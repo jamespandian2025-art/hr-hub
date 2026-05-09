@@ -1,0 +1,17 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(dir \"C:\\\\Users\\\\JAMES PC\\\\OneDrive\\\\Desktop\\\\my-project-system\")",
+      "Bash(npx tsc *)",
+      "Bash(Get-ChildItem -Path \"C:\\\\Users\\\\JAMES PC\\\\OneDrive\\\\Desktop\\\\my-project-system\" -Recurse -Filter \"*.tsx\" -Exclude node_modules)",
+      "Bash(Select-Object -ExpandProperty FullName)",
+      "WebSearch",
+      "Bash(npx next *)",
+      "Bash(python \"C:\\\\Users\\\\JAMES PC\\\\AppData\\\\Roaming\\\\Claude\\\\local-agent-mode-sessions\\\\skills-plugin\\\\ed2bb402-8b81-4284-a27b-36b96b2d0cc9\\\\e029db59-bfc9-485c-b388-35cc2e5627c3\\\\skills\\\\docx\\\\scripts\\\\office\\\\unpack.py\" \"C:\\\\Users\\\\JAMES PC\\\\Downloads\\\\Workflows_UI_Requirements \\(1\\).docx\" \"C:\\\\Users\\\\JAMES PC\\\\Downloads\\\\workflows_unpacked\")",
+      "PowerShell(Get-Command py -ErrorAction SilentlyContinue)",
+      "PowerShell(Get-ChildItem -Path \"C:\\\\Users\\\\JAMES PC\\\\Downloads\\\\workflows_unpacked\" -Recurse -Force | ForEach-Object { $_.FullName })",
+      "Bash(node -e \"const {execSync}=require\\('child_process'\\); execSync\\('npx tsc --noEmit', {stdio:'inherit'}\\)\")",
+      "mcp__Claude_in_Chrome__tabs_context_mcp"
+    ]
+  }
+}
