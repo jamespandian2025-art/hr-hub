@@ -31,7 +31,11 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   const router = useRouter()
   const isAuthPage = pathname === '/login' || pathname === '/signup' || pathname === '/onboarding'
   const isClientPortal = pathname.startsWith('/client-portal')
-  const isWorkspacePage = pathname === '/tasks' || pathname.startsWith('/tasks/') || pathname === '/to-do'
+  const isWorkspacePage =
+    pathname === '/tasks' ||
+    pathname.startsWith('/tasks/') ||
+    pathname === '/to-do' ||
+    pathname.startsWith('/workflows/')
 
   useEffect(() => {
     const saved = window.localStorage.getItem(sidebarKey)
