@@ -36,9 +36,10 @@ const applyTheme = () => {
 export default function AppShell({ children }: { children: React.ReactNode }) {
   const [mobileNavOpen, setMobileNavOpen] = useState(false)
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
+  const [authChecked, setAuthChecked] = useState(false)
   const pathname = usePathname()
   const router = useRouter()
-  const isAuthPage = pathname === '/login' || pathname === '/signup' || pathname === '/onboarding'
+  const isAuthPage = pathname === '/login' || pathname === '/signup' || pathname === '/onboarding' || pathname === '/employee/login'
   const isClientPortal = pathname.startsWith('/client-portal')
   const isHrWorkspace = pathname === '/hr' || pathname.startsWith('/hr/')
   const isFinancialWorkspace = pathname === '/financial' || pathname.startsWith('/financials')
@@ -81,22 +82,45 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   }, [])
 
   useEffect(() => {
+    let timer: number | undefined
     if (isAuthPage) return
     try {
       const accountRaw = window.localStorage.getItem(accountKey)
       const sessionRaw = window.localStorage.getItem(sessionKey)
+      if (!sessionRaw) {
+        router.replace(isEmployeePortal ? '/employee/login' : '/login')
+        return
+      }
       const account = accountRaw ? (JSON.parse(accountRaw) as { role?: string }) : {}
       const session = sessionRaw ? (JSON.parse(sessionRaw) as { role?: string }) : {}
-      const role = account.role || session.role
-      if (role === 'Client' && !isClientPortal) router.replace('/client-portal')
-      if (role === 'Finance' && !isFinancialWorkspace) router.replace('/financials/loan-management')
-      if (role === 'HR' && !isHrWorkspace) router.replace('/hr/overview')
+      const role = session.role || account.role
+      if (role === 'Employee' && !isEmployeePortal) {
+        router.replace('/employee/dashboard')
+        return
+      }
+      if (role === 'Client' && !isClientPortal) {
+        router.replace('/client-portal')
+        return
+      }
+      if (role === 'Finance' && !isFinancialWorkspace) {
+        router.replace('/financials/loan-management')
+        return
+      }
+      if (role === 'HR' && !isHrWorkspace) {
+        router.replace('/hr/overview')
+        return
+      }
+      timer = window.setTimeout(() => setAuthChecked(true), 0)
     } catch {
-      return
+      router.replace(isEmployeePortal ? '/employee/login' : '/login')
     }
-  }, [isAuthPage, isClientPortal, isFinancialWorkspace, isHrWorkspace, router])
+    return () => {
+      if (timer) window.clearTimeout(timer)
+    }
+  }, [isAuthPage, isClientPortal, isEmployeePortal, isFinancialWorkspace, isHrWorkspace, router])
 
   if (isAuthPage) return <>{children}</>
+  if (!authChecked) return null
   if (isClientPortal) return <main className="client-portal-shell">{children}</main>
   if (isHrWorkspace) return <>{children}</>
   if (isEmployeePortal) return <>{children}</>
