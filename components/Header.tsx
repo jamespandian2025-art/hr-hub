@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { usePathname, useRouter } from 'next/navigation'
 import ThemeSwitcher from './ThemeSwitcher'
+import { logoutUser } from '@/lib/auth/logout'
 import {
   BadgeDollarSign,
   BarChart3,
@@ -158,7 +159,6 @@ interface ReminderDraft {
 }
 
 const storageKey = 'flowsys-account'
-const sessionKey = 'flowsys-auth-session'
 const changeOrdersKey = 'flowsys-change-orders'
 const projectsKey = 'flowsys-projects'
 const tasksKey = 'flowsys-assigned-tasks'
@@ -358,6 +358,13 @@ export default function Header({ onMenuClick, compactWorkspace = false }: Header
     setAccount(previous => ({ ...previous, company: trimmed }))
     setCompanyName('')
     setNotice('Company created and selected.')
+  }
+
+  const logout = async () => {
+    await logoutUser()
+    setPanel(null)
+    setOpen(false)
+    router.replace('/login')
   }
 
   const sendInvite = async () => {
@@ -1043,7 +1050,7 @@ export default function Header({ onMenuClick, compactWorkspace = false }: Header
                 {panel === 'logout' && (
                   <div>
                     <div style={{ fontSize: 14, color: '#374151', lineHeight: 1.6, marginBottom: 18 }}>Are you sure you want to logout of {account.company}?</div>
-                    <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10 }}><button onClick={() => setPanel(null)} style={secondaryButtonStyle}>Cancel</button><button onClick={() => { window.localStorage.removeItem(sessionKey); setPanel(null); router.push('/login') }} style={{ ...primaryButtonStyle, background: '#dc2626' }}>Logout</button></div>
+                    <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10 }}><button onClick={() => setPanel(null)} style={secondaryButtonStyle}>Cancel</button><button onClick={logout} style={{ ...primaryButtonStyle, background: '#dc2626' }}>Logout</button></div>
                   </div>
                 )}
               </div>
@@ -1247,7 +1254,7 @@ export default function Header({ onMenuClick, compactWorkspace = false }: Header
                   <div style={{ fontSize: 14, color: '#374151', lineHeight: 1.6, marginBottom: 18 }}>Are you sure you want to logout of {account.company}?</div>
                   <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10 }}>
                     <button onClick={() => setPanel(null)} style={secondaryButtonStyle}>Cancel</button>
-                    <button onClick={() => { window.localStorage.removeItem(sessionKey); setPanel(null); router.push('/login') }} style={{ ...primaryButtonStyle, background: '#dc2626' }}>Logout</button>
+                    <button onClick={logout} style={{ ...primaryButtonStyle, background: '#dc2626' }}>Logout</button>
                   </div>
                 </div>
               )}

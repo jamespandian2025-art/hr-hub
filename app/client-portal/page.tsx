@@ -3,6 +3,7 @@
 import { useMemo, useState } from 'react'
 import { CalendarDays, Check, FileText, FolderKanban, Image as ImageIcon, LayoutDashboard, ListPlus, LogOut, MessageSquare, Settings, ShieldCheck, WalletCards, Wrench, X } from 'lucide-react'
 import { useRouter } from 'next/navigation'
+import { logoutUser } from '@/lib/auth/logout'
 
 const font = "var(--font-body)"
 const projectsKey = 'flowsys-projects'
@@ -11,7 +12,6 @@ const attachmentsKey = 'flowsys-project-attachments'
 const changeOrdersKey = 'flowsys-change-orders'
 const outboundNotificationsKey = 'flowsys-outbound-notifications'
 const accountKey = 'flowsys-account'
-const sessionKey = 'flowsys-auth-session'
 
 type ProjectStatus = 'Pending' | 'Ongoing' | 'Completed' | 'With issue'
 
@@ -172,9 +172,9 @@ export default function ClientPortalPage() {
     setNotice('Account settings saved.')
   }
 
-  const logout = () => {
-    window.localStorage.removeItem(sessionKey)
-    router.push('/login')
+  const logout = async () => {
+    await logoutUser()
+    router.replace('/login')
   }
 
   const requestChangeOrder = () => {

@@ -23,6 +23,7 @@ import {
 } from 'lucide-react'
 import type { ReactNode } from 'react'
 import { initials, useEmployeePortalData } from '@/app/employee/employeeData'
+import { logoutUser } from '@/lib/auth/logout'
 
 const nav = [
   { href: '/employee/dashboard', label: 'My Dashboard', icon: Home },
@@ -59,11 +60,10 @@ function EmployeeWorkspace({ children, pathname }: { children: ReactNode; pathna
   const [profileOpen, setProfileOpen] = useState(false)
   const title = titleForPath(pathname)
   const employeeInitials = initials(employeeName)
-  const logout = () => {
-    window.localStorage.removeItem('flowsys-auth-session')
-    window.localStorage.removeItem('flowsys-employee-session')
+  const logout = async () => {
+    await logoutUser()
     setProfileOpen(false)
-    router.push('/employee/login')
+    router.replace('/employee/login')
   }
 
   return (

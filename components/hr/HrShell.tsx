@@ -21,6 +21,7 @@ import HrMessenger from './HrMessenger'
 import { getHrRouteMeta, HR_NAV_ITEMS, isHrRouteActive } from './hrNav'
 import { loadStored } from '@/app/employee/employeeData'
 import { allowanceRequestKey, AllowanceRequest } from '@/app/hr/enterpriseData'
+import { logoutUser } from '@/lib/auth/logout'
 
 type StoredAccount = {
   company?: string
@@ -121,10 +122,10 @@ export default function HrShell({ children }: { children: React.ReactNode }) {
     setAccountMenuOpen(false)
     router.push(target)
   }
-  const logout = () => {
-    window.localStorage.removeItem(sessionKey)
+  const logout = async () => {
+    await logoutUser()
     setAccountMenuOpen(false)
-    router.push('/login')
+    router.replace('/login')
   }
   const hrNotificationItems = [
     ...pendingHrLeaveRequests.map(request => ({
