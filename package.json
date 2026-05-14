@@ -10,6 +10,7 @@
     "check:hrms": "node scripts/hrms-checks/business-logic.mjs"
   },
   "dependencies": {
+    "@supabase/supabase-js": "^2.105.4",
     "jspdf": "^4.2.1",
     "lucide-react": "^1.14.0",
     "next": "16.2.4",

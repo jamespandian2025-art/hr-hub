@@ -2,8 +2,9 @@
 
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import { FormEvent, useState } from 'react'
+import { FormEvent, useEffect, useState } from 'react'
 import { Eye, EyeOff, Lock, Mail } from 'lucide-react'
+import { getSupabaseBrowserClient, hasSupabaseConfig } from '@/lib/auth/supabaseClient'
 import {
   accountKey,
   type AuthUser,
@@ -36,6 +37,59 @@ export default function LoginPage() {
   const [password, setPassword] = useState('')
   const [showPassword, setShowPassword] = useState(false)
   const [error, setError] = useState('')
+
+  useEffect(() => {
+    const supabase = getSupabaseBrowserClient()
+    if (!supabase) return
+
+    let mounted = true
+    supabase.auth.getSession().then(({ data }) => {
+      if (!mounted || !data.session?.user) return
+      const user = data.session.user
+      const userEmail = user.email || ''
+      const userName = user.user_metadata?.full_name || user.user_metadata?.name || userEmail.split('@')[0] || 'Google User'
+      const accountRaw = window.localStorage.getItem(accountKey)
+      const account = accountRaw ? (JSON.parse(accountRaw) as AccountState & { theme?: string; company?: string }) : {}
+      const role = account.role || 'Admin'
+      window.localStorage.setItem(sessionKey, JSON.stringify({ userId: user.id, email: userEmail, provider: 'google', role }))
+      window.localStorage.setItem(accountKey, JSON.stringify({
+        ...account,
+        user: { id: user.id, email: userEmail, name: userName, role, provider: 'google' },
+        name: userName,
+        fullName: userName,
+        email: userEmail,
+        role,
+        theme: account.theme || 'Google Green',
+      }))
+      router.replace(routeForRole(role))
+    })
+
+    const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (!session?.user) return
+      const user = session.user
+      const userEmail = user.email || ''
+      const userName = user.user_metadata?.full_name || user.user_metadata?.name || userEmail.split('@')[0] || 'Google User'
+      const accountRaw = window.localStorage.getItem(accountKey)
+      const account = accountRaw ? (JSON.parse(accountRaw) as AccountState & { theme?: string; company?: string }) : {}
+      const role = account.role || 'Admin'
+      window.localStorage.setItem(sessionKey, JSON.stringify({ userId: user.id, email: userEmail, provider: 'google', role }))
+      window.localStorage.setItem(accountKey, JSON.stringify({
+        ...account,
+        user: { id: user.id, email: userEmail, name: userName, role, provider: 'google' },
+        name: userName,
+        fullName: userName,
+        email: userEmail,
+        role,
+        theme: account.theme || 'Google Green',
+      }))
+      router.replace(routeForRole(role))
+    })
+
+    return () => {
+      mounted = false
+      listener.subscription.unsubscribe()
+    }
+  }, [router])
 
   const saveSession = (user: AuthUser) => {
     const accountRaw = window.localStorage.getItem(accountKey)
@@ -88,7 +142,22 @@ export default function LoginPage() {
       return
     }
 
-    setError('Use your registered Gmail address and password. Google OAuth can be connected when the app is deployed with provider credentials.')
+    const supabase = getSupabaseBrowserClient()
+    if (!supabase || !hasSupabaseConfig()) {
+      setError('Google login is not configured yet. Add the Supabase URL and anon key in Vercel environment variables.')
+      return
+    }
+
+    void supabase.auth.signInWithOAuth({
+      provider: 'google',
+      options: {
+        redirectTo: `${window.location.origin}/login`,
+        queryParams: {
+          access_type: 'offline',
+          prompt: 'consent',
+        },
+      },
+    })
   }
 
   return (
