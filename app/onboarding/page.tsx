@@ -14,6 +14,8 @@ type Role = 'Admin' | 'Finance' | 'HR' | 'Project Manager' | 'Support' | 'Client
 interface Invite {
   email: string
   role: Role
+  status?: 'Pending' | 'Sent' | 'Failed'
+  error?: string
 }
 
 interface OnboardingState {
@@ -120,6 +122,8 @@ export default function OnboardingPage() {
   const [data, setData] = useState<OnboardingState>(loadOnboarding)
   const [inviteEmail, setInviteEmail] = useState('')
   const [inviteRole, setInviteRole] = useState<Role>('Project Manager')
+  const [inviteSending, setInviteSending] = useState(false)
+  const [inviteNotice, setInviteNotice] = useState('')
   const [roleLocked] = useState(() => {
     if (typeof window === 'undefined') return false
     try {
@@ -155,11 +159,42 @@ export default function OnboardingPage() {
   const back = () => setData(previous => ({ ...previous, step: Math.max(currentStep - 1, 0) }))
   const skip = () => next()
 
-  const addInvite = () => {
+  const addInvite = async () => {
     const email = inviteEmail.trim()
     if (!email) return
-    setData(previous => ({ ...previous, invites: [...previous.invites, { email, role: inviteRole }] }))
-    setInviteEmail('')
+
+    setInviteSending(true)
+    setInviteNotice('')
+
+    try {
+      const response = await fetch('/api/auth/invitations', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          email,
+          role: inviteRole,
+          invitedBy: data.personal.fullName || 'HR HUB Admin',
+        }),
+      })
+      const result = await response.json() as { ok?: boolean; error?: string }
+
+      if (!result.ok) {
+        const message = result.error || 'Invitation could not be sent.'
+        setData(previous => ({ ...previous, invites: [...previous.invites, { email, role: inviteRole, status: 'Failed', error: message }] }))
+        setInviteNotice(message)
+        return
+      }
+
+      setData(previous => ({ ...previous, invites: [...previous.invites, { email, role: inviteRole, status: 'Sent' }] }))
+      setInviteEmail('')
+      setInviteNotice(`Invitation email sent to ${email}.`)
+    } catch {
+      const message = 'Invitation could not be sent. Check your Supabase service role key and try again.'
+      setData(previous => ({ ...previous, invites: [...previous.invites, { email, role: inviteRole, status: 'Failed', error: message }] }))
+      setInviteNotice(message)
+    } finally {
+      setInviteSending(false)
+    }
   }
 
   const finish = () => {
@@ -294,7 +329,8 @@ export default function OnboardingPage() {
 
             {(stepName === 'Team Members' || stepName === 'Team Setup') && (
               <div style={formGridStyle}>
-                <div style={helperBoxStyle}>Invite teammates now, or skip and add them later from the account menu. These invitations are saved automatically.</div>
+                <div style={helperBoxStyle}>Invite teammates now, or skip and add them later from the account menu. HR HUB sends an email invitation when you add an invite.</div>
+                {inviteNotice && <div style={inviteNotice.startsWith('Invitation email sent') ? successBoxStyle : errorBoxStyle}>{inviteNotice}</div>}
                 <div style={inviteGridStyle}>
                   <label style={fieldGroupStyle}>
                     <span style={labelStyle}>Email address</span>
@@ -311,10 +347,10 @@ export default function OnboardingPage() {
                       <option>Admin</option>
                     </select>
                   </label>
-                  <button onClick={addInvite} style={darkButtonStyle}><Mail size={15} /> Add Invite</button>
+                  <button onClick={addInvite} disabled={inviteSending || !inviteEmail.trim()} style={{ ...darkButtonStyle, opacity: inviteSending || !inviteEmail.trim() ? 0.55 : 1, cursor: inviteSending || !inviteEmail.trim() ? 'not-allowed' : 'pointer' }}><Mail size={15} /> {inviteSending ? 'Sending...' : 'Add Invite'}</button>
                 </div>
                 <div style={inviteListStyle}>
-                  {data.invites.length === 0 ? <div style={emptyRowStyle}>No invitations added yet.</div> : data.invites.map(invite => <div key={invite.email} style={listRowStyle}><span>{invite.email}</span><strong>{invite.role}</strong></div>)}
+                  {data.invites.length === 0 ? <div style={emptyRowStyle}>No invitations added yet.</div> : data.invites.map(invite => <div key={`${invite.email}-${invite.role}`} style={listRowStyle}><span>{invite.email}</span><strong>{invite.status === 'Failed' ? 'Not sent' : invite.status || 'Sent'} - {invite.role}</strong></div>)}
                 </div>
               </div>
             )}
@@ -426,6 +462,8 @@ const inviteGridStyle = { display: 'grid', gridTemplateColumns: 'minmax(0,1fr) 1
 const inviteListStyle = { display: 'grid', gap: 9 }
 const twoColumnStyle = { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }
 const helperBoxStyle = { color: '#475569', fontSize: 14, lineHeight: 1.65, background: '#f8fafc', border: '1px solid #e5e7eb', borderRadius: 16, padding: '14px 16px' }
+const successBoxStyle = { color: '#166534', fontSize: 13, lineHeight: 1.5, fontWeight: 800, background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: 14, padding: '12px 14px' }
+const errorBoxStyle = { color: '#b91c1c', fontSize: 13, lineHeight: 1.5, fontWeight: 800, background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 14, padding: '12px 14px' }
 const emptyRowStyle = { border: '1px dashed #cbd5e1', borderRadius: 14, color: '#94a3b8', fontSize: 13, padding: '16px', textAlign: 'center' as const }
 const listRowStyle = { display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, border: '1px solid #edf2f7', borderRadius: 14, padding: '13px 15px', fontSize: 13, color: '#374151', background: '#fff' }
 const footerStyle = { display: 'flex', justifyContent: 'space-between', gap: 12, marginTop: 'auto', paddingTop: 28 }
