@@ -2,8 +2,9 @@
 
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import { FormEvent, useState } from 'react'
+import { FormEvent, useEffect, useState } from 'react'
 import { Building2, Eye, EyeOff, Lock, Mail, ShieldCheck, User } from 'lucide-react'
+import { getSupabaseBrowserClient, hasSupabaseConfig } from '@/lib/auth/supabaseClient'
 import {
   accountKey,
   type AccountRole,
@@ -16,6 +17,18 @@ import {
   sessionKey,
   validatePasswordStrength,
 } from '@/lib/auth/localAuth'
+
+function hasAdminOwner(authUsers: AuthUser[]) {
+  if (authUsers.some(user => user.role === 'Admin')) return true
+
+  try {
+    const accountRaw = window.localStorage.getItem(accountKey)
+    const account = accountRaw ? (JSON.parse(accountRaw) as { role?: AccountRole; roleLocked?: boolean }) : null
+    return account?.role === 'Admin' && account.roleLocked === true
+  } catch {
+    return false
+  }
+}
 
 export default function SignupPage() {
   const router = useRouter()
@@ -53,6 +66,80 @@ export default function SignupPage() {
     router.push('/onboarding')
   }
 
+  useEffect(() => {
+    const supabase = getSupabaseBrowserClient()
+    if (!supabase) return
+
+    let mounted = true
+    const finishGoogleSignup = async () => {
+      const { data } = await supabase.auth.getSession()
+      const supabaseUser = data.session?.user
+      if (!mounted || !supabaseUser) return
+
+      const currentUsers = loadAuthUsers()
+      const userEmail = (supabaseUser.email || '').trim().toLowerCase()
+      const userName = supabaseUser.user_metadata?.full_name || supabaseUser.user_metadata?.name || userEmail.split('@')[0] || 'Google User'
+
+      if (!isGmailAddress(userEmail)) {
+        setError('Use a Gmail account for workspace signup.')
+        await supabase.auth.signOut()
+        return
+      }
+
+      if (currentUsers.some(user => user.email.toLowerCase() === userEmail)) {
+        setError('Account already exists. Please log in.')
+        await supabase.auth.signOut()
+        return
+      }
+
+      if (hasAdminOwner(currentUsers)) {
+        setError('An Admin owner already exists. Please log in or ask the Admin to invite you.')
+        await supabase.auth.signOut()
+        return
+      }
+
+      const googleUser: AuthUser = {
+        id: currentUsers.reduce((max, user) => Math.max(max, user.id), 0) + 1,
+        name: userName,
+        email: userEmail,
+        provider: 'gmail',
+        role: 'Admin',
+      }
+      const nextUsers = [...currentUsers, googleUser]
+      setUsers(nextUsers)
+      saveAuthUsers(nextUsers)
+      window.localStorage.setItem(sessionKey, JSON.stringify({ userId: googleUser.id, email: googleUser.email, provider: googleUser.provider, role: 'Admin' }))
+      window.localStorage.setItem(
+        accountKey,
+        JSON.stringify({
+          user: publicUser(googleUser),
+          company: userName || 'WiseFlow Company',
+          email: googleUser.email,
+          role: 'Admin',
+          roleLocked: true,
+          theme: 'Google Green',
+          density: 'Comfortable',
+          emailNotifications: true,
+          desktopNotifications: false,
+          invitations: [],
+        })
+      )
+      window.localStorage.removeItem('flowsys-onboarding')
+      router.push('/onboarding')
+    }
+
+    void finishGoogleSignup()
+
+    const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (session?.user) void finishGoogleSignup()
+    })
+
+    return () => {
+      mounted = false
+      listener.subscription.unsubscribe()
+    }
+  }, [router])
+
   const signup = async (event: FormEvent) => {
     event.preventDefault()
     const trimmedEmail = email.trim().toLowerCase()
@@ -77,6 +164,11 @@ export default function SignupPage() {
       return
     }
 
+    if (hasAdminOwner(users)) {
+      setError('An Admin owner already exists. Please log in or ask the Admin to invite you.')
+      return
+    }
+
     const passwordFields = await createPasswordFields(password)
     saveUser(
       {
@@ -93,9 +185,32 @@ export default function SignupPage() {
   }
 
   const socialSignup = (provider: 'gmail' | 'facebook') => {
-    setError(provider === 'gmail'
-      ? 'Use your Gmail address with a protected password. Google OAuth can be connected after deployment.'
-      : 'Facebook signup is disabled for HR HUB.')
+    if (provider !== 'gmail') {
+      setError('Facebook signup is disabled for HR HUB.')
+      return
+    }
+
+    if (hasAdminOwner(users)) {
+      setError('An Admin owner already exists. Please log in or ask the Admin to invite you.')
+      return
+    }
+
+    const supabase = getSupabaseBrowserClient()
+    if (!supabase || !hasSupabaseConfig()) {
+      setError('Google signup is not configured yet. Add the Supabase URL and anon key in Vercel environment variables.')
+      return
+    }
+
+    void supabase.auth.signInWithOAuth({
+      provider: 'google',
+      options: {
+        redirectTo: `${window.location.origin}/signup`,
+        queryParams: {
+          access_type: 'offline',
+          prompt: 'consent',
+        },
+      },
+    })
   }
 
   return (

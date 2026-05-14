@@ -43,46 +43,45 @@ export default function LoginPage() {
     if (!supabase) return
 
     let mounted = true
-    supabase.auth.getSession().then(({ data }) => {
-      if (!mounted || !data.session?.user) return
-      const user = data.session.user
-      const userEmail = user.email || ''
-      const userName = user.user_metadata?.full_name || user.user_metadata?.name || userEmail.split('@')[0] || 'Google User'
+    const completeGoogleLogin = async (sessionUser: { id: string; email?: string; user_metadata?: { full_name?: string; name?: string } }) => {
+      if (!mounted) return
+      const userEmail = (sessionUser.email || '').trim().toLowerCase()
+      const registeredUsers = loadAuthUsers()
+      const registeredUser = registeredUsers.find(user => user.email.toLowerCase() === userEmail)
+
+      if (!registeredUser) {
+        setError('No HR HUB account exists for this Gmail. Please create the first Admin account or ask your Admin to invite you.')
+        await supabase.auth.signOut()
+        return
+      }
+
+      const userName = registeredUser.name || sessionUser.user_metadata?.full_name || sessionUser.user_metadata?.name || userEmail.split('@')[0] || 'Google User'
       const accountRaw = window.localStorage.getItem(accountKey)
       const account = accountRaw ? (JSON.parse(accountRaw) as AccountState & { theme?: string; company?: string }) : {}
-      const role = account.role || 'Admin'
-      window.localStorage.setItem(sessionKey, JSON.stringify({ userId: user.id, email: userEmail, provider: 'google', role }))
+      const role = registeredUser.role || account.role || 'Admin'
+      window.localStorage.setItem(sessionKey, JSON.stringify({ userId: registeredUser.id, email: userEmail, provider: registeredUser.provider, role }))
       window.localStorage.setItem(accountKey, JSON.stringify({
         ...account,
-        user: { id: user.id, email: userEmail, name: userName, role, provider: 'google' },
+        user: publicUser({ ...registeredUser, name: userName, role }),
         name: userName,
         fullName: userName,
         email: userEmail,
         role,
         theme: account.theme || 'Google Green',
       }))
-      router.replace(routeForRole(role))
+      const stored = window.localStorage.getItem(onboardingKey)
+      const onboarding = stored ? JSON.parse(stored) as { complete?: boolean } : null
+      router.replace(!onboarding?.complete && !account.onboardingComplete ? '/onboarding' : routeForRole(role))
+    }
+
+    supabase.auth.getSession().then(({ data }) => {
+      if (!data.session?.user) return
+      void completeGoogleLogin(data.session.user)
     })
 
     const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => {
       if (!session?.user) return
-      const user = session.user
-      const userEmail = user.email || ''
-      const userName = user.user_metadata?.full_name || user.user_metadata?.name || userEmail.split('@')[0] || 'Google User'
-      const accountRaw = window.localStorage.getItem(accountKey)
-      const account = accountRaw ? (JSON.parse(accountRaw) as AccountState & { theme?: string; company?: string }) : {}
-      const role = account.role || 'Admin'
-      window.localStorage.setItem(sessionKey, JSON.stringify({ userId: user.id, email: userEmail, provider: 'google', role }))
-      window.localStorage.setItem(accountKey, JSON.stringify({
-        ...account,
-        user: { id: user.id, email: userEmail, name: userName, role, provider: 'google' },
-        name: userName,
-        fullName: userName,
-        email: userEmail,
-        role,
-        theme: account.theme || 'Google Green',
-      }))
-      router.replace(routeForRole(role))
+      void completeGoogleLogin(session.user)
     })
 
     return () => {
