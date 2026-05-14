@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react'
 
-const font = "'DM Sans', sans-serif"
+const font = "var(--font-body)"
 const contactsStorageKey = 'flowsys-contacts'
 const clientsStorageKey = 'flowsys-clients'
 

@@ -5,7 +5,7 @@ import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
 import {
   BadgeDollarSign,
-  Building2,
+  BookOpen,
   ChevronDown,
   ChevronLeft,
   ChevronRight,
@@ -19,14 +19,15 @@ import {
   Warehouse,
 } from 'lucide-react'
 
-const font = "'DM Sans', sans-serif"
-const displayFont = "'Outfit', 'DM Sans', sans-serif"
+const font = "var(--font-body)"
+const displayFont = "var(--font-body)"
 
 type NavSubItem = {
   label: string
   href: string
   match?: string[]
   badge?: 'tasks' | 'todos' | 'workflows' | 'drafts'
+  newTab?: boolean
 }
 
 type NavParentItem = {
@@ -34,6 +35,7 @@ type NavParentItem = {
   href?: string
   icon: React.ComponentType<{ size?: number; color?: string }>
   match?: string[]
+  newTab?: boolean
   children?: NavSubItem[]
 }
 
@@ -58,7 +60,13 @@ const navSections: NavSection[] = [
     section: 'FINANCE & PEOPLE',
     items: [
       { label: 'Financial', href: '/financial', icon: HandCoins, match: ['/financials'] },
-      { label: 'HR',        href: '/hr',        icon: Building2, match: ['/people/teams', '/people/contacts'] },
+      {
+        label: 'HR Hub',
+        href: '/hr/overview',
+        icon: UsersRound,
+        match: ['/hr'],
+        newTab: true,
+      },
     ],
   },
   {
@@ -66,17 +74,23 @@ const navSections: NavSection[] = [
     items: [
       {
         label: 'Procurement',
+        href: '/procurement',
         icon: ShoppingCart,
-        match: ['/procurement', '/resources/pricebook'],
+        newTab: true,
+        match: ['/procurement'],
         children: [
-          { label: 'Overview',          href: '/procurement' },
-          { label: 'Pricebook',         href: '/resources/pricebook' },
-          { label: 'Purchase Requests', href: '/procurement/purchase-requests' },
-          { label: 'Purchase Orders',   href: '/procurement/purchase-orders' },
-          { label: 'RFQs',              href: '/procurement/rfqs' },
-          { label: 'Receiving',         href: '/procurement/receiving' },
-          { label: 'Supplier Database', href: '/resources/suppliers', match: ['/supplier-database', '/people/vendors'] },
+          { label: 'Pricebook',         href: '/procurement/pricebook', newTab: true },
+          { label: 'Purchase Requests', href: '/procurement/purchase-requests', newTab: true },
+          { label: 'Purchase Orders',   href: '/procurement/purchase-orders', newTab: true },
+          { label: 'RFQs',              href: '/procurement/rfqs', newTab: true },
+          { label: 'Receiving',         href: '/procurement/receiving', newTab: true },
         ],
+      },
+      {
+        label: 'Supplier Database',
+        href: '/supplier-database',
+        icon: UsersRound,
+        match: ['/supplier-database', '/resources/suppliers', '/people/vendors'],
       },
       {
         label: 'Warehouse',
@@ -116,7 +130,8 @@ const navSections: NavSection[] = [
   {
     section: 'SETTINGS',
     items: [
-      { label: 'Settings', href: '/settings', icon: Settings },
+      { label: 'Settings',       href: '/settings',       icon: Settings },
+      { label: 'Design System',  href: '/design-system',  icon: BookOpen },
     ],
   },
 ]
@@ -128,8 +143,8 @@ function BadgePill({ count }: { count: number }) {
       style={{
         marginLeft: 'auto',
         flexShrink: 0,
-        background: 'rgba(29,185,84,0.15)',
-        color: '#1db954',
+        background: 'rgba(34,197,94,0.15)',
+        color: '#22c55e',
         fontSize: 10,
         fontWeight: 700,
         lineHeight: 1,
@@ -153,6 +168,7 @@ function isItemActive(item: NavParentItem, pathname: string): boolean {
 }
 
 function isGroupActive(item: NavParentItem, pathname: string): boolean {
+  if (item.href && (pathname === item.href || pathname.startsWith(item.href + '/'))) return true
   if (!item.children) return false
   return item.children.some(
     child =>
@@ -172,6 +188,7 @@ function isSubItemActive(child: NavSubItem, pathname: string): boolean {
 
 function shouldAutoExpand(item: NavParentItem, path: string): boolean {
   return Boolean(
+    (item.href && (path === item.href || path.startsWith(item.href + '/'))) ||
     item.children?.some(
       child =>
         path === child.href ||
@@ -200,13 +217,16 @@ export default function Sidebar({ collapsed, onToggle }: { collapsed: boolean; o
   const [hoveredItem, setHoveredItem] = useState<string | null>(null)
 
   useEffect(() => {
-    setExpanded(prev => {
-      const next = { ...prev }
-      for (const sec of navSections)
-        for (const item of sec.items)
-          if (item.children && shouldAutoExpand(item, pathname)) next[item.label] = true
-      return next
-    })
+    const id = window.setTimeout(() => {
+      setExpanded(prev => {
+        const next = { ...prev }
+        for (const sec of navSections)
+          for (const item of sec.items)
+            if (item.children && shouldAutoExpand(item, pathname)) next[item.label] = true
+        return next
+      })
+    }, 0)
+    return () => window.clearTimeout(id)
   }, [pathname])
 
   useEffect(() => {
@@ -269,9 +289,9 @@ export default function Sidebar({ collapsed, onToggle }: { collapsed: boolean; o
               width: 34,
               height: 34,
               flexShrink: 0,
-              background: '#1db954',
+              background: '#22c55e',
               borderRadius: 9,
-              boxShadow: '0 0 16px rgba(29,185,84,0.35)',
+              boxShadow: '0 0 16px rgba(34,197,94,0.35)',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
@@ -289,7 +309,7 @@ export default function Sidebar({ collapsed, onToggle }: { collapsed: boolean; o
                 fontFamily: displayFont,
                 fontSize: 17,
                 fontWeight: 800,
-                color: '#1db954',
+                color: '#22c55e',
                 letterSpacing: '-0.3px',
                 whiteSpace: 'nowrap',
               }}
@@ -386,13 +406,17 @@ export default function Sidebar({ collapsed, onToggle }: { collapsed: boolean; o
               const hoverKey = `parent-${item.label}`
               const isHovered = hoveredItem === hoverKey
 
-              /* ─── Expandable parent row ─── */
+              /* â”€â”€â”€ Expandable parent row â”€â”€â”€ */
               if (hasChildren) {
                 return (
                   <div key={item.label}>
                     <button
                       onClick={() => {
-                        if (collapsed) {
+                        if (item.href) {
+                          if (item.newTab) window.open(item.href, '_blank', 'noopener,noreferrer')
+                          else router.push(item.href)
+                          setExpanded(prev => ({ ...prev, [item.label]: true }))
+                        } else if (collapsed) {
                           router.push(item.children![0].href)
                         } else {
                           toggleExpanded(item.label)
@@ -412,11 +436,11 @@ export default function Sidebar({ collapsed, onToggle }: { collapsed: boolean; o
                         cursor: 'pointer',
                         borderRadius: 6,
                         background: groupActive
-                          ? 'rgba(29,185,84,0.08)'
+                          ? 'rgba(34,197,94,0.08)'
                           : isHovered
                           ? 'rgba(255,255,255,0.04)'
                           : 'transparent',
-                        boxShadow: groupActive && !collapsed ? 'inset 3px 0 0 #1db954' : groupActive && collapsed ? '0 0 0 1.5px #1db954' : 'none',
+                        boxShadow: groupActive && !collapsed ? 'inset 3px 0 0 #22c55e' : groupActive && collapsed ? '0 0 0 1.5px #22c55e' : 'none',
                         color: groupActive ? '#ffffff' : 'rgba(255,255,255,0.65)',
                         fontWeight: groupActive ? 600 : 400,
                         fontSize: 13,
@@ -436,9 +460,9 @@ export default function Sidebar({ collapsed, onToggle }: { collapsed: boolean; o
                             right: 6,
                             width: 6,
                             height: 6,
-                            background: '#1db954',
+                            background: '#22c55e',
                             borderRadius: '50%',
-                            boxShadow: '0 0 6px rgba(29,185,84,0.6)',
+                            boxShadow: '0 0 6px rgba(34,197,94,0.6)',
                           }}
                         />
                       )}
@@ -449,7 +473,7 @@ export default function Sidebar({ collapsed, onToggle }: { collapsed: boolean; o
                           display: 'inline-flex',
                           justifyContent: 'center',
                           flexShrink: 0,
-                          color: groupActive ? '#1db954' : 'rgba(255,255,255,0.5)',
+                          color: groupActive ? '#22c55e' : 'rgba(255,255,255,0.5)',
                         }}
                       >
                         <Icon size={16} />
@@ -514,6 +538,8 @@ export default function Sidebar({ collapsed, onToggle }: { collapsed: boolean; o
                               <Link
                                 key={child.href + (child.label)}
                                 href={child.href}
+                                target={child.newTab ? '_blank' : undefined}
+                                rel={child.newTab ? 'noopener noreferrer' : undefined}
                                 style={{ textDecoration: 'none' }}
                               >
                                 <div
@@ -527,11 +553,11 @@ export default function Sidebar({ collapsed, onToggle }: { collapsed: boolean; o
                                     margin: '0 0 1px',
                                     borderRadius: 5,
                                     background: childActive
-                                      ? 'rgba(29,185,84,0.08)'
+                                      ? 'rgba(34,197,94,0.08)'
                                       : childHovered
                                       ? 'rgba(255,255,255,0.04)'
                                       : 'transparent',
-                                    boxShadow: childActive ? 'inset 2px 0 0 #1db954' : 'none',
+                                    boxShadow: childActive ? 'inset 2px 0 0 #22c55e' : 'none',
                                     color: childActive ? '#ffffff' : 'rgba(255,255,255,0.55)',
                                     fontWeight: childActive ? 500 : 400,
                                     fontSize: 12,
@@ -554,11 +580,13 @@ export default function Sidebar({ collapsed, onToggle }: { collapsed: boolean; o
                 )
               }
 
-              /* ─── Direct link row ─── */
+              /* â”€â”€â”€ Direct link row â”€â”€â”€ */
               return (
                 <Link
                   key={item.href}
                   href={item.href!}
+                  target={item.newTab ? '_blank' : undefined}
+                  rel={item.newTab ? 'noopener noreferrer' : undefined}
                   style={{ textDecoration: 'none' }}
                   title={collapsed ? item.label : undefined}
                 >
@@ -575,14 +603,14 @@ export default function Sidebar({ collapsed, onToggle }: { collapsed: boolean; o
                       cursor: 'pointer',
                       borderRadius: 6,
                       background: groupActive
-                        ? 'rgba(29,185,84,0.08)'
+                        ? 'rgba(34,197,94,0.08)'
                         : isHovered
                         ? 'rgba(255,255,255,0.04)'
                         : 'transparent',
                       boxShadow: groupActive && !collapsed
-                        ? 'inset 3px 0 0 #1db954'
+                        ? 'inset 3px 0 0 #22c55e'
                         : groupActive && collapsed
-                        ? '0 0 0 1.5px #1db954'
+                        ? '0 0 0 1.5px #22c55e'
                         : 'none',
                       color: groupActive ? '#ffffff' : 'rgba(255,255,255,0.65)',
                       fontWeight: groupActive ? 600 : 400,
@@ -597,7 +625,7 @@ export default function Sidebar({ collapsed, onToggle }: { collapsed: boolean; o
                         display: 'inline-flex',
                         justifyContent: 'center',
                         flexShrink: 0,
-                        color: groupActive ? '#1db954' : 'rgba(255,255,255,0.5)',
+                        color: groupActive ? '#22c55e' : 'rgba(255,255,255,0.5)',
                       }}
                     >
                       <Icon size={16} />

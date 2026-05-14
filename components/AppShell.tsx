@@ -9,14 +9,23 @@ const accountKey = 'flowsys-account'
 const sessionKey = 'flowsys-auth-session'
 const sidebarKey = 'wf-sidebar-collapsed'
 
+const THEME_MAP: Record<string, string> = {
+  'Light': 'light',
+  'Dark': 'dark',
+  'WiseFlow Light': 'light',
+  'WiseFlow Dark': 'dark',
+  'Google Blue': 'google-blue',
+  'Google Green': 'google-green',
+  'Graphite Pro': 'graphite',
+}
+
 const applyTheme = () => {
   try {
     const stored = window.localStorage.getItem(accountKey)
-    const account = stored ? JSON.parse(stored) as { theme?: 'System' | 'Light' | 'Dark' } : null
+    const account = stored ? JSON.parse(stored) as { theme?: string } : null
     const preference = account?.theme || 'System'
-    const theme = preference === 'System'
-      ? window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'
-      : preference.toLowerCase()
+    const mapped = THEME_MAP[preference]
+    const theme = mapped || (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light')
     document.documentElement.dataset.theme = theme
     document.documentElement.dataset.themePreference = preference
   } catch {
@@ -31,6 +40,10 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   const router = useRouter()
   const isAuthPage = pathname === '/login' || pathname === '/signup' || pathname === '/onboarding'
   const isClientPortal = pathname.startsWith('/client-portal')
+  const isHrWorkspace = pathname === '/hr' || pathname.startsWith('/hr/')
+  const isFinancialWorkspace = pathname === '/financial' || pathname.startsWith('/financials')
+  const isEmployeePortal = pathname === '/employee' || pathname.startsWith('/employee/')
+  const isProcurementWorkspace = pathname === '/procurement' || pathname.startsWith('/procurement/')
   const isWorkspacePage =
     pathname === '/tasks' ||
     pathname.startsWith('/tasks/') ||
@@ -38,8 +51,11 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
     pathname.startsWith('/workflows/')
 
   useEffect(() => {
-    const saved = window.localStorage.getItem(sidebarKey)
-    if (saved === '1') setSidebarCollapsed(true)
+    const id = window.setTimeout(() => {
+      const saved = window.localStorage.getItem(sidebarKey)
+      if (saved === '1') setSidebarCollapsed(true)
+    }, 0)
+    return () => window.clearTimeout(id)
   }, [])
 
   const toggleSidebar = () => {
@@ -73,13 +89,18 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
       const session = sessionRaw ? (JSON.parse(sessionRaw) as { role?: string }) : {}
       const role = account.role || session.role
       if (role === 'Client' && !isClientPortal) router.replace('/client-portal')
+      if (role === 'Finance' && !isFinancialWorkspace) router.replace('/financials/loan-management')
+      if (role === 'HR' && !isHrWorkspace) router.replace('/hr/overview')
     } catch {
       return
     }
-  }, [isAuthPage, isClientPortal, router])
+  }, [isAuthPage, isClientPortal, isFinancialWorkspace, isHrWorkspace, router])
 
   if (isAuthPage) return <>{children}</>
   if (isClientPortal) return <main className="client-portal-shell">{children}</main>
+  if (isHrWorkspace) return <>{children}</>
+  if (isEmployeePortal) return <>{children}</>
+  if (isProcurementWorkspace) return <>{children}</>
 
   const sidebarWidth = sidebarCollapsed ? 60 : 252
 
@@ -93,7 +114,12 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
           minWidth: sidebarWidth,
           maxWidth: sidebarWidth,
           flexShrink: 0,
+          height: '100dvh',
           overflow: 'hidden',
+          position: 'sticky',
+          top: 0,
+          alignSelf: 'flex-start',
+          zIndex: 90,
           transition: 'width 0.22s ease, min-width 0.22s ease, max-width 0.22s ease',
         }}
       >

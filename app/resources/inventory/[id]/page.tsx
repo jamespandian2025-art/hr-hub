@@ -5,7 +5,7 @@ import Image from 'next/image'
 import { useParams } from 'next/navigation'
 import { ChangeEvent, useEffect, useMemo, useState } from 'react'
 
-const font = "'DM Sans', sans-serif"
+const font = "var(--font-body)"
 const tabs = ['Inventory', 'Purchase Orders', 'Outgoing Transfers'] as const
 
 type Tab = (typeof tabs)[number]
@@ -125,7 +125,7 @@ const loadData = <T,>(key: string, fallback: T): T => {
   }
 }
 
-const money = (value: number) => `Php ${value.toLocaleString()}.00`
+const money = (value: number) => `PHP ${value.toLocaleString('en-PH')}.00`
 const nextId = <T extends { id: number }>(records: T[]) => records.reduce((max, record) => Math.max(max, record.id), 0) + 1
 
 export default function WarehouseDetailPage() {

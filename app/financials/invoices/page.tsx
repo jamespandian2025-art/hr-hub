@@ -1,7 +1,7 @@
 'use client'
 import { useEffect, useState } from 'react'
 
-const font = "'DM Sans', sans-serif"
+const font = "var(--font-body)"
 const invoicesStorageKey = 'flowsys-invoices'
 
 interface Item {
@@ -168,7 +168,7 @@ export default function InvoicesPage() {
             cursor: 'pointer',
           }}
         >
-          ← Back
+          ? Back
         </div>
 
         <div
@@ -268,7 +268,7 @@ export default function InvoicesPage() {
                 fontSize: '20px',
               }}
             >
-              👤
+              ??
             </div>
 
             <input
@@ -459,7 +459,7 @@ export default function InvoicesPage() {
                         color: '#111827',
                       }}
                     >
-                      ₱{(item.qty * item.cost).toLocaleString()}
+                      PHP {(item.qty * item.cost).toLocaleString('en-PH')}
                     </td>
 
                     <td style={{ padding: '10px 12px' }}>
@@ -474,7 +474,7 @@ export default function InvoicesPage() {
                             fontSize: '16px',
                           }}
                         >
-                          ✕
+                          ?
                         </button>
                       )}
                     </td>
@@ -518,7 +518,7 @@ export default function InvoicesPage() {
                 }}
               >
                 <span>Total</span>
-                <span>₱{total.toLocaleString()}.00</span>
+                <span>PHP {total.toLocaleString('en-PH')}.00</span>
               </div>
             </div>
           </div>
@@ -641,7 +641,7 @@ export default function InvoicesPage() {
             cursor: 'pointer',
           }}
         >
-          📅 May 06, 2026 ▾
+          ?? May 06, 2026 ?
         </div>
       </div>
 
@@ -704,7 +704,7 @@ export default function InvoicesPage() {
               Total Invoices
             </div>
             <div style={{ fontSize: '26px', fontWeight: 600, color: '#111827', marginBottom: '6px' }}>
-              ₱{totalAmount.toLocaleString()}.00
+              PHP {totalAmount.toLocaleString('en-PH')}.00
             </div>
             <div style={{ fontSize: '12px', color: '#f59e0b', fontWeight: 600 }}>
               {invoices.length} invoices total
@@ -716,7 +716,7 @@ export default function InvoicesPage() {
               Paid Invoices
             </div>
             <div style={{ fontSize: '26px', fontWeight: 600, color: '#111827', marginBottom: '6px' }}>
-              ₱{paidAmount.toLocaleString()}.00
+              PHP {paidAmount.toLocaleString('en-PH')}.00
             </div>
             <div style={{ fontSize: '12px', color: '#10b981', fontWeight: 600 }}>
               {tabCounts('Paid')} paid
@@ -760,7 +760,7 @@ export default function InvoicesPage() {
                   TOTAL
                 </div>
                 <div style={{ fontSize: '10px', fontWeight: 600, color: '#111827' }}>
-                  ₱{totalAmount.toLocaleString()}
+                  PHP {totalAmount.toLocaleString('en-PH')}
                 </div>
               </div>
             </div>
@@ -783,7 +783,7 @@ export default function InvoicesPage() {
                       {item.label} ({item.count})
                     </div>
                     <div style={{ fontSize: '12px', fontWeight: 600, color: '#111827' }}>
-                      ₱{item.amount.toLocaleString()}.00
+                      PHP {item.amount.toLocaleString('en-PH')}.00
                     </div>
                   </div>
                 </div>
@@ -814,7 +814,7 @@ export default function InvoicesPage() {
               background: '#fafafa',
             }}
           >
-            <span style={{ color: '#9ca3af' }}>🔍</span>
+            <span style={{ color: '#9ca3af' }}>??</span>
             <input
               type="text"
               placeholder="Search..."
@@ -844,7 +844,7 @@ export default function InvoicesPage() {
               fontWeight: 500,
             }}
           >
-            ⊞ Columns
+            ? Columns
           </div>
 
           <div
@@ -859,7 +859,7 @@ export default function InvoicesPage() {
               fontWeight: 500,
             }}
           >
-            ⚡ Filters
+            ? Filters
           </div>
 
           <div
@@ -872,7 +872,7 @@ export default function InvoicesPage() {
               color: '#9ca3af',
             }}
           >
-            ⋮
+            ?
           </div>
         </div>
 
@@ -887,7 +887,7 @@ export default function InvoicesPage() {
               gap: '12px',
             }}
           >
-            <div style={{ fontSize: '40px', opacity: 0.2 }}>🧾</div>
+            <div style={{ fontSize: '40px', opacity: 0.2 }}>??</div>
             <div style={{ fontSize: '14px', fontWeight: 600, color: '#9ca3af' }}>
               No invoices yet — click + Invoice to create one
             </div>
@@ -952,7 +952,7 @@ export default function InvoicesPage() {
                       {inv.dueDate}
                     </td>
                     <td style={{ padding: '16px', fontSize: '13px', fontWeight: 600, color: '#111827' }}>
-                      ₱{inv.total.toLocaleString()}.00
+                      PHP {inv.total.toLocaleString('en-PH')}.00
                     </td>
                     <td style={{ padding: '16px' }}>
                       <span
@@ -969,7 +969,7 @@ export default function InvoicesPage() {
                       </span>
                     </td>
                     <td style={{ padding: '16px', color: '#9ca3af', cursor: 'pointer', fontSize: '18px' }}>
-                      ⋮
+                      ?
                     </td>
                   </tr>
                 ))}

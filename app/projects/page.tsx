@@ -2,7 +2,7 @@
 
 import { ChangeEvent, useEffect, useMemo, useState } from 'react'
 
-const font = "'Inter', sans-serif"
+const font = "var(--font-body)"
 const storageKey = 'flowsys-projects'
 const clientsStorageKey = 'flowsys-clients'
 const projectTasksStorageKey = 'flowsys-project-tasks'
@@ -15,8 +15,8 @@ const tabs = ['All', 'Pending', 'Ongoing', 'Completed', 'With issue'] as const
 const projectDetailTabs = ['Overview', 'Progress', 'Change Orders', 'Tasks', 'Chat', 'Financials', 'Attachments', 'Settings'] as const
 const financialTabs = ['Summary', 'Budget', 'Bills and Expenses', 'Purchase Orders', 'Invoices'] as const
 const categories = [
-  { key: 'materialCost', label: 'Material cost', color: '#1db954' },
-  { key: 'laborCost', label: 'Labor cost', color: '#1ed760' },
+  { key: 'materialCost', label: 'Material cost', color: '#22c55e' },
+  { key: 'laborCost', label: 'Labor cost', color: '#4ade80' },
   { key: 'overheadProfit', label: 'Overhead profit', color: '#535353' },
   { key: 'generalExpense', label: 'General expense', color: '#191414' },
 ] as const
@@ -129,16 +129,53 @@ interface AssignedTask {
 }
 
 const initialClients: ClientRecord[] = [
-  { id: 1, name: 'Jessica Fields', email: 'Jessicajaneteran@gmail.com', contact: '-', completed: 0, total: 0, cost: 0, color: '#1db954' },
-  { id: 2, name: 'Joey Ong', email: 'Joey@ronincollective.ph', contact: '-', completed: 0, total: 0, cost: 0, color: '#1ed760' },
+  { id: 1, name: 'Jessica Fields', email: 'Jessicajaneteran@gmail.com', contact: '-', completed: 0, total: 0, cost: 0, color: '#22c55e' },
+  { id: 2, name: 'Joey Ong', email: 'Joey@ronincollective.ph', contact: '-', completed: 0, total: 0, cost: 0, color: '#4ade80' },
   { id: 3, name: 'Happy Alino', email: 'cjalinoproperties@gmail.com', contact: '-', completed: 0, total: 0, cost: 0, color: '#535353' },
 ]
 
 const statusStyle: Record<ProjectStatus, { bg: string; color: string }> = {
-  Ongoing: { bg: '#effff4', color: '#1db954' },
+  Ongoing: { bg: '#effff4', color: '#22c55e' },
   Pending: { bg: '#f5f5f5', color: '#535353' },
-  Completed: { bg: '#e8fbea', color: '#1ed760' },
+  Completed: { bg: '#e8fbea', color: '#4ade80' },
   'With issue': { bg: '#eeeeee', color: '#191414' },
+}
+
+const validProjectStatuses: ProjectStatus[] = ['Pending', 'Ongoing', 'Completed', 'With issue']
+
+const normalizeProjectStatus = (status: unknown): ProjectStatus => {
+  return validProjectStatuses.includes(status as ProjectStatus) ? (status as ProjectStatus) : 'Pending'
+}
+
+const getStatusStyle = (status: unknown) => statusStyle[normalizeProjectStatus(status)]
+
+const safeNumber = (value: unknown) => {
+  const numberValue = Number(value ?? 0)
+  return Number.isFinite(numberValue) ? numberValue : 0
+}
+
+const normalizeProject = (project: Partial<Project>, index: number): Project => {
+  const projectCost = safeNumber(project.projectCost)
+  const paidAmount = safeNumber(project.paidAmount)
+  const unpaidAmount = project.unpaidAmount === undefined ? Math.max(projectCost - paidAmount, 0) : safeNumber(project.unpaidAmount)
+
+  return {
+    id: safeNumber(project.id) || index + 1,
+    name: String(project.name || 'Untitled Project'),
+    client: String(project.client || '-'),
+    location: String(project.location || '-'),
+    projectCost,
+    startDate: String(project.startDate || '2026-05-06'),
+    endDate: String(project.endDate || '2026-05-06'),
+    status: normalizeProjectStatus(project.status),
+    materialCost: safeNumber(project.materialCost),
+    laborCost: safeNumber(project.laborCost),
+    overheadProfit: safeNumber(project.overheadProfit),
+    generalExpense: safeNumber(project.generalExpense),
+    paidAmount,
+    unpaidAmount,
+    notes: String(project.notes || ''),
+  }
 }
 
 const fieldStyle = {
@@ -177,7 +214,7 @@ const loadProjects = () => {
 
   try {
     const stored = window.localStorage.getItem(storageKey)
-    return stored ? (JSON.parse(stored) as Project[]) : []
+    return stored ? (JSON.parse(stored) as Partial<Project>[]).map(normalizeProject) : []
   } catch {
     return []
   }
@@ -205,12 +242,12 @@ const loadStored = <T,>(key: string, fallback: T[]): T[] => {
   }
 }
 
-const money = (value: number | undefined | null) => `Php ${(value ?? 0).toLocaleString()}.00`
+const money = (value: number | undefined | null) => `PHP ${(value ?? 0).toLocaleString('en-PH')}.00`
 const nextId = (records: Project[]) => records.reduce((max, record) => Math.max(max, record.id), 0) + 1
 const nextClientId = (records: ClientRecord[]) => records.reduce((max, record) => Math.max(max, record.id), 0) + 1
 const nextRecordId = <T extends { id: number }>(records: T[]) => records.reduce((max, record) => Math.max(max, record.id), 0) + 1
-const colorFor = (id: number) => ['#1db954', '#1ed760', '#535353', '#191414', '#b3b3b3'][id % 5]
-const statusLabel = (status: ProjectStatus) => status.toUpperCase()
+const colorFor = (id: number) => ['#22c55e', '#4ade80', '#535353', '#191414', '#b3b3b3'][id % 5]
+const statusLabel = (status: unknown) => normalizeProjectStatus(status).toUpperCase()
 const duration = (project: Project) => `${project.startDate || '-'} - ${project.endDate || '-'}`
 const formatDateTime = (date: string) =>
   new Date(date).toLocaleString('en-PH', {
@@ -224,8 +261,9 @@ const fileSize = (size: number) => (size >= 1024 * 1024 ? `${(size / 1024 / 1024
 const teamMembers = ['Anna', 'Mark', 'Leo', 'John', 'Jane', 'Paul', 'Mike', 'Project Manager', 'Support']
 
 export default function ProjectsPage() {
-  const [projects, setProjects] = useState<Project[]>(loadProjects)
-  const [clientRecords, setClientRecords] = useState<ClientRecord[]>(loadClients)
+  const [mounted, setMounted] = useState(false)
+  const [projects, setProjects] = useState<Project[]>([])
+  const [clientRecords, setClientRecords] = useState<ClientRecord[]>(initialClients)
   const [activeTab, setActiveTab] = useState<Tab>('All')
   const [viewMode, setViewMode] = useState<ProjectViewMode>('Table')
   const [search, setSearch] = useState('')
@@ -241,12 +279,12 @@ export default function ProjectsPage() {
   const [financialSearch, setFinancialSearch] = useState('')
   const [financialStatusOpen, setFinancialStatusOpen] = useState(false)
   const [financialStatuses, setFinancialStatuses] = useState<string[]>([])
-  const [projectTasks, setProjectTasks] = useState<ProjectTask[]>(() => loadStored<ProjectTask>(projectTasksStorageKey, []))
-  const [projectMessages, setProjectMessages] = useState<ProjectMessage[]>(() => loadStored<ProjectMessage>(projectMessagesStorageKey, []))
-  const [projectAttachments, setProjectAttachments] = useState<ProjectAttachment[]>(() => loadStored<ProjectAttachment>(projectAttachmentsStorageKey, []))
-  const [projectProgress, setProjectProgress] = useState<ProjectProgressUpdate[]>(() => loadStored<ProjectProgressUpdate>(projectProgressStorageKey, []))
-  const [changeOrders, setChangeOrders] = useState<ChangeOrder[]>(() => loadStored<ChangeOrder>(changeOrdersStorageKey, []))
-  const [assignedTasks, setAssignedTasks] = useState<AssignedTask[]>(() => loadStored<AssignedTask>(assignedTasksStorageKey, []))
+  const [projectTasks, setProjectTasks] = useState<ProjectTask[]>([])
+  const [projectMessages, setProjectMessages] = useState<ProjectMessage[]>([])
+  const [projectAttachments, setProjectAttachments] = useState<ProjectAttachment[]>([])
+  const [projectProgress, setProjectProgress] = useState<ProjectProgressUpdate[]>([])
+  const [changeOrders, setChangeOrders] = useState<ChangeOrder[]>([])
+  const [assignedTasks, setAssignedTasks] = useState<AssignedTask[]>([])
   const [taskTitle, setTaskTitle] = useState('')
   const [taskDueDate, setTaskDueDate] = useState('2026-05-06')
   const [taskNotes, setTaskNotes] = useState('')
@@ -282,36 +320,56 @@ export default function ProjectsPage() {
   const calculatedUnpaidAmount = Math.max(projectCost - paidAmount, 0)
 
   useEffect(() => {
+    setMounted(true)
+    setProjects(loadProjects())
+    setClientRecords(loadClients())
+    setProjectTasks(loadStored<ProjectTask>(projectTasksStorageKey, []))
+    setProjectMessages(loadStored<ProjectMessage>(projectMessagesStorageKey, []))
+    setProjectAttachments(loadStored<ProjectAttachment>(projectAttachmentsStorageKey, []))
+    setProjectProgress(loadStored<ProjectProgressUpdate>(projectProgressStorageKey, []))
+    setChangeOrders(loadStored<ChangeOrder>(changeOrdersStorageKey, []))
+    setAssignedTasks(loadStored<AssignedTask>(assignedTasksStorageKey, []))
+  }, [])
+
+  useEffect(() => {
+    if (!mounted) return
     window.localStorage.setItem(storageKey, JSON.stringify(projects))
-  }, [projects])
+  }, [mounted, projects])
 
   useEffect(() => {
+    if (!mounted) return
     window.localStorage.setItem(clientsStorageKey, JSON.stringify(clientRecords))
-  }, [clientRecords])
+  }, [mounted, clientRecords])
 
   useEffect(() => {
+    if (!mounted) return
     window.localStorage.setItem(projectTasksStorageKey, JSON.stringify(projectTasks))
-  }, [projectTasks])
+  }, [mounted, projectTasks])
 
   useEffect(() => {
+    if (!mounted) return
     window.localStorage.setItem(projectMessagesStorageKey, JSON.stringify(projectMessages))
-  }, [projectMessages])
+  }, [mounted, projectMessages])
 
   useEffect(() => {
+    if (!mounted) return
     window.localStorage.setItem(projectAttachmentsStorageKey, JSON.stringify(projectAttachments))
-  }, [projectAttachments])
+  }, [mounted, projectAttachments])
 
   useEffect(() => {
+    if (!mounted) return
     window.localStorage.setItem(projectProgressStorageKey, JSON.stringify(projectProgress))
-  }, [projectProgress])
+  }, [mounted, projectProgress])
 
   useEffect(() => {
+    if (!mounted) return
     window.localStorage.setItem(changeOrdersStorageKey, JSON.stringify(changeOrders))
-  }, [changeOrders])
+  }, [mounted, changeOrders])
 
   useEffect(() => {
+    if (!mounted) return
     window.localStorage.setItem(assignedTasksStorageKey, JSON.stringify(assignedTasks))
-  }, [assignedTasks])
+  }, [mounted, assignedTasks])
 
   const clients = useMemo(() => clientRecords.map(record => record.name), [clientRecords])
 
@@ -397,7 +455,7 @@ export default function ProjectsPage() {
     setProjectCost(project.projectCost ?? 0)
     setStartDate(project.startDate)
     setEndDate(project.endDate)
-    setStatus(project.status)
+    setStatus(normalizeProjectStatus(project.status))
     setMaterialCost(project.materialCost ?? 0)
     setLaborCost(project.laborCost ?? 0)
     setOverheadProfit(project.overheadProfit ?? 0)
@@ -930,13 +988,13 @@ export default function ProjectsPage() {
                               <div style={{ display: 'flex', justifyContent: 'space-between', gap: '8px', color: '#535353', fontSize: '12px', fontWeight: 600 }}><span>Spent</span><strong style={{ color: '#191414', fontWeight: 600 }}>{money(projectExpenses)}</strong></div>
                               <div>
                                 <div style={{ display: 'flex', justifyContent: 'space-between', color: '#535353', fontSize: '12px', fontWeight: 600, marginBottom: '6px' }}><span>Progress</span><span>{progress}%</span></div>
-                                <div style={{ height: 7, borderRadius: 999, background: '#d9d9d9', overflow: 'hidden' }}><div style={{ width: `${progress}%`, height: '100%', background: '#1db954' }} /></div>
+                                <div style={{ height: 7, borderRadius: 999, background: '#d9d9d9', overflow: 'hidden' }}><div style={{ width: `${progress}%`, height: '100%', background: '#22c55e' }} /></div>
                               </div>
                             </div>
                           </article>
                         )
                       })}
-                      <button onClick={startCreate} style={{ border: '1px dashed #b3b3b3', borderRadius: '12px', background: '#fff', color: '#1db954', padding: '12px', fontSize: '13px', fontWeight: 600, cursor: 'pointer' }}>+ Add Project</button>
+                      <button onClick={startCreate} style={{ border: '1px dashed #b3b3b3', borderRadius: '12px', background: '#fff', color: '#22c55e', padding: '12px', fontSize: '13px', fontWeight: 600, cursor: 'pointer' }}>+ Add Project</button>
                     </div>
                   </section>
                 )
@@ -955,7 +1013,7 @@ export default function ProjectsPage() {
                       <h3 style={{ margin: 0, color: '#191414', fontSize: '17px', fontWeight: 600, lineHeight: 1.35 }}>{project.name}</h3>
                       <p style={{ margin: '5px 0 0', color: '#535353', fontSize: '13px', fontWeight: 600 }}>{project.client}</p>
                     </div>
-                    <span style={{ fontSize: '11px', fontWeight: 600, padding: '5px 10px', borderRadius: '999px', background: statusStyle[project.status].bg, color: statusStyle[project.status].color, whiteSpace: 'nowrap' }}>{project.status}</span>
+                    <span style={{ fontSize: '11px', fontWeight: 600, padding: '5px 10px', borderRadius: '999px', background: getStatusStyle(project.status).bg, color: getStatusStyle(project.status).color, whiteSpace: 'nowrap' }}>{project.status}</span>
                   </div>
                   <div style={{ color: '#535353', fontSize: '13px', fontWeight: 600, marginBottom: '14px' }}>{project.location}</div>
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', marginBottom: '14px' }}>
@@ -966,7 +1024,7 @@ export default function ProjectsPage() {
                   </div>
                   <div>
                     <div style={{ display: 'flex', justifyContent: 'space-between', color: '#535353', fontSize: '12px', fontWeight: 600, marginBottom: '7px' }}><span>Payment progress</span><span>{progress}%</span></div>
-                    <div style={{ height: 8, borderRadius: 999, background: '#d9d9d9', overflow: 'hidden' }}><div style={{ height: '100%', width: `${progress}%`, background: '#1db954' }} /></div>
+                    <div style={{ height: 8, borderRadius: 999, background: '#d9d9d9', overflow: 'hidden' }}><div style={{ height: '100%', width: `${progress}%`, background: '#22c55e' }} /></div>
                   </div>
                 </article>
               )
@@ -1009,14 +1067,14 @@ export default function ProjectsPage() {
       <div>
         {financialTab === 'Purchase Orders' && (
           <div style={{ textAlign: 'right', fontSize: '14px', color: '#111827', fontWeight: 600, marginBottom: '28px' }}>
-            May 06, 2026⌄
+            May 06, 2026?
           </div>
         )}
         <div style={{ display: 'grid', gridTemplateColumns: '200px minmax(220px, 1fr) auto auto', gap: '16px', alignItems: 'start', marginBottom: '20px' }}>
           <div style={{ position: 'relative' }}>
             <button onClick={() => setFinancialStatusOpen(!financialStatusOpen)} style={{ ...fieldStyle, height: '54px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', color: financialStatusOpen ? '#111827' : '#94a3b8', fontWeight: 600, cursor: 'pointer', borderColor: financialStatusOpen ? '#111827' : '#e5e7eb' }}>
               <span>Status</span>
-              <span>{financialStatusOpen ? '⌃' : '⌄'}</span>
+              <span>{financialStatusOpen ? '^' : '?'}</span>
             </button>
             {financialStatusOpen && (
               <div style={{ position: 'absolute', top: '60px', left: 0, width: '200px', background: '#fff', border: '1px solid #e5e7eb', borderRadius: '0 0 10px 10px', boxShadow: '0 22px 44px rgba(15,23,42,0.14)', zIndex: 20, padding: '12px' }}>
@@ -1031,11 +1089,11 @@ export default function ProjectsPage() {
             )}
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px', border: '1px solid #e5e7eb', borderRadius: '8px', height: '54px', padding: '0 16px', background: '#fff' }}>
-            <span style={{ color: '#94a3b8', fontSize: '17px' }}>⌕</span>
+            <span style={{ color: '#94a3b8', fontSize: '17px' }}>?</span>
             <input value={financialSearch} onChange={event => setFinancialSearch(event.target.value)} placeholder={searchPlaceholder} style={{ border: 'none', outline: 'none', flex: 1, fontSize: '14px', color: '#374151' }} />
           </div>
-          <button style={{ border: 'none', background: 'transparent', color: '#111827', fontSize: '14px', fontWeight: 600, height: '54px', cursor: 'pointer' }}>● Columns</button>
-          {financialTab === 'Bills and Expenses' && <button style={{ border: 'none', background: 'transparent', color: '#111827', fontSize: '14px', fontWeight: 600, height: '54px', cursor: 'pointer' }}>▼ Filters</button>}
+          <button style={{ border: 'none', background: 'transparent', color: '#111827', fontSize: '14px', fontWeight: 600, height: '54px', cursor: 'pointer' }}>? Columns</button>
+          {financialTab === 'Bills and Expenses' && <button style={{ border: 'none', background: 'transparent', color: '#111827', fontSize: '14px', fontWeight: 600, height: '54px', cursor: 'pointer' }}>? Filters</button>}
         </div>
         <div style={{ overflowX: 'auto' }}>
           <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: financialTab === 'Bills and Expenses' ? '920px' : '760px' }}>
@@ -1056,7 +1114,7 @@ export default function ProjectsPage() {
           </div>
         </div>
         <div style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: '28px', padding: '18px 8px 0', fontSize: '14px', color: '#111827' }}>
-          <span>Rows per page: <strong style={{ marginLeft: '8px', fontWeight: 500 }}>50⌄</strong></span>
+          <span>Rows per page: <strong style={{ marginLeft: '8px', fontWeight: 500 }}>50?</strong></span>
           <span>0-0 of 0</span>
           <span style={{ color: '#94a3b8', fontSize: '24px' }}>‹</span>
           <span style={{ color: '#94a3b8', fontSize: '24px' }}>›</span>
@@ -1102,7 +1160,7 @@ export default function ProjectsPage() {
               <div style={{ fontSize: '16px', color: '#111827', fontWeight: 600, lineHeight: 1.4 }}>{selectedProject.name}</div>
               <div style={{ fontSize: '13px', color: '#64748b', fontWeight: 600, marginTop: '5px' }}>{selectedProject.location}</div>
               <div style={{ display: 'flex', gap: '8px', alignItems: 'center', marginTop: '10px', flexWrap: 'wrap' }}>
-                <span style={{ fontSize: '11px', fontWeight: 600, padding: '4px 10px', borderRadius: '7px', background: statusStyle[selectedProject.status].bg, color: statusStyle[selectedProject.status].color }}>{statusLabel(selectedProject.status)}</span>
+                <span style={{ fontSize: '11px', fontWeight: 600, padding: '4px 10px', borderRadius: '7px', background: getStatusStyle(selectedProject.status).bg, color: getStatusStyle(selectedProject.status).color }}>{statusLabel(selectedProject.status)}</span>
                 <span style={{ fontSize: '12px', color: '#64748b', fontWeight: 600 }}>as of {selectedProject.startDate || '-'}</span>
               </div>
             </div>
@@ -1152,8 +1210,8 @@ export default function ProjectsPage() {
               <section style={panelStyle}>
                 <div style={panelTitleStyle}>Expected Expenses and Actual Cost</div>
                 <div style={{ display: 'flex', gap: '18px', alignItems: 'center', marginTop: '8px', marginBottom: '18px' }}>
-                  <span style={{ fontSize: '12px', color: '#374151', fontWeight: 600 }}><span style={{ color: '#22c55e' }}>●</span> Estimated</span>
-                  <span style={{ fontSize: '12px', color: '#374151', fontWeight: 600 }}><span style={{ color: '#ef4444' }}>●</span> Cost</span>
+                  <span style={{ fontSize: '12px', color: '#374151', fontWeight: 600 }}><span style={{ color: '#22c55e' }}>?</span> Estimated</span>
+                  <span style={{ fontSize: '12px', color: '#374151', fontWeight: 600 }}><span style={{ color: '#ef4444' }}>?</span> Cost</span>
                 </div>
                 <div style={{ height: '260px', display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '28px', alignItems: 'end', borderBottom: '1px solid #e5e7eb', padding: '0 24px' }}>
                   {breakdown.map(item => (
@@ -1174,7 +1232,7 @@ export default function ProjectsPage() {
               <section style={panelStyle}>
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '18px' }}>
                   <div style={panelTitleStyle}>Notes</div>
-                  <button onClick={() => startEdit(selectedProject)} style={{ border: 'none', background: 'transparent', color: '#64748b', fontSize: '18px', cursor: 'pointer' }}>✎</button>
+                  <button onClick={() => startEdit(selectedProject)} style={{ border: 'none', background: 'transparent', color: '#64748b', fontSize: '18px', cursor: 'pointer' }}>?</button>
                 </div>
                 <div style={{ fontSize: '13px', color: selectedProject.notes ? '#374151' : '#64748b', lineHeight: 1.7, whiteSpace: 'pre-wrap' }}>{selectedProject.notes || 'This is where your notes will appear.'}</div>
               </section>
@@ -1608,7 +1666,7 @@ export default function ProjectsPage() {
         <div style={{ display: 'flex', justifyContent: 'space-between', gap: '14px', padding: '18px 22px 0', borderBottom: '1px solid #e5e7eb', flexWrap: 'wrap' }}>
           <div style={{ display: 'flex', gap: '18px', overflowX: 'auto' }}>
             {(['Kanban', 'Table', 'Grid'] as ProjectViewMode[]).map(mode => (
-              <button key={mode} onClick={() => setViewMode(mode)} style={{ border: 'none', borderBottom: viewMode === mode ? '3px solid #1db954' : '3px solid transparent', background: 'transparent', color: viewMode === mode ? '#191414' : '#535353', padding: '0 4px 14px', fontSize: '13px', fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap' }}>
+              <button key={mode} onClick={() => setViewMode(mode)} style={{ border: 'none', borderBottom: viewMode === mode ? '3px solid #22c55e' : '3px solid transparent', background: 'transparent', color: viewMode === mode ? '#191414' : '#535353', padding: '0 4px 14px', fontSize: '13px', fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap' }}>
                 {mode} View
               </button>
             ))}
@@ -1617,7 +1675,7 @@ export default function ProjectsPage() {
             <button style={{ ...buttonStyle, minHeight: '36px', padding: '8px 13px', background: '#fff', border: '1px solid #d9d9d9', color: '#191414' }}>Filter</button>
             <button style={{ ...buttonStyle, minHeight: '36px', padding: '8px 13px', background: '#fff', border: '1px solid #d9d9d9', color: '#191414' }}>Group by: Status</button>
             <button style={{ ...buttonStyle, minHeight: '36px', padding: '8px 13px', background: '#fff', border: '1px solid #d9d9d9', color: '#191414' }}>Sort</button>
-            <button onClick={startCreate} style={{ ...buttonStyle, minHeight: '36px', padding: '8px 14px', background: '#1db954', color: '#191414' }}>+ New Project</button>
+            <button onClick={startCreate} style={{ ...buttonStyle, minHeight: '36px', padding: '8px 14px', background: '#22c55e', color: '#191414' }}>+ New Project</button>
           </div>
         </div>
 
@@ -1635,9 +1693,9 @@ export default function ProjectsPage() {
 
         <div style={{ display: 'flex', gap: '12px', padding: '0 24px 16px', overflowX: 'auto' }}>
           {tabs.map(tab => (
-            <button key={tab} onClick={() => setActiveTab(tab)} style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '8px 12px', cursor: 'pointer', fontSize: '13px', fontWeight: 600, color: activeTab === tab ? '#191414' : '#535353', border: '1px solid', borderColor: activeTab === tab ? '#1db954' : '#d9d9d9', borderRadius: '999px', background: activeTab === tab ? '#effff4' : '#fff', whiteSpace: 'nowrap' }}>
+            <button key={tab} onClick={() => setActiveTab(tab)} style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '8px 12px', cursor: 'pointer', fontSize: '13px', fontWeight: 600, color: activeTab === tab ? '#191414' : '#535353', border: '1px solid', borderColor: activeTab === tab ? '#22c55e' : '#d9d9d9', borderRadius: '999px', background: activeTab === tab ? '#effff4' : '#fff', whiteSpace: 'nowrap' }}>
               {tab}
-              <span style={{ fontSize: '11px', padding: '1px 7px', borderRadius: '20px', background: activeTab === tab ? '#1db954' : '#f5f5f5', color: activeTab === tab ? '#191414' : '#535353', fontWeight: 600 }}>{tabCount(tab)}</span>
+              <span style={{ fontSize: '11px', padding: '1px 7px', borderRadius: '20px', background: activeTab === tab ? '#22c55e' : '#f5f5f5', color: activeTab === tab ? '#191414' : '#535353', fontWeight: 600 }}>{tabCount(tab)}</span>
             </button>
           ))}
         </div>
@@ -1678,7 +1736,7 @@ export default function ProjectsPage() {
                       <td style={cellStyle}>Paid {money(project.paidAmount)} / Unpaid {money(project.unpaidAmount)}</td>
                       <td style={cellStyle}>{duration(project)}</td>
                       <td style={{ padding: '16px' }}>
-                        <span style={{ fontSize: '11px', fontWeight: 600, padding: '4px 10px', borderRadius: '20px', background: statusStyle[project.status].bg, color: statusStyle[project.status].color }}>
+                        <span style={{ fontSize: '11px', fontWeight: 600, padding: '4px 10px', borderRadius: '20px', background: getStatusStyle(project.status).bg, color: getStatusStyle(project.status).color }}>
                           {statusLabel(project.status)}
                         </span>
                       </td>

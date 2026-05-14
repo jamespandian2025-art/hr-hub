@@ -9,7 +9,7 @@ const onboardingKey = 'flowsys-onboarding'
 const accountKey = 'flowsys-account'
 const projectsKey = 'flowsys-projects'
 
-type Role = 'Admin' | 'Project Manager' | 'Support' | 'Client'
+type Role = 'Admin' | 'Finance' | 'HR' | 'Project Manager' | 'Support' | 'Client'
 
 interface Invite {
   email: string
@@ -36,6 +36,8 @@ const initialState: OnboardingState = {
 
 const roleDescriptions: Record<Role, string> = {
   Admin: 'Full setup for company, team, and first project.',
+  Finance: 'Finance workspace for payroll controls, loans, cash advances, and accounting reviews.',
+  HR: 'HR workspace for employee records, attendance, leave, payroll review, and people workflows.',
   'Project Manager': 'Personal setup with quick access to assigned projects.',
   Support: 'Personal setup focused on team chat and support work.',
   Client: 'A simple client portal setup for viewing project updates.',
@@ -97,7 +99,17 @@ const loadOnboarding = () => {
 
   try {
     const stored = window.localStorage.getItem(onboardingKey)
-    return stored ? ({ ...initialState, ...JSON.parse(stored) } as OnboardingState) : initialState
+    if (stored) return { ...initialState, ...JSON.parse(stored) } as OnboardingState
+    const accountRaw = window.localStorage.getItem(accountKey)
+    const account = accountRaw ? JSON.parse(accountRaw) as { role?: Role; fullName?: string } : {}
+    return {
+      ...initialState,
+      personal: {
+        ...initialState.personal,
+        role: account.role || initialState.personal.role,
+        fullName: account.fullName || '',
+      },
+    }
   } catch {
     return initialState
   }
@@ -108,9 +120,21 @@ export default function OnboardingPage() {
   const [data, setData] = useState<OnboardingState>(loadOnboarding)
   const [inviteEmail, setInviteEmail] = useState('')
   const [inviteRole, setInviteRole] = useState<Role>('Project Manager')
+  const [roleLocked] = useState(() => {
+    if (typeof window === 'undefined') return false
+    try {
+      const accountRaw = window.localStorage.getItem(accountKey)
+      const account = accountRaw ? JSON.parse(accountRaw) as { roleLocked?: boolean } : {}
+      return Boolean(account.roleLocked)
+    } catch {
+      return false
+    }
+  })
 
   const steps = useMemo(() => {
     if (data.personal.role === 'Client') return ['Personal Info', 'Client Portal', 'Finish']
+    if (data.personal.role === 'Finance') return ['Personal Info', 'Finish']
+    if (data.personal.role === 'HR') return ['Personal Info', 'Finish']
     if (data.personal.role === 'Support') return ['Personal Info', 'Team Setup', 'Finish']
     if (data.personal.role === 'Project Manager') return ['Personal Info', 'Assigned Projects', 'Finish']
     return ['Personal Info', 'Company', 'Team Members', 'First Project', 'Finish']
@@ -174,7 +198,7 @@ export default function OnboardingPage() {
     }
 
     window.localStorage.setItem(onboardingKey, JSON.stringify({ ...data, complete: true, step: currentStep }))
-    router.push(data.personal.role === 'Client' ? '/client-portal' : '/dashboard')
+    router.push(routeForRole(data.personal.role))
   }
 
   return (
@@ -239,13 +263,14 @@ export default function OnboardingPage() {
                 <div>
                   <div style={labelStyle}>Choose your role</div>
                   <div style={roleGridStyle}>
-                    {(['Admin', 'Project Manager', 'Support', 'Client'] as Role[]).map(role => (
-                      <button key={role} onClick={() => update({ personal: { ...data.personal, role }, step: 0 })} style={choiceCardStyle(data.personal.role === role)}>
+                    {(roleLocked ? [data.personal.role] : ['Admin', 'Finance', 'HR', 'Project Manager', 'Support', 'Client'] as Role[]).map(role => (
+                      <button key={role} onClick={() => !roleLocked && update({ personal: { ...data.personal, role }, step: 0 })} style={choiceCardStyle(data.personal.role === role)}>
                         <span style={choiceTitleStyle}>{role}</span>
                         <span style={choiceBodyStyle}>{roleDescriptions[role]}</span>
                       </button>
                     ))}
                   </div>
+                  {roleLocked && <div style={helperBoxStyle}>For security, this signup is locked as the workspace Admin. HR and Finance accounts should be invited or assigned by Admin after setup.</div>}
                 </div>
 
                 <label style={fieldGroupStyle}>
@@ -279,6 +304,8 @@ export default function OnboardingPage() {
                     <span style={labelStyle}>Role</span>
                     <select style={fieldStyle} value={inviteRole} onChange={event => setInviteRole(event.target.value as Role)}>
                       <option>Project Manager</option>
+                      <option>Finance</option>
+                      <option>HR</option>
                       <option>Support</option>
                       <option>Client</option>
                       <option>Admin</option>
@@ -358,15 +385,22 @@ function InfoPanel({ title, body }: { title: string; body: string }) {
   )
 }
 
-const shellStyle: CSSProperties = { minHeight: '100vh', background: '#f5f5f5', fontFamily: "'Inter', sans-serif", display: 'grid', gridTemplateColumns: '360px minmax(0,1fr)' }
+function routeForRole(role: Role) {
+  if (role === 'Client') return '/client-portal'
+  if (role === 'Finance') return '/financials/loan-management'
+  if (role === 'HR') return '/hr/overview'
+  return '/dashboard'
+}
+
+const shellStyle: CSSProperties = { minHeight: '100vh', background: '#f5f5f5', fontFamily: "var(--font-body)", display: 'grid', gridTemplateColumns: '360px minmax(0,1fr)' }
 const railStyle: CSSProperties = { minHeight: '100vh', background: '#191414', color: '#fff', padding: '34px 30px', display: 'flex', flexDirection: 'column', justifyContent: 'space-between', boxShadow: '18px 0 50px rgba(25,20,20,.22)' }
 const brandStyle: CSSProperties = { display: 'flex', alignItems: 'center', gap: 10, fontSize: 18, fontWeight: 600, marginBottom: 44 }
-const brandIconStyle: CSSProperties = { width: 40, height: 40, borderRadius: 12, background: '#1db954', color: '#191414', display: 'grid', placeItems: 'center', boxShadow: '0 16px 32px rgba(29,185,84,.24)' }
+const brandIconStyle: CSSProperties = { width: 40, height: 40, borderRadius: 12, background: '#22c55e', color: '#191414', display: 'grid', placeItems: 'center', boxShadow: '0 16px 32px rgba(34,197,94,.24)' }
 const railTitleStyle = { fontSize: 32, lineHeight: 1.12, fontWeight: 600, marginBottom: 14 }
 const railTextStyle = { color: '#cbd5e1', fontSize: 14, lineHeight: 1.6, margin: 0 }
 const progressLabelStyle = { display: 'flex', justifyContent: 'space-between', color: '#cbd5e1', fontSize: 12, fontWeight: 600, marginTop: 30, marginBottom: 9 }
 const progressTrackStyle = { height: 8, background: '#263244', borderRadius: 99, overflow: 'hidden' }
-const progressFillStyle = { height: '100%', background: '#1db954', borderRadius: 99, transition: 'width .25s ease' }
+const progressFillStyle = { height: '100%', background: '#22c55e', borderRadius: 99, transition: 'width .25s ease' }
 const stepListStyle = { display: 'grid', gap: 12, marginTop: 34 }
 const stepRowStyle = { display: 'flex', alignItems: 'center', gap: 12, fontWeight: 600, padding: '10px 12px', borderRadius: 14 }
 const stepBubbleStyle = { width: 30, height: 30, borderRadius: '50%', display: 'grid', placeItems: 'center', fontSize: 12, flex: '0 0 auto' }

@@ -1,7 +1,7 @@
 'use client'
 import { useState } from 'react'
 
-const font = "'DM Sans', sans-serif"
+const font = "var(--font-body)"
 
 const companies = [
   {
@@ -100,7 +100,7 @@ export default function ProfileDropdown() {
                 justifyContent: 'center',
                 fontSize: '12px'
               }}>
-                🏢
+                ??
               </div>
 
               <div>

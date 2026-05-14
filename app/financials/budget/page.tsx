@@ -4,7 +4,7 @@ import { PieChart, Pie, Cell, ResponsiveContainer } from 'recharts'
 import ClientChart from '../../../components/ClientChart'
 import jsPDF from 'jspdf'
 
-const font = "'DM Sans', sans-serif"
+const font = "var(--font-body)"
 const projectsStorageKey = 'flowsys-projects'
 const budgetsStorageKey = 'flowsys-budgets'
 
@@ -148,7 +148,7 @@ export default function BudgetPage() {
     doc.setFont('helvetica', 'normal')
     doc.text(`Total Amount:`, 14, 98)
     doc.setFont('helvetica', 'bold')
-    doc.text(`P${budget.total.toLocaleString()}.00`, 50, 98)
+    doc.text(`PHP ${budget.total.toLocaleString('en-PH')}.00`, 50, 98)
     if (budget.description) {
       doc.setFont('helvetica', 'normal')
       doc.text(`Description:`, 14, 108)
@@ -188,7 +188,7 @@ export default function BudgetPage() {
     return (
       <div style={{ fontFamily: font }}>
         <div onClick={() => setShowCreate(false)} style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', fontSize: '14px', color: '#374151', fontWeight: 600, marginBottom: '20px', cursor: 'pointer' }}>
-          ← Back
+          ? Back
         </div>
         <div style={{ fontSize: '24px', fontWeight: 600, color: '#111827', marginBottom: '6px' }}>Create Budget</div>
         <div style={{ fontSize: '13px', color: '#9ca3af', marginBottom: '32px', display: 'flex', alignItems: 'center', gap: '6px' }}>
@@ -264,7 +264,7 @@ export default function BudgetPage() {
                 </div>
                 {budgetItems.length > 1 && (
                   <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
-                    <span onClick={() => removeBudgetItem(item.id)} style={{ fontSize: '13px', color: '#ef4444', fontWeight: 600, cursor: 'pointer' }}>🗑 Remove</span>
+                    <span onClick={() => removeBudgetItem(item.id)} style={{ fontSize: '13px', color: '#ef4444', fontWeight: 600, cursor: 'pointer' }}>?? Remove</span>
                   </div>
                 )}
               </div>
@@ -274,7 +274,7 @@ export default function BudgetPage() {
                 + Add Item
               </button>
               <button onClick={() => setShowImportModal(true)} style={{ padding: '9px 18px', background: '#fff', border: '1px solid #e5e7eb', borderRadius: '8px', fontFamily: font, fontSize: '13px', fontWeight: 600, cursor: 'pointer', color: '#374151' }}>
-                ▾ Import item
+                ? Import item
               </button>
             </div>
           </div>
@@ -286,7 +286,7 @@ export default function BudgetPage() {
           <div style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: '12px', padding: '20px' }}>
             <div style={{ fontSize: '13px', fontWeight: 600, color: '#374151', marginBottom: '12px' }}>Attachments</div>
             <div style={{ border: '2px dashed #e5e7eb', borderRadius: '12px', padding: '40px 20px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '12px', background: '#fafafa', cursor: 'pointer' }}>
-              <div style={{ fontSize: '40px' }}>📁</div>
+              <div style={{ fontSize: '40px' }}>??</div>
               <div style={{ fontSize: '14px', fontWeight: 600, color: '#111827' }}>Drop or Select file</div>
               <div style={{ fontSize: '13px', color: '#6b7280' }}>
                 Drop files here or click <span style={{ color: '#6c63ff', fontWeight: 600 }}>browse</span> thorough your machine
@@ -304,10 +304,10 @@ export default function BudgetPage() {
         {showImportModal && (
           <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}>
             <div style={{ background: '#fff', borderRadius: '16px', padding: '32px', width: '500px', position: 'relative' }}>
-              <div onClick={() => setShowImportModal(false)} style={{ position: 'absolute', top: '16px', right: '20px', fontSize: '20px', cursor: 'pointer', color: '#9ca3af' }}>✕</div>
+              <div onClick={() => setShowImportModal(false)} style={{ position: 'absolute', top: '16px', right: '20px', fontSize: '20px', cursor: 'pointer', color: '#9ca3af' }}>?</div>
               <div style={{ fontSize: '18px', fontWeight: 600, color: '#111827', marginBottom: '20px' }}>Import Budget</div>
               <div style={{ border: '1px solid #f3f4f6', borderRadius: '12px', padding: '40px 20px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '12px', background: '#fafafa', cursor: 'pointer', marginBottom: '24px' }}>
-                <div style={{ fontSize: '48px' }}>📁</div>
+                <div style={{ fontSize: '48px' }}>??</div>
                 <div style={{ fontSize: '15px', fontWeight: 600, color: '#111827' }}>Select PDF or CSV file</div>
                 <div style={{ fontSize: '13px', color: '#6b7280' }}>Drop files here or click <span style={{ color: '#6c63ff', fontWeight: 600 }}>browse</span> thorough your machine</div>
               </div>
@@ -331,7 +331,7 @@ export default function BudgetPage() {
             + Budget
           </button>
           <button onClick={() => setShowImportModal(true)} style={{ padding: '10px 20px', background: '#111827', color: '#fff', border: 'none', borderRadius: '10px', fontFamily: font, fontSize: '14px', fontWeight: 600, cursor: 'pointer' }}>
-            ⬇ Import
+            ? Import
           </button>
         </div>
       </div>
@@ -341,7 +341,7 @@ export default function BudgetPage() {
       </div>
 
       <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '16px' }}>
-        <div style={{ fontSize: '13px', color: '#374151', fontWeight: 600, background: '#fff', border: '1px solid #e5e7eb', padding: '8px 16px', borderRadius: '20px', cursor: 'pointer' }}>📅 May 06, 2026 ▾</div>
+        <div style={{ fontSize: '13px', color: '#374151', fontWeight: 600, background: '#fff', border: '1px solid #e5e7eb', padding: '8px 16px', borderRadius: '20px', cursor: 'pointer' }}>?? May 06, 2026 ?</div>
       </div>
 
       <div style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: '16px', overflow: 'hidden' }}>
@@ -367,7 +367,7 @@ export default function BudgetPage() {
           <div style={{ padding: '24px', borderRight: '1px solid #f3f4f6' }}>
             <div style={{ fontSize: '13px', color: '#6b7280', fontWeight: 500, marginBottom: '8px' }}>Total Budget</div>
             <div style={{ fontSize: '26px', fontWeight: 600, color: '#111827', marginBottom: '4px' }}>
-              ₱{totalAmount.toLocaleString()}.00
+              PHP {totalAmount.toLocaleString('en-PH')}.00
             </div>
             <div style={{ fontSize: '12px', color: '#f59e0b', fontWeight: 500 }}>
               {budgets.length} budget{budgets.length !== 1 ? 's' : ''} total
@@ -376,7 +376,7 @@ export default function BudgetPage() {
           <div style={{ padding: '24px', borderRight: '1px solid #f3f4f6' }}>
             <div style={{ fontSize: '13px', color: '#6b7280', fontWeight: 500, marginBottom: '8px' }}>Approved Budget</div>
             <div style={{ fontSize: '26px', fontWeight: 600, color: '#111827', marginBottom: '4px' }}>
-              ₱{approvedAmount.toLocaleString()}.00
+              PHP {approvedAmount.toLocaleString('en-PH')}.00
             </div>
             <div style={{ fontSize: '12px', color: '#10b981', fontWeight: 500 }}>
               {budgets.filter(b => b.status === 'APPROVED').length} approved
@@ -395,7 +395,7 @@ export default function BudgetPage() {
               </ClientChart>
               <div style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%,-50%)', textAlign: 'center' }}>
                 <div style={{ fontSize: '9px', color: '#6b7280', fontWeight: 600, textTransform: 'uppercase' }}>Total</div>
-                <div style={{ fontSize: '10px', fontWeight: 600, color: '#111827' }}>₱{(totalAmount / 1000000).toFixed(2)}M</div>
+                <div style={{ fontSize: '10px', fontWeight: 600, color: '#111827' }}>PHP {(totalAmount / 1000000).toFixed(2)}M</div>
               </div>
             </div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
@@ -411,7 +411,7 @@ export default function BudgetPage() {
                       {item.label} ({budgets.filter(b => b.status === item.status).length})
                     </div>
                     <div style={{ fontSize: '12px', color: '#111827', fontWeight: 600 }}>
-                      ₱{budgets.filter(b => b.status === item.status).reduce((s, b) => s + b.total, 0).toLocaleString()}.00
+                      PHP {budgets.filter(b => b.status === item.status).reduce((s, b) => s + b.total, 0).toLocaleString('en-PH')}.00
                     </div>
                   </div>
                 </div>
@@ -423,22 +423,22 @@ export default function BudgetPage() {
         {/* Filter Bar */}
         <div style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '16px 24px', borderBottom: '1px solid #f3f4f6' }}>
           <div style={{ flex: 1, display: 'flex', alignItems: 'center', gap: '8px', padding: '8px 14px', border: '1px solid #e5e7eb', borderRadius: '8px', background: '#fafafa' }}>
-            <span style={{ color: '#9ca3af' }}>🔍</span>
+            <span style={{ color: '#9ca3af' }}>??</span>
             <input type="text" placeholder="Search..." value={search} onChange={e => setSearch(e.target.value)}
               style={{ border: 'none', background: 'transparent', fontFamily: font, fontSize: '13px', color: '#374151', outline: 'none', flex: 1 }} />
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '8px 14px', border: '1px solid #e5e7eb', borderRadius: '8px', background: '#fafafa', cursor: 'pointer' }}>
-            <span style={{ fontSize: '13px', color: '#374151', fontWeight: 500 }}>⊞ Columns</span>
+            <span style={{ fontSize: '13px', color: '#374151', fontWeight: 500 }}>? Columns</span>
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '8px 14px', border: '1px solid #e5e7eb', borderRadius: '8px', background: '#fafafa', cursor: 'pointer' }}>
-            <span style={{ fontSize: '13px', color: '#374151', fontWeight: 500 }}>⚡ Filters</span>
+            <span style={{ fontSize: '13px', color: '#374151', fontWeight: 500 }}>? Filters</span>
           </div>
         </div>
 
         {/* Table or Empty */}
         {filtered.length === 0 ? (
           <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '60px', gap: '12px' }}>
-            <div style={{ fontSize: '40px', opacity: 0.2 }}>💰</div>
+            <div style={{ fontSize: '40px', opacity: 0.2 }}>??</div>
             <div style={{ fontSize: '14px', fontWeight: 600, color: '#9ca3af' }}>No budgets yet — click + Budget to create one</div>
           </div>
         ) : (
@@ -462,7 +462,7 @@ export default function BudgetPage() {
                     </td>
                     <td style={{ padding: '16px', fontSize: '13px', color: '#374151', fontWeight: 500 }}>{budget.project}</td>
                     <td style={{ padding: '16px', fontSize: '13px', color: '#6b7280' }}>{budget.date}</td>
-                    <td style={{ padding: '16px', fontSize: '13px', fontWeight: 600, color: '#111827' }}>₱{budget.total.toLocaleString()}.00</td>
+                    <td style={{ padding: '16px', fontSize: '13px', fontWeight: 600, color: '#111827' }}>PHP {budget.total.toLocaleString('en-PH')}.00</td>
                     <td style={{ padding: '16px' }}>
                       <span style={{ fontSize: '11px', fontWeight: 600, padding: '4px 10px', borderRadius: '20px', background: statusStyle[budget.status]?.bg, color: statusStyle[budget.status]?.color }}>
                         {budget.status}
@@ -470,26 +470,26 @@ export default function BudgetPage() {
                     </td>
                     <td style={{ padding: '16px', position: 'relative' }}>
                       <div onClick={e => { e.stopPropagation(); setOpenMenu(openMenu === budget.id ? null : budget.id) }}
-                        style={{ color: '#9ca3af', cursor: 'pointer', fontSize: '18px', fontWeight: 600, padding: '4px 8px', display: 'inline-block' }}>⋮</div>
+                        style={{ color: '#9ca3af', cursor: 'pointer', fontSize: '18px', fontWeight: 600, padding: '4px 8px', display: 'inline-block' }}>?</div>
                       {openMenu === budget.id && (
                         <div style={{ position: 'absolute', right: '40px', top: '8px', background: '#fff', border: '1px solid #e5e7eb', borderRadius: '10px', boxShadow: '0 4px 20px rgba(0,0,0,0.1)', zIndex: 100, minWidth: '140px', overflow: 'hidden' }}>
                           <div onClick={() => setOpenMenu(null)}
                             style={{ padding: '10px 16px', fontSize: '13px', color: '#374151', fontWeight: 500, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px' }}
                             onMouseEnter={e => (e.currentTarget.style.background = '#f9fafb')}
                             onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}>
-                            ✏️ Edit
+                            ?? Edit
                           </div>
                           <div onClick={() => handleDelete(budget.id)}
                             style={{ padding: '10px 16px', fontSize: '13px', color: '#ef4444', fontWeight: 500, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px' }}
                             onMouseEnter={e => (e.currentTarget.style.background = '#fef2f2')}
                             onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}>
-                            🗑️ Delete
+                            ??? Delete
                           </div>
                           <div onClick={() => handleDownload(budget)}
                             style={{ padding: '10px 16px', fontSize: '13px', color: '#374151', fontWeight: 500, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px' }}
                             onMouseEnter={e => (e.currentTarget.style.background = '#f9fafb')}
                             onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}>
-                            ⬇️ Download PDF
+                            ?? Download PDF
                           </div>
                         </div>
                       )}
@@ -521,10 +521,10 @@ export default function BudgetPage() {
       {showImportModal && (
         <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}>
           <div style={{ background: '#fff', borderRadius: '16px', padding: '32px', width: '500px', position: 'relative' }}>
-            <div onClick={() => setShowImportModal(false)} style={{ position: 'absolute', top: '16px', right: '20px', fontSize: '20px', cursor: 'pointer', color: '#9ca3af' }}>✕</div>
+            <div onClick={() => setShowImportModal(false)} style={{ position: 'absolute', top: '16px', right: '20px', fontSize: '20px', cursor: 'pointer', color: '#9ca3af' }}>?</div>
             <div style={{ fontSize: '18px', fontWeight: 600, color: '#111827', marginBottom: '20px' }}>Import Budget</div>
             <div style={{ border: '1px solid #f3f4f6', borderRadius: '12px', padding: '40px 20px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '12px', background: '#fafafa', cursor: 'pointer', marginBottom: '24px' }}>
-              <div style={{ fontSize: '48px' }}>📁</div>
+              <div style={{ fontSize: '48px' }}>??</div>
               <div style={{ fontSize: '15px', fontWeight: 600, color: '#111827' }}>Select PDF or CSV file</div>
               <div style={{ fontSize: '13px', color: '#6b7280' }}>Drop files here or click <span style={{ color: '#6c63ff', fontWeight: 600 }}>browse</span> thorough your machine</div>
             </div>

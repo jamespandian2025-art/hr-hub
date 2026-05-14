@@ -46,8 +46,8 @@ import {
   X,
 } from 'lucide-react'
 
-const font = "'DM Sans', sans-serif"
-const displayFont = "'Outfit', 'DM Sans', sans-serif"
+const font = "var(--font-body)"
+const displayFont = "var(--font-body)"
 const tasksStorageKey = 'flowsys-assigned-tasks'
 const projectsStorageKey = 'flowsys-projects'
 const accountStorageKey = 'flowsys-account'
@@ -144,7 +144,7 @@ interface ProjectRecord {
 }
 
 const DEFAULT_STAGES: WorkflowStage[] = [
-  { id: 'wf-done',   name: 'Done',   color: '#1db954', order: 100, type: 'done'   },
+  { id: 'wf-done',   name: 'Done',   color: '#22c55e', order: 100, type: 'done'   },
   { id: 'wf-failed', name: 'Failed', color: '#ef4444', order: 200, type: 'failed' },
 ]
 
@@ -238,8 +238,8 @@ const priorityColors: Record<TaskPriority, string> = {
 
 const statusColors: Record<TaskStatus, { bg: string; text: string; border: string }> = {
   Open: { bg: '#f5f5f5', text: '#535353', border: '#b3b3b3' },
-  'In Progress': { bg: '#effff4', text: '#1db954', border: '#1db954' },
-  Completed: { bg: '#e8fbea', text: '#138a3d', border: '#1ed760' },
+  'In Progress': { bg: '#effff4', text: '#22c55e', border: '#22c55e' },
+  Completed: { bg: '#e8fbea', text: '#138a3d', border: '#4ade80' },
 }
 
 const clStatusBadge: Record<TaskStatus, { bg: string; color: string }> = {
@@ -278,26 +278,26 @@ function dueMeta(task: AssignedTask) {
   const due = dateTime(task.dueDate)
   const today = todayTime()
   if (due < today) return { group: 'Overdue', label: `${formatDate(task.dueDate)} overdue`, text: '#191414', bg: '#e7e7e7' }
-  if (due === today) return { group: 'Today', label: `${formatDate(task.dueDate)} today`, text: '#191414', bg: '#1ed760' }
-  if (due <= today + 7 * 86400000) return { group: 'This Week', label: formatDate(task.dueDate), text: '#1db954', bg: '#effff4' }
-  return { group: 'Upcoming', label: formatDate(task.dueDate), text: '#1db954', bg: '#effff4' }
+  if (due === today) return { group: 'Today', label: `${formatDate(task.dueDate)} today`, text: '#191414', bg: '#4ade80' }
+  if (due <= today + 7 * 86400000) return { group: 'This Week', label: formatDate(task.dueDate), text: '#22c55e', bg: '#effff4' }
+  return { group: 'Upcoming', label: formatDate(task.dueDate), text: '#22c55e', bg: '#effff4' }
 }
 
 function taskPriority(task: AssignedTask) {
-  if (task.status === 'In Progress') return { label: 'High', color: '#1db954' }
+  if (task.status === 'In Progress') return { label: 'High', color: '#22c55e' }
   if (task.status === 'Completed') return { label: 'Done', color: '#138a3d' }
   return { label: 'Normal', color: '#b3b3b3' }
 }
 
 function spaceColor(name: string) {
-  const colors = ['#1db954', '#3b82f6', '#f59e0b', '#ef4444', '#8b5cf6', '#06b6d4', '#ec4899', '#10b981']
+  const colors = ['#22c55e', '#3b82f6', '#f59e0b', '#ef4444', '#8b5cf6', '#06b6d4', '#ec4899', '#10b981']
   let h = 0
   for (let i = 0; i < name.length; i++) h = (h * 31 + name.charCodeAt(i)) % colors.length
   return colors[h]
 }
 
 function taskType(task: AssignedTask) {
-  if (task.source === 'Change Order') return { label: 'Client Request', color: '#1db954' }
+  if (task.source === 'Change Order') return { label: 'Client Request', color: '#22c55e' }
   return { label: 'General', color: '#535353' }
 }
 
@@ -496,11 +496,11 @@ export default function TasksPage() {
 
   const groupedTasks = useMemo(() => {
     const groups = [
-      { title: 'Project Work', color: '#1db954', tasks: filteredTasks.filter(task => task.source !== 'Change Order') },
-      { title: 'Client Requests', color: '#1ed760', tasks: filteredTasks.filter(task => task.source === 'Change Order') },
+      { title: 'Project Work', color: '#22c55e', tasks: filteredTasks.filter(task => task.source !== 'Change Order') },
+      { title: 'Client Requests', color: '#4ade80', tasks: filteredTasks.filter(task => task.source === 'Change Order') },
     ].filter(group => group.tasks.length > 0)
 
-    return groups.length ? groups : [{ title: 'All Tasks', color: '#1db954', tasks: filteredTasks }]
+    return groups.length ? groups : [{ title: 'All Tasks', color: '#22c55e', tasks: filteredTasks }]
   }, [filteredTasks])
 
   const reminderGroups = useMemo(() => {
@@ -987,7 +987,7 @@ export default function TasksPage() {
     <main style={{ maxWidth: 'none', margin: 0, minHeight: 'calc(100vh - 66px)', background: '#111', fontFamily: font, color: '#f5f5f5' }}>
       <section style={{ display: 'grid', gridTemplateColumns: '260px minmax(0, 1fr)', minHeight: 'calc(100vh - 66px)' }}>
 
-        {/* ── Left sidebar ── */}
+        {/* -- Left sidebar -- */}
         <aside style={{ borderRight: '1px solid #1e1e1e', background: '#141414', position: 'sticky', top: 0, height: 'calc(100vh - 66px)', overflowY: 'auto', display: 'flex', flexDirection: 'column' }}>
 
           {/* User profile block */}
@@ -1019,7 +1019,7 @@ export default function TasksPage() {
               return (
                 <button key={item.key}
                   onClick={() => { setQuickFilter(item.key); setViewMode(item.mode) }}
-                  style={{ display: 'flex', alignItems: 'center', gap: 9, width: '100%', padding: '9px 10px', borderRadius: 8, border: 'none', background: active ? '#1db954' : 'transparent', color: active ? '#111' : '#888', cursor: 'pointer', fontSize: 13, fontWeight: active ? 700 : 500, fontFamily: font, marginBottom: 2, transition: 'background 0.12s, color 0.12s' }}
+                  style={{ display: 'flex', alignItems: 'center', gap: 9, width: '100%', padding: '9px 10px', borderRadius: 8, border: 'none', background: active ? '#22c55e' : 'transparent', color: active ? '#111' : '#888', cursor: 'pointer', fontSize: 13, fontWeight: active ? 700 : 500, fontFamily: font, marginBottom: 2, transition: 'background 0.12s, color 0.12s' }}
                   onMouseEnter={e => { if (!active) (e.currentTarget as HTMLButtonElement).style.background = '#1e1e1e'; if (!active) (e.currentTarget as HTMLButtonElement).style.color = '#ccc' }}
                   onMouseLeave={e => { if (!active) (e.currentTarget as HTMLButtonElement).style.background = 'transparent'; if (!active) (e.currentTarget as HTMLButtonElement).style.color = '#888' }}
                 >
@@ -1049,17 +1049,17 @@ export default function TasksPage() {
           </div>
         </aside>
 
-        {/* ── Main content ── */}
+        {/* -- Main content -- */}
         <section style={{ minWidth: 0, display: 'flex', flexDirection: 'column', background: isMyJobsSimpleView || viewMode === 'SystemReport' ? '#f4f4f4' : undefined }}>
 
           {/* Title row */}
           {!isMyJobsSimpleView && !isMyJobsContentView && viewMode !== 'SystemReport' && <div style={{ padding: '20px 28px 0', background: '#111', borderBottom: 'none' }}>
             {viewMode === 'Workflows' ? (
-              /* ── My Workflows header ── */
+              /* -- My Workflows header -- */
               <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 18 }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                  <div style={{ width: 34, height: 34, borderRadius: 9, background: '#1a2a1a', border: '1px solid #1db95440', display: 'grid', placeItems: 'center', flexShrink: 0 }}>
-                    <Layers size={17} color="#1db954" />
+                  <div style={{ width: 34, height: 34, borderRadius: 9, background: '#1a2a1a', border: '1px solid #22c55e40', display: 'grid', placeItems: 'center', flexShrink: 0 }}>
+                    <Layers size={17} color="#22c55e" />
                   </div>
                   <div>
                     <h1 style={{ margin: 0, color: '#f0f0f0', fontSize: 20, fontWeight: 800, fontFamily: displayFont, letterSpacing: '-0.02em' }}>My workflows</h1>
@@ -1071,13 +1071,13 @@ export default function TasksPage() {
                     <Search size={13} color="#555" />
                     <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search workflows" style={{ border: 'none', outline: 'none', background: 'transparent', color: '#ccc', fontSize: 12, fontFamily: font, width: 140 }} />
                   </label>
-                  <button onClick={() => setShowCreateWorkflow(true)} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '7px 14px', border: 'none', borderRadius: 8, background: '#1db954', color: '#111', fontSize: 12, fontWeight: 700, fontFamily: font, cursor: 'pointer' }}>
+                  <button onClick={() => setShowCreateWorkflow(true)} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '7px 14px', border: 'none', borderRadius: 8, background: '#22c55e', color: '#111', fontSize: 12, fontWeight: 700, fontFamily: font, cursor: 'pointer' }}>
                     <Plus size={13} /> Create workflow service
                   </button>
                 </div>
               </div>
             ) : (
-              /* ── Jobs / board header ── */
+              /* -- Jobs / board header -- */
               <>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginBottom: 0 }}>
                   {projectFilter !== 'All' ? (
@@ -1085,8 +1085,8 @@ export default function TasksPage() {
                       {(projects.find(p => p.id === projectFilter)?.name || 'W').slice(0, 2).toUpperCase()}
                     </div>
                   ) : (
-                    <div style={{ width: 32, height: 32, borderRadius: 8, background: '#1a2a1a', border: '1px solid #1db95440', display: 'grid', placeItems: 'center', flexShrink: 0 }}>
-                      <ClipboardList size={16} color="#1db954" />
+                    <div style={{ width: 32, height: 32, borderRadius: 8, background: '#1a2a1a', border: '1px solid #22c55e40', display: 'grid', placeItems: 'center', flexShrink: 0 }}>
+                      <ClipboardList size={16} color="#22c55e" />
                     </div>
                   )}
                   <h1 style={{ margin: 0, color: '#f0f0f0', fontSize: 18, fontWeight: 800, fontFamily: displayFont, letterSpacing: '-0.02em' }}>
@@ -1126,7 +1126,7 @@ export default function TasksPage() {
                         </div>
                       )}
                     </div>
-                    <button onClick={() => guardAddTask(quickAddTask)} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '7px 14px', border: 'none', borderRadius: 8, background: '#1db954', color: '#111', fontSize: 12, fontWeight: 700, fontFamily: font, cursor: 'pointer' }}>
+                    <button onClick={() => guardAddTask(quickAddTask)} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '7px 14px', border: 'none', borderRadius: 8, background: '#22c55e', color: '#111', fontSize: 12, fontWeight: 700, fontFamily: font, cursor: 'pointer' }}>
                       <Plus size={13} /> Create job
                     </button>
                   </div>
@@ -1143,7 +1143,7 @@ export default function TasksPage() {
                     const active = viewMode === mode
                     return (
                       <button key={mode} onClick={() => setViewMode(mode)}
-                        style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '9px 16px', border: 'none', borderBottom: active ? '2px solid #1db954' : '2px solid transparent', background: 'transparent', color: active ? '#e0e0e0' : '#555', fontWeight: active ? 700 : 500, fontSize: 12, fontFamily: font, cursor: 'pointer', whiteSpace: 'nowrap', transition: 'color 0.12s, border-color 0.12s' }}
+                        style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '9px 16px', border: 'none', borderBottom: active ? '2px solid #22c55e' : '2px solid transparent', background: 'transparent', color: active ? '#e0e0e0' : '#555', fontWeight: active ? 700 : 500, fontSize: 12, fontFamily: font, cursor: 'pointer', whiteSpace: 'nowrap', transition: 'color 0.12s, border-color 0.12s' }}
                         onMouseEnter={e => { if (!active) (e.currentTarget as HTMLButtonElement).style.color = '#aaa' }}
                         onMouseLeave={e => { if (!active) (e.currentTarget as HTMLButtonElement).style.color = '#555' }}
                       >
@@ -1156,12 +1156,12 @@ export default function TasksPage() {
                     return (
                       <button key={tab.key}
                         onClick={() => { setQuickFilter(tab.key); if (tab.key === 'overdue' || tab.key === 'today') setViewMode('Reminders') }}
-                        style={{ padding: '9px 16px', border: 'none', borderBottom: active ? '2px solid #1db954' : '2px solid transparent', background: 'transparent', color: active ? '#1db954' : '#555', fontWeight: active ? 700 : 500, fontSize: 12, fontFamily: font, cursor: 'pointer', whiteSpace: 'nowrap', display: 'flex', alignItems: 'center', gap: 5, transition: 'color 0.12s, border-color 0.12s' }}
+                        style={{ padding: '9px 16px', border: 'none', borderBottom: active ? '2px solid #22c55e' : '2px solid transparent', background: 'transparent', color: active ? '#22c55e' : '#555', fontWeight: active ? 700 : 500, fontSize: 12, fontFamily: font, cursor: 'pointer', whiteSpace: 'nowrap', display: 'flex', alignItems: 'center', gap: 5, transition: 'color 0.12s, border-color 0.12s' }}
                         onMouseEnter={e => { if (!active) (e.currentTarget as HTMLButtonElement).style.color = '#aaa' }}
                         onMouseLeave={e => { if (!active) (e.currentTarget as HTMLButtonElement).style.color = '#555' }}
                       >
                         {tab.label.toUpperCase()}
-                        {tab.count > 0 && <span style={{ background: active ? '#1db95430' : '#1e1e1e', color: active ? '#1db954' : '#555', borderRadius: 10, padding: '1px 6px', fontSize: 10, fontWeight: 700 }}>{tab.count}</span>}
+                        {tab.count > 0 && <span style={{ background: active ? '#22c55e30' : '#1e1e1e', color: active ? '#22c55e' : '#555', borderRadius: 10, padding: '1px 6px', fontSize: 10, fontWeight: 700 }}>{tab.count}</span>}
                       </button>
                     )
                   })}
@@ -1182,7 +1182,7 @@ export default function TasksPage() {
                 return (
                   <button key={chip.label}
                     onClick={() => setStatus(chip.value)}
-                    style={{ padding: '4px 12px', borderRadius: 6, border: 'none', background: active ? '#1db954' : 'transparent', color: active ? '#111' : '#555', fontWeight: 700, fontSize: 11, fontFamily: font, letterSpacing: '0.05em', cursor: 'pointer', transition: 'background 0.12s, color 0.12s' }}>
+                    style={{ padding: '4px 12px', borderRadius: 6, border: 'none', background: active ? '#22c55e' : 'transparent', color: active ? '#111' : '#555', fontWeight: 700, fontSize: 11, fontFamily: font, letterSpacing: '0.05em', cursor: 'pointer', transition: 'background 0.12s, color 0.12s' }}>
                     {chip.label}
                   </button>
                 )
@@ -1237,12 +1237,12 @@ export default function TasksPage() {
               <div style={{ position: 'relative', paddingBottom: 72 }}>
               <div className="workflow-board-scroll" style={{ display: 'flex', gap: 12, padding: '0 28px 16px', overflowX: 'auto', alignItems: 'flex-start', minHeight: 500 }}>
 
-                {/* ── Normal stage columns (or all columns when no custom stages) ── */}
+                {/* -- Normal stage columns (or all columns when no custom stages) -- */}
                 {(hasCustomStages ? normalBoardCols : boardColumns).map(({ stage, tasks: stageTasks }) => {
                   const isDone   = stage.type === 'done'
                   const isFailed = stage.type === 'failed'
-                  const colBg    = isDone ? 'rgba(29,185,84,0.06)' : isFailed ? 'rgba(239,68,68,0.06)' : '#121212'
-                  const headerBg = isDone ? 'rgba(29,185,84,0.1)'  : isFailed ? 'rgba(239,68,68,0.1)'  : 'transparent'
+                  const colBg    = isDone ? 'rgba(34,197,94,0.06)' : isFailed ? 'rgba(239,68,68,0.06)' : '#121212'
+                  const headerBg = isDone ? 'rgba(34,197,94,0.1)'  : isFailed ? 'rgba(239,68,68,0.1)'  : 'transparent'
                   const lateCount = stageTasks.filter(t => t.dueDate && dateTime(t.dueDate) < todayTime()).length
                   return (
                     <section
@@ -1264,7 +1264,7 @@ export default function TasksPage() {
                       >
                         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
                           <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
-                            <span style={{ color: isDone ? '#1db954' : isFailed ? '#ef4444' : '#e0e0e0', fontSize: 13, fontWeight: 700, letterSpacing: '0.3px' }}>{stage.name}</span>
+                            <span style={{ color: isDone ? '#22c55e' : isFailed ? '#ef4444' : '#e0e0e0', fontSize: 13, fontWeight: 700, letterSpacing: '0.3px' }}>{stage.name}</span>
                             <ChevronDown size={13} color="#444" />
                           </div>
                           <div style={{ display: 'flex', alignItems: 'center', gap: 2 }}>
@@ -1291,12 +1291,12 @@ export default function TasksPage() {
                   )
                 })}
 
-                {/* ── Terminal columns (Done / Failed) — always rendered last ── */}
+                {/* -- Terminal columns (Done / Failed) — always rendered last -- */}
                 {hasCustomStages && terminalBoardCols.map(({ stage, tasks: stageTasks }) => {
                   const isDone   = stage.type === 'done'
                   const isFailed = stage.type === 'failed'
-                  const colBg    = isDone ? 'rgba(29,185,84,0.06)' : isFailed ? 'rgba(239,68,68,0.06)' : '#121212'
-                  const headerBg = isDone ? 'rgba(29,185,84,0.1)'  : isFailed ? 'rgba(239,68,68,0.1)'  : 'transparent'
+                  const colBg    = isDone ? 'rgba(34,197,94,0.06)' : isFailed ? 'rgba(239,68,68,0.06)' : '#121212'
+                  const headerBg = isDone ? 'rgba(34,197,94,0.1)'  : isFailed ? 'rgba(239,68,68,0.1)'  : 'transparent'
                   const lateCount = stageTasks.filter(t => t.dueDate && dateTime(t.dueDate) < todayTime()).length
                   return (
                     <section
@@ -1317,7 +1317,7 @@ export default function TasksPage() {
                       >
                         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
                           <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
-                            <span style={{ color: isDone ? '#1db954' : isFailed ? '#ef4444' : '#e0e0e0', fontSize: 13, fontWeight: 700, letterSpacing: '0.3px' }}>{stage.name}</span>
+                            <span style={{ color: isDone ? '#22c55e' : isFailed ? '#ef4444' : '#e0e0e0', fontSize: 13, fontWeight: 700, letterSpacing: '0.3px' }}>{stage.name}</span>
                             <ChevronDown size={13} color="#444" />
                           </div>
                           <div style={{ display: 'flex', alignItems: 'center', gap: 2 }}>
@@ -1344,14 +1344,14 @@ export default function TasksPage() {
 
               </div>
 
-              {/* ── Add Stage button — pinned bottom-left of the board ── */}
+              {/* -- Add Stage button — pinned bottom-left of the board -- */}
               <div style={{ position: 'absolute', bottom: 16, left: 28 }}>
                 <button
                   onClick={() => setShowAddStage(true)}
                   title="Add Stage"
-                  style={{ width: 50, height: 50, borderRadius: '50%', border: 'none', background: '#1db954', cursor: 'pointer', display: 'grid', placeItems: 'center', color: '#fff', boxShadow: '0 4px 14px rgba(29,185,84,0.4)', transition: 'background 0.15s, transform 0.15s, box-shadow 0.15s' }}
-                  onMouseEnter={e => { const b = e.currentTarget as HTMLButtonElement; b.style.background = '#17a845'; b.style.transform = 'scale(1.08)'; b.style.boxShadow = '0 6px 20px rgba(29,185,84,0.55)' }}
-                  onMouseLeave={e => { const b = e.currentTarget as HTMLButtonElement; b.style.background = '#1db954'; b.style.transform = 'scale(1)'; b.style.boxShadow = '0 4px 14px rgba(29,185,84,0.4)' }}
+                  style={{ width: 50, height: 50, borderRadius: '50%', border: 'none', background: '#22c55e', cursor: 'pointer', display: 'grid', placeItems: 'center', color: '#fff', boxShadow: '0 4px 14px rgba(34,197,94,0.4)', transition: 'background 0.15s, transform 0.15s, box-shadow 0.15s' }}
+                  onMouseEnter={e => { const b = e.currentTarget as HTMLButtonElement; b.style.background = '#17a845'; b.style.transform = 'scale(1.08)'; b.style.boxShadow = '0 6px 20px rgba(34,197,94,0.55)' }}
+                  onMouseLeave={e => { const b = e.currentTarget as HTMLButtonElement; b.style.background = '#22c55e'; b.style.transform = 'scale(1)'; b.style.boxShadow = '0 4px 14px rgba(34,197,94,0.4)' }}
                 >
                   <Plus size={22} />
                 </button>
@@ -1452,7 +1452,7 @@ export default function TasksPage() {
       {/* No-stage error modal */}
       {showNoStageError && (
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.55)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 9999 }} onClick={() => setShowNoStageError(false)}>
-          <div onClick={e => e.stopPropagation()} style={{ background: '#fff', borderRadius: 14, padding: '32px 28px 24px', width: 380, boxShadow: '0 24px 64px rgba(0,0,0,0.32)', fontFamily: "'DM Sans', sans-serif", textAlign: 'center' }}>
+          <div onClick={e => e.stopPropagation()} style={{ background: '#fff', borderRadius: 14, padding: '32px 28px 24px', width: 380, boxShadow: '0 24px 64px rgba(0,0,0,0.32)', fontFamily: "var(--font-body)", textAlign: 'center' }}>
             {/* Icon */}
             <div style={{ width: 52, height: 52, borderRadius: '50%', background: '#fee2e2', display: 'grid', placeItems: 'center', margin: '0 auto 16px' }}>
               <span style={{ color: '#ef4444', fontSize: 22, fontWeight: 800, lineHeight: 1 }}>!</span>
@@ -1466,13 +1466,13 @@ export default function TasksPage() {
             {/* Buttons */}
             <button
               onClick={() => { setShowNoStageError(false); setShowAddStage(true) }}
-              style={{ width: '100%', padding: '11px 0', borderRadius: 8, border: 'none', background: '#1db954', color: '#fff', fontWeight: 700, fontSize: 14, cursor: 'pointer', marginBottom: 10, fontFamily: "'DM Sans', sans-serif" }}
+              style={{ width: '100%', padding: '11px 0', borderRadius: 8, border: 'none', background: '#22c55e', color: '#fff', fontWeight: 700, fontSize: 14, cursor: 'pointer', marginBottom: 10, fontFamily: "var(--font-body)" }}
             >
               Create Stage
             </button>
             <button
               onClick={() => setShowNoStageError(false)}
-              style={{ width: '100%', padding: '11px 0', borderRadius: 8, border: '1px solid #e5e7eb', background: 'transparent', color: '#6b7280', fontWeight: 600, fontSize: 14, cursor: 'pointer', fontFamily: "'DM Sans', sans-serif" }}
+              style={{ width: '100%', padding: '11px 0', borderRadius: 8, border: '1px solid #e5e7eb', background: 'transparent', color: '#6b7280', fontWeight: 600, fontSize: 14, cursor: 'pointer', fontFamily: "var(--font-body)" }}
             >
               Close
             </button>
@@ -1514,20 +1514,20 @@ export default function TasksPage() {
                 </div>
                 <input autoFocus value={spaceName} onChange={e => setSpaceName(e.target.value)} onKeyDown={e => { if (e.key === 'Enter' && spaceName.trim()) createSpace() }} placeholder="e.g. Marketing, Engineering, HR"
                   style={{ flex: 1, background: '#282828', border: '1px solid #333', borderRadius: 8, color: '#f5f5f5', fontSize: 14, fontFamily: font, padding: '10px 14px', outline: 'none' }}
-                  onFocus={e => (e.currentTarget.style.borderColor = '#1db954')} onBlur={e => (e.currentTarget.style.borderColor = '#333')} />
+                  onFocus={e => (e.currentTarget.style.borderColor = '#22c55e')} onBlur={e => (e.currentTarget.style.borderColor = '#333')} />
               </div>
             </div>
             <div style={{ marginBottom: 20 }}>
               <label style={{ display: 'block', color: '#f5f5f5', fontSize: 13, fontWeight: 700, marginBottom: 8 }}>Description <span style={{ color: '#555', fontWeight: 500 }}>(optional)</span></label>
               <input value={spaceDesc} onChange={e => setSpaceDesc(e.target.value)} style={{ width: '100%', background: '#282828', border: '1px solid #333', borderRadius: 8, color: '#f5f5f5', fontSize: 13, fontFamily: font, padding: '9px 14px', outline: 'none', boxSizing: 'border-box' }}
-                onFocus={e => (e.currentTarget.style.borderColor = '#1db954')} onBlur={e => (e.currentTarget.style.borderColor = '#333')} />
+                onFocus={e => (e.currentTarget.style.borderColor = '#22c55e')} onBlur={e => (e.currentTarget.style.borderColor = '#333')} />
             </div>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 24, paddingBottom: 20, borderBottom: '1px solid #2a2a2a' }}>
               <div>
                 <div style={{ color: '#f5f5f5', fontSize: 13, fontWeight: 700 }}>Make Private</div>
                 <div style={{ color: '#b3b3b3', fontSize: 12, marginTop: 2 }}>Only you and invited members have access</div>
               </div>
-              <button onClick={() => setSpacePrivate(v => !v)} style={{ width: 44, height: 24, borderRadius: 12, border: 'none', background: spacePrivate ? '#1db954' : '#444', cursor: 'pointer', position: 'relative', transition: 'background 0.2s', flexShrink: 0 }}>
+              <button onClick={() => setSpacePrivate(v => !v)} style={{ width: 44, height: 24, borderRadius: 12, border: 'none', background: spacePrivate ? '#22c55e' : '#444', cursor: 'pointer', position: 'relative', transition: 'background 0.2s', flexShrink: 0 }}>
                 <span style={{ position: 'absolute', top: 3, left: spacePrivate ? 23 : 3, width: 18, height: 18, borderRadius: '50%', background: '#fff', transition: 'left 0.2s' }} />
               </button>
             </div>
@@ -1542,7 +1542,7 @@ export default function TasksPage() {
   )
 }
 
-// ─── Rich-text guideline editor ──────────────────────────────────────────────
+// --- Rich-text guideline editor ----------------------------------------------
 function SystemReportView({
   projects,
   tasks,
@@ -1860,7 +1860,7 @@ function GuidelineEditor({
   const editorRef    = useRef<HTMLDivElement>(null)
   const fgColorRef   = useRef<HTMLInputElement>(null)
   const bgColorRef   = useRef<HTMLInputElement>(null)
-  const f = "'DM Sans', sans-serif"
+  const f = "var(--font-body)"
 
   useEffect(() => {
     if (editorRef.current) editorRef.current.innerHTML = initialValue
@@ -1906,7 +1906,7 @@ function GuidelineEditor({
 
   return (
     <div style={{ border: `1.5px solid ${borderColor}`, borderRadius: 7, overflow: 'hidden' }}>
-      {/* ── Toolbar ── */}
+      {/* -- Toolbar -- */}
       <div style={{ padding: '4px 8px', borderBottom: '1px solid #eee', display: 'flex', alignItems: 'center', gap: 1, background: '#fafafa', flexWrap: 'wrap' }}>
 
         {/* Group 1 — inline formatting */}
@@ -1952,7 +1952,7 @@ function GuidelineEditor({
         <Btn icon={<RemoveFormatting size={13} />} title="Clear formatting" action={() => exec('removeFormat')} />
       </div>
 
-      {/* ── Editable area ── */}
+      {/* -- Editable area -- */}
       <div
         ref={editorRef}
         contentEditable
@@ -1974,7 +1974,7 @@ function GuidelineEditor({
   )
 }
 
-// ─── Sidebar department-grouped project list ─────────────────────────────────
+// --- Sidebar department-grouped project list ---------------------------------
 function SidebarGroups({
   projects,
   deletedProjects,
@@ -2099,7 +2099,7 @@ function SidebarGroups({
         <Plus size={12} /> New Workflow
       </button>
 
-      {/* ── Deleted Workflows section ── */}
+      {/* -- Deleted Workflows section -- */}
       {deletedProjects.length > 0 && (
         <div style={{ marginTop: 12, borderTop: '1px solid #1e1e1e', paddingTop: 10 }}>
           <button
@@ -2126,8 +2126,8 @@ function SidebarGroups({
               <button
                 title="Restore"
                 onClick={() => onRestore(project.id)}
-                style={{ border: 'none', background: 'transparent', cursor: 'pointer', color: '#1db954', display: 'grid', placeItems: 'center', padding: 3, borderRadius: 4, flexShrink: 0 }}
-                onMouseEnter={e => (e.currentTarget as HTMLButtonElement).style.background = 'rgba(29,185,84,0.12)'}
+                style={{ border: 'none', background: 'transparent', cursor: 'pointer', color: '#22c55e', display: 'grid', placeItems: 'center', padding: 3, borderRadius: 4, flexShrink: 0 }}
+                onMouseEnter={e => (e.currentTarget as HTMLButtonElement).style.background = 'rgba(34,197,94,0.12)'}
                 onMouseLeave={e => (e.currentTarget as HTMLButtonElement).style.background = 'transparent'}
               >
                 <CirclePlus size={13} />
@@ -2169,7 +2169,7 @@ function SidebarGroups({
   )
 }
 
-// ─── Add Stage modal ─────────────────────────────────────────────────────────
+// --- Add Stage modal ---------------------------------------------------------
 function AddStageModal({
   existingStages,
   onClose,
@@ -2247,7 +2247,7 @@ function AddStageModal({
         {/* Two-column body */}
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', flex: 1 }}>
 
-          {/* ── Left column ── */}
+          {/* -- Left column -- */}
           <div style={{ padding: '24px', borderRight: '1px solid #eee', display: 'flex', flexDirection: 'column', gap: 18 }}>
 
             {/* Stage name */}
@@ -2349,7 +2349,7 @@ function AddStageModal({
             </div>
           </div>
 
-          {/* ── Right column ── */}
+          {/* -- Right column -- */}
           <div style={{ padding: '24px', display: 'flex', flexDirection: 'column', gap: 18 }}>
             <div style={{ fontSize: 10, fontWeight: 700, color: '#aaa', letterSpacing: '1px', textTransform: 'uppercase', marginBottom: 4 }}>Members in Stage</div>
 
@@ -2413,7 +2413,7 @@ function AddStageModal({
   )
 }
 
-// ─── Workflows card-grid view ────────────────────────────────────────────────
+// --- Workflows card-grid view ------------------------------------------------
 function MemberMentionInput({
   value,
   onChange,
@@ -2591,7 +2591,7 @@ function WorkflowsView({
         <Layers size={42} color="#2a2a2a" />
         <div style={{ fontSize: 17, fontWeight: 700, color: '#888' }}>No workflows yet</div>
         <div style={{ fontSize: 13, color: '#555' }}>Create your first workflow service to get started.</div>
-        <button onClick={onCreateWorkflow} style={{ display: 'flex', alignItems: 'center', gap: 7, padding: '10px 22px', background: '#1db954', color: '#111', border: 'none', borderRadius: 9, fontSize: 13, fontWeight: 700, fontFamily: font, cursor: 'pointer' }}>
+        <button onClick={onCreateWorkflow} style={{ display: 'flex', alignItems: 'center', gap: 7, padding: '10px 22px', background: '#22c55e', color: '#111', border: 'none', borderRadius: 9, fontSize: 13, fontWeight: 700, fontFamily: font, cursor: 'pointer' }}>
           <Plus size={14} /> Create workflow service
         </button>
       </div>
@@ -2687,13 +2687,13 @@ function WorkflowsView({
 
                   {/* Progress bar */}
                   <div style={{ height: 4, borderRadius: 2, background: '#252525', marginBottom: 10, overflow: 'hidden' }}>
-                    <div style={{ height: '100%', borderRadius: 2, background: '#1db954', width: `${pct}%`, transition: 'width 0.3s' }} />
+                    <div style={{ height: '100%', borderRadius: 2, background: '#22c55e', width: `${pct}%`, transition: 'width 0.3s' }} />
                   </div>
 
                   {/* Stats */}
                   <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
                     <span style={{ color: '#555', fontSize: 12 }}>{total} Job{total !== 1 ? 's' : ''}</span>
-                    <span style={{ color: '#1db954', fontSize: 12, fontWeight: 600 }}>{done} Done</span>
+                    <span style={{ color: '#22c55e', fontSize: 12, fontWeight: 600 }}>{done} Done</span>
                     <span style={{ color: '#ef4444', fontSize: 12, fontWeight: 600 }}>0 Failed</span>
                   </div>
                 </div>
@@ -2707,7 +2707,7 @@ function WorkflowsView({
   )
 }
 
-// ─── Create Workflow Service modal ───────────────────────────────────────────
+// --- Create Workflow Service modal -------------------------------------------
 function CreateWorkflowModal({
   onClose,
   onSubmit,
@@ -2779,7 +2779,7 @@ function CreateWorkflowModal({
         {/* Two-column body */}
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', flex: 1 }}>
 
-          {/* ── Left column ── */}
+          {/* -- Left column -- */}
           <div style={{ padding: '24px', borderRight: '1px solid #eee', display: 'flex', flexDirection: 'column', gap: 18 }}>
 
             {/* Workflow name */}
@@ -2792,7 +2792,7 @@ function CreateWorkflowModal({
                 onKeyDown={e => e.key === 'Enter' && handleSubmit()}
                 placeholder="Workflow name *"
                 style={{ ...fieldStyle }}
-                onFocus={e => (e.currentTarget.style.borderColor = '#1db954')}
+                onFocus={e => (e.currentTarget.style.borderColor = '#22c55e')}
                 onBlur={e => (e.currentTarget.style.borderColor = '#e0e0e0')}
               />
             </div>
@@ -2856,7 +2856,7 @@ function CreateWorkflowModal({
             </div>
           </div>
 
-          {/* ── Right column ── */}
+          {/* -- Right column -- */}
           <div style={{ padding: '24px', display: 'flex', flexDirection: 'column', gap: 18 }}>
             <div style={{ fontSize: 11, fontWeight: 700, color: '#aaa', letterSpacing: '0.8px', textTransform: 'uppercase', marginBottom: 4 }}>OTHER OPTIONS</div>
 
@@ -2927,7 +2927,7 @@ function CreateWorkflowModal({
           <button
             onClick={handleSubmit}
             disabled={!name.trim()}
-            style={{ background: name.trim() ? '#1db954' : '#d0d0d0', color: name.trim() ? '#fff' : '#aaa', border: 'none', borderRadius: 8, padding: '10px 36px', fontSize: 14, fontWeight: 700, fontFamily: font, cursor: name.trim() ? 'pointer' : 'not-allowed', transition: 'background 0.12s' }}
+            style={{ background: name.trim() ? '#22c55e' : '#d0d0d0', color: name.trim() ? '#fff' : '#aaa', border: 'none', borderRadius: 8, padding: '10px 36px', fontSize: 14, fontWeight: 700, fontFamily: font, cursor: name.trim() ? 'pointer' : 'not-allowed', transition: 'background 0.12s' }}
           >
             Create
           </button>
@@ -2942,14 +2942,14 @@ function SideItem({ label, count, active = false, onClick }: { label: string; co
     <button onClick={onClick} style={{ ...sideButtonStyle, background: active ? '#282828' : 'transparent', color: active ? '#ffffff' : '#b3b3b3' }}>
       <Circle size={13} />
       <span>{label}</span>
-      <span style={{ marginLeft: 'auto', color: active ? '#1ed760' : '#b3b3b3', fontSize: 11, fontWeight: 700 }}>{count}</span>
+      <span style={{ marginLeft: 'auto', color: active ? '#4ade80' : '#b3b3b3', fontSize: 11, fontWeight: 700 }}>{count}</span>
     </button>
   )
 }
 
 function ViewTab({ label, icon, active, onClick }: { label: string; icon: ReactNode; active: boolean; onClick: () => void }) {
   return (
-    <button onClick={onClick} style={{ ...viewButtonStyle, color: active ? '#1ed760' : '#b3b3b3', borderBottomColor: active ? '#1ed760' : 'transparent' }}>
+    <button onClick={onClick} style={{ ...viewButtonStyle, color: active ? '#4ade80' : '#b3b3b3', borderBottomColor: active ? '#4ade80' : 'transparent' }}>
       {icon}
       {label}
     </button>
@@ -2958,10 +2958,10 @@ function ViewTab({ label, icon, active, onClick }: { label: string; icon: ReactN
 
 const reminderGroupMeta: Record<string, { dot: string; label: string }> = {
   Overdue:    { dot: '#ef4444', label: 'Overdue' },
-  Today:      { dot: '#1db954', label: 'Today' },
+  Today:      { dot: '#22c55e', label: 'Today' },
   'This Week':{ dot: '#3b82f6', label: 'This Week' },
   Upcoming:   { dot: '#535353', label: 'Upcoming' },
-  Completed:  { dot: '#1db954', label: 'Completed' },
+  Completed:  { dot: '#22c55e', label: 'Completed' },
 }
 
 function RemindersListView({
@@ -3030,7 +3030,7 @@ function RemindersListView({
                         style={{ border: 'none', background: 'transparent', cursor: 'pointer', display: 'grid', placeItems: 'center', flexShrink: 0, padding: 0 }}
                       >
                         {task.status === 'Completed'
-                          ? <CheckCircle2 size={16} color="#1db954" />
+                          ? <CheckCircle2 size={16} color="#22c55e" />
                           : task.status === 'In Progress'
                             ? <Circle size={16} color="#3b82f6" strokeWidth={2.5} />
                             : <Circle size={16} color="#535353" />}
@@ -3161,7 +3161,7 @@ function DarkMyJobsContent({
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(130px, 1fr))', gap: 10, marginBottom: 16 }}>
         {[
-          ['Total Assigned', stats.total, '#1db954'],
+          ['Total Assigned', stats.total, '#22c55e'],
           ['Due Today', stats.today, '#f59e0b'],
           ['Overdue', stats.overdue, '#ef4444'],
           ['Completed', stats.completed, '#8b83e6'],
@@ -3182,7 +3182,7 @@ function DarkMyJobsContent({
           ['priority', 'High Priority'],
         ].map(([key, label]) => {
           const active = filter === key
-          return <button key={key} onClick={() => setFilter(key as typeof filter)} style={{ border: '1px solid #252525', borderRadius: 999, background: active ? '#1db954' : '#171717', color: active ? '#111' : '#aaa', padding: '7px 13px', fontSize: 12, fontWeight: 800, cursor: 'pointer' }}>{label}</button>
+          return <button key={key} onClick={() => setFilter(key as typeof filter)} style={{ border: '1px solid #252525', borderRadius: 999, background: active ? '#22c55e' : '#171717', color: active ? '#111' : '#aaa', padding: '7px 13px', fontSize: 12, fontWeight: 800, cursor: 'pointer' }}>{label}</button>
         })}
       </div>
 
@@ -3204,7 +3204,7 @@ function DarkMyJobsContent({
               <button
                 onClick={() => onStatus(task.id, task.status === 'Completed' ? 'Open' : 'Completed')}
                 title="Toggle done"
-                style={{ width: 16, height: 16, borderRadius: '50%', border: `1px solid ${task.status === 'Completed' ? '#1db954' : '#666'}`, background: task.status === 'Completed' ? '#1db954' : 'transparent', cursor: 'pointer' }}
+                style={{ width: 16, height: 16, borderRadius: '50%', border: `1px solid ${task.status === 'Completed' ? '#22c55e' : '#666'}`, background: task.status === 'Completed' ? '#22c55e' : 'transparent', cursor: 'pointer' }}
               />
               <button onClick={() => onOpen(task.id)} style={{ minWidth: 0, border: 'none', background: 'transparent', textAlign: 'left', cursor: 'pointer', padding: 0 }}>
                 <span style={{ display: 'block', color: '#fff', fontSize: 14, fontWeight: 900, marginBottom: 5, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{task.title}</span>
@@ -3212,7 +3212,7 @@ function DarkMyJobsContent({
                   {task.description || 'No description'} — created by {task.assignee || currentUser}
                 </span>
               </button>
-              <button onClick={() => project && onWorkflowSelect(project.id)} style={{ border: '1px solid rgba(29,185,84,.28)', borderRadius: 999, background: 'rgba(29,185,84,.1)', color: '#1db954', padding: '7px 10px', fontSize: 12, fontWeight: 900, cursor: project ? 'pointer' : 'default', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', textAlign: 'left' }}>
+              <button onClick={() => project && onWorkflowSelect(project.id)} style={{ border: '1px solid rgba(34,197,94,.28)', borderRadius: 999, background: 'rgba(34,197,94,.1)', color: '#22c55e', padding: '7px 10px', fontSize: 12, fontWeight: 900, cursor: project ? 'pointer' : 'default', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', textAlign: 'left' }}>
                 {project?.name || 'No workflow'}
               </button>
               <span style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
@@ -3257,7 +3257,7 @@ function ReminderSummary({ stats }: { stats: { overdue: number; today: number; u
     <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 22, flexWrap: 'wrap' }}>
       {[
         { label: 'Overdue', value: stats.overdue, dot: '#ef4444' },
-        { label: 'Due today', value: stats.today, dot: '#1db954' },
+        { label: 'Due today', value: stats.today, dot: '#22c55e' },
         { label: 'Upcoming', value: stats.upcoming, dot: '#3b82f6' },
       ].map(s => (
         <div key={s.label} style={{ display: 'flex', alignItems: 'center', gap: 7, background: '#1a1a1a', border: '1px solid #282828', borderRadius: 8, padding: '6px 12px' }}>
@@ -3362,7 +3362,7 @@ function SimpleMyJobsView({
           {statusFilters.map(item => {
             const active = status === item.value || (item.label === 'FAILED' && false)
             return (
-              <button key={item.label} onClick={() => onStatus(item.value)} style={{ border: 'none', background: 'transparent', color: active ? '#1db954' : '#8a8a8a', fontSize: 12, fontWeight: 800, cursor: 'pointer' }}>
+              <button key={item.label} onClick={() => onStatus(item.value)} style={{ border: 'none', background: 'transparent', color: active ? '#22c55e' : '#8a8a8a', fontSize: 12, fontWeight: 800, cursor: 'pointer' }}>
                 {item.label}
               </button>
             )
@@ -3515,7 +3515,7 @@ function TaskTable({ title, color, tasks, projectById, comments, onOpen, onStatu
         if (e.key === 'Enter') commitCell(taskId, col, cellDraft)
         if (e.key === 'Escape') setEditingCell(null)
       }}
-      style={{ width: '100%', background: 'transparent', border: 'none', borderBottom: '1px solid #1db954', outline: 'none', color: '#f5f5f5', fontSize: 12, fontWeight: 700, fontFamily: font, padding: 0 }}
+      style={{ width: '100%', background: 'transparent', border: 'none', borderBottom: '1px solid #22c55e', outline: 'none', color: '#f5f5f5', fontSize: 12, fontWeight: 700, fontFamily: font, padding: 0 }}
     />
   )
 
@@ -3575,7 +3575,7 @@ function TaskTable({ title, color, tasks, projectById, comments, onOpen, onStatu
               <div key={task.id} onClick={() => onOpen(task.id)} style={{ display: 'grid', gridTemplateColumns: gridCols, minHeight: 48, borderBottom: '1px solid #282828', cursor: 'pointer' }}>
                 {/* Status icon */}
                 <div style={{ ...tableCellStyle, display: 'grid', placeItems: 'center' }}>
-                  {task.status === 'Completed' ? <CheckCircle2 size={17} color="#1ed760" /> : <Circle size={17} color="#535353" />}
+                  {task.status === 'Completed' ? <CheckCircle2 size={17} color="#4ade80" /> : <Circle size={17} color="#535353" />}
                 </div>
 
                 {/* Name — inline editable */}
@@ -3613,7 +3613,7 @@ function TaskTable({ title, color, tasks, projectById, comments, onOpen, onStatu
                           >
                             <Avatar name={name} size={22} />
                             <span style={{ fontSize: 13, color: '#ccc' }}>{name}</span>
-                            {name === task.assignee && <span style={{ marginLeft: 'auto', color: '#1db954', fontSize: 11, fontWeight: 700 }}>✓</span>}
+                            {name === task.assignee && <span style={{ marginLeft: 'auto', color: '#22c55e', fontSize: 11, fontWeight: 700 }}>?</span>}
                           </div>
                         ))}
                       </div>
@@ -3660,7 +3660,7 @@ function TaskTable({ title, color, tasks, projectById, comments, onOpen, onStatu
                 </div>
 
                 {/* Task Type — read-only */}
-                <div style={{ ...tableCellStyle, background: type.color, color: type.color === '#1db954' ? '#191414' : '#fff', fontWeight: 700, justifyContent: 'center' }}>
+                <div style={{ ...tableCellStyle, background: type.color, color: type.color === '#22c55e' ? '#191414' : '#fff', fontWeight: 700, justifyContent: 'center' }}>
                   {type.label}{attachmentCount ? ` · ${attachmentCount}` : ''}
                 </div>
 
@@ -3685,7 +3685,7 @@ function TaskTable({ title, color, tasks, projectById, comments, onOpen, onStatu
                           onChange={e => setCellDraft(e.target.value)}
                           onBlur={() => saveCustom(cellDraft)}
                           onKeyDown={e => { if (e.key === 'Enter') saveCustom(cellDraft); if (e.key === 'Escape') setEditingCell(null) }}
-                          style={{ width: '100%', background: 'transparent', border: 'none', borderBottom: '1px solid #1db954', outline: 'none', color: '#f5f5f5', fontSize: 12, fontWeight: 700, fontFamily: font, padding: 0 }}
+                          style={{ width: '100%', background: 'transparent', border: 'none', borderBottom: '1px solid #22c55e', outline: 'none', color: '#f5f5f5', fontSize: 12, fontWeight: 700, fontFamily: font, padding: 0 }}
                         />
                       ) : (
                         <span style={{ color: val ? '#f5f5f5' : '#555' }}>{val || '—'}</span>
@@ -3723,7 +3723,7 @@ function TaskTable({ title, color, tasks, projectById, comments, onOpen, onStatu
           </div>
           <div style={{ display: 'flex', borderBottom: '1px solid #2a2a2a' }}>
             {(['create', 'existing'] as const).map(t => (
-              <button key={t} onClick={() => setFieldsTab(t)} style={{ flex: 1, border: 'none', background: 'transparent', color: fieldsTab === t ? '#f5f5f5' : '#555', fontWeight: 700, fontSize: 13, fontFamily: font, padding: '10px', borderBottom: fieldsTab === t ? '2px solid #1db954' : '2px solid transparent', cursor: 'pointer' }}>
+              <button key={t} onClick={() => setFieldsTab(t)} style={{ flex: 1, border: 'none', background: 'transparent', color: fieldsTab === t ? '#f5f5f5' : '#555', fontWeight: 700, fontSize: 13, fontFamily: font, padding: '10px', borderBottom: fieldsTab === t ? '2px solid #22c55e' : '2px solid transparent', cursor: 'pointer' }}>
                 {t === 'create' ? 'Create new' : 'Add existing'}
               </button>
             ))}
@@ -3781,7 +3781,7 @@ function ReworkListView({
 
         return (
           <div key={groupKey}>
-            {/* ── Group header ── */}
+            {/* -- Group header -- */}
             <button
               onClick={() => toggle(groupKey as number | 'none')}
               style={{ display: 'flex', alignItems: 'center', gap: 8, background: 'transparent', border: 'none', cursor: 'pointer', padding: '8px 4px', width: '100%', textAlign: 'left' }}
@@ -3792,7 +3792,7 @@ function ReworkListView({
               <span style={{ color: '#535353', fontSize: 12, fontWeight: 600 }}>{groupTasks.length} {groupTasks.length === 1 ? 'job' : 'jobs'}</span>
             </button>
 
-            {/* ── Rows ── */}
+            {/* -- Rows -- */}
             {!isCollapsed && (
               <div style={{ borderRadius: 10, border: '1px solid #1e1e1e', overflow: 'hidden', marginBottom: 8 }}>
                 {groupTasks.map((task, i) => {
@@ -3830,7 +3830,7 @@ function ReworkListView({
                         style={{ border: 'none', background: 'transparent', cursor: 'pointer', display: 'grid', placeItems: 'center', flexShrink: 0, padding: 0 }}
                       >
                         {isDone
-                          ? <CheckCircle2 size={16} color="#1db954" />
+                          ? <CheckCircle2 size={16} color="#22c55e" />
                           : task.status === 'In Progress'
                             ? <Circle size={16} color="#3b82f6" strokeWidth={2.5} />
                             : <Circle size={16} color="#535353" />}
@@ -4049,7 +4049,7 @@ function ClickUpListView({
                                 <button onClick={e => { e.stopPropagation(); onStatus(task.id, task.status === 'Completed' ? 'Open' : task.status === 'Open' ? 'In Progress' : 'Completed') }}
                                   style={{ border: 'none', background: 'transparent', cursor: 'pointer', display: 'grid', placeItems: 'center', flexShrink: 0, padding: 0 }}>
                                   {task.status === 'Completed'
-                                    ? <CheckCircle2 size={16} color="#1db954" />
+                                    ? <CheckCircle2 size={16} color="#22c55e" />
                                     : task.status === 'In Progress'
                                       ? <Circle size={16} color="#3b82f6" strokeWidth={2.5} />
                                       : <Circle size={16} color="#535353" />}
@@ -4058,7 +4058,7 @@ function ClickUpListView({
                                   ? <input autoFocus value={cellDraft} onChange={e => setCellDraft(e.target.value)}
                                       onBlur={() => commitCell(task.id, 'name', cellDraft)}
                                       onKeyDown={e => { if (e.key === 'Enter') commitCell(task.id, 'name', cellDraft); if (e.key === 'Escape') setEditingCell(null) }}
-                                      style={{ flex: 1, background: 'transparent', border: 'none', borderBottom: '1px solid #1db954', outline: 'none', color: '#f5f5f5', fontSize: 13, fontFamily: font, padding: 0 }} />
+                                      style={{ flex: 1, background: 'transparent', border: 'none', borderBottom: '1px solid #22c55e', outline: 'none', color: '#f5f5f5', fontSize: 13, fontFamily: font, padding: 0 }} />
                                   : <span style={{ color: '#e8e8e8', fontSize: 13, fontWeight: 500 }}>{task.title}</span>
                                 }
                               </div>
@@ -4077,7 +4077,7 @@ function ClickUpListView({
                                   ? <input autoFocus type="date" value={cellDraft} onChange={e => setCellDraft(e.target.value)}
                                       onBlur={() => commitCell(task.id, 'dueDate', cellDraft)}
                                       onKeyDown={e => { if (e.key === 'Enter') commitCell(task.id, 'dueDate', cellDraft); if (e.key === 'Escape') setEditingCell(null) }}
-                                      style={{ background: 'transparent', border: 'none', borderBottom: '1px solid #1db954', outline: 'none', color: '#f5f5f5', fontSize: 12, colorScheme: 'dark', fontFamily: font }} />
+                                      style={{ background: 'transparent', border: 'none', borderBottom: '1px solid #22c55e', outline: 'none', color: '#f5f5f5', fontSize: 12, colorScheme: 'dark', fontFamily: font }} />
                                   : task.dueDate
                                     ? <><CalendarDays size={13} color={due.group === 'Overdue' ? '#ef4444' : '#444'} /><span style={{ fontSize: 12, color: due.group === 'Overdue' ? '#ef4444' : '#b3b3b3', marginLeft: 4 }}>{due.label}</span></>
                                     : <CalendarDays size={14} color="#333" />}
@@ -4123,23 +4123,23 @@ function ClickUpListView({
 }
 
 const SUGGESTED_FIELDS: Array<{ icon: string; label: string; type: ColumnFieldType }> = [
-  { icon: '$', label: 'Budget Allocation', type: 'money' },
-  { icon: '⊞', label: 'Client Feedback', type: 'textarea' },
-  { icon: '⊞', label: 'Project Milestone', type: 'text' },
-  { icon: '⊠', label: 'Completion Percentage', type: 'number' },
+  { icon: 'PHP', label: 'Budget Allocation', type: 'money' },
+  { icon: '?', label: 'Client Feedback', type: 'textarea' },
+  { icon: '?', label: 'Project Milestone', type: 'text' },
+  { icon: '?', label: 'Completion Percentage', type: 'number' },
 ]
 
 const ALL_FIELD_TYPES: Array<{ icon: string; label: string; type: ColumnFieldType | null }> = [
-  { icon: '⊞', label: 'Dropdown', type: 'dropdown' },
+  { icon: '?', label: 'Dropdown', type: 'dropdown' },
   { icon: 'T', label: 'Text', type: 'text' },
-  { icon: '📅', label: 'Date', type: 'date' },
-  { icon: '⊞', label: 'Text area (Long Text)', type: 'textarea' },
+  { icon: '??', label: 'Date', type: 'date' },
+  { icon: '?', label: 'Text area (Long Text)', type: 'textarea' },
   { icon: '#', label: 'Number', type: 'number' },
-  { icon: '◇', label: 'Labels', type: 'labels' },
-  { icon: '☐', label: 'Checkbox', type: 'checkbox' },
-  { icon: '$', label: 'Money', type: 'money' },
-  { icon: '🌐', label: 'Website', type: 'website' },
-  { icon: '∑', label: 'Formula', type: null },
+  { icon: '?', label: 'Labels', type: 'labels' },
+  { icon: '?', label: 'Checkbox', type: 'checkbox' },
+  { icon: 'PHP', label: 'Money', type: 'money' },
+  { icon: '??', label: 'Website', type: 'website' },
+  { icon: '?', label: 'Formula', type: null },
 ]
 
 function FieldRow({ icon, label, onClick }: { icon: string; label: string; onClick?: () => void }) {
@@ -4251,9 +4251,9 @@ function TaskCard({ task, project, onOpen, onDragStart, onComplete, onEdit, onDe
           style={{ position: 'absolute', top: 10, right: 10, display: 'flex', alignItems: 'center', gap: 2, background: '#2a2a2a', border: '1px solid #3a3a3a', borderRadius: 7, padding: '3px 5px' }}
         >
           <button title={task.status === 'Completed' ? 'Mark open' : 'Mark complete'} onClick={onComplete}
-            style={{ border: 'none', background: 'transparent', color: task.status === 'Completed' ? '#1db954' : '#b3b3b3', cursor: 'pointer', display: 'grid', placeItems: 'center', padding: '3px 4px', borderRadius: 5 }}
-            onMouseEnter={e => (e.currentTarget as HTMLButtonElement).style.color = '#1db954'}
-            onMouseLeave={e => (e.currentTarget as HTMLButtonElement).style.color = task.status === 'Completed' ? '#1db954' : '#b3b3b3'}>
+            style={{ border: 'none', background: 'transparent', color: task.status === 'Completed' ? '#22c55e' : '#b3b3b3', cursor: 'pointer', display: 'grid', placeItems: 'center', padding: '3px 4px', borderRadius: 5 }}
+            onMouseEnter={e => (e.currentTarget as HTMLButtonElement).style.color = '#22c55e'}
+            onMouseLeave={e => (e.currentTarget as HTMLButtonElement).style.color = task.status === 'Completed' ? '#22c55e' : '#b3b3b3'}>
             <Check size={13} />
           </button>
           <button title="Add subtask" onClick={onEdit}
@@ -4462,7 +4462,7 @@ function TaskDetailModal(props: {
   const cuStatusStyle: Record<TaskStatus, { label: string; color: string; bg: string }> = {
     'Open': { label: 'TO DO', color: '#7c6af7', bg: 'rgba(124,106,247,0.18)' },
     'In Progress': { label: 'IN PROGRESS', color: '#f59e0b', bg: 'rgba(245,158,11,0.18)' },
-    'Completed': { label: 'DONE', color: '#1db954', bg: 'rgba(29,185,84,0.18)' },
+    'Completed': { label: 'DONE', color: '#22c55e', bg: 'rgba(34,197,94,0.18)' },
   }
   const priorityColors: Record<TaskPriority, string> = {
     Urgent: '#ef4444', High: '#f59e0b', Normal: '#3b82f6', Low: '#6b7280',
@@ -4622,7 +4622,7 @@ function TaskDetailModal(props: {
             <CuFieldRow icon={<CalendarDays size={14} color="#555" />} label="Dates">
               <div style={{ display: 'flex', alignItems: 'center', gap: 6, color: '#888', fontSize: 13 }}>
                 <input type="date" value={props.task.startDate || ''} onChange={e => props.onTaskUpdate({ startDate: e.target.value })} style={{ background: 'transparent', border: 'none', color: props.task.startDate ? '#888' : '#555', fontFamily: font, fontSize: 13, outline: 'none', cursor: 'pointer' }} />
-                <span style={{ color: '#444' }}>→</span>
+                <span style={{ color: '#444' }}>?</span>
                 <input type="date" value={props.task.dueDate} onChange={e => props.onTaskUpdate({ dueDate: e.target.value })} style={{ background: 'transparent', border: 'none', color: '#888', fontFamily: font, fontSize: 13, outline: 'none', cursor: 'pointer' }} />
               </div>
             </CuFieldRow>
@@ -4688,7 +4688,7 @@ function TaskDetailModal(props: {
                           >
                             <Avatar name={name} size={22} />
                             <span style={{ fontSize: 13, color: '#ccc', flex: 1 }}>{name}</span>
-                            <span style={{ fontSize: 10, color: '#1db954', fontWeight: 700 }}>✓</span>
+                            <span style={{ fontSize: 10, color: '#22c55e', fontWeight: 700 }}>?</span>
                           </div>
                         ))}
                         <div style={{ height: 1, background: '#2a2a2a', margin: '4px 0' }} />
@@ -4712,8 +4712,8 @@ function TaskDetailModal(props: {
                         <div style={{ padding: '8px 12px', fontSize: 12, color: '#555' }}>No people found</div>
                       )}
                     </div>
-                    <div onClick={assignWithAI} style={{ borderTop: '1px solid #2a2a2a', padding: '8px 12px', display: 'flex', alignItems: 'center', gap: 6, color: '#1db954', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>
-                      <span style={{ fontSize: 14 }}>✦</span> Assign with AI
+                    <div onClick={assignWithAI} style={{ borderTop: '1px solid #2a2a2a', padding: '8px 12px', display: 'flex', alignItems: 'center', gap: 6, color: '#22c55e', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>
+                      <span style={{ fontSize: 14 }}>?</span> Assign with AI
                     </div>
                   </div>
                 )}
@@ -4723,10 +4723,10 @@ function TaskDetailModal(props: {
             <CuFieldRow icon={<Flag size={14} color="#555" />} label="Priority">
               <select value={props.task.priority || ''} onChange={e => props.onTaskUpdate({ priority: (e.target.value as TaskPriority) || undefined })} style={{ background: 'transparent', border: 'none', color: props.task.priority ? priorityColors[props.task.priority] : '#555', fontSize: 13, fontFamily: font, outline: 'none', cursor: 'pointer' }}>
                 <option value="">Empty</option>
-                <option value="Urgent">🔴 Urgent</option>
-                <option value="High">🟠 High</option>
-                <option value="Normal">🔵 Normal</option>
-                <option value="Low">⚪ Low</option>
+                <option value="Urgent">?? Urgent</option>
+                <option value="High">?? High</option>
+                <option value="Normal">?? Normal</option>
+                <option value="Low">? Low</option>
               </select>
             </CuFieldRow>
 
@@ -4779,14 +4779,14 @@ function TaskDetailModal(props: {
                       onMouseEnter={e => (e.currentTarget as HTMLButtonElement).style.background = '#2c2c2c'}
                       onMouseLeave={e => (e.currentTarget as HTMLButtonElement).style.background = '#242424'}
                     >
-                      {showFullDesc ? '∧ Show less' : '∨ Show more'}
+                      {showFullDesc ? '? Show less' : '? Show more'}
                     </button>
                   )}
                 </>
               )
             })()}
             <button onClick={writeWithAI} style={{ background: 'transparent', border: 'none', color: '#7c6af7', fontSize: 12, cursor: 'pointer', fontFamily: font, display: 'inline-flex', alignItems: 'center', gap: 5, padding: 0, marginTop: 2 }}>
-              ✦ Write with AI
+              ? Write with AI
             </button>
           </div>
 
@@ -4798,7 +4798,7 @@ function TaskDetailModal(props: {
               <span style={{ color: '#e0e0e0', fontSize: 14, fontWeight: 700 }}>Add fields</span>
               <div ref={fieldsPanelRef} style={{ display: 'flex', gap: 6, position: 'relative' }}>
                 <button onClick={() => { setShowFieldsPanel(true); setFieldsTab('existing') }} style={cuSecondaryBtn} title="Search fields"><Search size={12} /></button>
-                <button onClick={() => setShowFieldsPanel(v => !v)} style={cuSecondaryBtn} aria-label="Expand">⤢</button>
+                <button onClick={() => setShowFieldsPanel(v => !v)} style={cuSecondaryBtn} aria-label="Expand">?</button>
                 <button onClick={() => { setShowFieldsPanel(true); setFieldsTab('create') }} style={cuSecondaryBtn} title="Create field"><Plus size={12} /></button>
                 {showFieldsPanel && (
                   <div style={{ position: 'absolute', top: 32, right: 0, width: 310, maxHeight: 420, overflow: 'hidden', background: '#1f1f1f', border: '1px solid #333', borderRadius: 10, boxShadow: '0 22px 50px rgba(0,0,0,.45)', zIndex: 20 }}>
@@ -4821,7 +4821,7 @@ function TaskDetailModal(props: {
             {props.customColumns.length > 0 && (
               <div style={{ display: 'grid', gap: 2, marginBottom: 10 }}>
                 {props.customColumns.map(column => (
-                  <CuFieldRow key={column.id} icon={<span style={{ color: '#555', width: 14, textAlign: 'center', fontSize: 12 }}>{column.type === 'money' ? '$' : column.type === 'number' ? '#' : column.type === 'date' ? 'D' : column.type === 'checkbox' ? '✓' : 'T'}</span>} label={column.name}>
+                  <CuFieldRow key={column.id} icon={<span style={{ color: '#555', width: column.type === 'money' ? 24 : 14, textAlign: 'center', fontSize: column.type === 'money' ? 9 : 12, fontWeight: column.type === 'money' ? 800 : 400 }}>{column.type === 'money' ? 'PHP' : column.type === 'number' ? '#' : column.type === 'date' ? 'D' : column.type === 'checkbox' ? '?' : 'T'}</span>} label={column.name}>
                     {renderCustomFieldInput(column)}
                   </CuFieldRow>
                 ))}
@@ -4842,7 +4842,7 @@ function TaskDetailModal(props: {
               <div style={{ marginBottom: 10 }}>
                 {subtasks.map(sub => (
                   <div key={sub.id} style={{ display: 'flex', alignItems: 'center', gap: 9, padding: '7px 0', borderBottom: '1px solid #222' }}>
-                    <button onClick={() => toggleSubtask(sub.id)} style={{ background: 'transparent', border: 'none', color: sub.done ? '#1db954' : '#444', cursor: 'pointer', display: 'grid', placeItems: 'center', flexShrink: 0, padding: 0 }}>
+                    <button onClick={() => toggleSubtask(sub.id)} style={{ background: 'transparent', border: 'none', color: sub.done ? '#22c55e' : '#444', cursor: 'pointer', display: 'grid', placeItems: 'center', flexShrink: 0, padding: 0 }}>
                       {sub.done ? <CheckCircle2 size={16} /> : <Circle size={16} />}
                     </button>
                     <span style={{ color: sub.done ? '#555' : '#ccc', fontSize: 13, flex: 1, textDecoration: sub.done ? 'line-through' : 'none' }}>{sub.title}</span>
@@ -4883,13 +4883,13 @@ function TaskDetailModal(props: {
                   </div>
                   {total > 0 && (
                     <div style={{ height: 3, background: '#242424' }}>
-                      <div style={{ height: '100%', width: `${pct}%`, background: '#1db954', transition: 'width 0.2s' }} />
+                      <div style={{ height: '100%', width: `${pct}%`, background: '#22c55e', transition: 'width 0.2s' }} />
                     </div>
                   )}
                   <div style={{ padding: '4px 0' }}>
                     {cl.items.map(item => (
                       <div key={item.id} style={{ display: 'flex', alignItems: 'center', gap: 9, padding: '6px 14px' }}>
-                        <button onClick={() => toggleChecklistItem(cl.id, item.id)} style={{ background: 'transparent', border: 'none', color: item.done ? '#1db954' : '#444', cursor: 'pointer', flexShrink: 0, padding: 0, display: 'grid', placeItems: 'center' }}>
+                        <button onClick={() => toggleChecklistItem(cl.id, item.id)} style={{ background: 'transparent', border: 'none', color: item.done ? '#22c55e' : '#444', cursor: 'pointer', flexShrink: 0, padding: 0, display: 'grid', placeItems: 'center' }}>
                           {item.done ? <CheckCircle2 size={15} /> : <Circle size={15} />}
                         </button>
                         <span style={{ color: item.done ? '#555' : '#ccc', fontSize: 13, flex: 1, textDecoration: item.done ? 'line-through' : 'none' }}>{item.text}</span>
@@ -4979,7 +4979,7 @@ function TaskDetailModal(props: {
               <div style={{ display: 'grid', gap: 16 }}>
                 {props.comments.map(comment => (
                   <div key={comment.id} style={{ display: 'grid', gridTemplateColumns: '30px minmax(0,1fr)', gap: 9 }}>
-                    <div style={{ width: 30, height: 30, borderRadius: '50%', background: '#2a2a2a', color: '#1ed760', display: 'grid', placeItems: 'center', fontSize: 11, fontWeight: 700, flexShrink: 0 }}>
+                    <div style={{ width: 30, height: 30, borderRadius: '50%', background: '#2a2a2a', color: '#4ade80', display: 'grid', placeItems: 'center', fontSize: 11, fontWeight: 700, flexShrink: 0 }}>
                       {(comment.author || '?').charAt(0).toUpperCase()}
                     </div>
                     <div>
@@ -5076,8 +5076,8 @@ function TaskFormModal({ draft, editing, projects, assignees, onChange, onSave, 
   const fieldTextarea: React.CSSProperties = { ...fieldInput, resize: 'vertical', minHeight: 100, lineHeight: 1.6 }
 
   const handleFocus = (e: React.FocusEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
-    e.currentTarget.style.borderColor = '#1db954'
-    e.currentTarget.style.boxShadow = '0 0 0 3px rgba(29,185,84,0.12)'
+    e.currentTarget.style.borderColor = '#22c55e'
+    e.currentTarget.style.boxShadow = '0 0 0 3px rgba(34,197,94,0.12)'
   }
   const handleBlur = (e: React.FocusEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
     e.currentTarget.style.borderColor = '#333'
@@ -5091,7 +5091,7 @@ function TaskFormModal({ draft, editing, projects, assignees, onChange, onSave, 
         {/* Header */}
         <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 16, padding: '22px 24px 20px', borderBottom: '1px solid #282828' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
-            <div style={{ width: 42, height: 42, borderRadius: 11, background: '#1db954', display: 'grid', placeItems: 'center', flexShrink: 0, boxShadow: '0 6px 18px rgba(29,185,84,0.25)' }}>
+            <div style={{ width: 42, height: 42, borderRadius: 11, background: '#22c55e', display: 'grid', placeItems: 'center', flexShrink: 0, boxShadow: '0 6px 18px rgba(34,197,94,0.25)' }}>
               <ListTodo size={20} color="#191414" />
             </div>
             <div>
@@ -5176,7 +5176,7 @@ function TaskFormModal({ draft, editing, projects, assignees, onChange, onSave, 
             onMouseLeave={e => (e.currentTarget as HTMLButtonElement).style.borderColor = '#333'}
           >Cancel</button>
           <button onClick={onSave} disabled={!draft.title.trim()}
-            style={{ background: draft.title.trim() ? '#1db954' : '#1a3a24', color: draft.title.trim() ? '#191414' : '#2d6b3c', border: 'none', borderRadius: 9, fontSize: 13, fontWeight: 800, fontFamily: font, padding: '9px 22px', cursor: draft.title.trim() ? 'pointer' : 'not-allowed', transition: 'background 0.15s', display: 'inline-flex', alignItems: 'center', gap: 7 }}
+            style={{ background: draft.title.trim() ? '#22c55e' : '#1a3a24', color: draft.title.trim() ? '#191414' : '#2d6b3c', border: 'none', borderRadius: 9, fontSize: 13, fontWeight: 800, fontFamily: font, padding: '9px 22px', cursor: draft.title.trim() ? 'pointer' : 'not-allowed', transition: 'background 0.15s', display: 'inline-flex', alignItems: 'center', gap: 7 }}
           >
             <Plus size={15} />{editing ? 'Save changes' : 'Create task'}
           </button>
@@ -5196,7 +5196,7 @@ function Pill({ color, children }: { color: string; children: ReactNode }) {
 }
 
 function Avatar({ name, size = 24 }: { name: string; size?: number }) {
-  return <span style={{ width: size, height: size, borderRadius: '50%', background: '#1db954', color: '#191414', display: 'inline-grid', placeItems: 'center', fontSize: Math.floor(size * 0.46), fontWeight: 800, flexShrink: 0 }}>{(name || '?').charAt(0).toUpperCase()}</span>
+  return <span style={{ width: size, height: size, borderRadius: '50%', background: '#22c55e', color: '#191414', display: 'inline-grid', placeItems: 'center', fontSize: Math.floor(size * 0.46), fontWeight: 800, flexShrink: 0 }}>{(name || '?').charAt(0).toUpperCase()}</span>
 }
 
 const sideSectionStyle = { color: '#b3b3b3', fontSize: 11, fontWeight: 800, textTransform: 'uppercase', letterSpacing: 1, padding: '0 8px 8px' } as const
@@ -5208,7 +5208,7 @@ const chipButtonStyle = { display: 'inline-flex', alignItems: 'center', gap: 6, 
 const darkSelectStyle = { border: '1px solid #282828', borderRadius: 999, background: '#121212', color: '#f5f5f5', minHeight: 32, padding: '0 11px', fontSize: 12, fontWeight: 700, fontFamily: font, outline: 'none' } as const
 const newTaskInputStyle = { width: 180, minHeight: 32, border: '1px solid #282828', borderRadius: 999, background: '#121212', color: '#f5f5f5', padding: '0 12px', fontSize: 12, fontWeight: 700, fontFamily: font, outline: 'none' } as const
 const formInputStyle = { width: '100%', minHeight: 40, border: '1px solid #535353', borderRadius: 10, background: '#121212', color: '#f5f5f5', padding: '0 12px', fontSize: 13, fontWeight: 700, fontFamily: font, outline: 'none' } as const
-const greenButtonStyle = { border: 'none', borderRadius: 999, minHeight: 32, padding: '0 13px', background: '#1db954', color: '#191414', fontSize: 12, fontWeight: 800, fontFamily: font, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 6 } as const
+const greenButtonStyle = { border: 'none', borderRadius: 999, minHeight: 32, padding: '0 13px', background: '#22c55e', color: '#191414', fontSize: 12, fontWeight: 800, fontFamily: font, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 6 } as const
 const tableCellStyle = { padding: '9px 12px', borderRight: '1px solid #282828', display: 'flex', alignItems: 'center', minWidth: 0, fontSize: 12, fontWeight: 700 } as const
 const detailGridStyle = { display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 12 } as const
 const smallLabelStyle = { color: '#b3b3b3', fontSize: 12, fontWeight: 700 } as const

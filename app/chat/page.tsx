@@ -16,8 +16,14 @@ import {
   Users,
 } from 'lucide-react'
 
-const font = "'DM Sans', sans-serif"
+const font = "var(--font-body)"
 const storageKey = 'flowsys-chat'
+const chatChangeEvent = 'flowsys-chat-change'
+const maxStoredMessages = 120
+const maxChatAttachmentBytes = 5 * 1024 * 1024
+const employeesStorageKey = 'flowsys-hr-employees'
+const accountStorageKey = 'flowsys-account'
+const sessionStorageKey = 'flowsys-auth-session'
 
 type ChannelType = 'channel' | 'dm'
 
@@ -30,6 +36,13 @@ interface ChatMessage {
   createdAt: string
   reactions: string[]
   attachments: string[]
+  payload?: {
+    type: 'text' | 'photo' | 'voice' | 'gif' | 'sticker' | 'emoji' | 'system'
+    url?: string
+    name?: string
+    label?: string
+    duration?: string
+  }
 }
 
 interface ChatChannel {
@@ -40,11 +53,30 @@ interface ChatChannel {
   unread: number
   pinned: boolean
   members: string[]
+  employeeId?: string
+  employeePhoto?: string
 }
 
 interface ChatStore {
   channels: ChatChannel[]
   messages: ChatMessage[]
+}
+
+interface Employee {
+  id: string
+  employeeId?: string
+  firstName?: string
+  lastName?: string
+  email?: string
+  photo?: string
+  jobTitle?: string
+  department?: string
+}
+
+interface AccountState {
+  fullName?: string
+  name?: string
+  role?: string
 }
 
 const initialStore: ChatStore = {
@@ -139,14 +171,98 @@ const initialStore: ChatStore = {
   ],
 }
 
+function loadJson<T>(key: string, fallback: T): T {
+  if (typeof window === 'undefined') return fallback
+  try {
+    const stored = window.localStorage.getItem(key)
+    return stored ? (JSON.parse(stored) as T) : fallback
+  } catch {
+    return fallback
+  }
+}
+
+function employeeFullName(employee: Employee) {
+  return [employee.firstName, employee.lastName].filter(Boolean).join(' ').trim() || employee.email || 'Employee'
+}
+
+function employeeChannel(employee: Employee): ChatChannel {
+  const name = employeeFullName(employee)
+  return {
+    id: `hr-dm-${employee.id}`,
+    name,
+    type: 'dm',
+    description: employee.jobTitle || employee.department || 'Employee direct message',
+    unread: 0,
+    pinned: false,
+    members: ['HR', name],
+    employeeId: employee.id,
+    employeePhoto: employee.photo,
+  }
+}
+
+function normalizeStore(store: Partial<ChatStore> | null | undefined, employees: Employee[] = []): ChatStore {
+  const storedChannels = Array.isArray(store?.channels) ? store.channels : []
+  const storedMessages = Array.isArray(store?.messages) ? store.messages : []
+  const employeeChannels = employees.filter(employee => employee.id).map(employeeChannel)
+  const channelMap = new Map<string, ChatChannel>()
+
+  initialStore.channels.forEach(channel => channelMap.set(channel.id, channel))
+  storedChannels.forEach(channel => channel?.id && channelMap.set(channel.id, { ...channel, unread: Number(channel.unread || 0), members: Array.isArray(channel.members) ? channel.members : [] }))
+  employeeChannels.forEach(channel => {
+    const existing = channelMap.get(channel.id)
+    channelMap.set(channel.id, existing ? { ...existing, ...channel, unread: existing.unread || 0, pinned: existing.pinned || false } : channel)
+  })
+
+  return {
+    channels: Array.from(channelMap.values()),
+    messages: storedMessages.filter(message => message && message.channelId && message.body).map(message => ({
+      ...message,
+      reactions: Array.isArray(message.reactions) ? message.reactions : [],
+      attachments: Array.isArray(message.attachments) ? message.attachments : [],
+    })),
+  }
+}
+
+function compactChatStore(store: ChatStore): ChatStore {
+  return {
+    channels: store.channels.map(channel => ({
+      ...channel,
+      employeePhoto: channel.employeePhoto?.startsWith('data:') ? undefined : channel.employeePhoto,
+    })),
+    messages: store.messages.slice(-maxStoredMessages).map(message => ({
+      ...message,
+      attachments: message.attachments?.map(name => String(name).slice(0, 120)) || [],
+      payload: message.payload?.url?.startsWith('data:')
+        ? { ...message.payload, type: 'text', url: undefined, label: message.payload.label || message.payload.name || 'Attachment saved outside local storage' }
+        : message.payload,
+    })),
+  }
+}
+
+function saveStore(store: ChatStore) {
+  const compactStore = compactChatStore(store)
+  try {
+    window.localStorage.setItem(storageKey, JSON.stringify(compactStore))
+  } catch {
+    try {
+      window.localStorage.setItem(storageKey, JSON.stringify({ ...compactStore, messages: compactStore.messages.slice(-40) }))
+    } catch {
+      window.localStorage.removeItem(storageKey)
+      window.localStorage.setItem(storageKey, JSON.stringify({ channels: compactStore.channels, messages: [] }))
+    }
+  }
+}
+
 const loadStore = () => {
   if (typeof window === 'undefined') return initialStore
+  const employees = loadJson<Employee[]>(employeesStorageKey, [])
+  return normalizeStore(loadJson<ChatStore | null>(storageKey, null), employees)
+}
 
-  try {
-    const stored = window.localStorage.getItem(storageKey)
-    return stored ? (JSON.parse(stored) as ChatStore) : initialStore
-  } catch {
-    return initialStore
+function loadAccount() {
+  return {
+    ...loadJson<AccountState>(sessionStorageKey, {}),
+    ...loadJson<AccountState>(accountStorageKey, {}),
   }
 }
 
@@ -159,19 +275,40 @@ const avatarColor = (name: string) => ['#2563eb', '#7c3aed', '#059669', '#f59e0b
 
 export default function ChatPage() {
   const [store, setStore] = useState<ChatStore>(loadStore)
-  const [activeChannelId, setActiveChannelId] = useState('general')
+  const [account, setAccount] = useState<AccountState>(() => typeof window === 'undefined' ? {} : loadAccount())
+  const [activeChannelId, setActiveChannelId] = useState(() => loadStore().channels[0]?.id || 'general')
   const [message, setMessage] = useState('')
+  const [attachments, setAttachments] = useState<string[]>([])
+  const [attachmentNotice, setAttachmentNotice] = useState('')
   const [search, setSearch] = useState('')
   const [showDetails, setShowDetails] = useState(true)
   const [newChannelName, setNewChannelName] = useState('')
   const [showNewChannel, setShowNewChannel] = useState(false)
+  const [emojiOpen, setEmojiOpen] = useState(false)
   const messagesEndRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
-    window.localStorage.setItem(storageKey, JSON.stringify(store))
+    saveStore(store)
   }, [store])
 
-  const activeChannel = store.channels.find(channel => channel.id === activeChannelId) || store.channels[0]
+  useEffect(() => {
+    const reload = () => {
+      const nextStore = loadStore()
+      setAccount(loadAccount())
+      setStore(nextStore)
+      setActiveChannelId(previous => nextStore.channels.some(channel => channel.id === previous) ? previous : nextStore.channels[0]?.id || 'general')
+    }
+    window.addEventListener('storage', reload)
+    window.addEventListener(chatChangeEvent, reload)
+    window.addEventListener('focus', reload)
+    return () => {
+      window.removeEventListener('storage', reload)
+      window.removeEventListener(chatChangeEvent, reload)
+      window.removeEventListener('focus', reload)
+    }
+  }, [])
+
+  const activeChannel = store.channels.find(channel => channel.id === activeChannelId) || store.channels[0] || initialStore.channels[0]
   const channelMessages = store.messages.filter(item => item.channelId === activeChannel.id)
   const visibleChannels = store.channels.filter(channel => {
     const query = search.toLowerCase()
@@ -180,6 +317,8 @@ export default function ChatPage() {
   const channels = visibleChannels.filter(channel => channel.type === 'channel')
   const dms = visibleChannels.filter(channel => channel.type === 'dm')
   const latestMessage = useMemo(() => channelMessages[channelMessages.length - 1], [channelMessages])
+  const authorName = account.fullName || account.name || 'James'
+  const authorRole = account.role || 'Admin'
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
@@ -195,7 +334,7 @@ export default function ChatPage() {
 
   const sendMessage = () => {
     const trimmed = message.trim()
-    if (!trimmed) return
+    if (!trimmed && attachments.length === 0) return
 
     setStore(previous => ({
       ...previous,
@@ -204,16 +343,19 @@ export default function ChatPage() {
         {
           id: nextMessageId(previous.messages),
           channelId: activeChannel.id,
-          author: 'James',
-          role: 'Admin',
-          body: trimmed,
+          author: authorName,
+          role: authorRole,
+          body: trimmed || `[Attached: ${attachments.join(', ')}]`,
           createdAt: new Date().toISOString(),
           reactions: [],
-          attachments: [],
+          attachments,
         },
       ],
     }))
     setMessage('')
+    setAttachments([])
+    setAttachmentNotice('')
+    setEmojiOpen(false)
   }
 
   const addChannel = () => {
@@ -257,8 +399,13 @@ export default function ChatPage() {
   const attachFile = (files: FileList | null) => {
     const file = files?.[0]
     if (!file) return
+    if (file.size > maxChatAttachmentBytes) {
+      setAttachmentNotice('This file is too large. Please attach a file up to 5 MB.')
+      return
+    }
 
-    setMessage(previous => `${previous}${previous ? ' ' : ''}[Attached: ${file.name}]`)
+    setAttachmentNotice('')
+    setAttachments(previous => previous.includes(file.name) ? previous : [...previous, file.name])
   }
 
   return (
@@ -279,7 +426,7 @@ export default function ChatPage() {
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px' }}>
               <div>
                 <div style={{ fontSize: '16px', fontWeight: 600 }}>WiseFlow</div>
-                <div style={{ fontSize: '12px', color: '#94a3b8', marginTop: '3px' }}>5 active conversations</div>
+                <div style={{ fontSize: '12px', color: '#94a3b8', marginTop: '3px' }}>{store.channels.length} active conversations</div>
               </div>
               <ChevronDown size={16} />
             </div>
@@ -384,16 +531,29 @@ export default function ChatPage() {
               <textarea value={message} onChange={event => setMessage(event.target.value)} onKeyDown={event => { if (event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); sendMessage() } }} placeholder={`Message ${activeChannel.type === 'channel' ? '#' : ''}${activeChannel.name}`} rows={3} style={{ width: '100%', border: 'none', outline: 'none', resize: 'none', padding: '12px', fontSize: '14px', color: '#111827' }} />
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderTop: '1px solid #f1f5f9', padding: '8px 10px' }}>
                 <div style={{ display: 'flex', gap: '6px' }}>
-                  <label style={composerButtonStyle}>
+                  <label style={composerButtonStyle} title="Attach file">
                     <Paperclip size={16} />
                     <input type="file" onChange={event => attachFile(event.target.files)} style={{ display: 'none' }} />
                   </label>
-                  <button style={composerButtonStyle}><Smile size={16} /></button>
+                  <button type="button" style={composerButtonStyle} onClick={() => setEmojiOpen(open => !open)}><Smile size={16} /></button>
                 </div>
-                <button onClick={sendMessage} disabled={!message.trim()} style={{ ...primaryButtonStyle, padding: '9px 13px', opacity: message.trim() ? 1 : 0.45, cursor: message.trim() ? 'pointer' : 'not-allowed' }}>
+                <button onClick={sendMessage} disabled={!message.trim() && attachments.length === 0} style={{ ...primaryButtonStyle, padding: '9px 13px', opacity: message.trim() || attachments.length ? 1 : 0.45, cursor: message.trim() || attachments.length ? 'pointer' : 'not-allowed' }}>
                   <Send size={15} /> Send
                 </button>
               </div>
+              {(attachments.length > 0 || emojiOpen) && (
+                <div style={{ borderTop: '1px solid #f1f5f9', padding: '9px 10px', display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+                  {attachments.map(file => (
+                    <button key={file} type="button" onClick={() => setAttachments(previous => previous.filter(item => item !== file))} style={{ border: '1px solid #e5e7eb', background: '#f8fafc', borderRadius: 999, padding: '5px 9px', color: '#334155', fontSize: 12, fontWeight: 700, cursor: 'pointer' }}>
+                      <Paperclip size={12} /> {file} ×
+                    </button>
+                  ))}
+                  {emojiOpen && ['👍', '✅', '🙏', '🎉', '💚', '⭐'].map(emoji => (
+                    <button key={emoji} type="button" onClick={() => { setMessage(previous => `${previous}${emoji}`); setEmojiOpen(false) }} style={{ width: 30, height: 30, border: '1px solid #e5e7eb', background: '#fff', borderRadius: 8, cursor: 'pointer' }}>{emoji}</button>
+                  ))}
+                </div>
+              )}
+              {attachmentNotice && <div style={attachmentNoticeStyle}>{attachmentNotice}</div>}
             </div>
           </div>
         </main>
@@ -520,6 +680,15 @@ const composerButtonStyle = {
   alignItems: 'center',
   justifyContent: 'center',
   cursor: 'pointer',
+}
+
+const attachmentNoticeStyle = {
+  borderTop: '1px solid #f1f5f9',
+  padding: '9px 10px',
+  color: '#92400e',
+  background: '#fffbeb',
+  fontSize: '12px',
+  fontWeight: 800,
 }
 
 const detailCardStyle = {

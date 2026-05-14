@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react'
 
-const font = "'DM Sans', sans-serif"
+const font = "var(--font-body)"
 const billsStorageKey = 'flowsys-bills'
 
 interface Bill {
@@ -43,7 +43,7 @@ const loadBills = () => {
 
 const tabs = ['All', 'Unpaid', 'Paid']
 
-const formatCurrency = (value: number) => `₱${value.toLocaleString()}.00`
+const formatCurrency = (value: number) => `PHP ${value.toLocaleString('en-PH')}.00`
 const formatDate = (value: string) =>
   value
     ? new Date(`${value}T00:00:00`).toLocaleDateString('en-PH', { month: 'long', day: 'numeric', year: 'numeric' })
@@ -191,7 +191,7 @@ export default function BillsPage() {
             cursor: 'pointer',
           }}
         >
-          ← Back
+          ? Back
         </div>
 
         <div style={{ fontSize: '24px', fontWeight: 600, color: '#111827', marginBottom: '6px' }}>
@@ -499,7 +499,7 @@ export default function BillsPage() {
             <span>Details</span>
           </div>
           <button onClick={() => startEdit(selectedBill)} style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', padding: '11px 18px', background: '#111827', color: '#fff', border: 'none', borderRadius: '8px', fontSize: '14px', fontWeight: 600, cursor: 'pointer' }}>
-            ✎ Edit details
+            ? Edit details
           </button>
         </div>
 
@@ -546,13 +546,13 @@ export default function BillsPage() {
                   <div style={{ fontSize: '12px', color: '#94a3b8', marginTop: '7px', fontWeight: 600 }}>{formatDate(selectedBill.date)}</div>
                 </div>
               </div>
-              <button style={{ border: 'none', background: 'transparent', color: '#111827', cursor: 'pointer', fontSize: '13px', fontWeight: 600, marginTop: '22px', padding: 0 }}>⌄ See more</button>
+              <button style={{ border: 'none', background: 'transparent', color: '#111827', cursor: 'pointer', fontSize: '13px', fontWeight: 600, marginTop: '22px', padding: 0 }}>? See more</button>
             </div>
           </div>
 
           <div style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: '18px', minHeight: '350px', display: 'grid', placeItems: 'center', textAlign: 'center', boxShadow: '0 18px 45px rgba(15,23,42,0.04)', padding: '28px' }}>
             <div>
-              <div style={{ width: '190px', height: '130px', borderRadius: '24px', background: 'linear-gradient(135deg, #e5e7eb, #f8fafc)', margin: '0 auto 34px', display: 'grid', placeItems: 'center', color: '#cbd5e1', fontSize: '54px' }}>▧</div>
+              <div style={{ width: '190px', height: '130px', borderRadius: '24px', background: 'linear-gradient(135deg, #e5e7eb, #f8fafc)', margin: '0 auto 34px', display: 'grid', placeItems: 'center', color: '#cbd5e1', fontSize: '54px' }}>?</div>
               <div style={{ fontSize: '14px', color: '#334155', fontWeight: 600 }}>This item doesn’t have a photo yet.</div>
             </div>
           </div>
@@ -615,7 +615,7 @@ export default function BillsPage() {
             cursor: 'pointer',
           }}
         >
-          📅 May 06, 2026 ▾
+          ?? May 06, 2026 ?
         </div>
       </div>
 
@@ -676,7 +676,7 @@ export default function BillsPage() {
               background: '#fafafa',
             }}
           >
-            <span style={{ color: '#9ca3af' }}>🔍</span>
+            <span style={{ color: '#9ca3af' }}>??</span>
             <input
               type="text"
               placeholder="Search..."
@@ -775,7 +775,7 @@ export default function BillsPage() {
                 >
                   <div style={{ fontSize: '9px', color: '#6b7280', fontWeight: 600 }}>TOTAL</div>
                   <div style={{ fontSize: '11px', fontWeight: 600, color: '#111827' }}>
-                    {totalAmount ? `₱${(totalAmount / 1000000).toFixed(2)}M` : '₱0'}
+                    {totalAmount ? `PHP ${(totalAmount / 1000000).toFixed(2)}M` : 'PHP 0'}
                   </div>
                 </div>
               </div>
@@ -819,7 +819,7 @@ export default function BillsPage() {
               gap: '12px',
             }}
           >
-            <div style={{ fontSize: '40px', opacity: 0.2 }}>🧾</div>
+            <div style={{ fontSize: '40px', opacity: 0.2 }}>??</div>
             <div style={{ fontSize: '14px', fontWeight: 600, color: '#9ca3af' }}>
               No bills or expenses yet - click + Bill and expense to create one
             </div>
@@ -897,7 +897,7 @@ export default function BillsPage() {
                       </span>
                     </td>
                     <td style={{ padding: '16px', fontSize: '13px', color: '#6b7280' }}>{item.date}</td>
-                    <td style={{ padding: '16px', color: '#9ca3af', cursor: 'pointer', fontSize: '18px' }}>⋮</td>
+                    <td style={{ padding: '16px', color: '#9ca3af', cursor: 'pointer', fontSize: '18px' }}>?</td>
                   </tr>
                 ))}
               </tbody>

@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react'
 
-const font = "'DM Sans', sans-serif"
+const font = "var(--font-body)"
 const storageKey = 'flowsys-accounting-entries'
 
 interface JournalLine {
@@ -49,7 +49,7 @@ const createDefaultLines = (): JournalLine[] => [
   { id: 2, account: 'Cash on Hand', description: '', debit: 0, credit: 0 },
 ]
 
-const formatCurrency = (value: number) => `₱${value.toLocaleString()}.00`
+const formatCurrency = (value: number) => `PHP ${value.toLocaleString('en-PH')}.00`
 
 const loadEntries = () => {
   if (typeof window === 'undefined') return []
@@ -221,7 +221,7 @@ export default function AccountingPage() {
             cursor: 'pointer',
           }}
         >
-          ← Back
+          ? Back
         </div>
 
         <div style={{ fontSize: '24px', fontWeight: 600, color: '#111827', marginBottom: '6px' }}>
@@ -473,7 +473,7 @@ export default function AccountingPage() {
                               fontSize: '16px',
                             }}
                           >
-                            ✕
+                            ?
                           </button>
                         )}
                       </td>
@@ -658,7 +658,7 @@ export default function AccountingPage() {
             cursor: 'pointer',
           }}
         >
-          📅 May 06, 2026 ▾
+          ?? May 06, 2026 ?
         </div>
       </div>
 
@@ -783,7 +783,7 @@ export default function AccountingPage() {
               background: '#fafafa',
             }}
           >
-            <span style={{ color: '#9ca3af' }}>🔍</span>
+            <span style={{ color: '#9ca3af' }}>??</span>
             <input
               type="text"
               placeholder="Search..."
@@ -827,7 +827,7 @@ export default function AccountingPage() {
               gap: '12px',
             }}
           >
-            <div style={{ fontSize: '40px', opacity: 0.2 }}>🧾</div>
+            <div style={{ fontSize: '40px', opacity: 0.2 }}>??</div>
             <div style={{ fontSize: '14px', fontWeight: 600, color: '#9ca3af' }}>
               No journal entries yet - click + Journal entry to create one
             </div>
@@ -922,7 +922,7 @@ export default function AccountingPage() {
                           fontWeight: 600,
                         }}
                       >
-                        ⋮
+                        ?
                       </button>
 
                       {openMenu === entry.id && (

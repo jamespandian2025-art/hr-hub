@@ -1,361 +1,284 @@
 'use client'
 
 import Link from 'next/link'
-import { useEffect, useState } from 'react'
+import type { ReactNode } from 'react'
+import { ChevronDown, CircleDollarSign, Filter, Grid3X3, LayoutList, MoreHorizontal, Search, Upload, UserCheck, UserMinus, UserPlus, UsersRound } from 'lucide-react'
+import { useMemo, useState } from 'react'
+import { ClientRecord, formatPeso, getInitials, loadClients } from './clientData'
 
-const font = "'DM Sans', sans-serif"
-const storageKey = 'flowsys-clients'
-const projectsStorageKey = 'flowsys-projects'
-
-interface Client {
-  id: number
-  name: string
-  email: string
-  contact: string
-  completed: number
-  total: number
-  cost: number
-  color: string
-}
-
-interface Project {
-  id: number
-  name: string
-  client: string
-  location: string
-  projectCost: number
-  startDate: string
-  endDate: string
-  status: string
-  materialCost: number
-  laborCost: number
-  overheadProfit: number
-  generalExpense: number
-  paidAmount: number
-  unpaidAmount: number
-  notes: string
-}
-
-const initialClients: Client[] = [
-  { id: 1, name: 'Jessica Fields', email: 'Jessicajaneteran@gmail.com', contact: '-', completed: 0, total: 0, cost: 0, color: '#6c63ff' },
-  { id: 2, name: 'Joey Ong', email: 'Joey@ronincollective.ph', contact: '-', completed: 0, total: 0, cost: 0, color: '#10b981' },
-  { id: 3, name: 'Happy Alino', email: 'cjalinoproperties@gmail.com', contact: '-', completed: 0, total: 0, cost: 0, color: '#f59e0b' },
-]
-
-const fieldStyle = {
-  width: '100%',
-  padding: '10px 12px',
-  border: '1px solid #e5e7eb',
-  borderRadius: '8px',
-  outline: 'none',
-  fontSize: '13px',
-  color: '#374151',
-  background: '#fff',
-}
-
-const labelStyle = {
-  display: 'grid',
-  gap: '7px',
-  fontSize: '12px',
-  color: '#374151',
-  fontWeight: 600,
-}
-
-const buttonStyle = {
-  padding: '10px 18px',
-  borderRadius: '10px',
-  border: 'none',
-  fontSize: '13px',
-  fontWeight: 600,
-  cursor: 'pointer',
-}
-
-const loadClients = () => {
-  if (typeof window === 'undefined') return initialClients
-
-  try {
-    const stored = window.localStorage.getItem(storageKey)
-    return stored ? (JSON.parse(stored) as Client[]) : initialClients
-  } catch {
-    return initialClients
-  }
-}
-
-const loadProjects = () => {
-  if (typeof window === 'undefined') return []
-
-  try {
-    const stored = window.localStorage.getItem(projectsStorageKey)
-    return stored ? (JSON.parse(stored) as Project[]) : []
-  } catch {
-    return []
-  }
-}
-
-const money = (value: number) => `Php ${value.toLocaleString()}.00`
-const nextId = (records: Client[]) => records.reduce((max, record) => Math.max(max, record.id), 0) + 1
-const colorFor = (id: number) => ['#6c63ff', '#10b981', '#f59e0b', '#2563eb', '#ec4899'][id % 5]
+const font = 'var(--font-body)'
+const green = '#16a34a'
 
 export default function ClientsPage() {
-  const [clients, setClients] = useState<Client[]>(loadClients)
-  const [projects] = useState<Project[]>(loadProjects)
+  const [clients] = useState<ClientRecord[]>(loadClients)
   const [search, setSearch] = useState('')
-  const [selected, setSelected] = useState<number[]>([])
-  const [activeMenu, setActiveMenu] = useState<number | null>(null)
-  const [showForm, setShowForm] = useState(false)
-  const [editingId, setEditingId] = useState<number | null>(null)
-  const [name, setName] = useState('')
-  const [email, setEmail] = useState('')
-  const [contact, setContact] = useState('')
+  const [statusFilter, setStatusFilter] = useState('All Status')
+  const [industryFilter, setIndustryFilter] = useState('All Industry')
+  const [view, setView] = useState<'list' | 'grid'>('list')
 
-  useEffect(() => {
-    window.localStorage.setItem(storageKey, JSON.stringify(clients))
+  const filteredClients = useMemo(() => {
+    const query = search.trim().toLowerCase()
+
+    return clients.filter(client => {
+      const matchesSearch = !query || [client.name, client.company, client.email, client.phone, client.industry].join(' ').toLowerCase().includes(query)
+      const matchesStatus = statusFilter === 'All Status' || client.status === statusFilter
+      const matchesIndustry = industryFilter === 'All Industry' || client.industry === industryFilter
+      return matchesSearch && matchesStatus && matchesIndustry
+    })
+  }, [clients, industryFilter, search, statusFilter])
+
+  const stats = useMemo(() => {
+    const active = clients.filter(client => client.status === 'Active').length
+    const inactive = clients.filter(client => client.status === 'Inactive').length
+    const newClients = clients.filter(client => client.createdAt.startsWith('2026-05')).length
+    const revenue = clients.reduce((sum, client) => sum + client.totalRevenue, 0)
+
+    return [
+      { label: 'Total Clients', value: clients.length.toString(), detail: `+${newClients} this month`, icon: UsersRound, color: '#16a34a' },
+      { label: 'Active Clients', value: active.toString(), detail: `${Math.round((active / Math.max(clients.length, 1)) * 100)}% of total`, icon: UserCheck, color: '#2563eb' },
+      { label: 'New Clients', value: newClients.toString(), detail: `+${newClients} this month`, icon: UserPlus, color: '#10b981' },
+      { label: 'Inactive Clients', value: inactive.toString(), detail: `${Math.round((inactive / Math.max(clients.length, 1)) * 100)}% of total`, icon: UserMinus, color: '#f97316' },
+      { label: 'Total Revenue', value: formatPeso(revenue), detail: '+18% this month', icon: CircleDollarSign, color: '#16a34a' },
+    ]
   }, [clients])
 
-  const filtered = clients.filter(client =>
-    client.name.toLowerCase().includes(search.toLowerCase()) ||
-    client.email.toLowerCase().includes(search.toLowerCase())
-  )
-  const clientStats = (clientName: string) => {
-    const ownedProjects = projects.filter(project => project.client.toLowerCase() === clientName.toLowerCase())
-
-    return {
-      completed: ownedProjects.filter(project => project.status === 'Completed').length,
-      total: ownedProjects.length,
-      paid: ownedProjects.reduce((sum, project) => sum + project.paidAmount, 0),
-    }
-  }
-
-  const resetForm = () => {
-    setName('')
-    setEmail('')
-    setContact('')
-    setEditingId(null)
-  }
-
-  const closeForm = () => {
-    resetForm()
-    setShowForm(false)
-  }
-
-  const startEdit = (client: Client) => {
-    setEditingId(client.id)
-    setName(client.name)
-    setEmail(client.email === '-' ? '' : client.email)
-    setContact(client.contact === '-' ? '' : client.contact)
-    setShowForm(true)
-    setActiveMenu(null)
-  }
-
-  const saveClient = () => {
-    const trimmedName = name.trim()
-    if (!trimmedName) return
-
-    if (editingId) {
-      setClients(previous =>
-        previous.map(client =>
-          client.id === editingId
-            ? { ...client, name: trimmedName, email: email.trim() || '-', contact: contact.trim() || '-' }
-            : client
-        )
-      )
-    } else {
-      setClients(previous => {
-        const id = nextId(previous)
-        return [
-          ...previous,
-          {
-            id,
-            name: trimmedName,
-            email: email.trim() || '-',
-            contact: contact.trim() || '-',
-            completed: 0,
-            total: 0,
-            cost: 0,
-            color: colorFor(id),
-          },
-        ]
-      })
-    }
-
-    closeForm()
-  }
-
-  const deleteClient = (id: number) => {
-    setClients(previous => previous.filter(client => client.id !== id))
-    setSelected(previous => previous.filter(clientId => clientId !== id))
-    setActiveMenu(null)
-  }
-
-  const toggleSelect = (id: number) => {
-    setSelected(previous =>
-      previous.includes(id) ? previous.filter(item => item !== id) : [...previous, id]
-    )
-  }
-
-  if (showForm) {
-    return (
-      <div style={{ fontFamily: font }}>
-        <button onClick={closeForm} style={{ border: 'none', background: 'transparent', color: '#374151', fontSize: '14px', fontWeight: 600, cursor: 'pointer', marginBottom: '20px', padding: 0 }}>
-          Back
-        </button>
-        <div style={{ fontSize: '24px', fontWeight: 600, color: '#111827', marginBottom: '6px' }}>{editingId ? 'Edit Client' : 'Add Client'}</div>
-        <div style={{ fontSize: '13px', color: '#9ca3af', marginBottom: '28px', display: 'flex', gap: '6px' }}>
-          <span style={{ color: '#6c63ff', fontWeight: 600 }}>Clients</span>
-          <span>/</span>
-          <span>{editingId ? 'Edit' : 'New'}</span>
-        </div>
-
-        <div style={{ display: 'grid', gridTemplateColumns: 'minmax(220px, 260px) minmax(0, 1fr)', gap: '32px' }}>
-          <div>
-            <div style={{ fontSize: '15px', fontWeight: 600, color: '#111827', marginBottom: '8px' }}>Client Details</div>
-            <div style={{ fontSize: '13px', color: '#6b7280', lineHeight: 1.6 }}>
-              Add client contact details. These clients are available when creating projects.
-            </div>
-          </div>
-
-          <div style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: '12px', padding: '20px', display: 'grid', gap: '14px' }}>
-            <label style={labelStyle}>
-              Client name
-              <input style={fieldStyle} value={name} onChange={event => setName(event.target.value)} placeholder="Client name" />
-            </label>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(190px, 1fr))', gap: '14px' }}>
-              <label style={labelStyle}>
-                Email
-                <input style={fieldStyle} value={email} onChange={event => setEmail(event.target.value)} placeholder="client@example.com" />
-              </label>
-              <label style={labelStyle}>
-                Contact
-                <input style={fieldStyle} value={contact} onChange={event => setContact(event.target.value)} placeholder="Phone or contact person" />
-              </label>
-            </div>
-          </div>
-        </div>
-
-        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px', marginTop: '28px' }}>
-          <button onClick={closeForm} style={{ ...buttonStyle, background: '#fff', border: '1px solid #e5e7eb', color: '#374151' }}>Cancel</button>
-          <button onClick={saveClient} disabled={!name.trim()} style={{ ...buttonStyle, background: name.trim() ? '#111827' : '#d1d5db', color: '#fff', cursor: name.trim() ? 'pointer' : 'not-allowed' }}>
-            {editingId ? 'Save Client' : 'Create Client'}
-          </button>
-        </div>
-      </div>
-    )
-  }
+  const industries = Array.from(new Set(clients.map(client => client.industry)))
 
   return (
-    <div style={{ fontFamily: font }} onClick={() => setActiveMenu(null)}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
-        <div style={{ fontSize: '24px', fontWeight: 600, color: '#111827' }}>Clients</div>
-        <button onClick={() => setShowForm(true)} style={{ ...buttonStyle, background: '#111827', color: '#fff' }}>
-          + Client
-        </button>
-      </div>
-
-      <div style={{ fontSize: '13px', color: '#9ca3af', marginBottom: '24px', display: 'flex', gap: '6px' }}>
-        <span style={{ color: '#6c63ff', fontWeight: 600 }}>Clients</span>
-        <span>/</span>
-        <span>List</span>
-      </div>
-
-      <div style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: '16px', overflow: 'hidden' }}>
-        <div style={{ display: 'flex', gap: '12px', padding: '16px 24px', borderBottom: '1px solid #f3f4f6' }}>
-          <div style={{ flex: 1, display: 'flex', gap: '8px', padding: '9px 14px', border: '1px solid #e5e7eb', borderRadius: '8px', background: '#fafafa' }}>
-            <span style={{ color: '#9ca3af' }}>Search</span>
-            <input type="text" placeholder="Search clients..." value={search} onChange={event => setSearch(event.target.value)} style={{ border: 'none', background: 'transparent', outline: 'none', flex: 1, color: '#374151' }} />
-          </div>
-        </div>
-
-        {filtered.length === 0 ? (
-          <div style={{ padding: '60px 24px', textAlign: 'center', color: '#9ca3af', fontSize: '14px', fontWeight: 600 }}>
-            No clients yet. Click + Client to create one.
-          </div>
-        ) : (
-          <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-            <thead>
-              <tr style={{ background: '#fafafa' }}>
-                <th style={{ padding: '12px 24px' }}><input type="checkbox" /></th>
-                {['Name', 'Contact', 'Completed', 'Projects', 'Cost', ''].map(header => (
-                  <th key={header} style={{ padding: '12px 16px', textAlign: 'left', fontSize: '12px', fontWeight: 600, color: '#6b7280', textTransform: 'uppercase' }}>{header}</th>
-                ))}
-              </tr>
-            </thead>
-
-            <tbody>
-              {filtered.map(client => {
-                const stats = clientStats(client.name)
-
-                return (
-                  <tr key={client.id} style={{ borderTop: '1px solid #f3f4f6' }}>
-                    <td style={{ padding: '16px 24px' }}>
-                      <input type="checkbox" checked={selected.includes(client.id)} onChange={() => toggleSelect(client.id)} />
-                    </td>
-                    <td style={{ padding: '16px' }}>
-                      <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
-                        <div style={{ width: '38px', height: '38px', borderRadius: '50%', background: client.color, color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 600 }}>
-                          {client.name.charAt(0)}
-                        </div>
-                        <div>
-                          <Link href={`/people/clients/${client.id}`} style={{ fontWeight: 600, color: '#111827', textDecoration: 'none' }}>
-                            {client.name}
-                          </Link>
-                          <div style={{ fontSize: '12px', color: '#6b7280' }}>{client.email}</div>
-                        </div>
-                      </div>
-                    </td>
-                    <td style={cellStyle}>{client.contact}</td>
-                    <td style={cellStyle}>{stats.completed}</td>
-                    <td style={cellStyle}>{stats.total}</td>
-                    <td style={cellStyle}>{money(stats.paid)}</td>
-                    <td style={{ padding: '16px', position: 'relative' }}>
-                      <button
-                        onClick={event => {
-                          event.stopPropagation()
-                          setActiveMenu(activeMenu === client.id ? null : client.id)
-                        }}
-                        style={{ border: 'none', background: 'transparent', cursor: 'pointer', fontSize: '18px', color: '#9ca3af' }}
-                      >
-                        ...
-                      </button>
-
-                      {activeMenu === client.id && (
-                        <div onClick={event => event.stopPropagation()} style={{ position: 'absolute', right: '16px', top: '46px', background: '#fff', border: '1px solid #e5e7eb', borderRadius: '10px', width: '140px', boxShadow: '0 10px 24px rgba(15,23,42,0.12)', overflow: 'hidden', zIndex: 20 }}>
-                          <button onClick={() => startEdit(client)} style={menuItemStyle}>Edit</button>
-                          <button onClick={() => deleteClient(client.id)} style={{ ...menuItemStyle, color: '#ef4444', borderBottom: 'none' }}>Delete</button>
-                        </div>
-                      )}
-                    </td>
-                  </tr>
-                )
-              })}
-            </tbody>
-          </table>
+    <div style={{ fontFamily: font, display: 'grid', gap: 24 }}>
+      <PageHeader
+        crumb="Home / Client Database"
+        title="Client Database"
+        subtitle="Manage and monitor all your clients and their details."
+        actions={(
+          <>
+            <button style={secondaryButton}><Upload size={16} /> Import Clients <ChevronDown size={14} /></button>
+            <Link href="/people/clients/new" style={primaryLink}><span style={{ fontSize: 18, lineHeight: 1 }}>+</span> Add Client <ChevronDown size={14} /></Link>
+          </>
         )}
+      />
 
-        <div style={{ padding: '16px 24px', borderTop: '1px solid #f3f4f6', fontSize: '13px', color: '#374151', fontWeight: 600 }}>
-          {filtered.length} clients
+      <div style={statGrid}>
+        {stats.map(stat => <StatCard key={stat.label} {...stat} />)}
+      </div>
+
+      <div style={filterBar}>
+        <label style={searchBox}>
+          <Search size={17} color="#64748b" />
+          <input value={search} onChange={event => setSearch(event.target.value)} placeholder="Search clients by name, email, company..." style={inputBare} />
+        </label>
+        <select value={statusFilter} onChange={event => setStatusFilter(event.target.value)} style={selectStyle}>
+          <option>All Status</option>
+          <option>Active</option>
+          <option>Inactive</option>
+        </select>
+        <select value={industryFilter} onChange={event => setIndustryFilter(event.target.value)} style={selectStyle}>
+          <option>All Industry</option>
+          {industries.map(industry => <option key={industry}>{industry}</option>)}
+        </select>
+        <select style={selectStyle}>
+          <option>All Tags</option>
+          <option>Enterprise</option>
+          <option>Priority</option>
+        </select>
+        <select style={selectStyle}>
+          <option>Account Manager</option>
+          <option>James Pandian</option>
+          <option>Sarah Johnson</option>
+        </select>
+        <button style={secondaryButton}><Filter size={16} /> Filter</button>
+        <div style={{ display: 'flex', gap: 8, marginLeft: 'auto' }}>
+          <button onClick={() => setView('list')} style={iconButton(view === 'list')}><LayoutList size={18} /></button>
+          <button onClick={() => setView('grid')} style={iconButton(view === 'grid')}><Grid3X3 size={18} /></button>
         </div>
+      </div>
+
+      {view === 'list' ? (
+        <ClientTable clients={filteredClients} />
+      ) : (
+        <div style={gridCards}>
+          {filteredClients.map(client => <ClientGridCard key={client.id} client={client} />)}
+        </div>
+      )}
+    </div>
+  )
+}
+
+function ClientTable({ clients }: { clients: ClientRecord[] }) {
+  if (!clients.length) return <EmptyState message="No clients found." />
+
+  return (
+    <div style={panel}>
+      <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 1050 }}>
+        <thead>
+          <tr style={{ background: '#f8fafc' }}>
+            <th style={checkCell}><input type="checkbox" /></th>
+            {['Client Name', 'Company', 'Email', 'Phone', 'Industry', 'Status', 'Account Manager', 'Total Projects', 'Total Revenue', 'Last Contact', 'Actions'].map(header => (
+              <th key={header} style={th}>{header}</th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {clients.map(client => (
+            <tr key={client.id} style={row}>
+              <td style={checkCell}><input type="checkbox" /></td>
+              <td style={td}>
+                <Link href={`/people/clients/${client.id}`} style={clientNameCell}>
+                  <span style={avatar('#ede9fe', '#7c3aed')}>{getInitials(client.name)}</span>
+                  <strong>{client.name}</strong>
+                </Link>
+              </td>
+              <td style={td}>{client.company}</td>
+              <td style={td}>{client.email}</td>
+              <td style={td}>{client.phone}</td>
+              <td style={td}><Badge tone="purple">{client.industry}</Badge></td>
+              <td style={td}><span style={statusDot(client.status)} /> {client.status}</td>
+              <td style={td}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <span style={avatar('#f1f5f9', '#0f172a')}>{getInitials(client.accountManager)}</span>
+                  {client.accountManager}
+                </div>
+              </td>
+              <td style={td}>{client.totalProjects}</td>
+              <td style={{ ...td, fontWeight: 800 }}>{formatPeso(client.totalRevenue)}</td>
+              <td style={td}>{client.lastContact}</td>
+              <td style={td}><button style={ghostIcon}><MoreHorizontal size={18} /></button></td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      <div style={tableFooter}>Showing 1 to {clients.length} of {clients.length} clients <span style={{ marginLeft: 'auto' }}>Page 1</span></div>
+    </div>
+  )
+}
+
+function ClientGridCard({ client }: { client: ClientRecord }) {
+  return (
+    <Link href={`/people/clients/${client.id}`} style={gridCard}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+        <span style={avatar('#ede9fe', '#7c3aed', 44)}>{getInitials(client.name)}</span>
+        <div>
+          <div style={{ fontWeight: 900, color: '#020617' }}>{client.name}</div>
+          <div style={{ fontSize: 12, color: '#64748b', marginTop: 3 }}>{client.industry}</div>
+        </div>
+      </div>
+      <div style={{ display: 'grid', gap: 8, fontSize: 13, color: '#475569' }}>
+        <span>{client.email}</span>
+        <span>{client.phone}</span>
+        <span>{client.totalProjects} projects - {formatPeso(client.totalRevenue)}</span>
+      </div>
+    </Link>
+  )
+}
+
+function PageHeader({ crumb, title, subtitle, actions }: { crumb: string; title: string; subtitle: string; actions: ReactNode }) {
+  return (
+    <div style={pageHeader}>
+      <div>
+        <div style={breadcrumb}>{crumb}</div>
+        <h1 style={h1}>{title}</h1>
+        <p style={subtitleStyle}>{subtitle}</p>
+      </div>
+      <div style={actionsWrap}>{actions}</div>
+    </div>
+  )
+}
+
+function StatCard({ label, value, detail, icon: Icon, color }: { label: string; value: string; detail: string; icon: typeof UsersRound; color: string }) {
+  return (
+    <div style={statCard}>
+      <div style={softIcon(color)}><Icon size={24} /></div>
+      <div>
+        <div style={statLabel}>{label}</div>
+        <div style={statValue}>{value}</div>
+        <div style={statDetail}>{detail}</div>
       </div>
     </div>
   )
 }
 
-const cellStyle = {
-  padding: '16px',
-  fontSize: '13px',
-  color: '#374151',
-  fontWeight: 600,
+function Badge({ children, tone }: { children: ReactNode; tone: 'purple' | 'green' | 'orange' | 'blue' }) {
+  const colors = {
+    purple: ['#f3e8ff', '#7e22ce'],
+    green: ['#dcfce7', '#15803d'],
+    orange: ['#ffedd5', '#c2410c'],
+    blue: ['#dbeafe', '#1d4ed8'],
+  }[tone]
+  return <span style={{ padding: '4px 8px', borderRadius: 999, background: colors[0], color: colors[1], fontSize: 12, fontWeight: 800 }}>{children}</span>
 }
 
-const menuItemStyle = {
-  display: 'block',
-  width: '100%',
-  padding: '11px 14px',
-  border: 'none',
-  borderBottom: '1px solid #f3f4f6',
-  background: '#fff',
-  color: '#374151',
-  textAlign: 'left' as const,
-  fontSize: '13px',
-  fontWeight: 600,
-  cursor: 'pointer',
+function EmptyState({ message }: { message: string }) {
+  return <div style={{ ...panel, padding: 80, textAlign: 'center', color: '#64748b', fontWeight: 700 }}>{message}</div>
 }
+
+const pageHeader = { display: 'flex', justifyContent: 'space-between', gap: 20, alignItems: 'flex-start', flexWrap: 'wrap' as const }
+const breadcrumb = { fontSize: 13, color: '#008b4a', fontWeight: 700, marginBottom: 18 }
+const h1 = { margin: 0, fontSize: 30, lineHeight: 1.12, color: '#020617', fontWeight: 900, letterSpacing: 0 }
+const subtitleStyle = { margin: '8px 0 0', color: '#475569', fontSize: 14, fontWeight: 500 }
+const actionsWrap = { display: 'flex', gap: 12, flexWrap: 'wrap' as const }
+const primaryLink = { display: 'inline-flex', alignItems: 'center', gap: 8, height: 42, padding: '0 18px', borderRadius: 8, border: '1px solid #16a34a', background: '#16a34a', color: '#fff', textDecoration: 'none', fontSize: 13, fontWeight: 800 }
+const secondaryButton = { display: 'inline-flex', alignItems: 'center', gap: 8, height: 42, padding: '0 16px', borderRadius: 8, border: '1px solid #dbe3ea', background: '#fff', color: '#0f172a', fontSize: 13, fontWeight: 800, cursor: 'pointer' }
+const statGrid = { display: 'grid', gridTemplateColumns: 'repeat(5, minmax(150px, 1fr))', gap: 16 }
+const statCard = { minHeight: 112, background: '#fff', border: '1px solid #dfe7ee', borderRadius: 12, boxShadow: '0 10px 24px rgba(15,23,42,.04)', padding: 20, display: 'flex', gap: 18, alignItems: 'center' }
+const statLabel = { color: '#475569', fontSize: 13, fontWeight: 700 }
+const statValue = { color: '#020617', fontSize: 25, fontWeight: 900, marginTop: 4 }
+const statDetail = { color: green, fontSize: 12, fontWeight: 700, marginTop: 6 }
+const filterBar = { display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' as const }
+const searchBox = { height: 44, minWidth: 320, flex: '1 1 330px', display: 'flex', alignItems: 'center', gap: 10, padding: '0 14px', border: '1px solid #dbe3ea', borderRadius: 8, background: '#fff' }
+const inputBare = { border: 'none', outline: 'none', flex: 1, background: 'transparent', fontSize: 13, color: '#0f172a' }
+const selectStyle = { height: 44, border: '1px solid #dbe3ea', borderRadius: 8, background: '#fff', color: '#0f172a', fontSize: 13, fontWeight: 700, padding: '0 14px', minWidth: 126 }
+const panel = { background: '#fff', border: '1px solid #dfe7ee', borderRadius: 12, boxShadow: '0 10px 24px rgba(15,23,42,.04)', overflow: 'auto' }
+const th = { padding: '14px 12px', color: '#475569', fontSize: 12, fontWeight: 900, textAlign: 'left' as const, whiteSpace: 'nowrap' as const }
+const td = { padding: '16px 12px', color: '#0f172a', fontSize: 13, fontWeight: 600, borderTop: '1px solid #eaf0f5', whiteSpace: 'nowrap' as const }
+const checkCell = { width: 44, padding: '14px 14px', borderTop: '1px solid #eaf0f5' }
+const row = { background: '#fff' }
+const clientNameCell = { display: 'flex', alignItems: 'center', gap: 10, textDecoration: 'none', color: '#020617' }
+const tableFooter = { padding: '16px 18px', borderTop: '1px solid #eaf0f5', color: '#475569', fontSize: 13, fontWeight: 600, display: 'flex' }
+const ghostIcon = { width: 34, height: 34, border: 'none', borderRadius: 8, background: 'transparent', color: '#475569', cursor: 'pointer' }
+const gridCards = { display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: 16 }
+const gridCard = { display: 'grid', gap: 18, minHeight: 180, padding: 18, background: '#fff', border: '1px solid #dfe7ee', borderRadius: 12, boxShadow: '0 10px 24px rgba(15,23,42,.04)', textDecoration: 'none' }
+
+const softIcon = (color: string) => ({
+  width: 56,
+  height: 56,
+  borderRadius: 14,
+  background: `${color}18`,
+  color,
+  display: 'grid',
+  placeItems: 'center',
+  flex: '0 0 auto',
+})
+
+const avatar = (background: string, color: string, size = 34) => ({
+  width: size,
+  height: size,
+  borderRadius: 10,
+  background,
+  color,
+  display: 'inline-grid',
+  placeItems: 'center',
+  fontSize: size > 40 ? 15 : 12,
+  fontWeight: 900,
+  flex: '0 0 auto',
+})
+
+const statusDot = (status: string) => ({
+  width: 7,
+  height: 7,
+  borderRadius: 999,
+  display: 'inline-block',
+  marginRight: 8,
+  background: status === 'Active' ? '#16a34a' : '#f97316',
+})
+
+const iconButton = (active: boolean) => ({
+  width: 40,
+  height: 40,
+  borderRadius: 9,
+  border: '1px solid #dbe3ea',
+  background: active ? '#ecfdf5' : '#fff',
+  color: active ? green : '#475569',
+  display: 'grid',
+  placeItems: 'center',
+  cursor: 'pointer',
+})

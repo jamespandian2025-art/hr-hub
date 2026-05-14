@@ -8,8 +8,8 @@ import {
   Search,
 } from 'lucide-react'
 
-const font = "'DM Sans', sans-serif"
-const displayFont = "'Outfit', 'DM Sans', sans-serif"
+const font = "var(--font-body)"
+const displayFont = "var(--font-body)"
 const tasksStorageKey = 'flowsys-assigned-tasks'
 const projectsStorageKey = 'flowsys-projects'
 const accountStorageKey = 'flowsys-account'
@@ -210,7 +210,7 @@ export default function ToDoPage() {
             ].map(([label, value]) => {
               const active = status === value
               return (
-                <button key={label} onClick={() => setStatus(value as typeof status)} style={{ border: 'none', background: 'transparent', color: active ? '#1db954' : '#8a8a8a', fontSize: 12, fontWeight: 800, cursor: 'pointer' }}>
+                <button key={label} onClick={() => setStatus(value as typeof status)} style={{ border: 'none', background: 'transparent', color: active ? '#22c55e' : '#8a8a8a', fontSize: 12, fontWeight: 800, cursor: 'pointer' }}>
                   {label}
                 </button>
               )
@@ -227,7 +227,7 @@ export default function ToDoPage() {
             const primaryAssignee = assignees[0] || currentUser
             return (
               <div key={task.id} style={{ width: '100%', minHeight: 66, borderBottom: '1px solid #e1e1e1', background: '#fff', color: '#111', display: 'grid', gridTemplateColumns: '42px minmax(360px, 1fr) 86px 200px 150px 170px', alignItems: 'center', gap: 12, padding: '10px 18px', boxSizing: 'border-box' }}>
-                <button onClick={() => toggleDone(task.id)} title="Toggle done" style={{ width: 19, height: 15, border: '1px solid #9a9a9a', borderRadius: 4, background: task.status === 'Completed' ? '#1db954' : '#fff', cursor: 'pointer' }} />
+                <button onClick={() => toggleDone(task.id)} title="Toggle done" style={{ width: 19, height: 15, border: '1px solid #9a9a9a', borderRadius: 4, background: task.status === 'Completed' ? '#22c55e' : '#fff', cursor: 'pointer' }} />
                 <span style={{ minWidth: 0 }}>
                   <span style={{ display: 'block', color: '#111', fontSize: 15, fontWeight: 900, marginBottom: 5, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{task.title}</span>
                   <span style={{ display: 'block', color: '#56616a', fontSize: 13, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
@@ -269,7 +269,7 @@ export default function ToDoPage() {
 
 function Avatar({ name }: { name: string }) {
   return (
-    <span style={{ width: 40, height: 40, borderRadius: '50%', background: '#1db954', color: '#191414', display: 'inline-grid', placeItems: 'center', fontSize: 15, fontWeight: 900, flexShrink: 0 }}>
+    <span style={{ width: 40, height: 40, borderRadius: '50%', background: '#22c55e', color: '#191414', display: 'inline-grid', placeItems: 'center', fontSize: 15, fontWeight: 900, flexShrink: 0 }}>
       {(name || '?').charAt(0).toUpperCase()}
     </span>
   )

@@ -4,7 +4,7 @@ import Link from 'next/link'
 import Image from 'next/image'
 import { ChangeEvent, useEffect, useState } from 'react'
 
-const font = "'DM Sans', sans-serif"
+const font = "var(--font-body)"
 const storageKey = 'flowsys-warehouses'
 
 interface Warehouse {
@@ -165,7 +165,7 @@ export default function InventoryPage() {
             cursor: 'pointer',
           }}
         >
-          ← Back
+          ? Back
         </div>
 
         <div style={{ fontSize: '24px', fontWeight: 600, color: '#111827', marginBottom: '6px' }}>
@@ -348,7 +348,7 @@ export default function InventoryPage() {
           maxWidth: '500px',
         }}
       >
-        <span style={{ color: '#9ca3af', fontSize: '15px' }}>🔍</span>
+        <span style={{ color: '#9ca3af', fontSize: '15px' }}>??</span>
         <input
           type="text"
           placeholder="Search warehouses..."
@@ -443,7 +443,7 @@ export default function InventoryPage() {
                   fontWeight: 600,
                 }}
               >
-                ⋮
+                ?
               </button>
 
               {openMenu === warehouse.id && (

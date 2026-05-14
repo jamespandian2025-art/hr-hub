@@ -1,7 +1,7 @@
 'use client'
 import { useState, useEffect } from 'react'
 
-const font = "'DM Sans', sans-serif"
+const font = "var(--font-body)"
 
 const vendors = [
   {
@@ -10,7 +10,7 @@ const vendors = [
     email: 'abc@supplier.com',
     contact: '09123456789',
     transactions: 5,
-    cost: '₱25,000',
+    cost: 'PHP 25,000',
     color: '#6c63ff',
   },
   {
@@ -19,7 +19,7 @@ const vendors = [
     email: 'buildpro@gmail.com',
     contact: '09987654321',
     transactions: 3,
-    cost: '₱12,500',
+    cost: 'PHP 12,500',
     color: '#10b981',
   },
 ]
@@ -29,7 +29,7 @@ export default function VendorsPage() {
   const [selected, setSelected] = useState<number[]>([])
   const [activeMenu, setActiveMenu] = useState<number | null>(null)
 
-  // ✅ close dropdown
+  // ? close dropdown
   useEffect(() => {
     const handleClick = () => setActiveMenu(null)
     window.addEventListener('click', handleClick)
@@ -165,7 +165,7 @@ export default function VendorsPage() {
                     }}
                     style={{ cursor: 'pointer', fontSize: '18px', color: '#9ca3af' }}
                   >
-                    ⋮
+                    ?
                   </div>
 
                   {activeMenu === vendor.id && (

@@ -3,7 +3,7 @@
 import Link from 'next/link'
 import { useEffect, useMemo, useState } from 'react'
 
-const font = "'DM Sans', sans-serif"
+const font = "var(--font-body)"
 const storageKey = 'flowsys-suppliers'
 
 type SupplyType = 'Material' | 'Tool' | 'Equipment' | 'Supply'

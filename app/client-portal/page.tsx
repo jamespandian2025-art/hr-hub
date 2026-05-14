@@ -4,7 +4,7 @@ import { useMemo, useState } from 'react'
 import { CalendarDays, Check, FileText, FolderKanban, Image as ImageIcon, LayoutDashboard, ListPlus, LogOut, MessageSquare, Settings, ShieldCheck, WalletCards, Wrench, X } from 'lucide-react'
 import { useRouter } from 'next/navigation'
 
-const font = "'DM Sans', sans-serif"
+const font = "var(--font-body)"
 const projectsKey = 'flowsys-projects'
 const progressKey = 'flowsys-project-progress'
 const attachmentsKey = 'flowsys-project-attachments'
@@ -101,8 +101,8 @@ const loadStored = <T,>(key: string, fallback: T[]): T[] => {
   }
 }
 
-const money = (value: number) => `Php ${Number(value || 0).toLocaleString()}.00`
-const shortMoney = (value: number) => `Php ${Number(value || 0).toLocaleString()}`
+const money = (value: number) => `PHP ${Number(value || 0).toLocaleString('en-PH')}.00`
+const shortMoney = (value: number) => `PHP ${Number(value || 0).toLocaleString('en-PH')}`
 const duration = (project: Project) => `${project.startDate || '-'} - ${project.endDate || '-'}`
 const fileSize = (size: number) => (size >= 1024 * 1024 ? `${(size / 1024 / 1024).toFixed(1)} MB` : `${Math.max(1, Math.round(size / 1024))} KB`)
 const statusStyle: Record<ProjectStatus, { bg: string; color: string; border: string }> = {
@@ -688,7 +688,7 @@ const miniStatStyle = {
 const sidebarProfileStyle = { marginTop: 28, borderTop: '1px solid #f1f5f9', paddingTop: 16, display: 'grid', gridTemplateColumns: '38px minmax(0,1fr)', gap: 10, alignItems: 'center' }
 const miniAvatarStyle = { width: 38, height: 38, borderRadius: '50%', background: '#111827', color: '#fff', display: 'grid', placeItems: 'center', fontSize: 13, fontWeight: 950 }
 const topBarStyle = { display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 18, marginBottom: 26, flexWrap: 'wrap' as const }
-const brandMarkStyle = { width: 42, height: 42, borderRadius: '50%', background: '#1db954', color: '#191414', display: 'grid', placeItems: 'center', fontSize: 18, fontWeight: 700, boxShadow: '0 12px 28px rgba(29,185,84,.2)' }
+const brandMarkStyle = { width: 42, height: 42, borderRadius: '50%', background: '#22c55e', color: '#191414', display: 'grid', placeItems: 'center', fontSize: 18, fontWeight: 700, boxShadow: '0 12px 28px rgba(34,197,94,.2)' }
 const selectStyle = { minWidth: 210, border: '1px solid #dbe3ee', borderRadius: 12, background: '#fff', color: '#111827', padding: '11px 13px', fontSize: 13, fontWeight: 850, outline: 'none' }
 const heroStyle = { display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) 220px', gap: 24, alignItems: 'center', background: '#fff', border: '1px solid #dbe3ee', borderRadius: 24, padding: 30, boxShadow: '0 24px 70px rgba(15,23,42,.08)' }
 const statusPillStyle = { display: 'inline-flex', border: '1px solid', borderRadius: 999, padding: '6px 11px', fontSize: 11, fontWeight: 950 }
@@ -714,5 +714,5 @@ const avatarStyle = { width: 34, height: 34, borderRadius: '50%', color: '#fff',
 const galleryCardStyle = { border: '1px solid #e5e7eb', borderRadius: 16, background: '#fff', padding: 10, display: 'grid', gap: 8, minWidth: 0 }
 const documentRowStyle = { display: 'grid', gridTemplateColumns: '24px minmax(0,1fr)', gap: 10, alignItems: 'center', border: '1px solid #f1f5f9', borderRadius: 14, padding: 12 }
 const emptyPanelStyle = { ...panelStyle, minHeight: 420, display: 'grid', placeItems: 'center', textAlign: 'center' as const }
-const emptyIconStyle = { width: 72, height: 72, borderRadius: 22, background: '#effff4', color: '#1db954', display: 'grid', placeItems: 'center', margin: '0 auto' }
+const emptyIconStyle = { width: 72, height: 72, borderRadius: 22, background: '#effff4', color: '#22c55e', display: 'grid', placeItems: 'center', margin: '0 auto' }
 const emptyStyle = { border: '1px dashed #cbd5e1', borderRadius: 14, padding: 22, color: '#64748b', fontSize: 13, fontWeight: 750, textAlign: 'center' as const }

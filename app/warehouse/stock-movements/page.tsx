@@ -1,5 +1,5 @@
-const displayFont = "'Outfit', 'DM Sans', sans-serif"
-const bodyFont = "'DM Sans', sans-serif"
+const displayFont = "var(--font-body)"
+const bodyFont = "var(--font-body)"
 
 export default function StockMovementsPage() {
   return (

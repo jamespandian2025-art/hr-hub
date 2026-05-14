@@ -2,7 +2,7 @@
 
 import { ChangeEvent, useEffect, useMemo, useRef, useState } from 'react'
 
-const font = "'DM Sans', sans-serif"
+const font = "var(--font-body)"
 const storageKey = 'flowsys-pricebook-items'
 const tabs = ['All', 'Active', 'Inactive'] as const
 
@@ -71,7 +71,7 @@ const loadItems = () => {
   }
 }
 
-const money = (value: number) => `Php ${value.toLocaleString()}.00`
+const money = (value: number) => `PHP ${value.toLocaleString('en-PH')}.00`
 const nextId = (records: PricebookItem[]) => records.reduce((max, record) => Math.max(max, record.id), 0) + 1
 const calculatedPrice = (cost: number, markup: number) => Math.round(cost + cost * (markup / 100))
 

@@ -1,7 +1,7 @@
 'use client'
 import { useState, useEffect, useRef } from 'react'
 
-const font = "'DM Sans', sans-serif"
+const font = "var(--font-body)"
 
 const teams = [
   {
@@ -27,7 +27,7 @@ export default function TeamsPage() {
 
   const menuRef = useRef<HTMLDivElement | null>(null)
 
-  // 🔥 Close dropdown when clicking outside
+  // ?? Close dropdown when clicking outside
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
       if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
@@ -188,7 +188,7 @@ export default function TeamsPage() {
                     }
                     style={{ cursor: 'pointer', fontSize: '18px', color: '#9ca3af' }}
                   >
-                    ⋮
+                    ?
                   </div>
 
                   {activeMenu === team.id && (

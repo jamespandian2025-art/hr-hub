@@ -4,39 +4,34 @@ import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { FormEvent, useState } from 'react'
 import { Eye, EyeOff, Lock, Mail } from 'lucide-react'
-
-const usersKey = 'flowsys-auth-users'
-const sessionKey = 'flowsys-auth-session'
-const onboardingKey = 'flowsys-onboarding'
-const accountKey = 'flowsys-account'
-
-interface AuthUser {
-  id: number
-  name: string
-  email: string
-  password: string
-  provider: 'email' | 'gmail' | 'facebook'
-}
+import {
+  accountKey,
+  type AuthUser,
+  createPasswordFields,
+  isGmailAddress,
+  loadAuthUsers,
+  onboardingKey,
+  publicUser,
+  saveAuthUsers,
+  sessionKey,
+  verifyPassword,
+} from '@/lib/auth/localAuth'
 
 interface AccountState {
-  role?: 'Admin' | 'Project Manager' | 'Support' | 'Client'
+  role?: 'Admin' | 'Finance' | 'HR' | 'Project Manager' | 'Support' | 'Client'
   onboardingComplete?: boolean
 }
 
-const loadUsers = () => {
-  if (typeof window === 'undefined') return []
-
-  try {
-    const stored = window.localStorage.getItem(usersKey)
-    return stored ? (JSON.parse(stored) as AuthUser[]) : []
-  } catch {
-    return []
-  }
+function routeForRole(role?: AccountState['role']) {
+  if (role === 'Client') return '/client-portal'
+  if (role === 'Finance') return '/financials/loan-management'
+  if (role === 'HR') return '/hr/overview'
+  return '/dashboard'
 }
 
 export default function LoginPage() {
   const router = useRouter()
-  const [users, setUsers] = useState<AuthUser[]>(loadUsers)
+  const [users, setUsers] = useState<AuthUser[]>(loadAuthUsers)
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [showPassword, setShowPassword] = useState(false)
@@ -45,7 +40,9 @@ export default function LoginPage() {
   const saveSession = (user: AuthUser) => {
     const accountRaw = window.localStorage.getItem(accountKey)
     const account = accountRaw ? (JSON.parse(accountRaw) as AccountState) : {}
-    window.localStorage.setItem(sessionKey, JSON.stringify({ userId: user.id, email: user.email, provider: user.provider, role: account.role || 'Admin' }))
+    const role = user.role || account.role || 'Admin'
+    window.localStorage.setItem(sessionKey, JSON.stringify({ userId: user.id, email: user.email, provider: user.provider, role }))
+    window.localStorage.setItem(accountKey, JSON.stringify({ ...account, user: publicUser(user), email: user.email, role }))
     const stored = window.localStorage.getItem(onboardingKey)
     const onboarding = stored ? JSON.parse(stored) as { complete?: boolean } : null
     if (!onboarding?.complete && !account.onboardingComplete) {
@@ -53,15 +50,32 @@ export default function LoginPage() {
       return
     }
 
-    router.push(account.role === 'Client' ? '/client-portal' : '/dashboard')
+    router.push(routeForRole(role))
   }
 
-  const login = (event: FormEvent) => {
+  const login = async (event: FormEvent) => {
     event.preventDefault()
-    const user = users.find(item => item.email.toLowerCase() === email.trim().toLowerCase() && item.password === password)
+    const trimmedEmail = email.trim().toLowerCase()
+    if (!isGmailAddress(trimmedEmail)) {
+      setError('Use the Gmail address registered for this workspace.')
+      return
+    }
 
-    if (!user) {
+    const user = users.find(item => item.email.toLowerCase() === trimmedEmail)
+    const passwordMatches = user ? await verifyPassword(user, password) : false
+
+    if (!user || !passwordMatches) {
       setError('Email or password is incorrect.')
+      return
+    }
+
+    if (user.password && !user.passwordHash) {
+      const passwordFields = await createPasswordFields(password)
+      const migrated = { ...user, ...passwordFields, password: undefined }
+      const nextUsers = users.map(item => item.id === user.id ? migrated : item)
+      setUsers(nextUsers)
+      saveAuthUsers(nextUsers)
+      saveSession(migrated)
       return
     }
 
@@ -69,25 +83,12 @@ export default function LoginPage() {
   }
 
   const socialLogin = (provider: 'gmail' | 'facebook') => {
-    const emailAddress = provider === 'gmail' ? 'gmail.user@example.com' : 'facebook.user@example.com'
-    const existing = users.find(user => user.email === emailAddress)
-    const user =
-      existing ||
-      {
-        id: users.reduce((max, item) => Math.max(max, item.id), 0) + 1,
-        name: provider === 'gmail' ? 'Gmail User' : 'Facebook User',
-        email: emailAddress,
-        password: '',
-        provider,
-      }
-
-    if (!existing) {
-      const nextUsers = [...users, user]
-      setUsers(nextUsers)
-      window.localStorage.setItem(usersKey, JSON.stringify(nextUsers))
+    if (provider !== 'gmail') {
+      setError('Facebook login is disabled for HR HUB. Use your registered Gmail and password.')
+      return
     }
 
-    saveSession(user)
+    setError('Use your registered Gmail address and password. Google OAuth can be connected when the app is deployed with provider credentials.')
   }
 
   return (
@@ -99,7 +100,7 @@ export default function LoginPage() {
           <span style={labelStyle}>Email</span>
           <div style={inputWrapStyle}>
             <Mail size={17} color="#64748b" />
-            <input value={email} onChange={event => setEmail(event.target.value)} type="email" placeholder="you@example.com" required style={inputStyle} />
+            <input value={email} onChange={event => setEmail(event.target.value)} type="email" placeholder="you@gmail.com" required style={inputStyle} />
           </div>
         </label>
 
@@ -119,6 +120,11 @@ export default function LoginPage() {
 
       <SocialButtons onSocial={socialLogin} label="Log in" />
 
+      <div style={{ marginTop: 18, padding: 12, borderRadius: 12, background: '#f0fdf4', border: '1px solid #bbf7d0', display: 'grid', gap: 8 }}>
+        <div style={{ color: '#14532d', fontSize: 13, fontWeight: 700 }}>Logging in as an employee?</div>
+        <Link href="/employee/login" style={employeeLoginLinkStyle}>Open Employee Self-Service Portal</Link>
+      </div>
+
       <div style={{ textAlign: 'center', fontSize: 13, color: '#64748b', marginTop: 18 }}>
         No account yet? <Link href="/signup" style={{ color: '#111827', fontWeight: 600, textDecoration: 'none' }}>Create one</Link>
       </div>
@@ -128,11 +134,11 @@ export default function LoginPage() {
 
 function AuthShell({ title, subtitle, children }: { title: string; subtitle: string; children: React.ReactNode }) {
   return (
-    <main style={{ minHeight: '100vh', background: '#eef2f7', display: 'grid', gridTemplateColumns: 'minmax(320px, 0.9fr) minmax(360px, 1fr)', fontFamily: "'DM Sans', sans-serif" }}>
+    <main style={{ minHeight: '100vh', background: '#eef2f7', display: 'grid', gridTemplateColumns: 'minmax(320px, 0.9fr) minmax(360px, 1fr)', fontFamily: "var(--font-body)" }}>
       <section style={{ background: '#111827', color: '#fff', padding: '56px', display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
         <div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 80 }}>
-            <div style={{ width: 40, height: 40, borderRadius: 11, background: '#1db954', color: '#191414', display: 'grid', placeItems: 'center', fontWeight: 600 }}>W</div>
+            <div style={{ width: 40, height: 40, borderRadius: 11, background: '#22c55e', color: '#191414', display: 'grid', placeItems: 'center', fontWeight: 600 }}>W</div>
             <div style={{ fontSize: 20, fontWeight: 600 }}>WiseFlow</div>
           </div>
           <h1 style={{ color: '#fff', fontSize: 42, lineHeight: 1.05, marginBottom: 18 }}>Run your construction workflow in one place.</h1>
@@ -179,6 +185,7 @@ const labelStyle = { fontSize: 12, color: '#374151', fontWeight: 600 }
 const inputWrapStyle = { height: 44, border: '1px solid #e5e7eb', borderRadius: 10, display: 'flex', alignItems: 'center', gap: 9, padding: '0 12px', background: '#fff' }
 const inputStyle = { border: 'none', outline: 'none', flex: 1, minWidth: 0, fontSize: 14, color: '#111827', background: 'transparent' }
 const primaryButtonStyle = { border: 'none', borderRadius: 10, background: '#111827', color: '#fff', height: 44, fontSize: 14, fontWeight: 600, cursor: 'pointer' }
+const employeeLoginLinkStyle = { height: 38, borderRadius: 10, background: '#16a34a', color: '#fff', fontSize: 13, fontWeight: 800, textDecoration: 'none', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }
 const socialButtonStyle = { height: 42, border: '1px solid #e5e7eb', borderRadius: 10, background: '#fff', color: '#111827', fontSize: 13, fontWeight: 600, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 8 }
 const ghostIconButtonStyle = { border: 'none', background: 'transparent', color: '#64748b', cursor: 'pointer', display: 'inline-flex', padding: 0 }
 const alertStyle = { padding: '10px 12px', borderRadius: 10, background: '#fef2f2', color: '#dc2626', fontSize: 13, fontWeight: 600 }

@@ -4,7 +4,7 @@ import Link from 'next/link'
 import { useParams } from 'next/navigation'
 import { ChangeEvent, useEffect, useMemo, useRef, useState } from 'react'
 
-const font = "'DM Sans', sans-serif"
+const font = "var(--font-body)"
 const storageKey = 'flowsys-suppliers'
 
 type SupplyType = 'Material' | 'Tool' | 'Equipment' | 'Supply'
@@ -95,7 +95,7 @@ const loadSuppliers = () => {
   }
 }
 
-const money = (value: number) => `Php ${value.toLocaleString()}.00`
+const money = (value: number) => `PHP ${value.toLocaleString('en-PH')}.00`
 const nextId = <T extends { id: number }>(records: T[]) => records.reduce((max, record) => Math.max(max, record.id), 0) + 1
 const validSupplyType = (value: string): SupplyType => {
   const normalized = value.trim()

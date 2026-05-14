@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react'
 import { usePathname, useRouter } from 'next/navigation'
+import ThemeSwitcher from './ThemeSwitcher'
 import {
   BadgeDollarSign,
   BarChart3,
@@ -14,8 +15,11 @@ import {
   CalendarDays,
   Check,
   CheckCircle2,
+  ChevronDown,
   ChevronLeft,
   ChevronRight,
+  HelpCircle,
+  Home,
   CircleGauge,
   ClipboardCheck,
   ClipboardList,
@@ -56,7 +60,8 @@ interface AccountState {
   email: string
   fullName?: string
   name?: string
-  theme: 'System' | 'Light' | 'Dark'
+  role?: string
+  theme: string
   density: 'Comfortable' | 'Compact'
   emailNotifications: boolean
   desktopNotifications: boolean
@@ -87,13 +92,41 @@ interface ProjectRecord {
 
 interface OutboundNotification {
   id: number
-  channel: 'Email' | 'SMS'
-  recipientRole: 'Admin' | 'Project Manager'
+  channel: 'Email' | 'SMS' | 'In-App'
+  recipientRole: 'Admin' | 'Project Manager' | 'Finance' | 'HR' | 'Employee'
   subject: string
   message: string
-  relatedType: 'Change Order'
-  relatedId: number
+  relatedType: string
+  relatedId: number | string
   status: 'Queued'
+  target?: string
+  createdAt: string
+}
+
+interface LoanRequestNotification {
+  id: string
+  employeeName?: string
+  employeeCode?: string
+  requestType: string
+  customLoanType?: string
+  amount: number
+  status: string
+  approvalStep: string
+  financeApprovalStatus?: string
+  hrApprovalStatus?: string
+  createdAt: string
+}
+
+interface AllowanceRequestNotification {
+  id: string
+  employeeName: string
+  employeeCode?: string
+  type: 'Fuel' | 'Meal'
+  amount: number
+  status: string
+  date: string
+  purpose?: string
+  reason?: string
   createdAt: string
 }
 
@@ -130,10 +163,12 @@ const changeOrdersKey = 'flowsys-change-orders'
 const projectsKey = 'flowsys-projects'
 const tasksKey = 'flowsys-assigned-tasks'
 const outboundNotificationsKey = 'flowsys-outbound-notifications'
+const loanRequestsKey = 'flowsys-hr-loan-requests'
+const allowanceRequestsKey = 'flowsys-hr-allowance-requests'
 const initialAccount: AccountState = {
   company: 'Livewise Construction',
   email: 'livewiseofficial@gmail.com',
-  theme: 'Light',
+  theme: 'WiseFlow Light',
   density: 'Comfortable',
   emailNotifications: true,
   desktopNotifications: false,
@@ -151,7 +186,7 @@ const loadAccount = () => {
   }
 }
 
-// ── Route → page title + icon ──────────────────────────────────────────────
+// -- Route ? page title + icon ----------------------------------------------
 const PAGE_META: { match: string; label: string; icon: React.ComponentType<{ size?: number }> }[] = [
   { match: '/dashboard',          label: 'Dashboard',        icon: LayoutDashboard },
   { match: '/client-database',    label: 'Client Database',  icon: UsersRound      },
@@ -164,10 +199,21 @@ const PAGE_META: { match: string; label: string; icon: React.ComponentType<{ siz
   { match: '/projects',           label: 'Project Mgmt',     icon: FolderKanban    },
   { match: '/financial',          label: 'Financial',        icon: HandCoins       },
   { match: '/financials',         label: 'Financial',        icon: HandCoins       },
-  { match: '/hr',                 label: 'HR',               icon: Building2       },
-  { match: '/people/teams',       label: 'HR',               icon: Building2       },
+  { match: '/hr/overview',         label: 'HR Hub',           icon: Building2       },
+  { match: '/hr/employees',        label: 'HR Hub',           icon: Building2       },
+  { match: '/hr/teams',            label: 'HR Hub',           icon: Building2       },
+  { match: '/hr/attendance',       label: 'HR Hub',           icon: Building2       },
+  { match: '/hr/leave-requests',   label: 'HR Hub',           icon: Building2       },
+  { match: '/hr/approvals',        label: 'HR Hub',           icon: Building2       },
+  { match: '/hr/payroll',          label: 'HR Hub',           icon: Building2       },
+  { match: '/hr/documents',        label: 'HR Hub',           icon: Building2       },
+  { match: '/hr/performance',      label: 'HR Hub',           icon: Building2       },
+  { match: '/hr/reports',          label: 'HR Hub',           icon: Building2       },
+  { match: '/hr/settings',         label: 'HR Hub',           icon: Building2       },
+  { match: '/hr',                  label: 'HR Hub',           icon: Building2       },
+  { match: '/people/teams',        label: 'HR Hub',           icon: Building2       },
   { match: '/procurement',        label: 'Procurement',      icon: ShoppingCart    },
-  { match: '/resources/pricebook', label: 'Procurement',      icon: ShoppingCart    },
+  { match: '/resources/pricebook', label: 'Pricebook',        icon: ShoppingCart    },
   { match: '/supplier-database',  label: 'Supplier Database',icon: PackageSearch   },
   { match: '/resources/suppliers',label: 'Supplier Database',icon: PackageSearch   },
   { match: '/warehouse-inventory',label: 'Warehouse',        icon: Boxes           },
@@ -193,11 +239,13 @@ export default function Header({ onMenuClick, compactWorkspace = false }: Header
   const [globalSearch, setGlobalSearch] = useState('')
   const [open, setOpen] = useState(false)
   const [panel, setPanel] = useState<Panel>(null)
-  const [account, setAccount] = useState<AccountState>(loadAccount)
+  const [account, setAccount] = useState<AccountState>(initialAccount)
   const [changeOrders, setChangeOrders] = useState<ChangeOrder[]>([])
   const [projects, setProjects] = useState<ProjectRecord[]>([])
   const [tasks, setTasks] = useState<ReminderTask[]>([])
   const [outboundNotifications, setOutboundNotifications] = useState<OutboundNotification[]>([])
+  const [loanRequests, setLoanRequests] = useState<LoanRequestNotification[]>([])
+  const [allowanceRequests, setAllowanceRequests] = useState<AllowanceRequestNotification[]>([])
   const [notificationsOpen, setNotificationsOpen] = useState(false)
   const [notificationFilter, setNotificationFilter] = useState<'all' | 'mentioned' | 'priority'>('all')
   const [remindersOpen, setRemindersOpen] = useState(false)
@@ -223,7 +271,16 @@ export default function Header({ onMenuClick, compactWorkspace = false }: Header
   const [inviteEmail, setInviteEmail] = useState('')
   const [inviteRole, setInviteRole] = useState('Member')
   const [notice, setNotice] = useState('')
+  const [nowMs] = useState(() => Date.now())
   const ref = useRef<HTMLDivElement>(null)
+  // Guards the save-effect from firing on the initial render before localStorage is loaded
+  const accountSaveReady = useRef(false)
+
+  // Load stored account after mount to avoid SSR/client hydration mismatch
+  useEffect(() => {
+    const id = window.setTimeout(() => setAccount(loadAccount()), 0)
+    return () => window.clearTimeout(id)
+  }, [])
 
   useEffect(() => {
     const handleClick = (event: MouseEvent) => {
@@ -246,11 +303,15 @@ export default function Header({ onMenuClick, compactWorkspace = false }: Header
         setProjects(JSON.parse(window.localStorage.getItem(projectsKey) || '[]') as ProjectRecord[])
         setTasks(JSON.parse(window.localStorage.getItem(tasksKey) || '[]') as ReminderTask[])
         setOutboundNotifications(JSON.parse(window.localStorage.getItem(outboundNotificationsKey) || '[]') as OutboundNotification[])
+        setLoanRequests(JSON.parse(window.localStorage.getItem(loanRequestsKey) || '[]') as LoanRequestNotification[])
+        setAllowanceRequests(JSON.parse(window.localStorage.getItem(allowanceRequestsKey) || '[]') as AllowanceRequestNotification[])
       } catch {
         setChangeOrders([])
         setProjects([])
         setTasks([])
         setOutboundNotifications([])
+        setLoanRequests([])
+        setAllowanceRequests([])
       }
     }
 
@@ -266,11 +327,17 @@ export default function Header({ onMenuClick, compactWorkspace = false }: Header
   }, [])
 
   useEffect(() => {
+    // Skip the very first run (initialAccount); only save after localStorage has been loaded
+    if (!accountSaveReady.current) { accountSaveReady.current = true; return }
     window.localStorage.setItem(storageKey, JSON.stringify(account))
-    const preference = account.theme || 'System'
-    const theme = preference === 'System'
-      ? window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'
-      : preference.toLowerCase()
+    const THEME_MAP: Record<string, string> = {
+      'Light': 'light', 'Dark': 'dark',
+      'WiseFlow Light': 'light', 'WiseFlow Dark': 'dark',
+      'Google Blue': 'google-blue', 'Google Green': 'google-green', 'Graphite Pro': 'graphite',
+    }
+    const preference = account.theme || 'WiseFlow Light'
+    const mapped = THEME_MAP[preference]
+    const theme = mapped || (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light')
     document.documentElement.dataset.theme = theme
     document.documentElement.dataset.themePreference = preference
     window.dispatchEvent(new Event('flowsys-theme-change'))
@@ -323,8 +390,65 @@ export default function Header({ onMenuClick, compactWorkspace = false }: Header
   const latestRequests = [...changeOrders].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()).slice(0, 8)
   const projectName = (id: number) => projects.find(project => project.id === id)?.name || `Project #${id}`
   const displayName = account.fullName || account.name || 'Reymark'
-  const notificationItems = latestRequests.length
-    ? latestRequests.map((order, index) => ({
+  const role = account.role || 'Admin'
+  const financeLoanNotifications = loanRequests.filter(request =>
+    request.status === 'Pending' && request.financeApprovalStatus !== 'Approved'
+  )
+  const financeAllowanceNotifications = allowanceRequests.filter(request =>
+    request.status === 'Pending' || request.status === 'Manager Approved'
+  )
+  const financeOutboundNotifications = outboundNotifications.filter(item =>
+    (role === 'Finance' || pathname.startsWith('/financials')) &&
+    item.recipientRole === 'Finance'
+  )
+  const requestNotificationItems = [
+    ...financeOutboundNotifications.map(item => ({
+      id: `finance-outbound-${item.id}`,
+      title: `[FINANCE] ${item.subject}`,
+      lines: [
+        item.message,
+        item.relatedType,
+        'Open Finance workspace to review required action.',
+      ],
+      time: new Date(item.createdAt).toLocaleTimeString('en-PH', { hour: '2-digit', minute: '2-digit' }),
+      date: new Date(item.createdAt).toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: '2-digit', year: 'numeric' }),
+      age: `${Math.max(0, Math.floor((nowMs - new Date(item.createdAt).getTime()) / 86400000))} days ago`,
+      mentioned: true,
+      priority: true,
+      target: item.target || '/financials/loan-management',
+    })),
+    ...(role === 'Finance' || pathname.startsWith('/financials') ? financeLoanNotifications.map(request => ({
+      id: `loan-finance-${request.id}`,
+      title: `[FINANCE] ${request.employeeName || 'Employee'} requested ${request.customLoanType || request.requestType}`,
+      lines: [
+        `Amount: PHP ${Number(request.amount || 0).toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
+        'Finance approval is required before payroll deduction.',
+        request.employeeCode || 'Loan / cash advance request',
+      ],
+      time: new Date(request.createdAt).toLocaleTimeString('en-PH', { hour: '2-digit', minute: '2-digit' }),
+      date: new Date(request.createdAt).toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: '2-digit', year: 'numeric' }),
+      age: `${Math.max(0, Math.floor((nowMs - new Date(request.createdAt).getTime()) / 86400000))} days ago`,
+      mentioned: true,
+      priority: true,
+      target: '/financials/loan-management',
+    })) : []),
+    ...(role === 'Finance' || pathname.startsWith('/financials') ? financeAllowanceNotifications.map(request => ({
+      id: `allowance-finance-${request.id}`,
+      title: `[FINANCE] ${request.employeeName} filed ${request.type} allowance`,
+      lines: [
+        `Amount: PHP ${Number(request.amount || 0).toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
+        request.purpose || request.reason || 'Allowance request needs review.',
+        request.employeeCode || request.date,
+      ],
+      time: new Date(request.createdAt).toLocaleTimeString('en-PH', { hour: '2-digit', minute: '2-digit' }),
+      date: new Date(request.createdAt).toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: '2-digit', year: 'numeric' }),
+      age: `${Math.max(0, Math.floor((nowMs - new Date(request.createdAt).getTime()) / 86400000))} days ago`,
+      mentioned: true,
+      priority: true,
+      target: '/financials/loan-management',
+    })) : []),
+  ]
+  const changeOrderNotificationItems = latestRequests.map((order, index) => ({
       id: order.id,
       title: `[${projectName(order.projectId)}] ${order.requestedBy || order.clientName} requested ${order.title}`,
       lines: [
@@ -334,14 +458,20 @@ export default function Header({ onMenuClick, compactWorkspace = false }: Header
       ],
       time: new Date(order.createdAt).toLocaleTimeString('en-PH', { hour: '2-digit', minute: '2-digit' }),
       date: new Date(order.createdAt).toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: '2-digit', year: 'numeric' }),
-      age: `${Math.max(0, Math.floor((Date.now() - new Date(order.createdAt).getTime()) / 86400000))} days ago`,
+      age: `${Math.max(0, Math.floor((nowMs - new Date(order.createdAt).getTime()) / 86400000))} days ago`,
       mentioned: index === 0,
       priority: order.status === 'Requested',
       target: '/projects',
     }))
+  const actualNotificationItems = [...requestNotificationItems, ...changeOrderNotificationItems]
+    .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
+    .slice(0, 12)
+  const notificationItems = actualNotificationItems.length
+    ? actualNotificationItems
     : [
       { id: 1, title: '[WORKFLOWS] Welcome to WiseFlow notifications', lines: ['Workflow updates, stage changes, and tagged notes will appear here.', 'Click any notification to open its related work.', 'Use filters above to narrow the list.'], time: '10:19', date: 'Monday, Dec 15, 2025', age: 'today', mentioned: true, priority: false, target: '/tasks' },
     ]
+  const notificationBadgeCount = actualNotificationItems.length
   const filteredNotifications = notificationItems.filter(item =>
     notificationFilter === 'all' ? true : notificationFilter === 'mentioned' ? item.mentioned : item.priority
   )
@@ -415,6 +545,11 @@ export default function Header({ onMenuClick, compactWorkspace = false }: Header
     if (viewMode) window.setTimeout(() => dispatchWorkspaceAction('flowsys-workspace-view', { mode: viewMode }), 0)
   }
 
+  const openTool = (href: string) => {
+    setToolsOpen(false)
+    window.open(href, '_blank', 'noopener,noreferrer')
+  }
+
   const toolSections = [
     {
       label: 'Work Operations',
@@ -453,7 +588,7 @@ export default function Header({ onMenuClick, compactWorkspace = false }: Header
         { label: 'Dashboard', detail: 'Business overview', icon: LayoutDashboard, action: () => navigateTool('/dashboard') },
         { label: 'Client database', detail: 'Clients and contacts', icon: UsersRound, action: () => navigateTool('/client-database') },
         { label: 'Sales', detail: 'Opportunities', icon: BadgeDollarSign, action: () => navigateTool('/sales') },
-        { label: 'Procurement', detail: 'Purchasing', icon: ShoppingCart, action: () => navigateTool('/procurement') },
+        { label: 'Procurement', detail: 'Purchasing', icon: ShoppingCart, action: () => openTool('/procurement') },
         { label: 'Supplier database', detail: 'Vendor list', icon: PackageSearch, action: () => navigateTool('/supplier-database') },
         { label: 'Warehouse', detail: 'Inventory', icon: Warehouse, action: () => navigateTool('/warehouse-inventory') },
       ],
@@ -471,151 +606,110 @@ export default function Header({ onMenuClick, compactWorkspace = false }: Header
   const PageIcon = pageMeta.icon
   const isTasksPage = pathname === '/tasks' || pathname.startsWith('/tasks/')
 
+  // Compute initials from display name
+  const initials = displayName.split(' ').filter(Boolean).map((w: string) => w[0]).slice(0, 2).join('').toUpperCase()
+
   if (compactWorkspace) {
-    const CWPageIcon = pageMeta.icon
     return (
       <div
         ref={ref}
-        className="app-header workspace-topbar"
-        style={{ height: 42, background: '#0f3d2a', color: '#e6fbfd', display: 'grid', gridTemplateColumns: 'minmax(320px, 1fr) minmax(260px, 360px) minmax(320px, 1fr)', alignItems: 'center', gap: 12, padding: '0 8px', position: 'sticky', top: 0, zIndex: 95, boxShadow: '0 1px 0 rgba(255,255,255,.08) inset', fontFamily: 'inherit' }}
+        className="app-header"
+        style={{
+          height: 48,
+          background: '#fff',
+          borderBottom: '1px solid #e5e7eb',
+          display: 'grid',
+          gridTemplateColumns: 'minmax(180px, 280px) 1fr minmax(240px, auto)',
+          alignItems: 'center',
+          gap: 16,
+          padding: '0 20px',
+          position: 'sticky',
+          top: 0,
+          zIndex: 95,
+          boxShadow: '0 1px 3px rgba(0,0,0,0.05)',
+          fontFamily: "var(--font-body)",
+        }}
       >
-        {/* ── Left: menu + dynamic page label + contextual icons ── */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
-          <button onClick={() => { setToolsOpen(prev => !prev); setOpen(false); setNotificationsOpen(false) }} aria-label="Open tools menu" style={workspaceIconButtonStyle}>
-            <Menu size={16} />
-          </button>
-
-          {/* Dynamic page name pill */}
+        {/* -- Left: mobile menu + breadcrumb -- */}
+        <div className="header-left-area" style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
           <button
-            style={{ ...workspacePillButtonStyle, fontWeight: 800, display: 'inline-flex', alignItems: 'center', gap: 6 }}
-            onClick={() => {}}
+            className="header-mobile-menu"
+            onClick={onMenuClick}
+            aria-label="Open navigation"
+            style={{ width: 34, height: 34, border: 'none', background: 'transparent', borderRadius: 8, display: 'none', placeItems: 'center', cursor: 'pointer', color: '#374151', flexShrink: 0 }}
           >
-            <CWPageIcon size={14} />
-            {pageMeta.label}
+            <Menu size={18} />
           </button>
-
-          {/* Workflows-page shortcuts */}
-          {isTasksPage && <>
-            <button onClick={() => { router.push('/tasks'); dispatchWorkspaceAction('flowsys-workspace-view', { mode: 'Board' }) }} title="Board" style={workspaceCountButtonStyle}>
-              <ClipboardList size={15} />
-            </button>
-            <button onClick={() => { window.sessionStorage.setItem('flowsys-workspace-pending-view', 'SystemReport'); router.push('/tasks'); window.setTimeout(() => dispatchWorkspaceAction('flowsys-workspace-view', { mode: 'SystemReport' }), 120) }} title="System report" style={workspaceIconButtonStyle}>
-              <BarChart3 size={15} />
-            </button>
-            <button onClick={() => setWorkflowSettingsOpen(true)} title="Settings" style={workspaceIconButtonStyle}>
-              <Settings size={15} />
-            </button>
-          </>}
-
-          {/* Create button — always visible */}
-          <div
-            onMouseEnter={() => setCreateMenuOpen(true)}
-            onMouseLeave={() => setCreateMenuOpen(false)}
-            style={{ position: 'relative', display: 'inline-flex', alignItems: 'center', height: 42 }}
-          >
-            <button onClick={() => setCreateMenuOpen(prev => !prev)} title="Create" style={workspaceIconButtonStyle}>
-              <Plus size={16} />
-            </button>
-            {createMenuOpen && (
-              <div style={{ position: 'absolute', top: 34, left: 0, width: 262, background: '#fff', color: '#333', borderRadius: 3, boxShadow: '0 8px 24px rgba(0,0,0,.2)', padding: '9px 0', zIndex: 150 }}>
-                <button onClick={() => { setCreateMenuOpen(false); router.push('/tasks'); window.setTimeout(() => dispatchWorkspaceAction('flowsys-workspace-create-workflow'), 120) }} style={createMenuItemStyle}>Create new workflow service</button>
-                <button onClick={() => { setCreateMenuOpen(false); dispatchWorkspaceAction('flowsys-workspace-create-job') }} style={createMenuItemStyle}>Create new job</button>
-                <button onClick={() => { setCreateMenuOpen(false); router.push('/tasks'); window.setTimeout(() => dispatchWorkspaceAction('flowsys-workspace-create-group'), 120) }} style={createMenuItemStyle}>Create new service group</button>
-              </div>
-            )}
+          <div className="header-breadcrumb" style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 12, minWidth: 0 }}>
+            <Home size={13} color="#9ca3af" style={{ flexShrink: 0 }} />
+            <ChevronRight size={11} color="#d1d5db" style={{ flexShrink: 0 }} />
+            <span style={{ color: '#374151', fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{pageMeta.label}</span>
           </div>
         </div>
 
-        {toolsOpen && (
-          <div style={{ position: 'absolute', top: 42, left: 0, width: 500, maxWidth: 'calc(100vw - 16px)', height: 'calc(100vh - 42px)', background: '#fff', borderRight: '1px solid #dfe5e8', boxShadow: '18px 0 45px rgba(0,0,0,.16)', zIndex: 120, display: 'grid', gridTemplateColumns: '58px minmax(0, 1fr)', color: '#333' }}>
-            <div style={{ borderRight: '1px solid #e6ecef', background: '#fbfbfb', display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '16px 10px', gap: 16 }}>
-              <button onClick={() => navigateTool('/dashboard')} title="Livewise" style={{ width: 36, height: 36, border: 'none', borderRadius: 3, background: '#0f8f65', color: '#fff', fontSize: 14, fontWeight: 900, cursor: 'pointer' }}>LC</button>
-              <button onClick={() => openPanel('company')} title="Create company" style={launcherRailButtonStyle}><Plus size={18} /></button>
-              <div style={{ flex: 1 }} />
-              <button onClick={() => navigateTool('/settings')} title="Settings" style={launcherRailButtonStyle}><Settings size={18} /></button>
-              <button onClick={() => openPanel('logout')} title="Logout" style={launcherRailButtonStyle}><LogOut size={18} /></button>
-            </div>
-
-            <div style={{ padding: '16px 22px 28px', overflowY: 'auto' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 12 }}>
-                <span style={{ width: 38, height: 38, borderRadius: '50%', background: '#8b83e6', color: '#fff', display: 'grid', placeItems: 'center', flexShrink: 0 }}>
-                  <UserCircle size={24} />
-                </span>
-                <div style={{ minWidth: 0 }}>
-                  <div style={{ color: '#333', fontSize: 15, fontWeight: 800, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{displayName}</div>
-                  <div style={{ color: '#777', fontSize: 13, marginTop: 2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{account.company}</div>
-                </div>
-              </div>
-
-              <label style={{ display: 'flex', alignItems: 'center', gap: 8, height: 36, background: '#f2f2f2', borderRadius: 3, padding: '0 12px', marginBottom: 28 }}>
-                <input value={toolsSearch} onChange={event => setToolsSearch(event.target.value)} placeholder="Quick filter apps" style={{ flex: 1, border: 'none', outline: 'none', background: 'transparent', color: '#333', fontSize: 14 }} />
-                <Search size={16} color="#999" />
-              </label>
-
-              <button onClick={() => openPanel('settings')} style={{ ...launcherToolButtonStyle, marginBottom: 24 }}>
-                <Settings size={26} color="#888" />
-                <span style={{ minWidth: 0 }}>
-                  <span style={launcherToolTitleStyle}>Settings</span>
-                  <span style={launcherToolDetailStyle}>CRM Centralized Settings</span>
-                </span>
-              </button>
-
-              {searchedToolSections.map(section => (
-                <div key={section.label} style={{ marginBottom: 28 }}>
-                  <div style={{ color: '#9a9a9a', fontSize: 10, fontWeight: 800, textTransform: 'uppercase', margin: '0 0 10px 8px' }}>{section.label}</div>
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', columnGap: 26, rowGap: 8 }}>
-                    {section.items.map(item => {
-                      const Icon = item.icon
-                      return (
-                        <button key={item.label} onClick={item.action} style={launcherToolButtonStyle}>
-                          <Icon size={18} color="#858585" />
-                          <span style={{ minWidth: 0 }}>
-                            <span style={launcherToolTitleStyle}>{item.label}</span>
-                            <span style={launcherToolDetailStyle}>{item.detail}</span>
-                          </span>
-                        </button>
-                      )
-                    })}
-                  </div>
-                </div>
-              ))}
-
-              {searchedToolSections.length === 0 && (
-                <div style={{ color: '#999', fontSize: 13, padding: '20px 8px' }}>No tools match that search.</div>
-              )}
-            </div>
-          </div>
-        )}
-
-        <label style={{ display: 'flex', alignItems: 'center', gap: 9, height: 28, borderRadius: 4, background: '#fff', padding: '0 12px', minWidth: 0 }}>
-          <Search size={15} color="#111" />
+        {/* -- Center: search -- */}
+        <label
+          className="header-search"
+          style={{ display: 'flex', alignItems: 'center', gap: 9, height: 34, borderRadius: 8, background: '#f9fafb', border: '1px solid #e5e7eb', padding: '0 12px', cursor: 'text', transition: 'border-color 0.15s, box-shadow 0.15s', maxWidth: 520, margin: '0 auto', width: '100%' }}
+          onFocus={e => { (e.currentTarget as HTMLLabelElement).style.borderColor = '#1A73E8'; (e.currentTarget as HTMLLabelElement).style.boxShadow = '0 0 0 2px rgba(26,115,232,0.12)' }}
+          onBlur={e => { (e.currentTarget as HTMLLabelElement).style.borderColor = '#e5e7eb'; (e.currentTarget as HTMLLabelElement).style.boxShadow = 'none' }}
+        >
+          <Search size={14} color="#9ca3af" style={{ flexShrink: 0 }} />
           <input
             className="workspace-general-search-input"
             onChange={event => dispatchWorkspaceAction('flowsys-workspace-general-search', { value: event.target.value })}
-            placeholder="Search"
-            style={{ flex: 1, minWidth: 0, border: 'none', outline: 'none', background: 'transparent', color: '#111', fontSize: 13, fontWeight: 700 }}
+            placeholder="Search jobs, tasks, clients, invoices..."
+            style={{ flex: 1, minWidth: 0, border: 'none', outline: 'none', background: 'transparent', color: '#111827', fontSize: 13 }}
           />
+          <kbd className="header-search-kbd" style={{ flexShrink: 0, display: 'inline-flex', alignItems: 'center', gap: 2, background: '#f3f4f6', border: '1px solid #e5e7eb', borderRadius: 5, padding: '1px 6px', fontSize: 11, color: '#6b7280', fontFamily: "var(--font-body)", letterSpacing: '0.01em' }}>? K</kbd>
         </label>
 
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 8, minWidth: 0 }}>
-          <button title="Reminders" onClick={() => { setRemindersOpen(true); setNotificationsOpen(false); setOpen(false); setToolsOpen(false) }} style={workspaceIconButtonStyle}>
-            <CircleGauge size={15} />
-          </button>
+        {/* -- Right: actions -- */}
+        <div className="header-actions-area" style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 4, minWidth: 0 }}>
+          {/* Bell */}
           <button
             onClick={() => { setNotificationsOpen(!notificationsOpen); setOpen(false) }}
-            aria-label="Open notifications"
-            style={{ ...workspaceIconButtonStyle, position: 'relative' }}
+            aria-label="Notifications"
+            style={{ position: 'relative', width: 34, height: 34, border: 'none', background: 'transparent', borderRadius: 8, display: 'grid', placeItems: 'center', cursor: 'pointer', color: '#374151' }}
           >
-            <Bell size={15} />
-            {actionableRequests.length > 0 && <span style={workspaceNotificationBadgeStyle}>{actionableRequests.length}</span>}
+            <Bell size={17} />
+            {notificationBadgeCount > 0 && (
+              <span style={{ position: 'absolute', top: 4, right: 4, minWidth: 16, height: 16, borderRadius: 999, background: '#ef4444', color: '#fff', fontSize: 10, fontWeight: 700, display: 'grid', placeItems: 'center', padding: '0 4px', lineHeight: 1 }}>
+                {notificationBadgeCount}
+              </span>
+            )}
           </button>
-          <button onClick={toggleTheme} title={isDarkTheme ? 'Switch to light theme' : 'Switch to dark theme'} style={workspaceIconButtonStyle}>
-            {isDarkTheme ? <Moon size={15} /> : <Sun size={15} />}
+
+          {/* Help — hidden on mobile */}
+          <button
+            className="header-help-btn"
+            title="Help"
+            style={{ width: 34, height: 34, border: 'none', background: 'transparent', borderRadius: 8, display: 'grid', placeItems: 'center', cursor: 'pointer', color: '#374151' }}
+          >
+            <HelpCircle size={17} />
           </button>
-          <button onClick={() => setOpen(!open)} style={{ border: 'none', background: 'transparent', color: '#f7ffff', display: 'inline-flex', alignItems: 'center', cursor: 'pointer', padding: 0 }}>
-            <span style={{ width: 32, height: 32, borderRadius: '50%', background: '#8b83e6', color: '#fff', display: 'grid', placeItems: 'center', flexShrink: 0 }}>
-              <UserCircle size={20} />
+
+          {/* Settings — hidden on small mobile */}
+          <button
+            className="header-settings-btn"
+            onClick={() => router.push('/settings')}
+            title="Settings"
+            style={{ width: 34, height: 34, border: 'none', background: 'transparent', borderRadius: 8, display: 'grid', placeItems: 'center', cursor: 'pointer', color: '#374151' }}
+          >
+            <Settings size={17} />
+          </button>
+
+          {/* Avatar + name */}
+          <button
+            className="header-user-button"
+            onClick={() => setOpen(!open)}
+            style={{ display: 'inline-flex', alignItems: 'center', gap: 7, border: '1px solid #e5e7eb', background: '#fff', borderRadius: 8, padding: '5px 10px 5px 5px', cursor: 'pointer', marginLeft: 2 }}
+          >
+            <span style={{ width: 28, height: 28, borderRadius: '50%', background: '#1A73E8', color: '#fff', display: 'grid', placeItems: 'center', fontSize: 11, fontWeight: 700, flexShrink: 0 }}>
+              {initials}
             </span>
+            <span className="header-username" style={{ fontSize: 13, fontWeight: 500, color: '#111827', whiteSpace: 'nowrap', maxWidth: 130, overflow: 'hidden', textOverflow: 'ellipsis' }}>{displayName}</span>
+            <ChevronDown size={13} color="#9ca3af" />
           </button>
 
           {notificationsOpen && (
@@ -632,7 +726,7 @@ export default function Header({ onMenuClick, compactWorkspace = false }: Header
           )}
 
           {open && (
-            <div className="profile-menu" style={{ position: 'absolute', top: 42, right: 8, width: 280, background: '#fff', border: '1px solid #eef2f7', borderRadius: 12, boxShadow: '0 24px 70px rgba(15,23,42,0.22)', overflow: 'hidden', zIndex: 100, color: '#111827' }}>
+            <div className="profile-menu" style={{ position: 'absolute', top: 52, right: 8, width: 280, background: '#fff', border: '1px solid #eef2f7', borderRadius: 12, boxShadow: '0 24px 70px rgba(15,23,42,0.22)', overflow: 'hidden', zIndex: 100, color: '#111827' }}>
               <div style={{ padding: 20, textAlign: 'center' }}>
                 <div style={{ fontWeight: 600 }}>{account.company}</div>
                 <div style={{ fontSize: 12, color: '#6b7280' }}>{account.email}</div>
@@ -946,10 +1040,10 @@ export default function Header({ onMenuClick, compactWorkspace = false }: Header
         </div>
       </div>}
 
-      {/* ── Centred search bar ── */}
+      {/* -- Centred search bar -- */}
       {!compactWorkspace && (
         <label style={{ position: 'absolute', left: '50%', transform: 'translateX(-50%)', display: 'flex', alignItems: 'center', gap: 8, background: '#f3f4f6', border: '1px solid #e5e7eb', borderRadius: 999, padding: '7px 16px', width: 320, cursor: 'text', transition: 'border-color 0.15s, box-shadow 0.15s' }}
-          onFocus={e => { (e.currentTarget as HTMLLabelElement).style.borderColor = '#1db954'; (e.currentTarget as HTMLLabelElement).style.boxShadow = '0 0 0 3px rgba(29,185,84,0.12)' }}
+          onFocus={e => { (e.currentTarget as HTMLLabelElement).style.borderColor = '#22c55e'; (e.currentTarget as HTMLLabelElement).style.boxShadow = '0 0 0 3px rgba(34,197,94,0.12)' }}
           onBlur={e => { (e.currentTarget as HTMLLabelElement).style.borderColor = '#e5e7eb'; (e.currentTarget as HTMLLabelElement).style.boxShadow = 'none' }}
         >
           <Search size={14} color="#9ca3af" style={{ flexShrink: 0 }} />
@@ -974,19 +1068,10 @@ export default function Header({ onMenuClick, compactWorkspace = false }: Header
           style={notificationButtonStyle}
         >
           <Bell size={18} />
-          {actionableRequests.length > 0 && <span style={notificationBadgeStyle}>{actionableRequests.length}</span>}
+          {notificationBadgeCount > 0 && <span style={notificationBadgeStyle}>{notificationBadgeCount}</span>}
         </button>
 
-        <button
-          onClick={toggleTheme}
-          aria-label={isDarkTheme ? 'Switch to light theme' : 'Switch to dark theme'}
-          title={isDarkTheme ? 'Switch to light theme' : 'Switch to dark theme'}
-          style={themeToggleStyle(isDarkTheme)}
-        >
-          <span style={themeKnobStyle(isDarkTheme)}>
-            {isDarkTheme ? <Moon size={14} /> : <Sun size={14} />}
-          </span>
-        </button>
+        <ThemeSwitcher />
 
         {notificationsOpen && (
           <NotificationPanel
@@ -1157,7 +1242,7 @@ function NotificationPanel({
   onClose,
   onOpen,
 }: {
-  items: Array<{ id: number; title: string; lines: string[]; time: string; date: string; age: string; target: string }>
+  items: Array<{ id: number | string; title: string; lines: string[]; time: string; date: string; age: string; target: string; mentioned?: boolean; priority?: boolean }>
   allCount: number
   mentionedCount: number
   priorityCount: number
