@@ -270,6 +270,7 @@ export default function Header({ onMenuClick, compactWorkspace = false }: Header
   const [companyName, setCompanyName] = useState('')
   const [inviteEmail, setInviteEmail] = useState('')
   const [inviteRole, setInviteRole] = useState('Member')
+  const [inviteSending, setInviteSending] = useState(false)
   const [notice, setNotice] = useState('')
   const [nowMs] = useState(() => Date.now())
   const ref = useRef<HTMLDivElement>(null)
@@ -359,23 +360,48 @@ export default function Header({ onMenuClick, compactWorkspace = false }: Header
     setNotice('Company created and selected.')
   }
 
-  const sendInvite = () => {
+  const sendInvite = async () => {
     const trimmed = inviteEmail.trim()
     if (!trimmed) return
-    setAccount(previous => ({
-      ...previous,
-      invitations: [
-        ...previous.invitations,
-        {
-          id: previous.invitations.reduce((max, invitation) => Math.max(max, invitation.id), 0) + 1,
+    setInviteSending(true)
+    setNotice('')
+
+    try {
+      const response = await fetch('/api/auth/invitations', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
           email: trimmed,
           role: inviteRole,
-          status: 'Pending',
-        },
-      ],
-    }))
-    setInviteEmail('')
-    setNotice('Invitation added.')
+          invitedBy: account.fullName || account.name || account.email || 'HR HUB Admin',
+        }),
+      })
+      const result = await response.json() as { ok?: boolean; error?: string }
+
+      if (!result.ok) {
+        setNotice(result.error || 'Invitation could not be sent.')
+        return
+      }
+
+      setAccount(previous => ({
+        ...previous,
+        invitations: [
+          ...previous.invitations,
+          {
+            id: previous.invitations.reduce((max, invitation) => Math.max(max, invitation.id), 0) + 1,
+            email: trimmed,
+            role: inviteRole,
+            status: 'Pending',
+          },
+        ],
+      }))
+      setInviteEmail('')
+      setNotice(`Invitation email sent to ${trimmed}.`)
+    } catch {
+      setNotice('Invitation could not be sent. Check your email provider settings and try again.')
+    } finally {
+      setInviteSending(false)
+    }
   }
 
   const removeInvite = (id: number) => {
@@ -995,8 +1021,8 @@ export default function Header({ onMenuClick, compactWorkspace = false }: Header
                   <div style={{ display: 'grid', gap: 14 }}>
                     <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) 150px auto', gap: 10, alignItems: 'end' }}>
                       <label style={fieldGroupStyle}><span style={labelStyle}>Email</span><input value={inviteEmail} onChange={event => setInviteEmail(event.target.value)} placeholder="teammate@example.com" style={fieldStyle} /></label>
-                      <label style={fieldGroupStyle}><span style={labelStyle}>Role</span><select value={inviteRole} onChange={event => setInviteRole(event.target.value)} style={fieldStyle}><option>Member</option><option>Project Manager</option><option>Finance</option><option>Admin</option></select></label>
-                      <button onClick={sendInvite} disabled={!inviteEmail.trim()} style={{ ...primaryButtonStyle, height: 40, opacity: inviteEmail.trim() ? 1 : 0.45 }}>Invite</button>
+                      <label style={fieldGroupStyle}><span style={labelStyle}>Role</span><select value={inviteRole} onChange={event => setInviteRole(event.target.value)} style={fieldStyle}><option>Member</option><option>HR</option><option>Finance</option><option>Project Manager</option><option>Admin</option></select></label>
+                      <button onClick={sendInvite} disabled={!inviteEmail.trim() || inviteSending} style={{ ...primaryButtonStyle, height: 40, opacity: inviteEmail.trim() && !inviteSending ? 1 : 0.45 }}>{inviteSending ? 'Sending...' : 'Invite'}</button>
                     </div>
                   </div>
                 )}
@@ -1165,12 +1191,13 @@ export default function Header({ onMenuClick, compactWorkspace = false }: Header
                       <span style={labelStyle}>Role</span>
                       <select value={inviteRole} onChange={event => setInviteRole(event.target.value)} style={fieldStyle}>
                         <option>Member</option>
-                        <option>Project Manager</option>
+                        <option>HR</option>
                         <option>Finance</option>
+                        <option>Project Manager</option>
                         <option>Admin</option>
                       </select>
                     </label>
-                    <button onClick={sendInvite} disabled={!inviteEmail.trim()} style={{ ...primaryButtonStyle, height: 40, opacity: inviteEmail.trim() ? 1 : 0.45 }}>Invite</button>
+                    <button onClick={sendInvite} disabled={!inviteEmail.trim() || inviteSending} style={{ ...primaryButtonStyle, height: 40, opacity: inviteEmail.trim() && !inviteSending ? 1 : 0.45 }}>{inviteSending ? 'Sending...' : 'Invite'}</button>
                   </div>
                   {account.invitations.length === 0 ? (
                     <div style={{ padding: 24, textAlign: 'center', color: '#9ca3af', border: '1px dashed #e5e7eb', borderRadius: 12 }}>No invitations yet.</div>

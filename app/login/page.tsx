@@ -23,6 +23,15 @@ interface AccountState {
   onboardingComplete?: boolean
 }
 
+const accountRoles = new Set(['Admin', 'Finance', 'HR', 'Project Manager', 'Support', 'Client'])
+
+function invitedRole(input: unknown): AccountState['role'] | null {
+  if (typeof input !== 'string') return null
+  if (accountRoles.has(input)) return input as AccountState['role']
+  if (input === 'Member') return 'Support'
+  return null
+}
+
 function routeForRole(role?: AccountState['role']) {
   if (role === 'Client') return '/client-portal'
   if (role === 'Finance') return '/financials/loan-management'
@@ -43,11 +52,23 @@ export default function LoginPage() {
     if (!supabase) return
 
     let mounted = true
-    const completeGoogleLogin = async (sessionUser: { id: string; email?: string; user_metadata?: { full_name?: string; name?: string } }) => {
+    const completeGoogleLogin = async (sessionUser: { id: string; email?: string; user_metadata?: { full_name?: string; name?: string; role?: string } }) => {
       if (!mounted) return
       const userEmail = (sessionUser.email || '').trim().toLowerCase()
       const registeredUsers = loadAuthUsers()
-      const registeredUser = registeredUsers.find(user => user.email.toLowerCase() === userEmail)
+      let registeredUser = registeredUsers.find(user => user.email.toLowerCase() === userEmail)
+      const roleFromInvite = invitedRole(sessionUser.user_metadata?.role)
+
+      if (!registeredUser && roleFromInvite) {
+        registeredUser = {
+          id: registeredUsers.reduce((max, user) => Math.max(max, user.id), 0) + 1,
+          name: sessionUser.user_metadata?.full_name || sessionUser.user_metadata?.name || userEmail.split('@')[0] || 'Invited User',
+          email: userEmail,
+          provider: 'gmail',
+          role: roleFromInvite,
+        }
+        saveAuthUsers([...registeredUsers, registeredUser])
+      }
 
       if (!registeredUser) {
         setError('No HR HUB account exists for this Gmail. Please create the first Admin account or ask your Admin to invite you.')
