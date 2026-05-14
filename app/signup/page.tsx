@@ -12,6 +12,7 @@ import {
   createPasswordFields,
   isGmailAddress,
   loadAuthUsers,
+  logoutIntentKey,
   publicUser,
   saveAuthUsers,
   onboardingKey,
@@ -40,6 +41,8 @@ function hasAdminOwner(authUsers: AuthUser[]) {
 
 function existingSessionRoute() {
   try {
+    if (window.localStorage.getItem(logoutIntentKey)) return null
+
     const sessionRaw = window.localStorage.getItem(sessionKey)
     if (!sessionRaw) return null
 
@@ -103,6 +106,8 @@ export default function SignupPage() {
 
     let mounted = true
     const finishGoogleSignup = async () => {
+      if (window.localStorage.getItem(logoutIntentKey)) return
+
       const { data } = await supabase.auth.getSession()
       const supabaseUser = data.session?.user
       if (!mounted || !supabaseUser) return
@@ -231,6 +236,8 @@ export default function SignupPage() {
       setError('Google signup is not configured yet. Add the Supabase URL and anon key in Vercel environment variables.')
       return
     }
+
+    window.localStorage.removeItem(logoutIntentKey)
 
     void supabase.auth.signInWithOAuth({
       provider: 'google',

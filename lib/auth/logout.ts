@@ -1,9 +1,10 @@
 'use client'
 
 import { getSupabaseBrowserClient } from './supabaseClient'
-import { sessionKey } from './localAuth'
+import { logoutIntentKey, sessionKey } from './localAuth'
 
 export async function logoutUser() {
+  window.localStorage.setItem(logoutIntentKey, new Date().toISOString())
   window.localStorage.removeItem(sessionKey)
   window.localStorage.removeItem('flowsys-employee-session')
 

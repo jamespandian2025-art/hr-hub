@@ -4,6 +4,7 @@ export const usersKey = 'flowsys-auth-users'
 export const sessionKey = 'flowsys-auth-session'
 export const onboardingKey = 'flowsys-onboarding'
 export const accountKey = 'flowsys-account'
+export const logoutIntentKey = 'flowsys-auth-logged-out'
 
 export type AccountRole = 'Admin' | 'Finance' | 'HR' | 'Project Manager' | 'Support' | 'Client'
 export type AuthProvider = 'email' | 'gmail' | 'facebook'

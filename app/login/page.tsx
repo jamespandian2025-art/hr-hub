@@ -11,6 +11,7 @@ import {
   createPasswordFields,
   isGmailAddress,
   loadAuthUsers,
+  logoutIntentKey,
   onboardingKey,
   publicUser,
   saveAuthUsers,
@@ -47,6 +48,8 @@ function routeForRole(role?: AccountState['role']) {
 
 function existingSessionRoute() {
   try {
+    if (window.localStorage.getItem(logoutIntentKey)) return null
+
     const sessionRaw = window.localStorage.getItem(sessionKey)
     if (!sessionRaw) return null
 
@@ -83,6 +86,8 @@ export default function LoginPage() {
     let mounted = true
     const completeGoogleLogin = async (sessionUser: { id: string; email?: string; user_metadata?: { full_name?: string; name?: string; role?: string } }) => {
       if (!mounted) return
+      if (window.localStorage.getItem(logoutIntentKey)) return
+
       const userEmail = (sessionUser.email || '').trim().toLowerCase()
       const registeredUsers = loadAuthUsers()
       let registeredUser = registeredUsers.find(user => user.email.toLowerCase() === userEmail)
@@ -207,6 +212,8 @@ export default function LoginPage() {
       setError('Google login is not configured yet. Add the Supabase URL and anon key in Vercel environment variables.')
       return
     }
+
+    window.localStorage.removeItem(logoutIntentKey)
 
     void supabase.auth.signInWithOAuth({
       provider: 'google',
