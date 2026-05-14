@@ -14,9 +14,17 @@ import {
   loadAuthUsers,
   publicUser,
   saveAuthUsers,
+  onboardingKey,
   sessionKey,
   validatePasswordStrength,
 } from '@/lib/auth/localAuth'
+
+function routeForRole(role?: AccountRole) {
+  if (role === 'Client') return '/client-portal'
+  if (role === 'Finance') return '/financials/loan-management'
+  if (role === 'HR') return '/hr/overview'
+  return '/dashboard'
+}
 
 function hasAdminOwner(authUsers: AuthUser[]) {
   if (authUsers.some(user => user.role === 'Admin')) return true
@@ -27,6 +35,24 @@ function hasAdminOwner(authUsers: AuthUser[]) {
     return account?.role === 'Admin' && account.roleLocked === true
   } catch {
     return false
+  }
+}
+
+function existingSessionRoute() {
+  try {
+    const sessionRaw = window.localStorage.getItem(sessionKey)
+    if (!sessionRaw) return null
+
+    const accountRaw = window.localStorage.getItem(accountKey)
+    const account = accountRaw ? (JSON.parse(accountRaw) as { role?: AccountRole; onboardingComplete?: boolean }) : {}
+    const session = JSON.parse(sessionRaw) as { role?: AccountRole }
+    const stored = window.localStorage.getItem(onboardingKey)
+    const onboarding = stored ? JSON.parse(stored) as { complete?: boolean } : null
+
+    if (!onboarding?.complete && !account.onboardingComplete) return '/onboarding'
+    return routeForRole(session.role || account.role)
+  } catch {
+    return null
   }
 }
 
@@ -41,6 +67,11 @@ export default function SignupPage() {
   const [confirmPassword, setConfirmPassword] = useState('')
   const [showPassword, setShowPassword] = useState(false)
   const [error, setError] = useState('')
+
+  useEffect(() => {
+    const route = existingSessionRoute()
+    if (route) router.replace(route)
+  }, [router])
 
   const saveUser = (user: AuthUser, companyName: string, accountRole: AccountRole) => {
     const nextUsers = [...users.filter(item => item.email.toLowerCase() !== user.email.toLowerCase()), user]

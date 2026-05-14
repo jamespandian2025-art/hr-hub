@@ -45,6 +45,24 @@ function routeForRole(role?: AccountState['role']) {
   return '/dashboard'
 }
 
+function existingSessionRoute() {
+  try {
+    const sessionRaw = window.localStorage.getItem(sessionKey)
+    if (!sessionRaw) return null
+
+    const accountRaw = window.localStorage.getItem(accountKey)
+    const account = accountRaw ? (JSON.parse(accountRaw) as AccountState) : {}
+    const session = JSON.parse(sessionRaw) as { role?: AccountState['role'] }
+    const stored = window.localStorage.getItem(onboardingKey)
+    const onboarding = stored ? JSON.parse(stored) as { complete?: boolean } : null
+
+    if (!onboarding?.complete && !account.onboardingComplete) return '/onboarding'
+    return routeForRole(session.role || account.role)
+  } catch {
+    return null
+  }
+}
+
 export default function LoginPage() {
   const router = useRouter()
   const [users, setUsers] = useState<AuthUser[]>(loadAuthUsers)
@@ -52,6 +70,11 @@ export default function LoginPage() {
   const [password, setPassword] = useState('')
   const [showPassword, setShowPassword] = useState(false)
   const [error, setError] = useState('')
+
+  useEffect(() => {
+    const route = existingSessionRoute()
+    if (route) router.replace(route)
+  }, [router])
 
   useEffect(() => {
     const supabase = getSupabaseBrowserClient()
