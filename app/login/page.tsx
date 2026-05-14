@@ -19,7 +19,13 @@ import {
 } from '@/lib/auth/localAuth'
 
 interface AccountState {
+  email?: string
+  fullName?: string
+  name?: string
+  theme?: string
+  company?: string
   role?: 'Admin' | 'Finance' | 'HR' | 'Project Manager' | 'Support' | 'Client'
+  roleLocked?: boolean
   onboardingComplete?: boolean
 }
 
@@ -58,6 +64,8 @@ export default function LoginPage() {
       const registeredUsers = loadAuthUsers()
       let registeredUser = registeredUsers.find(user => user.email.toLowerCase() === userEmail)
       const roleFromInvite = invitedRole(sessionUser.user_metadata?.role)
+      const accountRaw = window.localStorage.getItem(accountKey)
+      const account = accountRaw ? (JSON.parse(accountRaw) as AccountState) : {}
 
       if (!registeredUser && roleFromInvite) {
         registeredUser = {
@@ -70,6 +78,17 @@ export default function LoginPage() {
         saveAuthUsers([...registeredUsers, registeredUser])
       }
 
+      if (!registeredUser && account.role === 'Admin' && account.roleLocked === true && account.email?.toLowerCase() === userEmail) {
+        registeredUser = {
+          id: registeredUsers.reduce((max, user) => Math.max(max, user.id), 0) + 1,
+          name: account.fullName || account.name || sessionUser.user_metadata?.full_name || sessionUser.user_metadata?.name || userEmail.split('@')[0] || 'Admin Owner',
+          email: userEmail,
+          provider: 'gmail',
+          role: 'Admin',
+        }
+        saveAuthUsers([...registeredUsers, registeredUser])
+      }
+
       if (!registeredUser) {
         setError('No HR HUB account exists for this Gmail. Please create the first Admin account or ask your Admin to invite you.')
         await supabase.auth.signOut()
@@ -77,8 +96,6 @@ export default function LoginPage() {
       }
 
       const userName = registeredUser.name || sessionUser.user_metadata?.full_name || sessionUser.user_metadata?.name || userEmail.split('@')[0] || 'Google User'
-      const accountRaw = window.localStorage.getItem(accountKey)
-      const account = accountRaw ? (JSON.parse(accountRaw) as AccountState & { theme?: string; company?: string }) : {}
       const role = registeredUser.role || account.role || 'Admin'
       window.localStorage.setItem(sessionKey, JSON.stringify({ userId: registeredUser.id, email: userEmail, provider: registeredUser.provider, role }))
       window.localStorage.setItem(accountKey, JSON.stringify({
