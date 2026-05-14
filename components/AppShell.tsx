@@ -23,7 +23,7 @@ const applyTheme = () => {
   try {
     const stored = window.localStorage.getItem(accountKey)
     const account = stored ? JSON.parse(stored) as { theme?: string } : null
-    const preference = account?.theme || 'System'
+    const preference = account?.theme || 'Google Green'
     const mapped = THEME_MAP[preference]
     const theme = mapped || (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light')
     document.documentElement.dataset.theme = theme

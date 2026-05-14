@@ -42,7 +42,7 @@ export default function SignupPage() {
         email: user.email,
         role: accountRole,
         roleLocked: true,
-        theme: 'System',
+        theme: 'Google Green',
         density: 'Comfortable',
         emailNotifications: true,
         desktopNotifications: false,

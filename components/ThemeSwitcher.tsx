@@ -34,16 +34,17 @@ function applyThemeToDOM(preference: string) {
 
 export default function ThemeSwitcher() {
   const [open, setOpen] = useState(false)
-  const [current, setCurrent] = useState<string>('WiseFlow Light')
-  const ref = useRef<HTMLDivElement>(null)
-
-  useEffect(() => {
+  const [current, setCurrent] = useState<string>(() => {
+    if (typeof window === 'undefined') return 'Google Green'
     try {
       const stored = window.localStorage.getItem(storageKey)
       const account = stored ? JSON.parse(stored) as { theme?: string } : null
-      if (account?.theme && THEME_MAP[account.theme]) setCurrent(account.theme)
-    } catch { /* ignore */ }
-  }, [])
+      return account?.theme && THEME_MAP[account.theme] ? account.theme : 'Google Green'
+    } catch {
+      return 'Google Green'
+    }
+  })
+  const ref = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {

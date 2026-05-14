@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import Link from 'next/link'
 import { ArrowLeft, Check } from 'lucide-react'
 
@@ -181,17 +181,18 @@ function ThemePreviewCard({
 }
 
 export default function AppearancePage() {
-  const [current, setCurrent] = useState<ThemeName>('WiseFlow Light')
-  const [previewing, setPreviewing] = useState<ThemeName | null>(null)
-  const [saved, setSaved] = useState(false)
-
-  useEffect(() => {
+  const [current, setCurrent] = useState<ThemeName>(() => {
+    if (typeof window === 'undefined') return 'Google Green'
     try {
       const stored = window.localStorage.getItem(storageKey)
       const account = stored ? JSON.parse(stored) as { theme?: string } : null
-      if (account?.theme && THEME_MAP[account.theme]) setCurrent(account.theme as ThemeName)
-    } catch { /* ignore */ }
-  }, [])
+      return account?.theme && THEME_MAP[account.theme] ? account.theme as ThemeName : 'Google Green'
+    } catch {
+      return 'Google Green'
+    }
+  })
+  const [previewing, setPreviewing] = useState<ThemeName | null>(null)
+  const [saved, setSaved] = useState(false)
 
   const handlePreview = (name: ThemeName) => {
     setPreviewing(name)

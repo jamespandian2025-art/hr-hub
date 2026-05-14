@@ -168,7 +168,7 @@ const allowanceRequestsKey = 'flowsys-hr-allowance-requests'
 const initialAccount: AccountState = {
   company: 'Livewise Construction',
   email: 'livewiseofficial@gmail.com',
-  theme: 'WiseFlow Light',
+  theme: 'Google Green',
   density: 'Comfortable',
   emailNotifications: true,
   desktopNotifications: false,
@@ -335,7 +335,7 @@ export default function Header({ onMenuClick, compactWorkspace = false }: Header
       'WiseFlow Light': 'light', 'WiseFlow Dark': 'dark',
       'Google Blue': 'google-blue', 'Google Green': 'google-green', 'Graphite Pro': 'graphite',
     }
-    const preference = account.theme || 'WiseFlow Light'
+    const preference = account.theme || 'Google Green'
     const mapped = THEME_MAP[preference]
     const theme = mapped || (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light')
     document.documentElement.dataset.theme = theme
