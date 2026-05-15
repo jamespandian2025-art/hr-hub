@@ -260,7 +260,7 @@ button:active {
   transform: translateY(0);
 }
 
-/* Global tab hierarchy: active tabs should read as the selected surface, not only an underline. */
+/* Global tabs use a clean underline active state. */
 [class*='tabs'] button.is-active,
 [class*='tabs'] .is-active,
 [class*='tabs'] button[style*='#16a34a'],
@@ -270,11 +270,11 @@ button:active {
 [class*='tabs'] button[style*='rgb(34, 197, 94)'],
 .dashboard-tabs button.is-active,
 .sales-tabs button.is-active {
-  background: #111827 !important;
-  color: #ffffff !important;
-  border-color: #111827 !important;
+  background: transparent !important;
+  color: #111827 !important;
+  border-color: transparent !important;
   border-bottom-color: #111827 !important;
-  border-radius: 9px !important;
+  border-radius: 0 !important;
   box-shadow: none !important;
 }
 
@@ -287,7 +287,7 @@ button:active {
 [class*='tabs'] button[style*='rgb(34, 197, 94)'] *,
 .dashboard-tabs button.is-active *,
 .sales-tabs button.is-active * {
-  color: #ffffff !important;
+  color: #111827 !important;
 }
 
 [class*='tabs'] button,

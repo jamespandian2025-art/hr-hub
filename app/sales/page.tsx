@@ -972,5 +972,5 @@ const prefixStyle: CSSProperties = { position: 'absolute', left: 12, top: 12, co
 const drawerFooter: CSSProperties = { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, padding: 28, borderTop: '1px solid #e2e8f0' }
 
 const softIcon = (color: string, size = 54): CSSProperties => ({ width: size, height: size, borderRadius: 14, background: `${color}16`, color, display: 'grid', placeItems: 'center', flex: '0 0 auto' })
-const tabStyle = (active: boolean): CSSProperties => ({ border: 0, background: active ? '#111827' : 'transparent', padding: '8px 13px', margin: 0, color: active ? '#fff' : '#334155', borderBottom: '2px solid transparent', borderRadius: 9, fontSize: 13, fontWeight: active ? 900 : 750, cursor: 'pointer', whiteSpace: 'nowrap' })
+const tabStyle = (active: boolean): CSSProperties => ({ border: 0, background: 'transparent', padding: '8px 13px', margin: 0, color: active ? '#111827' : '#334155', borderBottom: active ? '2px solid #111827' : '2px solid transparent', borderRadius: 0, fontSize: 13, fontWeight: active ? 900 : 750, cursor: 'pointer', whiteSpace: 'nowrap' })
 const legendDot = (color: string): CSSProperties => ({ width: 8, height: 8, borderRadius: 999, background: color, display: 'inline-block', marginRight: 8 })
