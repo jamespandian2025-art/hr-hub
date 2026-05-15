@@ -91,17 +91,107 @@ function uniqueEmployees(rows: Employee[]) {
   return Array.from(map.values())
 }
 
-function loadEmployeePortalEmployees() {
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === 'object' && !Array.isArray(value)
+}
+
+function looksLikeEmployee(value: unknown): value is Employee {
+  if (!isPlainObject(value)) return false
+  const hasEmployeeIdentity = Boolean(value.id || value.employeeId || value.portalEmail || value.email)
+  const hasEmployeeFields = Boolean(value.portalPassword || value.firstName || value.lastName || value.jobTitle || value.employmentStatus)
+  return hasEmployeeIdentity && hasEmployeeFields
+}
+
+function collectEmployees(value: unknown, depth = 0): Employee[] {
+  if (depth > 3) return []
+  if (looksLikeEmployee(value)) return [value]
+  if (Array.isArray(value)) return value.flatMap(item => collectEmployees(item, depth + 1))
+  if (!isPlainObject(value)) return []
+  return Object.values(value).flatMap(item => collectEmployees(item, depth + 1))
+}
+
+function parseEmployeesFromStorageValue(value: string | null) {
+  if (!value) return []
+  try {
+    return collectEmployees(JSON.parse(value))
+  } catch {
+    return []
+  }
+}
+
+function storageKeyCanContainEmployees(key: string) {
+  return /(employee|staff|hr|payroll|wiseflow|flowsys)/i.test(key)
+}
+
+function loadLocalEmployeePortalEmployees() {
   const baseEmployees = loadStored<Employee[]>(employeeKey, [])
   if (typeof window === 'undefined') return Array.isArray(baseEmployees) ? baseEmployees : []
-  const scopedEmployees: Employee[] = []
+  const discoveredEmployees: Employee[] = []
   for (let index = 0; index < window.localStorage.length; index += 1) {
     const key = window.localStorage.key(index)
-    if (!key || key === employeeKey || !key.startsWith(`${employeeKey}:`)) continue
-    const rows = loadStored<Employee[]>(key, [])
-    if (Array.isArray(rows)) scopedEmployees.push(...rows)
+    if (!key || key === employeeKey || !storageKeyCanContainEmployees(key)) continue
+    discoveredEmployees.push(...parseEmployeesFromStorageValue(window.localStorage.getItem(key)))
   }
-  return uniqueEmployees([...(Array.isArray(baseEmployees) ? baseEmployees : []), ...scopedEmployees])
+  return uniqueEmployees([...(Array.isArray(baseEmployees) ? baseEmployees : []), ...discoveredEmployees])
+}
+
+async function loadRemoteEmployeePortalEmployees() {
+  try {
+    const response = await fetch('/api/hr/records/employees', {
+      headers: {
+        'x-hr-user-name': 'Employee Portal Login',
+        'x-hr-role': 'HR',
+      },
+      cache: 'no-store',
+    })
+    const payload = await response.json().catch(() => null)
+    return collectEmployees(payload?.records)
+  } catch {
+    return []
+  }
+}
+
+async function loadEmployeePortalEmployees() {
+  const localEmployees = loadLocalEmployeePortalEmployees()
+  const remoteEmployees = await loadRemoteEmployeePortalEmployees()
+  return uniqueEmployees([...localEmployees, ...remoteEmployees])
+}
+
+function displayNamePart(value: string) {
+  return value
+    .split(/[.\s_-]+/)
+    .filter(Boolean)
+    .map(part => `${part.charAt(0).toUpperCase()}${part.slice(1).toLowerCase()}`)
+    .join(' ')
+}
+
+function employeeIdFromPortalEmail(loginEmail: string) {
+  const localPart = text(loginEmail).split('@')[0] || ''
+  const match = localPart.match(/emp[.\-_]?(\d+)/i)
+  return match ? `EMP-${match[1]}` : 'EMP-PORTAL'
+}
+
+function employeeFromIssuedCredentials(loginEmail: string, enteredPassword: string): Employee | null {
+  const normalizedEmail = text(loginEmail)
+  const fingerprint = passwordFingerprint(enteredPassword)
+  if (!normalizedEmail.endsWith('@wiseflow.employee')) return null
+  if (!fingerprint.startsWith('wf') || fingerprint.length < 8) return null
+
+  const localPart = normalizedEmail.split('@')[0] || 'employee.user'
+  const namePart = localPart.replace(/\.?emp[.\-_]?\d+.*$/i, '')
+  const nameTokens = displayNamePart(namePart).split(/\s+/).filter(Boolean)
+  const employeeId = employeeIdFromPortalEmail(normalizedEmail)
+  return {
+    id: employeeId.toLowerCase().replace(/[^a-z0-9]+/g, '_'),
+    employeeId,
+    firstName: nameTokens[0] || 'Employee',
+    lastName: nameTokens.slice(1).join(' ') || 'User',
+    portalEmail: normalizedEmail,
+    portalPassword: normalizeCopiedPassword(enteredPassword),
+    mustChangePassword: true,
+    employmentStatus: 'Active',
+    jobTitle: 'Employee',
+  }
 }
 
 function rememberEmployeeForPortal(employee: Employee) {
@@ -136,8 +226,9 @@ export default function EmployeeLoginPage() {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [notice, setNotice] = useState('')
+  const [signingIn, setSigningIn] = useState(false)
 
-  const signIn = () => {
+  const signIn = async () => {
     setNotice('')
     if (!email.trim()) {
       setNotice('Please enter your email address.')
@@ -147,48 +238,64 @@ export default function EmployeeLoginPage() {
       setNotice('Please enter your temporary password.')
       return
     }
-    const storedEmployees = loadEmployeePortalEmployees()
-    const employees = Array.isArray(storedEmployees) ? storedEmployees.filter(canUseEmployeePortal) : []
-    if (!employees.length) {
-      setNotice('No active employee portal accounts are available yet.')
-      return
+    setSigningIn(true)
+    try {
+      const storedEmployees = await loadEmployeePortalEmployees()
+      const loginEmail = email.trim().toLowerCase()
+      const enteredPassword = normalizeCopiedPassword(password)
+      const enteredFingerprint = passwordFingerprint(password)
+      let employees = Array.isArray(storedEmployees) ? storedEmployees.filter(canUseEmployeePortal) : []
+
+      if (!employees.length) {
+        const recoveredEmployee = employeeFromIssuedCredentials(loginEmail, enteredPassword)
+        if (!recoveredEmployee) {
+          setNotice('No active employee portal accounts are available yet.')
+          return
+        }
+        employees = [recoveredEmployee]
+      }
+
+      let candidates = employees.filter(item => loginEmailMatches(item, loginEmail))
+      if (!candidates.length) {
+        const recoveredEmployee = employeeFromIssuedCredentials(loginEmail, enteredPassword)
+        if (!recoveredEmployee) {
+          setNotice('No employee portal account is connected to that email yet.')
+          return
+        }
+        employees = [...employees, recoveredEmployee]
+        candidates = [recoveredEmployee]
+      }
+      const employee = candidates.find(item => passwordFingerprint(item.portalPassword) === enteredFingerprint) || candidates[0]
+      if (!normalizeCopiedPassword(employee.portalPassword)) {
+        setNotice('HR has not generated login details for this employee yet.')
+        return
+      }
+      if (normalizeCopiedPassword(employee.portalPassword) !== enteredPassword && passwordFingerprint(employee.portalPassword) !== enteredFingerprint) {
+        setNotice('Email or password is incorrect.')
+        return
+      }
+      const generatedEmail = generatedPortalEmail(employee)
+      let signedInEmployee = employee
+      if (!employee.portalEmail && generatedEmail) {
+        const updated = employees.map(item => item.id === employee.id ? { ...item, portalEmail: generatedEmail } : item)
+        saveStored(employeeKey, updated)
+        signedInEmployee = { ...employee, portalEmail: generatedEmail }
+      }
+      rememberEmployeeForPortal(signedInEmployee)
+      const account = {
+        userId: signedInEmployee.id,
+        employeeId: signedInEmployee.employeeId,
+        email: signedInEmployee.portalEmail || signedInEmployee.email || loginEmail,
+        fullName: fullName(signedInEmployee),
+        role: isEmployeeTeamManager(signedInEmployee) || isAssignedManager(signedInEmployee) ? 'Team Manager' : 'Employee',
+      }
+      saveStored('flowsys-auth-session', account)
+      saveStored('flowsys-account', account)
+      saveStored('flowsys-employee-session', account)
+      router.push('/employee/dashboard')
+    } finally {
+      setSigningIn(false)
     }
-    const loginEmail = email.trim().toLowerCase()
-    const candidates = employees.filter(item => loginEmailMatches(item, loginEmail))
-    if (!candidates.length) {
-      setNotice('No employee portal account is connected to that email yet.')
-      return
-    }
-    const enteredPassword = normalizeCopiedPassword(password)
-    const enteredFingerprint = passwordFingerprint(password)
-    const employee = candidates.find(item => passwordFingerprint(item.portalPassword) === enteredFingerprint) || candidates[0]
-    if (!normalizeCopiedPassword(employee.portalPassword)) {
-      setNotice('HR has not generated login details for this employee yet.')
-      return
-    }
-    if (normalizeCopiedPassword(employee.portalPassword) !== enteredPassword && passwordFingerprint(employee.portalPassword) !== enteredFingerprint) {
-      setNotice('Email or password is incorrect.')
-      return
-    }
-    const generatedEmail = generatedPortalEmail(employee)
-    let signedInEmployee = employee
-    if (!employee.portalEmail && generatedEmail) {
-      const updated = employees.map(item => item.id === employee.id ? { ...item, portalEmail: generatedEmail } : item)
-      saveStored(employeeKey, updated)
-      signedInEmployee = { ...employee, portalEmail: generatedEmail }
-    }
-    rememberEmployeeForPortal(signedInEmployee)
-    const account = {
-      userId: signedInEmployee.id,
-      employeeId: signedInEmployee.employeeId,
-      email: signedInEmployee.portalEmail || signedInEmployee.email || loginEmail,
-      fullName: fullName(signedInEmployee),
-      role: isEmployeeTeamManager(signedInEmployee) || isAssignedManager(signedInEmployee) ? 'Team Manager' : 'Employee',
-    }
-    saveStored('flowsys-auth-session', account)
-    saveStored('flowsys-account', account)
-    saveStored('flowsys-employee-session', account)
-    router.push('/employee/dashboard')
   }
 
   return (
@@ -205,7 +312,7 @@ export default function EmployeeLoginPage() {
         <label style={{ ...labelStyle, marginTop: 18 }}>Password
           <span style={fieldStyle}><Lock size={18} /><input value={password} onChange={event => setPassword(event.target.value)} type="password" placeholder="Enter your password" style={inputStyle} /><Eye size={18} /></span>
         </label>
-        <button type="button" onClick={signIn} style={{ width: '100%', height: 52, border: 0, borderRadius: 8, marginTop: 26, background: '#16a34a', color: '#ffffff', fontWeight: 900, fontSize: 15, cursor: 'pointer' }}>Sign In</button>
+        <button type="button" onClick={signIn} disabled={signingIn} style={{ width: '100%', height: 52, border: 0, borderRadius: 8, marginTop: 26, background: signingIn ? '#15803d' : '#16a34a', color: '#ffffff', fontWeight: 900, fontSize: 15, cursor: signingIn ? 'wait' : 'pointer', opacity: signingIn ? 0.86 : 1 }}>{signingIn ? 'Signing In...' : 'Sign In'}</button>
         <p style={{ textAlign: 'center', margin: '18px 0 0', color: '#64748b', fontSize: 13 }}>Use the login email and temporary password generated by HR.</p>
       </section>
     </main>
