@@ -101,6 +101,8 @@ export default function ApplyLeavePage() {
     }
     const requests = loadStored<LeaveRequest[]>(leaveRequestKey, [])
     saveStored(leaveRequestKey, [buildRequest('Pending'), ...requests])
+    window.dispatchEvent(new Event('storage'))
+    window.dispatchEvent(new Event('wiseflow:hr-data-changed'))
     router.push('/employee/leave-requests')
   }
 

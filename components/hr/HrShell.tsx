@@ -21,6 +21,7 @@ import HrMessenger from './HrMessenger'
 import { getHrRouteMeta, HR_NAV_ITEMS, isHrRouteActive } from './hrNav'
 import { loadStored } from '@/app/employee/employeeData'
 import { allowanceRequestKey, AllowanceRequest } from '@/app/hr/enterpriseData'
+import { loadLeaveRequests } from '@/app/hr/leave-requests/leaveData'
 import { logoutUser } from '@/lib/auth/logout'
 
 type StoredAccount = {
@@ -33,7 +34,6 @@ type StoredAccount = {
 
 const accountKey = 'flowsys-account'
 const sessionKey = 'flowsys-auth-session'
-const leaveRequestKey = 'flowsys-hr-leave-requests'
 
 type LeaveNotification = {
   id: string
@@ -99,19 +99,29 @@ export default function HrShell({ children }: { children: React.ReactNode }) {
       const storedAccount = parseStoredObject(window.localStorage.getItem(accountKey))
       const storedSession = parseStoredObject(window.localStorage.getItem(sessionKey))
       setAccount({ ...storedSession, ...storedAccount })
-      setLeaveNotifications(loadStored<LeaveNotification[]>(leaveRequestKey, []))
+      setLeaveNotifications(loadLeaveRequests())
       setAllowanceNotifications(loadStored<AllowanceRequest[]>(allowanceRequestKey, []))
     }
     loadAccount()
     window.addEventListener('storage', loadAccount)
-    return () => window.removeEventListener('storage', loadAccount)
+    window.addEventListener('focus', loadAccount)
+    window.addEventListener('wiseflow:hr-data-changed', loadAccount)
+    const timer = window.setInterval(loadAccount, 2500)
+    return () => {
+      window.removeEventListener('storage', loadAccount)
+      window.removeEventListener('focus', loadAccount)
+      window.removeEventListener('wiseflow:hr-data-changed', loadAccount)
+      window.clearInterval(timer)
+    }
   }, [])
 
   const displayName = account.fullName || account.name || 'HR User'
   const company = account.company || 'WiseFlow Company'
   const role = account.role || 'Team member'
   const pendingHrLeaveRequests = leaveNotifications.filter(request =>
-    request.status === 'Pending' && (request.approvalStep === 'hr' || request.hrApprovalStatus === 'Pending')
+    String(request.status || '').toLowerCase() === 'pending'
+    && !['approved', 'rejected'].includes(String(request.hrApprovalStatus || '').toLowerCase())
+    && (!request.approvalStep || request.approvalStep === 'hr')
   )
   const approvedAllowanceUpdates = allowanceNotifications.filter(request =>
     request.status === 'Finance Approved'
