@@ -4393,7 +4393,9 @@ thead td,
 .accounting-shell aside .active {
   background: #1f1f1f !important;
   color: rgb(237, 237, 237) !important;
-  box-shadow: 0 0 0 1px #ffffff !important;
+  border-color: transparent !important;
+  box-shadow: none !important;
+  outline: none !important;
 }
 
 .desktop-sidebar .main-sidebar-row,
