@@ -65,6 +65,17 @@ function normalizeCopiedPassword(value: unknown) {
   return normalizePassword(value).replace(/[\u2010-\u2015\u2212]/g, '-')
 }
 
+function passwordFingerprint(value: unknown) {
+  if (value === null || value === undefined) return ''
+  const raw = typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean' ? String(value) : ''
+  return raw
+    .replace(/â€[\u0090\u0091\u0092\u0093\u0094]/g, '-')
+    .replace(/âˆ’/g, '-')
+    .replace(/[\u2010-\u2015\u2212]/g, '-')
+    .replace(/[^a-z0-9]/gi, '')
+    .toLowerCase()
+}
+
 function canUseEmployeePortal(employee: Employee) {
   const status = text(employee.employmentStatus)
   return !['archived', 'deleted', 'inactive', 'terminated', 'resigned'].includes(status)
@@ -120,12 +131,13 @@ export default function EmployeeLoginPage() {
       return
     }
     const enteredPassword = normalizeCopiedPassword(password)
-    const employee = candidates.find(item => normalizeCopiedPassword(item.portalPassword) === enteredPassword) || candidates[0]
+    const enteredFingerprint = passwordFingerprint(password)
+    const employee = candidates.find(item => passwordFingerprint(item.portalPassword) === enteredFingerprint) || candidates[0]
     if (!normalizeCopiedPassword(employee.portalPassword)) {
       setNotice('HR has not generated login details for this employee yet.')
       return
     }
-    if (normalizeCopiedPassword(employee.portalPassword) !== enteredPassword) {
+    if (normalizeCopiedPassword(employee.portalPassword) !== enteredPassword && passwordFingerprint(employee.portalPassword) !== enteredFingerprint) {
       setNotice('Email or password is incorrect.')
       return
     }
