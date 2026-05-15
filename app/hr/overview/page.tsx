@@ -36,7 +36,8 @@ interface LeaveRequest {
   id: string; employeeId: string; employeeName: string; jobTitle?: string
   leaveType: string; startDate: string; endDate: string
   days: number; reason?: string; status: string
-  createdAt: string
+  approvalStep?: string; hrApprovalStatus?: string
+  createdAt: string; updatedAt?: string
 }
 
 interface HRAnnouncement {
@@ -84,6 +85,20 @@ function findLeaveEmployee(leave: LeaveRequest, employees: Employee[]) {
     employee.employeeId === leave.employeeId ||
     fullName(employee).toLowerCase() === requestedName
   )
+}
+
+function statusToken(value?: string) {
+  return String(value || '').trim().toLowerCase()
+}
+
+function isPendingHrLeave(leave: LeaveRequest) {
+  const status = statusToken(leave.status)
+  const hrStatus = statusToken(leave.hrApprovalStatus)
+  const step = statusToken(leave.approvalStep)
+  const finalStatuses = ['approved', 'rejected', 'cancelled', 'draft']
+
+  if (finalStatuses.includes(status) || ['approved', 'rejected'].includes(hrStatus)) return false
+  return status === 'pending' || hrStatus === 'pending' || !step || step === 'hr'
 }
 
 function EmployeeAvatar({ employee, name, tone = 'green' }: { employee?: Employee; name?: string; tone?: 'green' | 'amber' }) {
@@ -166,10 +181,14 @@ export default function HROverview() {
       setEmployees(loadStored('flowsys-hr-employees', []))
       const localLeaves = loadLeaveRequests() as LeaveRequest[]
       try {
-        const serverLeaves = await listHrRecords<LeaveRequest>('leave-requests')
-        if (!cancelled) setLeaves(uniqueLeaveRequests([...serverLeaves, ...localLeaves]))
+        const serverLeaves = await listHrRecords<LeaveRequest>('leave-requests', {
+          'x-hr-role': 'HR',
+          'x-hr-user-name': 'HR Overview',
+        })
+        const nextLeaves = uniqueLeaveRequests([...serverLeaves, ...localLeaves])
+        if (!cancelled) setLeaves(current => nextLeaves.length > 0 || current.length === 0 ? nextLeaves : current)
       } catch {
-        if (!cancelled) setLeaves(localLeaves)
+        if (!cancelled) setLeaves(current => localLeaves.length > 0 || current.length === 0 ? localLeaves : current)
       }
       setAnnouncements(loadStored('flowsys-hr-announcements', []))
     }
@@ -207,7 +226,7 @@ export default function HROverview() {
     const total      = employees.length
     const active     = employees.filter(e => e.employmentStatus === 'Active').length
     const onLeave    = employees.filter(e => e.employmentStatus === 'On Leave').length
-    const pending    = leaveRequests.filter(l => l.status === 'Pending').length
+    const pending    = leaveRequests.filter(isPendingHrLeave).length
     const leaveToday = leaveRequests.filter(l => { const d = new Date(l.startDate); return d.toDateString() === now.toDateString() && l.status === 'Approved' }).length
     const newThisMonth = employees.filter(e => thisMonth(e.dateOfJoining || e.createdAt)).length
     const payroll = employees.reduce((s, e) => s + (e.basicSalary || 0) + (e.allowances || 0) - (e.deductions || 0), 0)
@@ -276,7 +295,10 @@ export default function HROverview() {
 
   // â”€â”€ Pending leaves â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   const pendingLeaves = useMemo(() =>
-    leaveRequests.filter(l => l.status === 'Pending').slice(0, 4),
+    leaveRequests
+      .filter(isPendingHrLeave)
+      .sort((a, b) => new Date(b.createdAt || b.updatedAt || '').getTime() - new Date(a.createdAt || a.updatedAt || '').getTime())
+      .slice(0, 4),
   [leaveRequests])
 
   // â”€â”€ Recent activity â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€

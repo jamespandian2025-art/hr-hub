@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto'
 import { mkdir, readFile, rename, writeFile } from 'node:fs/promises'
-import { tmpdir } from 'node:os'
 import path from 'node:path'
+import { createClient, type SupabaseClient } from '@supabase/supabase-js'
 import {
   canAccessCollection,
   HrAction,
@@ -38,10 +38,49 @@ export type AuditLogRecord = {
   before?: unknown
   after?: unknown
   createdAt: string
+  updatedAt: string
 }
 
 const dataDir = process.env.HRHUB_DATA_DIR
-  || (process.env.VERCEL ? path.join(tmpdir(), 'hrhub') : path.join(process.cwd(), '.data', 'hrhub'))
+  || path.join(process.cwd(), '.data', 'hrhub')
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
+const supabaseServiceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY
+let supabaseAdmin: SupabaseClient | null = null
+
+type HrStoreRow = {
+  id: string
+  collection: HrCollection
+  payload: Record<string, unknown> | null
+  company_id: string | null
+  created_at: string
+  updated_at: string
+}
+
+function shouldUseSupabase() {
+  return Boolean(supabaseUrl && supabaseServiceRoleKey)
+}
+
+function shouldUseFileStore() {
+  return !process.env.VERCEL || Boolean(process.env.HRHUB_DATA_DIR)
+}
+
+function getSupabaseAdmin() {
+  if (!supabaseUrl || !supabaseServiceRoleKey) return null
+  if (!supabaseAdmin) {
+    supabaseAdmin = createClient(supabaseUrl, supabaseServiceRoleKey, {
+      auth: {
+        autoRefreshToken: false,
+        persistSession: false,
+      },
+    })
+  }
+  return supabaseAdmin
+}
+
+function assertStoreConfigured() {
+  if (shouldUseSupabase() || shouldUseFileStore()) return
+  throw Object.assign(new Error('Supabase HR records storage is not configured. Add SUPABASE_SERVICE_ROLE_KEY in Vercel and create the hr_records table.'), { status: 500 })
+}
 
 function collectionFile(collection: HrCollection) {
   return path.join(dataDir, `${collection}.json`)
@@ -69,6 +108,75 @@ async function writeJsonArray<T>(file: string, value: T[]) {
   const temp = `${file}.${process.pid}.${Date.now()}.tmp`
   await writeFile(temp, `${JSON.stringify(value, null, 2)}\n`, 'utf8')
   await rename(temp, file)
+}
+
+function cleanRecord(record: HrRecord) {
+  return JSON.parse(JSON.stringify(record)) as Record<string, unknown>
+}
+
+function rowToRecord(row: HrStoreRow): HrRecord {
+  const payload = row.payload && typeof row.payload === 'object' ? row.payload : {}
+  return {
+    ...payload,
+    id: String(payload.id || row.id),
+    createdAt: typeof payload.createdAt === 'string' ? payload.createdAt : row.created_at,
+    updatedAt: typeof payload.updatedAt === 'string' ? payload.updatedAt : row.updated_at,
+  }
+}
+
+function recordToRow(collection: HrCollection, record: HrRecord) {
+  const payload = cleanRecord(record)
+  const companyId = typeof record.companyId === 'string'
+    ? record.companyId
+    : typeof record.company_id === 'string'
+      ? record.company_id
+      : null
+
+  return {
+    id: record.id,
+    collection,
+    payload,
+    company_id: companyId,
+    created_at: typeof record.createdAt === 'string' ? record.createdAt : new Date().toISOString(),
+    updated_at: typeof record.updatedAt === 'string' ? record.updatedAt : new Date().toISOString(),
+  }
+}
+
+async function readStoreRecords(collection: HrCollection) {
+  assertStoreConfigured()
+  const supabase = getSupabaseAdmin()
+  if (!supabase) return readJsonArray<HrRecord>(collectionFile(collection))
+
+  const { data, error } = await supabase
+    .from('hr_records')
+    .select('id, collection, payload, company_id, created_at, updated_at')
+    .eq('collection', collection)
+    .order('created_at', { ascending: false })
+
+  if (error) {
+    throw Object.assign(new Error(`Could not read HR records from Supabase: ${error.message}`), { status: 500 })
+  }
+
+  return (data || []).map(row => rowToRecord(row as HrStoreRow))
+}
+
+async function writeStoreRecords(collection: HrCollection, records: HrRecord[]) {
+  assertStoreConfigured()
+  const supabase = getSupabaseAdmin()
+  if (!supabase) {
+    await writeJsonArray(collectionFile(collection), records)
+    return
+  }
+
+  if (records.length === 0) return
+
+  const { error } = await supabase
+    .from('hr_records')
+    .upsert(records.map(record => recordToRow(collection, record)), { onConflict: 'id' })
+
+  if (error) {
+    throw Object.assign(new Error(`Could not write HR records to Supabase: ${error.message}`), { status: 500 })
+  }
 }
 
 export function actorFromRequest(request: Request): HrActor {
@@ -126,7 +234,7 @@ export function recordVisibleToActor(collection: HrCollection, record: HrRecord,
 }
 
 export async function listRecords(collection: HrCollection) {
-  return readJsonArray<HrRecord>(collectionFile(collection))
+  return readStoreRecords(collection)
 }
 
 export async function listVisibleRecords(collection: HrCollection, actor: HrActor) {
@@ -154,7 +262,7 @@ export async function createRecord(collection: HrCollection, input: Record<strin
   }
   const records = await listRecords(collection)
   const next = [record, ...records.filter(item => item.id !== record.id)]
-  await writeJsonArray(collectionFile(collection), next)
+  await writeStoreRecords(collection, next)
   await appendAuditLog({
     action: sensitiveAuditAction(collection, 'create'),
     actor,
@@ -177,7 +285,7 @@ export async function updateRecord(collection: HrCollection, id: string, input: 
     createdAt: before.createdAt,
     updatedAt: new Date().toISOString(),
   }
-  await writeJsonArray(collectionFile(collection), records.map(record => record.id === id ? after : record))
+  await writeStoreRecords(collection, records.map(record => record.id === id ? after : record))
   await appendAuditLog({
     action: sensitiveAuditAction(collection, 'update'),
     actor,
@@ -190,7 +298,7 @@ export async function updateRecord(collection: HrCollection, id: string, input: 
   return after
 }
 
-export async function appendAuditLog(input: Omit<AuditLogRecord, 'id' | 'actorId' | 'actorName' | 'actorRole' | 'createdAt'> & { actor: HrActor }) {
+export async function appendAuditLog(input: Omit<AuditLogRecord, 'id' | 'actorId' | 'actorName' | 'actorRole' | 'createdAt' | 'updatedAt'> & { actor: HrActor }) {
   const now = new Date().toISOString()
   const record: AuditLogRecord = {
     id: `audit-${randomUUID()}`,
@@ -204,9 +312,10 @@ export async function appendAuditLog(input: Omit<AuditLogRecord, 'id' | 'actorId
     before: input.before,
     after: input.after,
     createdAt: now,
+    updatedAt: now,
   }
-  const records = await readJsonArray<AuditLogRecord>(collectionFile('audit-logs'))
-  await writeJsonArray(collectionFile('audit-logs'), [record, ...records].slice(0, 5000))
+  const records = await readStoreRecords('audit-logs') as AuditLogRecord[]
+  await writeStoreRecords('audit-logs', [record, ...records].slice(0, 5000))
   return record
 }
 

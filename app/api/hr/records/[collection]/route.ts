@@ -2,6 +2,7 @@ import {
   actorFromRequest,
   assertCollection,
   assertPermission,
+  createNotification,
   createRecord,
   jsonError,
   listVisibleRecords,
@@ -38,6 +39,20 @@ export async function POST(request: Request, context: RouteContext) {
       return Response.json({ ok: false, error: 'Request body must be an object.' }, { status: 400 })
     }
     const record = await createRecord(collection, payload as Record<string, unknown>, actor)
+    if (collection === 'leave-requests' && String(record.status || '').toLowerCase() !== 'draft') {
+      await createNotification({
+        id: `notification-leave-${record.id}`,
+        targetRole: 'HR',
+        audience: ['HR', 'Admin'],
+        type: 'Leave request',
+        title: `${record.employeeName || 'Employee'} requested ${record.leaveType || 'leave'}`,
+        detail: `${record.days || 0} day${Number(record.days || 0) === 1 ? '' : 's'} needs HR review`,
+        relatedCollection: 'leave-requests',
+        relatedId: record.id,
+        employeeId: record.employeeId,
+        status: 'Unread',
+      }, actor)
+    }
     return Response.json({ ok: true, record }, { status: 201 })
   } catch (error) {
     return jsonError(error)

@@ -22,6 +22,7 @@ import { loadStored } from '@/app/employee/employeeData'
 import { allowanceRequestKey, AllowanceRequest } from '@/app/hr/enterpriseData'
 import { loadLeaveRequests } from '@/app/hr/leave-requests/leaveData'
 import { logoutUser } from '@/lib/auth/logout'
+import { listHrRecords } from '@/lib/hrms/client'
 
 type StoredAccount = {
   company?: string
@@ -38,6 +39,7 @@ const sessionKey = 'flowsys-auth-session'
 
 type LeaveNotification = {
   id: string
+  employeeId?: string
   employeeName?: string
   leaveType: string
   days: number
@@ -45,6 +47,37 @@ type LeaveNotification = {
   approvalStep?: string
   hrApprovalStatus?: string
   createdAt: string
+  updatedAt?: string
+}
+
+type HrSystemNotification = {
+  id: string
+  title?: string
+  detail?: string
+  type?: string
+  status?: string
+  employeeId?: string
+  relatedCollection?: string
+  relatedId?: string
+  createdAt: string
+  updatedAt?: string
+}
+
+function uniqueLeaveNotifications(rows: LeaveNotification[]) {
+  const map = new Map<string, LeaveNotification>()
+  rows.forEach((row, index) => {
+    const key = row.id || `leave-${index}`
+    map.set(key, { ...map.get(key), ...row })
+  })
+  return Array.from(map.values())
+}
+
+function notificationTone(status: string) {
+  const normalized = status.toLowerCase()
+  if (normalized === 'approved') return '#34a853'
+  if (normalized === 'rejected') return '#ea4335'
+  if (normalized === 'cancelled') return '#64748b'
+  return '#1a73e8'
 }
 
 function parseStoredObject(value: string | null): StoredAccount {
@@ -91,24 +124,43 @@ export default function HrShell({ children }: { children: React.ReactNode }) {
   const [createMenuOpen, setCreateMenuOpen] = useState(false)
   const [accountMenuOpen, setAccountMenuOpen] = useState(false)
   const [leaveNotifications, setLeaveNotifications] = useState<LeaveNotification[]>([])
+  const [systemNotifications, setSystemNotifications] = useState<HrSystemNotification[]>([])
   const [allowanceNotifications, setAllowanceNotifications] = useState<AllowanceRequest[]>([])
   const activeMeta = getHrRouteMeta(pathname)
   const ActiveIcon = activeMeta.icon
 
   useEffect(() => {
-    const loadAccount = () => {
+    let cancelled = false
+    const loadAccount = async () => {
       const storedAccount = parseStoredObject(window.localStorage.getItem(accountKey))
       const storedSession = parseStoredObject(window.localStorage.getItem(sessionKey))
       setAccount({ ...storedSession, ...storedAccount })
-      setLeaveNotifications(loadLeaveRequests())
+      const localLeaves = loadLeaveRequests()
+      try {
+        const actorName = storedAccount.fullName || storedSession.fullName || storedAccount.name || storedSession.name || storedAccount.email || storedSession.email || 'HR User'
+        const hrHeaders = {
+          'x-hr-role': 'HR',
+          'x-hr-user-name': actorName,
+        }
+        const [serverLeaves, serverNotifications] = await Promise.all([
+          listHrRecords<LeaveNotification>('leave-requests', hrHeaders),
+          listHrRecords<HrSystemNotification>('notifications', hrHeaders),
+        ])
+        const nextLeaves = uniqueLeaveNotifications([...serverLeaves, ...localLeaves])
+        if (!cancelled) setLeaveNotifications(current => nextLeaves.length > 0 || current.length === 0 ? nextLeaves : current)
+        if (!cancelled) setSystemNotifications(current => serverNotifications.length > 0 || current.length === 0 ? serverNotifications : current)
+      } catch {
+        if (!cancelled) setLeaveNotifications(current => localLeaves.length > 0 || current.length === 0 ? localLeaves : current)
+      }
       setAllowanceNotifications(loadStored<AllowanceRequest[]>(allowanceRequestKey, []))
     }
-    loadAccount()
+    void loadAccount()
     window.addEventListener('storage', loadAccount)
     window.addEventListener('focus', loadAccount)
     window.addEventListener('wiseflow:hr-data-changed', loadAccount)
     const timer = window.setInterval(loadAccount, 2500)
     return () => {
+      cancelled = true
       window.removeEventListener('storage', loadAccount)
       window.removeEventListener('focus', loadAccount)
       window.removeEventListener('wiseflow:hr-data-changed', loadAccount)
@@ -139,16 +191,40 @@ export default function HrShell({ children }: { children: React.ReactNode }) {
     setAccountMenuOpen(false)
     router.replace('/login')
   }
+  const notifiedLeaveIds = new Set(systemNotifications
+    .filter(notification => notification.relatedCollection === 'leave-requests' && notification.relatedId)
+    .map(notification => String(notification.relatedId)))
   const hrNotificationItems = [
-    ...pendingHrLeaveRequests.map(request => ({
+    ...systemNotifications
+      .filter(notification => String(notification.status || '').toLowerCase() !== 'archived')
+      .map(notification => ({
+        id: `system-${notification.id}`,
+        title: notification.title || 'HR notification',
+        detail: notification.detail || 'Open this HR update for details',
+        type: notification.type || 'Notification',
+        time: notification.updatedAt || notification.createdAt,
+        tone: '#1a73e8',
+        target: notification.employeeId ? `/hr/leave-requests/${encodeURIComponent(notification.employeeId)}` : '/hr/leave-requests',
+      })),
+    ...leaveNotifications
+      .filter(request => String(request.status || '').toLowerCase() !== 'draft' && !notifiedLeaveIds.has(request.id))
+      .map(request => {
+        const isPending = pendingHrLeaveRequests.some(item => item.id === request.id)
+        const status = String(request.status || 'Pending')
+        return {
       id: `leave-${request.id}`,
-      title: `${request.employeeName || 'Employee'} requested ${request.leaveType}`,
-      detail: `${request.days} day${Number(request.days || 0) === 1 ? '' : 's'} needs HR review`,
+      title: isPending
+        ? `${request.employeeName || 'Employee'} requested ${request.leaveType}`
+        : `${request.employeeName || 'Employee'} ${status.toLowerCase()} ${request.leaveType}`,
+      detail: isPending
+        ? `${request.days} day${Number(request.days || 0) === 1 ? '' : 's'} needs HR review`
+        : `${request.days} day${Number(request.days || 0) === 1 ? '' : 's'} - ${status}`,
       type: 'Leave request',
-      time: request.createdAt,
-      tone: '#1a73e8',
-      target: '/hr/leave-requests',
-    })),
+      time: request.updatedAt || request.createdAt,
+      tone: notificationTone(status),
+      target: request.employeeId ? `/hr/leave-requests/${encodeURIComponent(request.employeeId)}` : '/hr/leave-requests',
+        }
+      }),
     ...approvedAllowanceUpdates.map(request => ({
       id: `allowance-${request.id}`,
       title: `${request.employeeName} ${request.type.toLowerCase()} allowance approved`,

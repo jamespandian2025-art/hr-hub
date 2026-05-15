@@ -39,6 +39,7 @@ export default function ApplyLeavePage() {
   const [halfDay, setHalfDay] = useState(false)
   const [attachments, setAttachments] = useState<Array<{ name: string; size: number; type: string; dataUrl?: string }>>([])
   const [notice, setNotice] = useState('')
+  const [isSubmitting, setIsSubmitting] = useState(false)
   const isWorkFromHome = leaveType === 'Work From Home'
   const days = halfDay ? 0.5 : daysBetweenInclusive(startDate, endDate)
   const balances = leaveBalanceFor(myLeaveRequests)
@@ -88,6 +89,7 @@ export default function ApplyLeavePage() {
   }
 
   const submit = async () => {
+    if (isSubmitting) return
     setNotice('')
     if (!startDate || !endDate || !days) {
       setNotice('Please choose a valid start and end date.')
@@ -102,18 +104,23 @@ export default function ApplyLeavePage() {
       return
     }
     const request = buildRequest('Pending')
-    const requests = loadStored<LeaveRequest[]>(leaveRequestKey, [])
-    saveStored(leaveRequestKey, [request, ...requests])
-    const outbox = loadStored<LeaveRequest[]>(employeeLeaveOutboxKey, [])
-    saveStored(employeeLeaveOutboxKey, [request, ...outbox.filter(item => item.id !== request.id)])
+    setIsSubmitting(true)
     try {
-      await createHrRecord<LeaveRequest>('leave-requests', request as unknown as Record<string, unknown>)
+      const syncedRequest = await createHrRecord<LeaveRequest>('leave-requests', request as unknown as Record<string, unknown>)
+      const requests = loadStored<LeaveRequest[]>(leaveRequestKey, [])
+      saveStored(leaveRequestKey, [syncedRequest, ...requests.filter(item => item.id !== syncedRequest.id)])
+      const outbox = loadStored<LeaveRequest[]>(employeeLeaveOutboxKey, [])
+      saveStored(employeeLeaveOutboxKey, [syncedRequest, ...outbox.filter(item => item.id !== syncedRequest.id)])
+      window.dispatchEvent(new Event('storage'))
+      window.dispatchEvent(new Event('wiseflow:hr-data-changed'))
+      router.push('/employee/leave-requests')
     } catch (error) {
       console.error('Could not sync leave request to HR inbox', error)
+      const message = error instanceof Error ? error.message : 'HR backend request failed.'
+      setNotice(`Could not send this request to HR yet: ${message}`)
+    } finally {
+      setIsSubmitting(false)
     }
-    window.dispatchEvent(new Event('storage'))
-    window.dispatchEvent(new Event('wiseflow:hr-data-changed'))
-    router.push('/employee/leave-requests')
   }
 
   return (
@@ -176,7 +183,7 @@ export default function ApplyLeavePage() {
 
           <div style={actionBarStyle}>
             <button type="button" onClick={saveDraft} className="employee-secondary-button">Save as Draft</button>
-            <button type="button" onClick={submit} className="employee-primary-button">Submit to HR</button>
+            <button type="button" onClick={submit} disabled={isSubmitting} className="employee-primary-button">{isSubmitting ? 'Sending...' : 'Submit to HR'}</button>
           </div>
         </section>
 

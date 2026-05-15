@@ -41,9 +41,12 @@ async function parseResponse<T>(response: Response): Promise<T> {
   return payload as T
 }
 
-export async function listHrRecords<T>(collection: HrCollection) {
+export async function listHrRecords<T>(collection: HrCollection, headers: Record<string, string> = {}) {
   const response = await fetch(`/api/hr/records/${collection}`, {
-    headers: actorHeaders(),
+    headers: {
+      ...actorHeaders(),
+      ...headers,
+    },
     cache: 'no-store',
   })
   const payload = await parseResponse<{ ok: true; records: T[] }>(response)

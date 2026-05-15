@@ -12,6 +12,7 @@ import {
   loadLeaveRequests, loadStored, normalizeStatus, saveStored, statusTone,
   type Employee, type LeaveRequest, type LeaveRow, type LeaveStatus,
 } from '../leaveData'
+import { listHrRecords, updateHrRecord } from '@/lib/hrms/client'
 
 const font = "var(--font-body)"
 const detailTabs = ['Overview', 'Attendance', 'Leave Requests', 'Leave Balance', 'Calendar', 'Documents', 'Activity'] as const
@@ -27,6 +28,46 @@ const leaveEntitlements = [
   { type: 'Unpaid Leave', total: 10, color: '#64748b' },
 ]
 
+function lookupKey(value?: string) {
+  return String(value || '').toLowerCase().replace(/[^a-z0-9]/g, '')
+}
+
+function nameParts(name: string) {
+  const parts = name.trim().split(/\s+/).filter(Boolean)
+  if (parts.length <= 1) return { firstName: parts[0] || 'Employee', lastName: '' }
+  return { firstName: parts.slice(0, -1).join(' '), lastName: parts[parts.length - 1] }
+}
+
+function uniqueRequests(rows: LeaveRequest[]) {
+  const map = new Map<string, LeaveRequest>()
+  rows.forEach((row, index) => {
+    const key = row.id || `leave-${index}`
+    map.set(key, { ...map.get(key), ...row })
+  })
+  return Array.from(map.values())
+}
+
+function employeeFromLeaveRow(row?: LeaveRow): Employee | null {
+  if (!row) return null
+  const parsedName = nameParts(row.employeeName || row.employeeId || 'Employee')
+  return {
+    id: row.employeeId,
+    employeeId: row.employeeCode || row.employeeId,
+    firstName: parsedName.firstName,
+    lastName: parsedName.lastName,
+    email: '',
+    phone: '',
+    employeeType: 'Employee',
+    employmentStatus: 'Active',
+    dateOfJoining: '',
+    department: row.department && row.department !== '-' ? row.department : '',
+    team: '',
+    jobTitle: row.jobTitle && row.jobTitle !== '-' ? row.jobTitle : '',
+    createdAt: row.createdAt,
+    updatedAt: row.updatedAt || row.createdAt,
+  }
+}
+
 export default function EmployeeLeaveRequestsPage() {
   const params = useParams<{ id: string }>()
   const router = useRouter()
@@ -41,13 +82,30 @@ export default function EmployeeLeaveRequestsPage() {
   const menuRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
-    const load = () => {
+    let cancelled = false
+    const load = async () => {
       setEmployees(loadStored<Employee[]>(employeeKey, []))
-      setRequests(loadLeaveRequests())
+      const localRequests = loadLeaveRequests()
+      try {
+        const serverRequests = await listHrRecords<LeaveRequest>('leave-requests')
+        const merged = uniqueRequests([...serverRequests, ...localRequests])
+        if (!cancelled) setRequests(current => merged.length > 0 || current.length === 0 ? merged : current)
+      } catch {
+        if (!cancelled) setRequests(current => localRequests.length > 0 || current.length === 0 ? localRequests : current)
+      }
     }
-    load()
+    void load()
     window.addEventListener('storage', load)
-    return () => window.removeEventListener('storage', load)
+    window.addEventListener('focus', load)
+    window.addEventListener('wiseflow:hr-data-changed', load)
+    const timer = window.setInterval(load, 2500)
+    return () => {
+      cancelled = true
+      window.removeEventListener('storage', load)
+      window.removeEventListener('focus', load)
+      window.removeEventListener('wiseflow:hr-data-changed', load)
+      window.clearInterval(timer)
+    }
   }, [])
 
   useEffect(() => {
@@ -60,15 +118,19 @@ export default function EmployeeLeaveRequestsPage() {
 
   const employee = useMemo(() => {
     const id = decodeURIComponent(String(params.id || ''))
-    return employees.find(item => item.id === id || item.employeeId === id) || null
+    const cleanId = lookupKey(id)
+    return employees.find(item => lookupKey(item.id) === cleanId || lookupKey(item.employeeId) === cleanId) || null
   }, [employees, params.id])
 
   const employeeRows = useMemo(() => {
     const id = decodeURIComponent(String(params.id || ''))
+    const cleanId = lookupKey(id)
     return buildRows(employees, requests)
-      .filter(row => row.employee?.id === id || row.employeeCode === id || row.employeeId === id)
+      .filter(row => lookupKey(row.employee?.id) === cleanId || lookupKey(row.employeeCode) === cleanId || lookupKey(row.employeeId) === cleanId)
       .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
   }, [employees, params.id, requests])
+
+  const profileEmployee = useMemo(() => employee || employeeFromLeaveRow(employeeRows[0]), [employee, employeeRows])
 
   const visibleRows = useMemo(() => {
     const clean = query.trim().toLowerCase()
@@ -120,24 +182,33 @@ export default function EmployeeLeaveRequestsPage() {
     saveStored(leaveRequestKey, next)
   }
 
-  function updateStatus(row: LeaveRow, status: LeaveStatus) {
-    persist(requests.map(request => {
+  async function updateStatus(row: LeaveRow, status: LeaveStatus) {
+    const next = requests.map(request => {
       if (request.id !== row.id) return request
       if (status === 'Cancelled') return { ...request, status, approvalStep: 'complete' as const, updatedAt: new Date().toISOString() }
       if (status === 'Pending') return { ...request, status, updatedAt: new Date().toISOString() }
       return decideLeaveRequest(request, row.employee, 'hr', status)
-    }))
+    })
+    persist(next)
+    const changed = next.find(request => request.id === row.id)
+    if (changed) {
+      try {
+        await updateHrRecord<LeaveRequest>('leave-requests', changed.id, changed as unknown as Record<string, unknown>)
+      } catch (error) {
+        console.error('Could not sync leave request decision', error)
+      }
+    }
     setMenuId(null)
   }
 
   function exportRows() {
-    downloadCsv(`${employee ? fullName(employee) || employee.employeeId : 'employee'}-leave-requests.csv`, [
+    downloadCsv(`${profileEmployee ? fullName(profileEmployee) || profileEmployee.employeeId : 'employee'}-leave-requests.csv`, [
       ['Request ID', 'Leave Type', 'Duration', 'Dates', 'Reason', 'Status', 'Applied On'],
       ...visibleRows.map(row => [row.id, row.leaveType, `${row.days} day${row.days === 1 ? '' : 's'}`, dateSpan(row), row.reason || '', normalizeStatus(row.status), formatDateTime(row.createdAt)]),
     ])
   }
 
-  if (!employee && employees.length > 0) {
+  if (!profileEmployee && requests.length > 0) {
     return (
       <div className="hr-module-page" style={{ fontFamily: font }}>
         <button onClick={() => router.push('/hr/leave-requests')} style={secondaryButtonStyle}><ArrowLeft size={15} /> Back to leave requests</button>
@@ -146,8 +217,8 @@ export default function EmployeeLeaveRequestsPage() {
     )
   }
 
-  const name = fullName(employee || undefined) || '-'
-  const status = employee?.employmentStatus || 'Active'
+  const name = fullName(profileEmployee || undefined) || employeeRows[0]?.employeeName || '-'
+  const status = profileEmployee?.employmentStatus || 'Active'
 
   return (
     <div className="hr-module-page" style={{ fontFamily: font }}>
@@ -157,30 +228,30 @@ export default function EmployeeLeaveRequestsPage() {
           <div>
             <button onClick={() => router.push('/hr/leave-requests')} style={{ ...secondaryIconButtonStyle, marginBottom: 16 }}><ArrowLeft size={16} /></button>
             <div style={{ display: 'flex', alignItems: 'center', gap: 22 }}>
-              <Avatar employee={employee || undefined} name={name} size={104} />
+              <Avatar employee={profileEmployee || undefined} name={name} size={104} />
               <div style={{ minWidth: 0 }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
                   <h1 style={{ margin: 0, color: '#0f172a', fontSize: 26 }}>{name}</h1>
                   <span style={{ ...pillStyle, background: '#dcfce7', color: '#15803d' }}>{status}</span>
                 </div>
-                <div style={{ marginTop: 6, color: '#475569', fontSize: 13 }}>{employee?.jobTitle || '-'} <span style={{ color: '#cbd5e1' }}>â€¢</span> <strong style={{ color: '#4f46e5' }}>{employee?.employeeId || employee?.id || '-'}</strong></div>
+                <div style={{ marginTop: 6, color: '#475569', fontSize: 13 }}>{profileEmployee?.jobTitle || '-'} <span style={{ color: '#cbd5e1' }}>â€¢</span> <strong style={{ color: '#4f46e5' }}>{profileEmployee?.employeeId || profileEmployee?.id || '-'}</strong></div>
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: '10px 28px', marginTop: 18, color: '#334155', fontSize: 12 }}>
-                  <Info icon={Briefcase} text={employee?.department || '-'} />
-                  <Info icon={Users} text={employee?.team || '-'} />
-                  <Info icon={Mail} text={employee?.email || '-'} />
-                  <Info icon={Phone} text={employee?.phone || '-'} />
-                  <Info icon={MapPin} text={employee?.workLocation || employee?.address || '-'} />
+                  <Info icon={Briefcase} text={profileEmployee?.department || '-'} />
+                  <Info icon={Users} text={profileEmployee?.team || '-'} />
+                  <Info icon={Mail} text={profileEmployee?.email || '-'} />
+                  <Info icon={Phone} text={profileEmployee?.phone || '-'} />
+                  <Info icon={MapPin} text={profileEmployee?.workLocation || profileEmployee?.address || '-'} />
                 </div>
               </div>
             </div>
           </div>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 18, alignContent: 'start' }}>
-            <ProfileFact label="Employment Type" value={employee?.employeeType || '-'} />
-            <ProfileFact label="Date of Joining" value={formatLongDate(employee?.dateOfJoining)} />
-            <ProfileFact label="Reporting Manager" value={employee?.reportsTo || '-'} />
-            <ProfileFact label="Work Schedule" value={employee?.shift || '-'} />
+            <ProfileFact label="Employment Type" value={profileEmployee?.employeeType || '-'} />
+            <ProfileFact label="Date of Joining" value={formatLongDate(profileEmployee?.dateOfJoining)} />
+            <ProfileFact label="Reporting Manager" value={profileEmployee?.reportsTo || '-'} />
+            <ProfileFact label="Work Schedule" value={profileEmployee?.shift || '-'} />
             <div style={{ gridColumn: '1 / -1', display: 'flex', justifyContent: 'flex-end', gap: 10 }}>
-              <button onClick={() => router.push(`/hr/employees/${employee?.id}`)} style={secondaryButtonStyle}><Pencil size={14} /> Edit</button>
+              <button onClick={() => router.push(`/hr/employees/${profileEmployee?.id}`)} style={secondaryButtonStyle}><Pencil size={14} /> Edit</button>
               <button onClick={exportRows} style={secondaryButtonStyle}><Download size={14} /> Export</button>
             </div>
           </div>
@@ -220,7 +291,7 @@ export default function EmployeeLeaveRequestsPage() {
             <div style={cardStyle}>
               <SectionTitle title="Attendance" />
               <div style={{ color: '#475569', fontSize: 13, lineHeight: 1.6, marginBottom: 16 }}>Attendance records are managed in the attendance module.</div>
-              <button onClick={() => router.push(`/hr/attendance/${employee?.id}`)} style={secondaryButtonStyle}>Open Attendance Records</button>
+              <button onClick={() => router.push(`/hr/attendance/${profileEmployee?.id}`)} style={secondaryButtonStyle}>Open Attendance Records</button>
             </div>
           )}
 
@@ -332,7 +403,7 @@ export default function EmployeeLeaveRequestsPage() {
             <div style={cardStyle}>
               <SectionTitle title="Documents" />
               <div style={{ color: '#475569', fontSize: 13, lineHeight: 1.6, marginBottom: 16 }}>Employee documents are stored in the employee profile and HR documents module.</div>
-              <button onClick={() => router.push(`/hr/employees/${employee?.id}`)} style={secondaryButtonStyle}>Open Employee Profile</button>
+              <button onClick={() => router.push(`/hr/employees/${profileEmployee?.id}`)} style={secondaryButtonStyle}>Open Employee Profile</button>
             </div>
           )}
 
@@ -362,8 +433,8 @@ export default function EmployeeLeaveRequestsPage() {
           <div style={cardStyle}>
             <SectionTitle title="Manager" />
             <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
-              <span style={{ width: 38, height: 38, borderRadius: '50%', background: '#dcfce7', color: '#15803d', display: 'grid', placeItems: 'center', fontWeight: 900 }}>{initials(employee?.reportsTo || 'HR')}</span>
-              <div><strong style={{ color: '#0f172a', fontSize: 13 }}>{employee?.reportsTo || '-'}</strong><div style={{ color: '#64748b', fontSize: 12 }}>Manager</div></div>
+              <span style={{ width: 38, height: 38, borderRadius: '50%', background: '#dcfce7', color: '#15803d', display: 'grid', placeItems: 'center', fontWeight: 900 }}>{initials(profileEmployee?.reportsTo || 'HR')}</span>
+              <div><strong style={{ color: '#0f172a', fontSize: 13 }}>{profileEmployee?.reportsTo || '-'}</strong><div style={{ color: '#64748b', fontSize: 12 }}>Manager</div></div>
             </div>
           </div>
         </aside>

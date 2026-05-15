@@ -65,9 +65,10 @@ export default function HrLeaveRequestsPage() {
       const localRequests = loadLeaveRequests()
       try {
         const serverRequests = await listHrRecords<LeaveRequest>('leave-requests')
-        if (!cancelled) setRequests(uniqueRequests([...serverRequests, ...localRequests]))
+        const nextRequests = uniqueRequests([...serverRequests, ...localRequests])
+        if (!cancelled) setRequests(current => nextRequests.length > 0 || current.length === 0 ? nextRequests : current)
       } catch {
-        if (!cancelled) setRequests(localRequests)
+        if (!cancelled) setRequests(current => localRequests.length > 0 || current.length === 0 ? localRequests : current)
       }
     }
     load()
