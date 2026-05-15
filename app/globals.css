@@ -3736,7 +3736,43 @@ html body {
   }
 
   .sales-page [style*='grid-template-columns: repeat(auto-fit, minmax(210px'] {
-    grid-template-columns: 1fr !important;
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  }
+
+  .sales-page .sales-metric-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+    gap: 10px !important;
+  }
+
+  .sales-page .sales-metric-card {
+    min-height: 150px !important;
+    padding: 12px !important;
+    align-items: flex-start !important;
+    flex-direction: column !important;
+    gap: 10px !important;
+  }
+
+  .sales-page .sales-metric-icon {
+    width: 42px !important;
+    height: 42px !important;
+    border-radius: 12px !important;
+  }
+
+  .sales-page .sales-stat-label {
+    font-size: 11px !important;
+    line-height: 1.25 !important;
+  }
+
+  .sales-page .sales-stat-value {
+    font-size: 18px !important;
+    line-height: 1.12 !important;
+    margin-top: 5px !important;
+  }
+
+  .sales-page .sales-stat-detail {
+    font-size: 11px !important;
+    line-height: 1.25 !important;
+    margin-top: 7px !important;
   }
 
   .sales-page [style*='grid-template-columns: 1fr 1fr'] {

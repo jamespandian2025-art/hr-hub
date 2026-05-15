@@ -464,7 +464,7 @@ export default function SalesPage() {
 
       <WorkflowStrip />
 
-      <div style={metricGrid}>
+      <div className="sales-metric-grid" style={metricGrid}>
         <MetricCard icon={<CircleDollarSign size={23} />} label="Total Revenue" value={money(revenue)} detail={`${money(paidRevenue)} collected`} tone="#16a34a" />
         <MetricCard icon={<ShoppingBag size={23} />} label="Total Orders" value={String(orders.length)} detail={`${orders.filter(item => item.deliveryStatus !== 'Delivered').length} open deliveries`} tone="#2563eb" />
         <MetricCard icon={<BarChart3 size={23} />} label="Average Order Value" value={money(aov)} detail="Across confirmed orders" tone="#7c3aed" />
@@ -708,7 +708,7 @@ function PageHeader({ title, subtitle, actions }: { title: string; subtitle: str
 }
 
 function MetricCard({ icon, label, value, detail, tone }: { icon: ReactNode; label: string; value: string; detail: string; tone: string }) {
-  return <div style={metricCard}><span style={softIcon(tone)}>{icon}</span><div style={{ minWidth: 0 }}><div style={statLabel}>{label}</div><div style={statValue}>{value}</div><div style={statDetail}>{detail}</div></div></div>
+  return <div className="sales-metric-card" style={metricCard}><span className="sales-metric-icon" style={softIcon(tone)}>{icon}</span><div style={{ minWidth: 0 }}><div className="sales-stat-label" style={statLabel}>{label}</div><div className="sales-stat-value" style={statValue}>{value}</div><div className="sales-stat-detail" style={statDetail}>{detail}</div></div></div>
 }
 
 function PerformanceChart({ orders }: { orders: SalesOrder[] }) {
