@@ -562,9 +562,9 @@ function Overview({ orders, invoices, reps, categories, pipeline, onCreateInvoic
 function WorkflowStrip() {
   const steps = ['Lead', 'Opportunity', 'Quote', 'Sales Order', 'Invoice', 'Payment', 'Delivery']
   return (
-    <div style={workflowStrip}>
+    <div className="sales-workflow-strip" style={workflowStrip}>
       {steps.map((step, index) => (
-        <div key={step} style={workflowStep}>
+        <div key={step} className="sales-workflow-step" style={workflowStep}>
           <span style={workflowNumber}>{index + 1}</span>
           <span>{step}</span>
         </div>

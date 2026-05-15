@@ -3735,6 +3735,31 @@ html body {
     padding: 16px !important;
   }
 
+  .sales-page .sales-workflow-strip {
+    grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+    gap: 8px !important;
+  }
+
+  .sales-page .sales-workflow-step {
+    min-height: 46px !important;
+    padding: 0 8px !important;
+    gap: 6px !important;
+    font-size: 11px !important;
+  }
+
+  .sales-page .sales-workflow-step span:first-child {
+    width: 22px !important;
+    height: 22px !important;
+    font-size: 10px !important;
+    flex: 0 0 auto !important;
+  }
+
+  .sales-page .sales-workflow-step span:last-child {
+    min-width: 0 !important;
+    overflow-wrap: anywhere !important;
+    line-height: 1.15 !important;
+  }
+
   .sales-page [style*='grid-template-columns: repeat(auto-fit, minmax(210px'] {
     grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
   }
