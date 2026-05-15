@@ -88,6 +88,8 @@ export default function NewLoanRequestPage() {
 
     const requests = loadStored<LoanRequest[]>(loanRequestKey, [])
     saveStored(loanRequestKey, [request, ...requests])
+    window.dispatchEvent(new Event('storage'))
+    window.dispatchEvent(new Event('wiseflow:finance-requests-changed'))
     appendSystemNotification(
       `${employeeName} requested ${selectedRequestType.toLowerCase()}`,
       `${employeeName} submitted a ${money(amountValue)} ${selectedRequestType.toLowerCase()} request. Finance must approve payment terms before payroll deduction.`,

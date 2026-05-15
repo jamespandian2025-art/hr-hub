@@ -59,6 +59,7 @@ export default function EmployeeAllowancesPage() {
     }
     saveStored(allowanceRequestKey, [request, ...requests])
     window.dispatchEvent(new Event('storage'))
+    window.dispatchEvent(new Event('wiseflow:finance-requests-changed'))
     appendAuditLog({ action: 'allowance.change', targetType: 'Allowance Request', targetId: request.id, summary: `${employeeName} filed ${displayType} allowance for ${amountValue}.` })
     setAmount('')
     setPurpose('')

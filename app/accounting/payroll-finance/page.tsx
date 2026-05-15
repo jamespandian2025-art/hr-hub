@@ -64,6 +64,7 @@ type PayrollRecord = {
 }
 
 const payrollRecordKey = 'flowsys-hr-payroll-records'
+const financeRefreshEvent = 'wiseflow:finance-requests-changed'
 
 function money(value: number) {
   return `PHP ${Number(value || 0).toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
@@ -71,6 +72,28 @@ function money(value: number) {
 
 function StatusPill({ value }: { value: string }) {
   return <span className={`payroll-pill ${value.toLowerCase().replaceAll(' ', '-')}`}>{value}</span>
+}
+
+function uniqueRows<T extends { id?: string }>(rows: T[]) {
+  const map = new Map<string, T>()
+  rows.forEach((row, index) => {
+    const key = row.id || `row-${index}`
+    map.set(key, { ...map.get(key), ...row })
+  })
+  return Array.from(map.values())
+}
+
+function loadAllStoredRows<T extends { id?: string }>(baseKey: string, loader: <V>(key: string, fallback: V) => V) {
+  const baseRows = loader<T[]>(baseKey, [])
+  if (typeof window === 'undefined') return Array.isArray(baseRows) ? baseRows : []
+  const rows = Array.isArray(baseRows) ? [...baseRows] : []
+  for (let index = 0; index < window.localStorage.length; index += 1) {
+    const key = window.localStorage.key(index)
+    if (!key || key === baseKey || !key.startsWith(`${baseKey}:`)) continue
+    const scopedRows = loader<T[]>(key, [])
+    if (Array.isArray(scopedRows)) rows.push(...scopedRows)
+  }
+  return uniqueRows(rows)
 }
 
 function isActiveEmployee(employee: Employee) {
@@ -155,17 +178,21 @@ export default function PayrollFinancePage() {
   useEffect(() => {
     const loadFinanceData = () => {
       setEmployees(loadStored<Employee[]>(employeeKey, []))
-      setLoanRequests(loadStored<LoanRequest[]>(loanRequestKey, []))
-      setAllowanceRequests(loadEnterpriseStored<AllowanceRequest[]>(allowanceRequestKey, []))
-      setPayrollRecords(loadStored<PayrollRecord[]>(payrollRecordKey, []))
+      setLoanRequests(loadAllStoredRows<LoanRequest>(loanRequestKey, loadStored))
+      setAllowanceRequests(loadAllStoredRows<AllowanceRequest>(allowanceRequestKey, loadEnterpriseStored))
+      setPayrollRecords(loadAllStoredRows<PayrollRecord>(payrollRecordKey, loadStored))
     }
 
     loadFinanceData()
     window.addEventListener('storage', loadFinanceData)
     window.addEventListener('focus', loadFinanceData)
+    window.addEventListener(financeRefreshEvent, loadFinanceData)
+    const timer = window.setInterval(loadFinanceData, 2500)
     return () => {
       window.removeEventListener('storage', loadFinanceData)
       window.removeEventListener('focus', loadFinanceData)
+      window.removeEventListener(financeRefreshEvent, loadFinanceData)
+      window.clearInterval(timer)
     }
   }, [])
 
@@ -209,6 +236,7 @@ export default function PayrollFinancePage() {
     const nextRequests = loanRequests.map(item => item.id === request.id ? decideLoanRequest(item, employee, 'finance', decision) : item)
     setLoanRequests(nextRequests)
     saveLoanRequests(nextRequests)
+    window.dispatchEvent(new Event(financeRefreshEvent))
     setNotice(`${loanDisplayName(request)} for ${request.employeeName || fullName(employee) || 'employee'} ${decision.toLowerCase()} by Finance. ${decision === 'Approved' ? 'HR can now include it in final payroll.' : 'The employee request was rejected.'}`)
   }
 
@@ -240,6 +268,7 @@ export default function PayrollFinancePage() {
     setAllowanceRequests(next)
     saveEnterpriseStored(allowanceRequestKey, next)
     window.dispatchEvent(new Event('storage'))
+    window.dispatchEvent(new Event(financeRefreshEvent))
     setNotice(`${request.customType || request.type} allowance for ${request.employeeName || 'employee'} ${decision.toLowerCase()} by Finance.`)
   }
 
@@ -276,6 +305,35 @@ export default function PayrollFinancePage() {
       </section>
 
       {notice && <div className="payroll-notice"><span>{notice}</span><button type="button" onClick={() => setNotice('')}>Dismiss</button></div>}
+
+      <section className="payroll-card payroll-inbox-card">
+        <div className="payroll-panel-header">
+          <div>
+            <h2>Employee Request Inbox</h2>
+            <p className="payroll-section-subtitle">Live requests submitted from the Employee portal for Finance review.</p>
+          </div>
+          <strong className="payroll-inbox-count">{pendingFinanceLoans.length + pendingFinanceAllowances.length} waiting</strong>
+        </div>
+        <div className="payroll-request-grid payroll-request-grid-top">
+          <section>
+            <h3>Loans & Cash Advances</h3>
+            <LoanRequestList
+              requests={loanRequests}
+              employees={employees}
+              onApprove={request => saveLoanDecision(request, 'Approved')}
+              onReject={request => saveLoanDecision(request, 'Rejected')}
+            />
+          </section>
+          <section>
+            <h3>Allowances</h3>
+            <AllowanceRequestList
+              requests={allowanceRequests}
+              onApprove={request => saveAllowanceDecision(request, 'Approved')}
+              onReject={request => saveAllowanceDecision(request, 'Rejected')}
+            />
+          </section>
+        </div>
+      </section>
 
       <nav className="payroll-tabs" aria-label="Payroll finance sections">
         {['Payroll Overview', 'Employees', 'Earnings', 'Deductions', 'Taxes & Contributions', 'Payments', 'Journal Entries', 'Payroll History'].map((tab, index) => <button key={tab} className={index === 0 ? 'is-active' : undefined}>{tab}</button>)}
@@ -366,23 +424,6 @@ export default function PayrollFinancePage() {
           ))}
         </div>
         <div className="payroll-request-grid">
-          <section>
-            <h3>Loan & Cash Advance Requests</h3>
-            <LoanRequestList
-              requests={loanRequests}
-              employees={employees}
-              onApprove={request => saveLoanDecision(request, 'Approved')}
-              onReject={request => saveLoanDecision(request, 'Rejected')}
-            />
-          </section>
-          <section>
-            <h3>Allowance Requests</h3>
-            <AllowanceRequestList
-              requests={allowanceRequests}
-              onApprove={request => saveAllowanceDecision(request, 'Approved')}
-              onReject={request => saveAllowanceDecision(request, 'Rejected')}
-            />
-          </section>
           <section>
             <h3>Final Payroll Queue</h3>
             <PayrollQueue records={finalPayrollQueue} employees={employees} onApprove={approveFinalPayroll} onRelease={releasePay} />
@@ -554,6 +595,9 @@ const payrollCss = `
 .payroll-card { background: #fff; border: 1px solid #e8edf4; border-radius: 8px; padding: 18px; box-shadow: 0 1px 2px rgba(15, 23, 42, .03); }
 .payroll-notice { display: flex; justify-content: space-between; gap: 12px; align-items: center; border: 1px solid #bbf7d0; background: #f0fdf4; color: #166534; border-radius: 8px; padding: 12px 14px; margin-bottom: 16px; font-size: 13px; font-weight: 900; }
 .payroll-notice button { border: 0; background: transparent; color: #166534; font-weight: 900; cursor: pointer; }
+.payroll-inbox-card { margin-bottom: 16px; }
+.payroll-inbox-count { min-height: 30px; border-radius: 999px; background: #dcfce7; color: #15803d; display: inline-flex; align-items: center; padding: 0 12px; font-size: 12px; font-weight: 950; white-space: nowrap; }
+.payroll-request-grid-top { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; }
 .payroll-metric-card { min-height: 100px; display: flex; align-items: center; }
 .payroll-metric-icon { width: 54px; height: 54px; border-radius: 9px; display: grid; place-items: center; margin-right: 16px; flex: 0 0 auto; }
 .payroll-label { display: block; color: #475569; font-size: 12px; font-weight: 850; }
