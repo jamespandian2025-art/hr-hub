@@ -6,12 +6,12 @@ import { usePathname, useRouter } from 'next/navigation'
 import {
   BadgeDollarSign,
   BookOpen,
-  BookOpenCheck,
   ChevronDown,
   ChevronLeft,
   ChevronRight,
   ClipboardList,
   FolderKanban,
+  HandCoins,
   LayoutDashboard,
   Settings,
   ShoppingCart,
@@ -71,10 +71,10 @@ const navSections: NavSection[] = [
     section: 'FINANCE & PEOPLE',
     items: [
       {
-        label: 'Accounting',
+        label: 'Financials',
         href: '/accounting',
-        icon: BookOpenCheck,
-        match: ['/accounting'],
+        icon: HandCoins,
+        match: ['/accounting', '/financial', '/financials'],
         newTab: true,
       },
       {
