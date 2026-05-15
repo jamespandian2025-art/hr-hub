@@ -594,12 +594,12 @@ function OrdersTab({ orders, onCreateInvoice, onUpdateDelivery, compact, view = 
     return <div className="sales-orders-card-grid" style={ordersCardGrid}>
       {orders.map(order => (
         <article key={order.id} style={orderCard}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10, alignItems: 'flex-start' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) auto', gap: 10, alignItems: 'flex-start' }}>
             <div style={{ minWidth: 0 }}>
               <strong style={{ display: 'block', color: '#020617', fontSize: 13 }}>{order.id}</strong>
               <span style={{ display: 'block', color: '#475569', fontSize: 12, fontWeight: 750, marginTop: 4, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{order.customer}</span>
             </div>
-            <strong style={{ color: '#020617', fontSize: 13, whiteSpace: 'nowrap' }}>{money(order.amount)}</strong>
+            <strong style={{ color: '#020617', fontSize: 13, whiteSpace: 'nowrap', minWidth: 0 }}>{money(order.amount)}</strong>
           </div>
           <div style={orderCardMeta}>
             <span><small>Payment</small><Badge text={order.paymentStatus} /></span>
@@ -634,12 +634,12 @@ function InvoicesTab({ invoices, onMarkPaid, compact, view = 'table' }: { invoic
     return <div className="sales-orders-card-grid" style={ordersCardGrid}>
       {invoices.map(invoice => (
         <article key={invoice.id} style={orderCard}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10, alignItems: 'flex-start' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) auto', gap: 10, alignItems: 'flex-start' }}>
             <div style={{ minWidth: 0 }}>
               <strong style={{ display: 'block', color: '#020617', fontSize: 13 }}>{invoice.id}</strong>
               <span style={{ display: 'block', color: '#475569', fontSize: 12, fontWeight: 750, marginTop: 4, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{invoice.customer}</span>
             </div>
-            <strong style={{ color: '#020617', fontSize: 13, whiteSpace: 'nowrap' }}>{money(invoice.amount)}</strong>
+            <strong style={{ color: '#020617', fontSize: 13, whiteSpace: 'nowrap', minWidth: 0 }}>{money(invoice.amount)}</strong>
           </div>
           <div style={orderCardMeta}>
             <span><small>Paid</small><strong style={{ color: '#0f172a', fontSize: 12 }}>{money(invoice.paidAmount)}</strong></span>
@@ -945,7 +945,7 @@ const repRow: CSSProperties = { display: 'flex', alignItems: 'center', gap: 12, 
 const repMeta: CSSProperties = { flex: 1, minWidth: 0, display: 'grid', gap: 2, gridTemplateColumns: 'minmax(0, 1fr)', color: '#0f172a' }
 const avatarStyle: CSSProperties = { width: 32, height: 32, borderRadius: 999, background: '#2563eb', color: '#fff', display: 'inline-grid', placeItems: 'center', fontSize: 12, fontWeight: 900, flex: '0 0 auto' }
 const dealPill: CSSProperties = { background: '#dcfce7', color: '#15803d', borderRadius: 999, padding: '4px 9px', fontSize: 11, fontWeight: 850, whiteSpace: 'nowrap' }
-const ordersCardGrid: CSSProperties = { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(210px, 1fr))', gap: 12, padding: 14 }
+const ordersCardGrid: CSSProperties = { display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 12, padding: 14 }
 const orderCard: CSSProperties = { border: '1px solid #e2e8f0', borderRadius: 10, padding: 14, display: 'grid', gap: 12, background: '#fff', boxShadow: '0 8px 22px rgba(15,23,42,.04)', minWidth: 0 }
 const orderCardMeta: CSSProperties = { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }
 const categoryLayout: CSSProperties = { display: 'grid', gridTemplateColumns: '150px minmax(0, 1fr)', alignItems: 'center', gap: 22, padding: 18 }
