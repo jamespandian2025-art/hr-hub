@@ -143,7 +143,7 @@ export default function DesignSystemPage() {
         <div>
           <div style={{ fontSize: 10, fontWeight: 700, color: '#9ca3af', letterSpacing: '1px', textTransform: 'uppercase', marginBottom: 12 }}>Typography</div>
           <div style={{ fontSize: 42, fontWeight: 700, color: '#111827', lineHeight: 1, letterSpacing: '-2px', marginBottom: 8 }}>Aa</div>
-          <div style={{ fontSize: 16, fontWeight: 700, color: '#111827', marginBottom: 3 }}>Inter</div>
+          <div style={{ fontSize: 16, fontWeight: 700, color: '#111827', marginBottom: 3 }}>Public Sans</div>
           <div style={{ fontSize: 11, color: '#6b7280', lineHeight: 1.5, marginBottom: 12 }}>Clean, modern and highly readable typeface for enterprise interfaces.</div>
           <div style={{ display: 'grid', gap: 5 }}>
             {typeScale.map(t => (

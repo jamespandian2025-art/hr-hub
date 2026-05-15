@@ -44,8 +44,8 @@ html[data-theme='light'] {
   --wf-paper:             #FFFFFF;
   --wf-soft:              #F8FAFD;
   --wf-border:            #E5E7EB;
-  --font-display:         var(--font-inter), Inter, Arial, "Apple Color Emoji", "Segoe UI Emoji", sans-serif;
-  --font-body:            var(--font-inter), Inter, Arial, "Apple Color Emoji", "Segoe UI Emoji", sans-serif;
+  --font-display:         var(--font-public-sans), "Public Sans", Arial, "Apple Color Emoji", "Segoe UI Emoji", sans-serif;
+  --font-body:            var(--font-public-sans), "Public Sans", Arial, "Apple Color Emoji", "Segoe UI Emoji", sans-serif;
 }
 
 /* â”€â”€ 2. WiseFlow Dark â”€â”€ */
@@ -213,8 +213,8 @@ html[data-theme='graphite'] {
   --wf-soft:              #000000;
   --wf-border:            #2A2A2A;
   --wf-paper:             #0A0A0A;
-  --font-display:         var(--font-inter), Inter, Arial, "Apple Color Emoji", "Segoe UI Emoji", sans-serif;
-  --font-body:            var(--font-inter), Inter, Arial, "Apple Color Emoji", "Segoe UI Emoji", sans-serif;
+  --font-display:         var(--font-public-sans), "Public Sans", Arial, "Apple Color Emoji", "Segoe UI Emoji", sans-serif;
+  --font-body:            var(--font-public-sans), "Public Sans", Arial, "Apple Color Emoji", "Segoe UI Emoji", sans-serif;
 }
 
 * {
