@@ -19,7 +19,11 @@ import {
 } from 'lucide-react'
 import { Employee, employeeKey, fullName, loadStored, saveStored } from '@/app/employee/employeeData'
 import {
+  applyFinanceLoanTerms,
+  calculateLoanScheduledDeduction,
   decideLoanRequest,
+  DeductionSchedule,
+  FinanceLoanTerms,
   loanApprovalState,
   LoanRequest,
   loanDisplayName,
@@ -327,9 +331,10 @@ export default function PayrollFinancePage() {
     { title: 'Net Pay', value: money(netPay), detail: grossPay ? `${((netPay / grossPay) * 100).toFixed(1)}% of gross pay` : 'No final payroll yet', icon: FileText, tone: '#ef4444' },
   ]
 
-  async function saveLoanDecision(request: LoanRequest, decision: 'Approved' | 'Rejected') {
+  async function saveLoanDecision(request: LoanRequest, decision: 'Approved' | 'Rejected', financeTerms?: FinanceLoanTerms) {
     const employee = resolveLoanEmployee(request, employees)
-    const decided = decideLoanRequest(request, employee, 'finance', decision)
+    const reviewedRequest = decision === 'Approved' && financeTerms ? applyFinanceLoanTerms(request, financeTerms) : request
+    const decided = decideLoanRequest(reviewedRequest, employee, 'finance', decision)
     const nextRequests = loanRequests.map(item => item.id === request.id ? decided : item)
     setLoanRequests(nextRequests)
     saveLoanRequests(nextRequests)
@@ -339,7 +344,10 @@ export default function PayrollFinancePage() {
       console.error('Could not sync Finance loan decision', error)
     }
     window.dispatchEvent(new Event(financeRefreshEvent))
-    setNotice(`${loanDisplayName(request)} for ${request.employeeName || fullName(employee) || 'employee'} ${decision.toLowerCase()} by Finance. ${decision === 'Approved' ? 'HR can now include it in final payroll.' : 'The employee request was rejected.'}`)
+    const approvedTerms = decision === 'Approved'
+      ? ` Approved terms: ${decided.repaymentMonths} month${decided.repaymentMonths === 1 ? '' : 's'}, ${loanMoney(loanScheduledDeduction(decided))} per ${decided.deductionSchedule || 'payroll'}. HR can now include it in final payroll.`
+      : ' The employee request was rejected.'
+    setNotice(`${loanDisplayName(request)} for ${request.employeeName || fullName(employee) || 'employee'} ${decision.toLowerCase()} by Finance.${approvedTerms}`)
   }
 
   function updatePayrollRecord(record: PayrollRecord, status: PayrollStatus, patch: Partial<PayrollRecord> = {}) {
@@ -581,7 +589,7 @@ export default function PayrollFinancePage() {
             <LoanRequestList
               requests={loanRequests}
               employees={employees}
-              onApprove={request => saveLoanDecision(request, 'Approved')}
+              onApprove={(request, financeTerms) => saveLoanDecision(request, 'Approved', financeTerms)}
               onReject={request => saveLoanDecision(request, 'Rejected')}
             />
           </section>
@@ -704,13 +712,42 @@ export default function PayrollFinancePage() {
   )
 }
 
-function LoanRequestList({ requests, employees, onApprove, onReject }: { requests: LoanRequest[]; employees: Employee[]; onApprove: (request: LoanRequest) => void; onReject: (request: LoanRequest) => void }) {
+const deductionSchedules: DeductionSchedule[] = ['15th payroll', '30th payroll', 'Twice a month', 'One-time']
+
+function LoanRequestList({ requests, employees, onApprove, onReject }: { requests: LoanRequest[]; employees: Employee[]; onApprove: (request: LoanRequest, financeTerms: FinanceLoanTerms) => void; onReject: (request: LoanRequest) => void }) {
+  const [termsByRequest, setTermsByRequest] = useState<Record<string, FinanceLoanTerms>>({})
   if (!requests.length) return <div className="payroll-empty">No employee loan or cash advance requests yet.</div>
+
+  const defaultTerms = (request: LoanRequest): FinanceLoanTerms => ({
+    repaymentMonths: Math.max(1, Number(request.financeApprovedRepaymentMonths || request.repaymentMonths || 1)),
+    deductionSchedule: request.financeApprovedDeductionSchedule || request.deductionSchedule || 'Twice a month',
+  })
+
+  const updateTerms = (request: LoanRequest, patch: Partial<FinanceLoanTerms>) => {
+    setTermsByRequest(current => ({
+      ...current,
+      [request.id]: {
+        ...defaultTerms(request),
+        ...(current[request.id] || {}),
+        ...patch,
+      },
+    }))
+  }
+
   return (
     <div className="payroll-request-list">
       {requests.map(request => {
         const employee = resolveLoanEmployee(request, employees)
         const state = loanApprovalState(request)
+        const financeTerms = termsByRequest[request.id] || defaultTerms(request)
+        const approvedDeduction = calculateLoanScheduledDeduction({
+          ...request,
+          repaymentMonths: financeTerms.repaymentMonths,
+          deductionSchedule: financeTerms.deductionSchedule,
+        })
+        const originalMonths = Number(request.requestedRepaymentMonths || request.repaymentMonths || 1)
+        const originalSchedule = request.requestedDeductionSchedule || request.deductionSchedule || 'Twice a month'
+        const termsAdjusted = financeTerms.repaymentMonths !== originalMonths || financeTerms.deductionSchedule !== originalSchedule
         return (
           <article key={request.id}>
             <div className="request-card-head">
@@ -723,15 +760,46 @@ function LoanRequestList({ requests, employees, onApprove, onReject }: { request
             <div className="request-card-body">
               <span><small>Request</small><strong>{loanDisplayName(request)}</strong></span>
               <span><small>Amount</small><strong>{loanMoney(request.amount)}</strong></span>
+              <span><small>Employee Requested</small><strong>{originalMonths} month{originalMonths === 1 ? '' : 's'}</strong><small>{originalSchedule}</small></span>
+              {request.financeApprovedRepaymentMonths ? <span><small>Finance Approved</small><strong>{request.financeApprovedRepaymentMonths} month{request.financeApprovedRepaymentMonths === 1 ? '' : 's'}</strong><small>{request.financeApprovedDeductionSchedule || request.deductionSchedule || 'Twice a month'}</small></span> : null}
               <span><small>Deduction</small><strong>{loanMoney(loanScheduledDeduction(request))}</strong></span>
               <span><small>Workflow</small><strong>{state.label}</strong></span>
             </div>
             <p>{request.reason || 'No reason provided.'}</p>
             {state.canFinanceDecide ? (
+              <>
+              <div className="loan-term-review">
+                <div className="loan-term-review-copy">
+                  <strong>Finance approved terms</strong>
+                  <small>Adjust the repayment months if the employee request is not applicable for this amount.</small>
+                </div>
+                <label>
+                  <span>Terms</span>
+                  <input
+                    type="number"
+                    min={1}
+                    max={60}
+                    value={financeTerms.repaymentMonths}
+                    onChange={event => updateTerms(request, { repaymentMonths: Math.max(1, Math.round(Number(event.target.value || 1))) })}
+                  />
+                </label>
+                <label>
+                  <span>Schedule</span>
+                  <select value={financeTerms.deductionSchedule} onChange={event => updateTerms(request, { deductionSchedule: event.target.value as DeductionSchedule })}>
+                    {deductionSchedules.map(schedule => <option key={schedule}>{schedule}</option>)}
+                  </select>
+                </label>
+                <span>
+                  <small>Approved deduction</small>
+                  <strong>{loanMoney(approvedDeduction)}</strong>
+                  {termsAdjusted ? <em>Terms adjusted by Finance</em> : <em>Matches employee request</em>}
+                </span>
+              </div>
               <div className="request-actions">
-                <button type="button" className="approve" onClick={() => onApprove(request)}><CheckCircle2 size={14} /> Approve for HR Payroll</button>
+                <button type="button" className="approve" onClick={() => onApprove(request, financeTerms)}><CheckCircle2 size={14} /> Approve for HR Payroll</button>
                 <button type="button" onClick={() => onReject(request)}><XCircle size={14} /> Reject</button>
               </div>
+              </>
             ) : null}
           </article>
         )
@@ -903,6 +971,13 @@ const payrollCss = `
 .request-card-body { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 10px; border-top: 1px solid #f1f5f9; padding-top: 12px; }
 .request-card-body strong { display: block; color: #0f172a; font-size: 12.5px; margin-top: 4px; }
 .payroll-request-list p { margin: 0; color: #475569; font-size: 12.5px; line-height: 1.45; }
+.loan-term-review { display: grid; grid-template-columns: minmax(180px, 1fr) 104px 150px minmax(150px, .9fr); gap: 10px; align-items: end; border: 1px solid #dbeafe; background: #f8fbff; border-radius: 8px; padding: 12px; }
+.loan-term-review-copy strong { display: block; color: #0f172a; font-size: 13px; font-weight: 950; }
+.loan-term-review-copy small, .loan-term-review span small, .loan-term-review label span { display: block; color: #64748b; font-size: 11px; font-weight: 850; line-height: 1.35; }
+.loan-term-review label { display: grid; gap: 6px; min-width: 0; }
+.loan-term-review input, .loan-term-review select { width: 100%; min-height: 36px; border: 1px solid #cbd5e1; border-radius: 8px; background: #fff; color: #0f172a; font: inherit; font-size: 12.5px; font-weight: 850; padding: 0 10px; }
+.loan-term-review span strong { display: block; color: #0f172a; font-size: 13px; margin-top: 4px; }
+.loan-term-review em { display: block; color: #16a34a; font-size: 11px; font-style: normal; font-weight: 900; margin-top: 4px; }
 .request-actions { display: flex; justify-content: flex-end; gap: 8px; flex-wrap: wrap; border-top: 1px solid #f1f5f9; padding-top: 12px; }
 .request-actions button { min-height: 34px; border: 1px solid #e8edf4; border-radius: 8px; background: #fff; color: #0f172a; display: inline-flex; align-items: center; gap: 7px; padding: 0 11px; font-size: 12px; font-weight: 900; cursor: pointer; }
 .request-actions .approve { border-color: #16a34a; background: #16a34a; color: #fff; }
@@ -970,6 +1045,7 @@ const payrollCss = `
   .payroll-metrics { grid-template-columns: repeat(3, minmax(180px, 1fr)); }
   .payroll-grid, .payroll-lower-grid { grid-template-columns: 1fr; }
   .payroll-flow-steps, .payroll-request-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .loan-term-review { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 @media (max-width: 900px) {
   .payroll-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
@@ -977,6 +1053,7 @@ const payrollCss = `
   .payroll-compliance-list div { grid-template-columns: 42px minmax(0, 1fr); }
   .payroll-pagination { flex-direction: column; align-items: flex-start; }
   .payroll-request-grid { grid-template-columns: 1fr; }
+  .loan-term-review { grid-template-columns: minmax(180px, 1fr) minmax(110px, .55fr); }
 }
 @media (max-width: 640px) {
   .payroll-page { padding: 16px; }
@@ -986,6 +1063,7 @@ const payrollCss = `
   .payroll-tabs { margin-left: -16px; margin-right: -16px; padding-left: 16px; padding-right: 16px; }
   .payroll-card { padding: 14px; }
   .payroll-flow-steps { grid-template-columns: 1fr; }
+  .loan-term-review { grid-template-columns: 1fr; }
   .payroll-bars { overflow-x: auto; grid-template-columns: repeat(6, 48px); }
   .payroll-task-list div { grid-template-columns: 42px minmax(0, 1fr); }
   .payroll-task-list .payroll-pill { grid-column: 2; justify-self: start; }

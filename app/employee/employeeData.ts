@@ -117,9 +117,16 @@ export type LoanRequest = {
   amount: number
   repaymentMonths: number
   repaymentAmount: number
+  requestedRepaymentMonths?: number
+  requestedDeductionSchedule?: '15th payroll' | '30th payroll' | 'Twice a month' | 'One-time'
   deductionSchedule?: '15th payroll' | '30th payroll' | 'Twice a month' | 'One-time'
   deductionPaused?: boolean
   deductionOverrideAmount?: number
+  financeApprovedRepaymentMonths?: number
+  financeApprovedDeductionSchedule?: '15th payroll' | '30th payroll' | 'Twice a month' | 'One-time'
+  financeApprovedRepaymentAmount?: number
+  financeTermsAdjusted?: boolean
+  financeTermsNote?: string
   reason?: string
   rejectionReason?: string
   status: 'Pending' | 'Approved' | 'Rejected' | 'Processed' | 'Cancelled'

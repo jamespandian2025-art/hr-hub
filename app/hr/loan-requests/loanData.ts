@@ -16,6 +16,11 @@ export type LoanApprovalDecision = 'Pending' | 'Approved' | 'Rejected' | 'Skippe
 export type LoanApprovalActor = 'finance'
 export type DeductionSchedule = '15th payroll' | '30th payroll' | 'Twice a month' | 'One-time'
 export type DeductionControlDecision = 'Full deduction' | 'Partial deduction' | 'Skip temporarily'
+export type FinanceLoanTerms = {
+  repaymentMonths: number
+  deductionSchedule?: DeductionSchedule
+  note?: string
+}
 
 export type LoanApprovalLog = {
   id: string
@@ -47,10 +52,17 @@ export type LoanRequest = {
   amount: number
   repaymentMonths: number
   repaymentAmount: number
+  requestedRepaymentMonths?: number
+  requestedDeductionSchedule?: DeductionSchedule
   deductionSchedule?: DeductionSchedule
   deductionPaused?: boolean
   deductionOverrideAmount?: number
   deductionControls?: LoanDeductionControl[]
+  financeApprovedRepaymentMonths?: number
+  financeApprovedDeductionSchedule?: DeductionSchedule
+  financeApprovedRepaymentAmount?: number
+  financeTermsAdjusted?: boolean
+  financeTermsNote?: string
   reason?: string
   rejectionReason?: string
   status: LoanRequestStatus
@@ -120,6 +132,33 @@ export function loanScheduledDeduction(request: LoanRequest) {
     return saved
   }
   return expected
+}
+
+export function applyFinanceLoanTerms(request: LoanRequest, terms: FinanceLoanTerms) {
+  const requestedRepaymentMonths = Number(request.requestedRepaymentMonths || request.repaymentMonths || 1)
+  const requestedDeductionSchedule = request.requestedDeductionSchedule || request.deductionSchedule
+  const repaymentMonths = Math.max(1, Math.round(Number(terms.repaymentMonths || request.repaymentMonths || 1)))
+  const deductionSchedule = terms.deductionSchedule || request.deductionSchedule || 'Twice a month'
+  const repaymentAmount = calculateLoanScheduledDeduction({
+    ...request,
+    repaymentMonths,
+    deductionSchedule,
+  })
+
+  return {
+    ...request,
+    requestedRepaymentMonths,
+    requestedDeductionSchedule,
+    repaymentMonths,
+    deductionSchedule,
+    repaymentAmount,
+    deductionOverrideAmount: undefined,
+    financeApprovedRepaymentMonths: repaymentMonths,
+    financeApprovedDeductionSchedule: deductionSchedule,
+    financeApprovedRepaymentAmount: repaymentAmount,
+    financeTermsAdjusted: repaymentMonths !== requestedRepaymentMonths || deductionSchedule !== requestedDeductionSchedule,
+    financeTermsNote: terms.note?.trim() || request.financeTermsNote,
+  }
 }
 
 export function loanRemainingTerms(request: LoanRequest) {

@@ -89,7 +89,11 @@ function LoanTable({ requests, empty, employees, onApprove, onReject }: { reques
               <div style={requestBodyStyle}>
                 <InfoBlock label="Loan type" value={loanDisplayName(request)} />
                 <InfoBlock label="Amount" value={money(request.amount)} strong />
-                <InfoBlock label="Repayment" value={`${money(loanScheduledDeduction(request))} x ${request.repaymentMonths}`} hint={request.deductionSchedule || 'Twice a month'} />
+                <InfoBlock
+                  label="Repayment"
+                  value={`${money(loanScheduledDeduction(request))} x ${request.repaymentMonths}`}
+                  hint={request.financeTermsAdjusted ? `Finance approved terms (${request.requestedRepaymentMonths || request.repaymentMonths} requested)` : request.deductionSchedule || 'Twice a month'}
+                />
                 <InfoBlock label="Workflow" value={state.label} />
                 <InfoBlock label="Submitted" value={formatDateTime(request.createdAt)} />
               </div>
