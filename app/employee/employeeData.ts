@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useMemo, useState } from 'react'
+import { listHrRecords } from '@/lib/hrms/client'
 import { buildEmployeeTaxBreakdown, deductionBreakdownTotal, defaultPayrollFrequency, PayrollFrequency, roundPayrollMoney } from '@/app/hr/payroll/taxRules'
 
 export type StoredAccount = {
@@ -333,6 +334,15 @@ export function leaveBalanceFor(requests: LeaveRequest[]) {
   })
 }
 
+function uniqueLeaveRequests(rows: LeaveRequest[]) {
+  const map = new Map<string, LeaveRequest>()
+  rows.forEach((row, index) => {
+    const key = row.id || `leave-${index}`
+    map.set(key, { ...map.get(key), ...row })
+  })
+  return Array.from(map.values())
+}
+
 function belongsToEmployee<T extends { employeeId?: string; employeeName?: string; uploadedById?: string; uploadedByEmail?: string }>(item: T, identity: Employee) {
   return matchesEmployeeId(item.employeeId, identity)
     || matchesEmployeeId(item.employeeName, identity)
@@ -370,6 +380,38 @@ export function useEmployeePortalData() {
 
   const employee = useMemo(() => resolveCurrentEmployee(employees, account), [account, employees])
   const employeeName = fullName(employee) || employee.email || 'Employee'
+
+  useEffect(() => {
+    let cancelled = false
+    const syncEmployeeLeaves = async () => {
+      if (!employee.id && !employee.employeeId) return
+      const localRequests = loadStored<LeaveRequest[]>(leaveRequestKey, [])
+      try {
+        const serverRequests = await listHrRecords<LeaveRequest>('leave-requests', {
+          'x-hr-role': 'Employee',
+          'x-hr-user-id': employee.id || employee.employeeId || '',
+          'x-hr-user-name': employeeName,
+        })
+        const merged = uniqueLeaveRequests([...localRequests, ...serverRequests])
+        if (cancelled) return
+        setLeaveRequests(merged)
+        saveStored(leaveRequestKey, merged)
+      } catch {
+        if (!cancelled) setLeaveRequests(localRequests)
+      }
+    }
+    void syncEmployeeLeaves()
+    window.addEventListener('focus', syncEmployeeLeaves)
+    window.addEventListener('wiseflow:hr-data-changed', syncEmployeeLeaves)
+    const timer = window.setInterval(syncEmployeeLeaves, 2500)
+    return () => {
+      cancelled = true
+      window.removeEventListener('focus', syncEmployeeLeaves)
+      window.removeEventListener('wiseflow:hr-data-changed', syncEmployeeLeaves)
+      window.clearInterval(timer)
+    }
+  }, [employee.id, employee.employeeId, employeeName])
+
   const myLeaveRequests = useMemo(() => leaveRequests.filter(item => belongsToEmployee(item, employee)), [employee, leaveRequests])
   const myAttendance = useMemo(() => attendance.filter(item => matchesEmployeeId(item.employeeId, employee)), [attendance, employee])
   const myPayroll = useMemo(
