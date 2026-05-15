@@ -14,6 +14,7 @@ const THEME_MAP: Record<string, string> = {
   'Dark': 'dark',
   'WiseFlow Light': 'light',
   'WiseFlow Dark': 'dark',
+  'Vercel Dark': 'dark',
   'Google Blue': 'google-blue',
   'Google Green': 'google-green',
   'Graphite Pro': 'graphite',
@@ -23,13 +24,15 @@ const applyTheme = () => {
   try {
     const stored = window.localStorage.getItem(accountKey)
     const account = stored ? JSON.parse(stored) as { theme?: string } : null
-    const preference = account?.theme || 'Google Green'
+    const savedPreference = account?.theme
+    const preference = !savedPreference || savedPreference === 'Google Green' ? 'Vercel Dark' : savedPreference
     const mapped = THEME_MAP[preference]
     const theme = mapped || (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light')
     document.documentElement.dataset.theme = theme
     document.documentElement.dataset.themePreference = preference
   } catch {
-    document.documentElement.dataset.theme = 'light'
+    document.documentElement.dataset.theme = 'dark'
+    document.documentElement.dataset.themePreference = 'Vercel Dark'
   }
 }
 

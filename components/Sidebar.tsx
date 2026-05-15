@@ -22,6 +22,17 @@ import {
 
 const font = "var(--font-body)"
 const displayFont = "var(--font-body)"
+const sidebarColors = {
+  bg: '#000000',
+  surface: '#1f1f1f',
+  surfaceHover: '#1a1a1a',
+  border: '#242424',
+  text: 'rgb(237, 237, 237)',
+  muted: '#a1a1a1',
+  faint: '#737373',
+  icon: '#a1a1a1',
+  activeRing: '#ffffff',
+}
 
 type NavSubItem = {
   label: string
@@ -271,7 +282,7 @@ export default function Sidebar({ collapsed, onToggle }: { collapsed: boolean; o
         width: '100%',
         minHeight: '100vh',
         height: '100vh',
-        background: 'linear-gradient(180deg, #0d1117 0%, #161b22 100%)',
+        background: sidebarColors.bg,
         padding: collapsed ? '20px 0' : '20px 0',
         fontFamily: font,
         overflowY: 'auto',
@@ -297,13 +308,13 @@ export default function Sidebar({ collapsed, onToggle }: { collapsed: boolean; o
               width: 34,
               height: 34,
               flexShrink: 0,
-              background: '#22c55e',
+              background: sidebarColors.text,
               borderRadius: 9,
-              boxShadow: '0 0 16px rgba(34,197,94,0.35)',
+              boxShadow: 'none',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
-              color: '#0d1117',
+              color: sidebarColors.bg,
               fontSize: 16,
               fontWeight: 800,
               fontFamily: displayFont,
@@ -317,8 +328,8 @@ export default function Sidebar({ collapsed, onToggle }: { collapsed: boolean; o
                 fontFamily: displayFont,
                 fontSize: 17,
                 fontWeight: 800,
-                color: '#22c55e',
-                letterSpacing: '-0.3px',
+                color: sidebarColors.text,
+                letterSpacing: 0,
                 whiteSpace: 'nowrap',
               }}
             >
@@ -336,9 +347,9 @@ export default function Sidebar({ collapsed, onToggle }: { collapsed: boolean; o
               width: 22,
               height: 22,
               borderRadius: '50%',
-              border: '1px solid rgba(255,255,255,0.12)',
-              background: 'rgba(255,255,255,0.06)',
-              color: 'rgba(255,255,255,0.4)',
+              border: `1px solid ${sidebarColors.border}`,
+              background: 'transparent',
+              color: sidebarColors.muted,
               display: 'grid',
               placeItems: 'center',
               cursor: 'pointer',
@@ -358,9 +369,9 @@ export default function Sidebar({ collapsed, onToggle }: { collapsed: boolean; o
               width: 22,
               height: 22,
               borderRadius: '50%',
-              border: '1px solid rgba(255,255,255,0.12)',
-              background: 'rgba(255,255,255,0.06)',
-              color: 'rgba(255,255,255,0.4)',
+              border: `1px solid ${sidebarColors.border}`,
+              background: 'transparent',
+              color: sidebarColors.muted,
               display: 'grid',
               placeItems: 'center',
               cursor: 'pointer',
@@ -385,7 +396,7 @@ export default function Sidebar({ collapsed, onToggle }: { collapsed: boolean; o
                   fontSize: 10,
                   letterSpacing: '1px',
                   textTransform: 'uppercase',
-                  color: 'rgba(255,255,255,0.28)',
+                  color: sidebarColors.faint,
                   padding: '0 22px 5px',
                   fontWeight: 600,
                   whiteSpace: 'nowrap',
@@ -400,7 +411,7 @@ export default function Sidebar({ collapsed, onToggle }: { collapsed: boolean; o
               <div
                 style={{
                   height: 1,
-                  background: 'rgba(255,255,255,0.06)',
+                  background: sidebarColors.border,
                   margin: '10px 10px 10px',
                 }}
               />
@@ -442,16 +453,16 @@ export default function Sidebar({ collapsed, onToggle }: { collapsed: boolean; o
                         padding: collapsed ? '9px 0' : '8px 10px',
                         margin: '0 8px 2px',
                         cursor: 'pointer',
-                        borderRadius: 6,
+                        borderRadius: 0,
                         background: groupActive
-                          ? 'rgba(34,197,94,0.08)'
+                          ? sidebarColors.surface
                           : isHovered
-                          ? 'rgba(255,255,255,0.04)'
+                          ? sidebarColors.surfaceHover
                           : 'transparent',
-                        boxShadow: groupActive && !collapsed ? 'inset 3px 0 0 #22c55e' : groupActive && collapsed ? '0 0 0 1.5px #22c55e' : 'none',
-                        color: groupActive ? '#ffffff' : 'rgba(255,255,255,0.65)',
-                        fontWeight: groupActive ? 600 : 400,
-                        fontSize: 13,
+                        boxShadow: groupActive ? `0 0 0 1px ${sidebarColors.activeRing}` : 'none',
+                        color: groupActive || isHovered ? sidebarColors.text : sidebarColors.muted,
+                        fontWeight: groupActive ? 600 : 500,
+                        fontSize: 14,
                         fontFamily: font,
                         border: 'none',
                         transition: 'background 150ms ease, color 150ms ease',
@@ -468,7 +479,7 @@ export default function Sidebar({ collapsed, onToggle }: { collapsed: boolean; o
                             right: 6,
                             width: 6,
                             height: 6,
-                            background: '#22c55e',
+                            background: sidebarColors.text,
                             borderRadius: '50%',
                             boxShadow: '0 0 6px rgba(34,197,94,0.6)',
                           }}
@@ -481,7 +492,7 @@ export default function Sidebar({ collapsed, onToggle }: { collapsed: boolean; o
                           display: 'inline-flex',
                           justifyContent: 'center',
                           flexShrink: 0,
-                          color: groupActive ? '#22c55e' : 'rgba(255,255,255,0.5)',
+                          color: groupActive || isHovered ? sidebarColors.text : sidebarColors.icon,
                         }}
                       >
                         <Icon size={16} />
@@ -493,7 +504,7 @@ export default function Sidebar({ collapsed, onToggle }: { collapsed: boolean; o
                           <span
                             style={{
                               display: 'inline-flex',
-                              color: 'rgba(255,255,255,0.3)',
+                              color: sidebarColors.faint,
                               transition: 'transform 200ms ease',
                               transform: isOpen ? 'rotate(180deg)' : 'rotate(0deg)',
                               flexShrink: 0,
@@ -531,7 +542,7 @@ export default function Sidebar({ collapsed, onToggle }: { collapsed: boolean; o
                               top: 4,
                               bottom: 8,
                               width: 1,
-                              background: 'rgba(255,255,255,0.08)',
+                              background: sidebarColors.border,
                               borderRadius: 1,
                             }}
                           />
@@ -559,16 +570,16 @@ export default function Sidebar({ collapsed, onToggle }: { collapsed: boolean; o
                                     gap: 8,
                                     padding: '6px 10px 6px 12px',
                                     margin: '0 0 1px',
-                                    borderRadius: 5,
+                                    borderRadius: 0,
                                     background: childActive
-                                      ? 'rgba(34,197,94,0.08)'
+                                      ? sidebarColors.surface
                                       : childHovered
-                                      ? 'rgba(255,255,255,0.04)'
+                                      ? sidebarColors.surfaceHover
                                       : 'transparent',
-                                    boxShadow: childActive ? 'inset 2px 0 0 #22c55e' : 'none',
-                                    color: childActive ? '#ffffff' : 'rgba(255,255,255,0.55)',
+                                    boxShadow: childActive ? `0 0 0 1px ${sidebarColors.activeRing}` : 'none',
+                                    color: childActive || childHovered ? sidebarColors.text : sidebarColors.muted,
                                     fontWeight: childActive ? 500 : 400,
-                                    fontSize: 12,
+                                    fontSize: 14,
                                     fontFamily: font,
                                     cursor: 'pointer',
                                     transition: 'background 150ms ease, color 150ms ease',
@@ -609,20 +620,16 @@ export default function Sidebar({ collapsed, onToggle }: { collapsed: boolean; o
                       padding: collapsed ? '9px 0' : '8px 10px',
                       margin: collapsed ? '0 8px 2px' : '0 8px 2px',
                       cursor: 'pointer',
-                      borderRadius: 6,
+                      borderRadius: 0,
                       background: groupActive
-                        ? 'rgba(34,197,94,0.08)'
+                        ? sidebarColors.surface
                         : isHovered
-                        ? 'rgba(255,255,255,0.04)'
+                        ? sidebarColors.surfaceHover
                         : 'transparent',
-                      boxShadow: groupActive && !collapsed
-                        ? 'inset 3px 0 0 #22c55e'
-                        : groupActive && collapsed
-                        ? '0 0 0 1.5px #22c55e'
-                        : 'none',
-                      color: groupActive ? '#ffffff' : 'rgba(255,255,255,0.65)',
-                      fontWeight: groupActive ? 600 : 400,
-                      fontSize: 13,
+                      boxShadow: groupActive ? `0 0 0 1px ${sidebarColors.activeRing}` : 'none',
+                      color: groupActive || isHovered ? sidebarColors.text : sidebarColors.muted,
+                      fontWeight: groupActive ? 600 : 500,
+                      fontSize: 14,
                       fontFamily: font,
                       transition: 'background 150ms ease, color 150ms ease',
                     }}
@@ -633,7 +640,7 @@ export default function Sidebar({ collapsed, onToggle }: { collapsed: boolean; o
                         display: 'inline-flex',
                         justifyContent: 'center',
                         flexShrink: 0,
-                        color: groupActive ? '#22c55e' : 'rgba(255,255,255,0.5)',
+                        color: groupActive || isHovered ? sidebarColors.text : sidebarColors.icon,
                       }}
                     >
                       <Icon size={16} />
@@ -651,7 +658,7 @@ export default function Sidebar({ collapsed, onToggle }: { collapsed: boolean; o
               <div
                 style={{
                   height: 1,
-                  background: 'rgba(255,255,255,0.06)',
+                  background: sidebarColors.border,
                   margin: '10px 16px 0',
                 }}
               />

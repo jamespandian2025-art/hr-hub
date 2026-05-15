@@ -5,11 +5,12 @@ import { ChevronDown, Palette } from 'lucide-react'
 
 const storageKey = 'flowsys-account'
 
-type ThemeName = 'WiseFlow Light' | 'WiseFlow Dark' | 'Google Blue' | 'Google Green' | 'Graphite Pro'
+type ThemeName = 'WiseFlow Light' | 'WiseFlow Dark' | 'Vercel Dark' | 'Google Blue' | 'Google Green' | 'Graphite Pro'
 
 const THEMES: { name: ThemeName; accent: string; bg: string; surface: string }[] = [
   { name: 'WiseFlow Light', accent: '#1A73E8', bg: '#F8FAFD', surface: '#FFFFFF' },
   { name: 'WiseFlow Dark',  accent: '#4285F4', bg: '#0F172A', surface: '#111827' },
+  { name: 'Vercel Dark',    accent: '#ededed', bg: '#000000', surface: '#0a0a0a' },
   { name: 'Google Blue',    accent: '#4285F4', bg: '#F6F9FE', surface: '#FFFFFF' },
   { name: 'Google Green',   accent: '#34A853', bg: '#F4FBF6', surface: '#FFFFFF' },
   { name: 'Graphite Pro',   accent: '#8B5CF6', bg: '#111111', surface: '#1A1A1A' },
@@ -18,6 +19,7 @@ const THEMES: { name: ThemeName; accent: string; bg: string; surface: string }[]
 const THEME_MAP: Record<string, string> = {
   'WiseFlow Light': 'light',
   'WiseFlow Dark': 'dark',
+  'Vercel Dark': 'dark',
   'Google Blue': 'google-blue',
   'Google Green': 'google-green',
   'Graphite Pro': 'graphite',
@@ -35,13 +37,13 @@ function applyThemeToDOM(preference: string) {
 export default function ThemeSwitcher() {
   const [open, setOpen] = useState(false)
   const [current, setCurrent] = useState<string>(() => {
-    if (typeof window === 'undefined') return 'Google Green'
+    if (typeof window === 'undefined') return 'Vercel Dark'
     try {
       const stored = window.localStorage.getItem(storageKey)
       const account = stored ? JSON.parse(stored) as { theme?: string } : null
-      return account?.theme && THEME_MAP[account.theme] ? account.theme : 'Google Green'
+      return account?.theme && account.theme !== 'Google Green' && THEME_MAP[account.theme] ? account.theme : 'Vercel Dark'
     } catch {
-      return 'Google Green'
+      return 'Vercel Dark'
     }
   })
   const ref = useRef<HTMLDivElement>(null)

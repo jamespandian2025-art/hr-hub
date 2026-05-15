@@ -10,7 +10,6 @@ import {
   BookOpenCheck,
   CalendarDays,
   ChevronDown,
-  ClipboardList,
   FileBarChart,
   FileClock,
   FileText,
@@ -53,12 +52,13 @@ export default function AccountingShell({ children }: { children: React.ReactNod
 
   return (
     <div style={{ minHeight: '100vh', background: '#f7f9fc', display: 'grid', gridTemplateColumns: '250px minmax(0, 1fr)', fontFamily: font, color: '#111827' }}>
-      <aside style={{ minHeight: '100vh', position: 'sticky', top: 0, alignSelf: 'start', background: 'linear-gradient(180deg, #061321 0%, #07111f 100%)', color: '#fff', padding: '18px 14px', display: 'flex', flexDirection: 'column', gap: 14 }}>
+      <style>{accountingShellCss}</style>
+      <aside style={{ minHeight: '100vh', position: 'sticky', top: 0, alignSelf: 'start', background: '#000', color: '#ededed', padding: '18px 10px', display: 'flex', flexDirection: 'column', gap: 14 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '0 6px 4px' }}>
-          <span style={{ width: 36, height: 36, borderRadius: 10, background: '#22c55e', color: '#052e16', display: 'grid', placeItems: 'center', fontWeight: 950, fontSize: 16 }}>W</span>
+          <span style={{ width: 36, height: 36, borderRadius: 10, background: '#ededed', color: '#000', display: 'grid', placeItems: 'center', fontWeight: 700, fontSize: 16 }}>W</span>
           <span>
-            <span style={{ display: 'block', fontSize: 18, fontWeight: 900, lineHeight: 1 }}>Accounting</span>
-            <span style={{ display: 'block', fontSize: 11, color: '#8ea3bb', marginTop: 3 }}>Finance workspace</span>
+            <span style={{ display: 'block', fontSize: 16, fontWeight: 600, lineHeight: 1, color: '#ededed' }}>Accounting</span>
+            <span style={{ display: 'block', fontSize: 12, color: '#a1a1a1', marginTop: 4, fontWeight: 500 }}>Finance workspace</span>
           </span>
         </div>
 
@@ -67,15 +67,15 @@ export default function AccountingShell({ children }: { children: React.ReactNod
           Back to WiseFlow
         </Link>
 
-        <nav style={{ display: 'grid', gap: 4, alignContent: 'start', flex: 1, overflowY: 'auto', paddingRight: 2 }} aria-label="Accounting workspace navigation">
-          <div style={{ fontSize: 10, color: '#8ea3bb', fontWeight: 800, padding: '0 6px 5px', textTransform: 'uppercase' }}>Workspace</div>
+        <nav style={{ display: 'grid', gap: 3, alignContent: 'start', flex: 1, overflowY: 'auto', paddingRight: 0 }} aria-label="Accounting workspace navigation">
+          <div style={{ fontSize: 11, color: '#737373', fontWeight: 500, padding: '0 10px 6px', textTransform: 'uppercase' }}>Workspace</div>
           {accountingNavItems.map(item => {
             const Icon = item.icon
             const active = pathname === item.href || pathname.startsWith(item.href + '/')
             return (
               <Link key={item.href} href={item.href} style={{ textDecoration: 'none' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 10, minHeight: 35, padding: '7px 10px', borderRadius: 8, background: active ? 'rgba(34,197,94,0.16)' : 'transparent', color: active ? '#fff' : '#cbd5e1', boxShadow: active ? 'inset 3px 0 0 #22c55e' : 'none', fontSize: 12.5, fontWeight: active ? 850 : 650 }}>
-                  <Icon size={15} color={active ? '#22c55e' : '#cbd5e1'} />
+                <div className={`accounting-nav-row${active ? ' active' : ''}`}>
+                  <Icon size={16} />
                   <span style={{ flex: 1 }}>{item.label}</span>
                 </div>
               </Link>
@@ -181,3 +181,41 @@ const primaryButtonStyle: React.CSSProperties = {
   fontWeight: 900,
   cursor: 'pointer',
 }
+
+const accountingShellCss = `
+.accounting-nav-row {
+  min-height: 36px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 0 10px;
+  border-radius: 0;
+  color: #a1a1a1;
+  background: transparent;
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 20px;
+  transition: background 120ms ease, color 120ms ease, box-shadow 120ms ease;
+}
+.accounting-nav-row svg {
+  color: #a1a1a1;
+  flex-shrink: 0;
+  transition: color 120ms ease;
+}
+.accounting-nav-row:hover {
+  background: #1a1a1a;
+  color: #ededed;
+}
+.accounting-nav-row:hover svg {
+  color: #ededed;
+}
+.accounting-nav-row.active {
+  background: #1f1f1f;
+  color: #ededed;
+  box-shadow: 0 0 0 1px #ffffff;
+  font-weight: 600;
+}
+.accounting-nav-row.active svg {
+  color: #ededed;
+}
+`

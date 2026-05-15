@@ -3,7 +3,6 @@
 import Link from 'next/link'
 import {
   ArrowDownLeft,
-  ArrowRight,
   ArrowUpRight,
   Banknote,
   Building2,
