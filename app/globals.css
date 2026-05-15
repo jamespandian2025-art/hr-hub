@@ -4380,6 +4380,16 @@ thead td,
 }
 
 .desktop-sidebar .main-sidebar-row.is-active,
+.desktop-sidebar .main-sidebar-subrow.is-active,
+.mobile-nav-drawer .main-sidebar-row.is-active,
+.mobile-nav-drawer .main-sidebar-subrow.is-active,
+.procurement-sidepanel .active,
+.accounting-shell aside .active {
+  box-shadow: none !important;
+  outline: none !important;
+}
+
+.desktop-sidebar .main-sidebar-row.is-active,
 .desktop-sidebar .main-sidebar-row.is-active *,
 .desktop-sidebar .main-sidebar-row.is-hovered,
 .desktop-sidebar .main-sidebar-row.is-hovered *,

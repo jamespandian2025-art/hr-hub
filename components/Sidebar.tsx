@@ -30,7 +30,7 @@ const sidebarColors = {
   muted: '#a1a1a1',
   faint: '#737373',
   icon: '#a1a1a1',
-  activeRing: '#ffffff',
+  activeRing: 'transparent',
 }
 
 type NavSubItem = {
@@ -458,7 +458,7 @@ export default function Sidebar({ collapsed, onToggle }: { collapsed: boolean; o
                           : isHovered
                           ? sidebarColors.surfaceHover
                           : 'transparent',
-                        boxShadow: groupActive ? `0 0 0 1px ${sidebarColors.activeRing}` : 'none',
+                        boxShadow: 'none',
                         color: groupActive || isHovered ? sidebarColors.text : sidebarColors.muted,
                         fontWeight: groupActive ? 600 : 500,
                         fontSize: 14,
@@ -576,7 +576,7 @@ export default function Sidebar({ collapsed, onToggle }: { collapsed: boolean; o
                                       : childHovered
                                       ? sidebarColors.surfaceHover
                                       : 'transparent',
-                                    boxShadow: childActive ? `0 0 0 1px ${sidebarColors.activeRing}` : 'none',
+                                    boxShadow: 'none',
                                     color: childActive || childHovered ? sidebarColors.text : sidebarColors.muted,
                                     fontWeight: childActive ? 500 : 400,
                                     fontSize: 14,
@@ -627,7 +627,7 @@ export default function Sidebar({ collapsed, onToggle }: { collapsed: boolean; o
                         : isHovered
                         ? sidebarColors.surfaceHover
                         : 'transparent',
-                      boxShadow: groupActive ? `0 0 0 1px ${sidebarColors.activeRing}` : 'none',
+                      boxShadow: 'none',
                       color: groupActive || isHovered ? sidebarColors.text : sidebarColors.muted,
                       fontWeight: groupActive ? 600 : 500,
                       fontSize: 14,

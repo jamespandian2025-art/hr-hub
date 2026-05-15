@@ -28,7 +28,7 @@ const sidebarColors = {
   muted: '#a1a1a1',
   faint: '#737373',
   icon: '#a1a1a1',
-  activeRing: '#ffffff',
+  activeRing: 'transparent',
 }
 
 const procurementNavItems = [
@@ -204,7 +204,7 @@ const procurementShellCss = `
 .procurement-nav-row.active {
   background: ${sidebarColors.surface};
   color: ${sidebarColors.text};
-  box-shadow: 0 0 0 1px ${sidebarColors.activeRing};
+  box-shadow: none;
   font-weight: 600;
 }
 .procurement-nav-row.active svg {
