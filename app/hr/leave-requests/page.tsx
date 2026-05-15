@@ -13,6 +13,7 @@ import {
   loadLeaveRequests, loadStored, monthRangeLabel, normalizeStatus, saveStored, statusTone,
   todayInput, type Employee, type LeaveRequest, type LeaveRow, type LeaveStatus,
 } from './leaveData'
+import { createHrRecord, listHrRecords, updateHrRecord } from '@/lib/hrms/client'
 
 const font = "var(--font-body)"
 const statuses: Array<LeaveStatus | 'All'> = ['All', 'Pending', 'Approved', 'Rejected', 'Cancelled']
@@ -34,6 +35,15 @@ const defaultForm = (): FormState => ({
   reason: '',
 })
 
+function uniqueRequests(rows: LeaveRequest[]) {
+  const map = new Map<string, LeaveRequest>()
+  rows.forEach((row, index) => {
+    const key = row.id || `leave-${index}`
+    map.set(key, { ...map.get(key), ...row })
+  })
+  return Array.from(map.values())
+}
+
 export default function HrLeaveRequestsPage() {
   const router = useRouter()
   const [employees, setEmployees] = useState<Employee[]>([])
@@ -49,9 +59,16 @@ export default function HrLeaveRequestsPage() {
   const menuRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
-    const load = () => {
+    let cancelled = false
+    const load = async () => {
       setEmployees(loadStored<Employee[]>(employeeKey, []))
-      setRequests(loadLeaveRequests())
+      const localRequests = loadLeaveRequests()
+      try {
+        const serverRequests = await listHrRecords<LeaveRequest>('leave-requests')
+        if (!cancelled) setRequests(uniqueRequests([...serverRequests, ...localRequests]))
+      } catch {
+        if (!cancelled) setRequests(localRequests)
+      }
     }
     load()
     window.addEventListener('storage', load)
@@ -59,6 +76,7 @@ export default function HrLeaveRequestsPage() {
     window.addEventListener('wiseflow:hr-data-changed', load)
     const timer = window.setInterval(load, 2500)
     return () => {
+      cancelled = true
       window.removeEventListener('storage', load)
       window.removeEventListener('focus', load)
       window.removeEventListener('wiseflow:hr-data-changed', load)
@@ -123,17 +141,26 @@ export default function HrLeaveRequestsPage() {
     window.dispatchEvent(new Event('wiseflow:hr-data-changed'))
   }
 
-  function updateStatus(row: LeaveRow, status: LeaveStatus) {
-    persist(requests.map(request => {
+  async function updateStatus(row: LeaveRow, status: LeaveStatus) {
+    const next = requests.map(request => {
       if (request.id !== row.id) return request
       if (status === 'Cancelled') return { ...request, status, approvalStep: 'complete' as const, updatedAt: new Date().toISOString() }
       if (status === 'Pending') return { ...request, status, updatedAt: new Date().toISOString() }
       return decideLeaveRequest(request, row.employee, 'hr', status)
-    }))
+    })
+    persist(next)
+    const changed = next.find(request => request.id === row.id)
+    if (changed) {
+      try {
+        await updateHrRecord<LeaveRequest>('leave-requests', changed.id, changed as unknown as Record<string, unknown>)
+      } catch (error) {
+        console.error('Could not sync leave request decision', error)
+      }
+    }
     setMenuId(null)
   }
 
-  function submitRequest() {
+  async function submitRequest() {
     const employee = employees.find(item => item.id === form.employeeId)
     if (!employee) return
     const next: LeaveRequest = {
@@ -154,6 +181,11 @@ export default function HrLeaveRequestsPage() {
       updatedAt: new Date().toISOString(),
     }
     persist([next, ...requests])
+    try {
+      await createHrRecord<LeaveRequest>('leave-requests', next as unknown as Record<string, unknown>)
+    } catch (error) {
+      console.error('Could not sync HR-created leave request', error)
+    }
     setForm(defaultForm())
     setModalOpen(false)
   }

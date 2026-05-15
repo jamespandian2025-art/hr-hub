@@ -10,6 +10,7 @@ import {
   Wallet, Zap,
 } from 'lucide-react'
 import { Cell, Pie, PieChart, ResponsiveContainer } from 'recharts'
+import { listHrRecords } from '@/lib/hrms/client'
 
 // â”€â”€â”€ Types â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
@@ -49,6 +50,15 @@ const font = "var(--font-body)"
 function loadStored<T>(key: string, fallback: T): T {
   if (typeof window === 'undefined') return fallback
   try { const r = window.localStorage.getItem(key); return r ? (JSON.parse(r) as T) : fallback } catch { return fallback }
+}
+
+function uniqueLeaveRequests(rows: LeaveRequest[]) {
+  const map = new Map<string, LeaveRequest>()
+  rows.forEach((row, index) => {
+    const key = row.id || `leave-${index}`
+    map.set(key, { ...map.get(key), ...row })
+  })
+  return Array.from(map.values())
 }
 
 function money(v: number) { return `PHP ${v.toLocaleString('en-PH', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}` }
@@ -150,12 +160,30 @@ export default function HROverview() {
   const [payOpen, setPayOpen] = useState(false)
 
   useEffect(() => {
-    const id = window.setTimeout(() => {
+    let cancelled = false
+    const loadOverview = async () => {
       setEmployees(loadStored('flowsys-hr-employees', []))
-      setLeaves(loadStored('flowsys-hr-leave-requests', []))
+      const localLeaves = loadStored<LeaveRequest[]>('flowsys-hr-leave-requests', [])
+      try {
+        const serverLeaves = await listHrRecords<LeaveRequest>('leave-requests')
+        if (!cancelled) setLeaves(uniqueLeaveRequests([...serverLeaves, ...localLeaves]))
+      } catch {
+        if (!cancelled) setLeaves(localLeaves)
+      }
       setAnnouncements(loadStored('flowsys-hr-announcements', []))
-    }, 0)
-    return () => window.clearTimeout(id)
+    }
+    loadOverview()
+    window.addEventListener('storage', loadOverview)
+    window.addEventListener('focus', loadOverview)
+    window.addEventListener('wiseflow:hr-data-changed', loadOverview)
+    const timer = window.setInterval(loadOverview, 2500)
+    return () => {
+      cancelled = true
+      window.removeEventListener('storage', loadOverview)
+      window.removeEventListener('focus', loadOverview)
+      window.removeEventListener('wiseflow:hr-data-changed', loadOverview)
+      window.clearInterval(timer)
+    }
   }, [])
 
   // Close dropdowns on outside click

@@ -14,6 +14,7 @@ import {
   saveStored,
   useEmployeePortalData,
 } from '../../employeeData'
+import { createHrRecord } from '@/lib/hrms/client'
 
 const leaveTypes = ['Annual Leave', 'Sick Leave', 'Personal Leave', 'Maternity Leave', 'Paternity Leave', 'Emergency Leave', 'Unpaid Leave', 'Work From Home']
 
@@ -85,7 +86,7 @@ export default function ApplyLeavePage() {
     setNotice('Draft saved on this device.')
   }
 
-  const submit = () => {
+  const submit = async () => {
     setNotice('')
     if (!startDate || !endDate || !days) {
       setNotice('Please choose a valid start and end date.')
@@ -99,8 +100,14 @@ export default function ApplyLeavePage() {
       setNotice(`You only have ${selectedBalance.remaining} day${selectedBalance.remaining === 1 ? '' : 's'} left for ${leaveType}.`)
       return
     }
+    const request = buildRequest('Pending')
     const requests = loadStored<LeaveRequest[]>(leaveRequestKey, [])
-    saveStored(leaveRequestKey, [buildRequest('Pending'), ...requests])
+    saveStored(leaveRequestKey, [request, ...requests])
+    try {
+      await createHrRecord<LeaveRequest>('leave-requests', request as unknown as Record<string, unknown>)
+    } catch (error) {
+      console.error('Could not sync leave request to HR inbox', error)
+    }
     window.dispatchEvent(new Event('storage'))
     window.dispatchEvent(new Event('wiseflow:hr-data-changed'))
     router.push('/employee/leave-requests')
