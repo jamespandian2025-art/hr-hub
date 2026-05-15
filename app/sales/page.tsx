@@ -12,6 +12,8 @@ import {
   FileText,
   Filter,
   Funnel,
+  LayoutGrid,
+  List,
   MoreHorizontal,
   Package,
   Plus,
@@ -529,6 +531,8 @@ export default function SalesPage() {
 }
 
 function Overview({ orders, invoices, reps, categories, pipeline, onCreateInvoice }: { orders: SalesOrder[]; invoices: Invoice[]; reps: { label: string; amount: number; count: number }[]; categories: { label: string; amount: number; count: number }[]; pipeline: { stage: OpportunityStage; count: number; amount: number }[]; onCreateInvoice: (order: SalesOrder) => void }) {
+  const [ordersView, setOrdersView] = useState<'grid' | 'table'>('grid')
+
   return (
     <>
       <div className="sales-top-grid" style={topGrid}>
@@ -543,8 +547,16 @@ function Overview({ orders, invoices, reps, categories, pipeline, onCreateInvoic
         </Panel>
       </div>
       <div className="sales-bottom-grid" style={bottomGrid}>
-        <Panel title="Recent Sales Orders" action={<a style={viewAll}>View All</a>}>
-          <OrdersTab orders={orders.slice(0, 6)} onCreateInvoice={onCreateInvoice} compact />
+        <Panel
+          title="Recent Sales Orders"
+          action={(
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+              <ViewToggle value={ordersView} onChange={setOrdersView} />
+              <a style={viewAll}>View All</a>
+            </div>
+          )}
+        >
+          <OrdersTab orders={orders.slice(0, 6)} onCreateInvoice={onCreateInvoice} compact view={ordersView} />
         </Panel>
         <div style={{ display: 'grid', gap: 16, minWidth: 0 }}>
           <Panel title="Revenue by Product Category" action={<a style={viewAll}>View All</a>}>
@@ -599,13 +611,43 @@ function QuotesTab({ quotes, onSend, onConvert }: { quotes: Quote[]; onSend: (qu
   </DataTable>
 }
 
-function OrdersTab({ orders, onCreateInvoice, onUpdateDelivery, compact }: { orders: SalesOrder[]; onCreateInvoice: (order: SalesOrder) => void; onUpdateDelivery?: (order: SalesOrder) => void; compact?: boolean }) {
+function OrdersTab({ orders, onCreateInvoice, onUpdateDelivery, compact, view = 'table' }: { orders: SalesOrder[]; onCreateInvoice: (order: SalesOrder) => void; onUpdateDelivery?: (order: SalesOrder) => void; compact?: boolean; view?: 'grid' | 'table' }) {
+  if (compact && view === 'grid') {
+    return <div className="sales-orders-card-grid" style={ordersCardGrid}>
+      {orders.map(order => (
+        <article key={order.id} style={orderCard}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10, alignItems: 'flex-start' }}>
+            <div style={{ minWidth: 0 }}>
+              <strong style={{ display: 'block', color: '#020617', fontSize: 13 }}>{order.id}</strong>
+              <span style={{ display: 'block', color: '#475569', fontSize: 12, fontWeight: 750, marginTop: 4, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{order.customer}</span>
+            </div>
+            <strong style={{ color: '#020617', fontSize: 13, whiteSpace: 'nowrap' }}>{money(order.amount)}</strong>
+          </div>
+          <div style={orderCardMeta}>
+            <span><small>Payment</small><Badge text={order.paymentStatus} /></span>
+            <span><small>Delivery</small><Badge text={order.deliveryStatus} /></span>
+          </div>
+          <ActionGroup actions={[['Invoice', () => onCreateInvoice(order), FileText], ['Delivery', () => onUpdateDelivery?.(order), Truck]]} />
+        </article>
+      ))}
+    </div>
+  }
+
   return <DataTable headers={compact ? ['Order #', 'Customer', 'Amount', 'Payment', 'Delivery', 'Actions'] : ['Sales order #', 'Customer', 'Order date', 'Delivery date', 'Amount', 'Payment status', 'Delivery status', 'Sales rep', 'Actions']}>
     {orders.map(order => <tr key={order.id}>
       <Cell strong>{order.id}</Cell><Cell>{order.customer}</Cell>{!compact && <Cell>{date(order.orderDate)}</Cell>}{!compact && <Cell>{date(order.deliveryDate)}</Cell>}<Cell strong>{money(order.amount)}</Cell><Cell><Badge text={order.paymentStatus} /></Cell><Cell><Badge text={order.deliveryStatus} /></Cell>{!compact && <Cell>{order.salesRep}</Cell>}
       <Cell><ActionGroup actions={[['Invoice', () => onCreateInvoice(order), FileText], ['Delivery', () => onUpdateDelivery?.(order), Truck]]} /></Cell>
     </tr>)}
   </DataTable>
+}
+
+function ViewToggle({ value, onChange }: { value: 'grid' | 'table'; onChange: (value: 'grid' | 'table') => void }) {
+  return (
+    <div className="sales-view-toggle" style={viewToggle}>
+      <button type="button" aria-label="Grid view" onClick={() => onChange('grid')} style={viewToggleButton(value === 'grid')}><LayoutGrid size={14} /></button>
+      <button type="button" aria-label="Table view" onClick={() => onChange('table')} style={viewToggleButton(value === 'table')}><List size={14} /></button>
+    </div>
+  )
 }
 
 function InvoicesTab({ invoices, onMarkPaid, compact }: { invoices: Invoice[]; onMarkPaid?: (invoice: Invoice) => void; compact?: boolean }) {
@@ -836,6 +878,8 @@ const tableStyle: CSSProperties = { width: '100%', borderCollapse: 'collapse', m
 const thStyle: CSSProperties = { padding: '13px 14px', color: '#475569', background: '#f8fafc', fontSize: 11, fontWeight: 900, textAlign: 'left', whiteSpace: 'nowrap' }
 const tdStyle: CSSProperties = { padding: '13px 14px', borderTop: '1px solid #edf2f7', color: '#0f172a', fontSize: 12, whiteSpace: 'nowrap' }
 const viewAll: CSSProperties = { color: '#2563eb', fontSize: 12, fontWeight: 800, textDecoration: 'none', whiteSpace: 'nowrap' }
+const viewToggle: CSSProperties = { display: 'inline-grid', gridTemplateColumns: '1fr 1fr', border: '1px solid #dbe3ea', borderRadius: 8, overflow: 'hidden', background: '#fff' }
+const viewToggleButton = (active: boolean): CSSProperties => ({ width: 30, height: 30, border: 0, borderRight: active ? 0 : '1px solid #e2e8f0', background: active ? '#16a34a' : '#fff', color: active ? '#fff' : '#475569', display: 'grid', placeItems: 'center', cursor: 'pointer' })
 const miniSelect: CSSProperties = { height: 34, border: '1px solid #dbe3ea', borderRadius: 8, padding: '0 10px', background: '#fff', color: '#334155', fontSize: 12, fontWeight: 750 }
 const searchBox: CSSProperties = { height: 34, width: 'min(240px, 48vw)', display: 'flex', alignItems: 'center', gap: 8, padding: '0 10px', border: '1px solid #dbe3ea', borderRadius: 8, background: '#fff' }
 const bareInput: CSSProperties = { border: 0, outline: 0, minWidth: 0, flex: 1, fontSize: 12, background: 'transparent', color: '#0f172a' }
@@ -851,6 +895,9 @@ const funnelBar: CSSProperties = { height: 34, borderRadius: 7, clipPath: 'polyg
 const repRow: CSSProperties = { display: 'flex', alignItems: 'center', gap: 12, minWidth: 0 }
 const avatarStyle: CSSProperties = { width: 32, height: 32, borderRadius: 999, background: '#2563eb', color: '#fff', display: 'inline-grid', placeItems: 'center', fontSize: 12, fontWeight: 900, flex: '0 0 auto' }
 const dealPill: CSSProperties = { background: '#dcfce7', color: '#15803d', borderRadius: 999, padding: '4px 9px', fontSize: 11, fontWeight: 850, whiteSpace: 'nowrap' }
+const ordersCardGrid: CSSProperties = { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(210px, 1fr))', gap: 12, padding: 14 }
+const orderCard: CSSProperties = { border: '1px solid #e2e8f0', borderRadius: 10, padding: 14, display: 'grid', gap: 12, background: '#fff', boxShadow: '0 8px 22px rgba(15,23,42,.04)', minWidth: 0 }
+const orderCardMeta: CSSProperties = { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }
 const categoryLayout: CSSProperties = { display: 'grid', gridTemplateColumns: '150px minmax(0, 1fr)', alignItems: 'center', gap: 22, padding: 18 }
 const donut: CSSProperties = { width: 140, height: 140, borderRadius: '50%', background: 'conic-gradient(#16a34a 0 40%, #2563eb 40% 70%, #8b5cf6 70% 90%, #f59e0b 90% 100%)', display: 'grid', placeItems: 'center', position: 'relative', color: '#0f172a', textAlign: 'center', fontSize: 12 }
 const categoryRow: CSSProperties = { display: 'flex', justifyContent: 'space-between', gap: 12, fontSize: 13, minWidth: 0 }

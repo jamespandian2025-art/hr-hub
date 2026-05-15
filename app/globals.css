@@ -3760,6 +3760,23 @@ html body {
     line-height: 1.15 !important;
   }
 
+  .sales-page .sales-view-toggle {
+    order: 2 !important;
+  }
+
+  .sales-page .sales-orders-card-grid {
+    grid-template-columns: 1fr !important;
+    padding: 12px !important;
+  }
+
+  .sales-page .sales-orders-card-grid small {
+    display: block !important;
+    color: #64748b !important;
+    font-size: 10px !important;
+    font-weight: 800 !important;
+    margin-bottom: 5px !important;
+  }
+
   .sales-page [style*='grid-template-columns: repeat(auto-fit, minmax(210px'] {
     grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
   }
