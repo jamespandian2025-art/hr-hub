@@ -27,7 +27,7 @@ import {
   Warehouse,
   X,
 } from 'lucide-react'
-import { type CompanyRecord, companyChangeEvent, companyScopedKey, getActiveCompany } from '@/lib/tenant/company'
+import { type CompanyRecord, companyChangeEvent, companyScopedKey, getActiveCompany, getCurrentActor } from '@/lib/tenant/company'
 
 type LeadStatus = 'New' | 'Contacted' | 'Qualified' | 'Lost'
 type OpportunityStage = 'Lead' | 'Qualified' | 'Proposal' | 'Negotiation' | 'Won' | 'Lost'
@@ -148,56 +148,6 @@ type SalesWorkspaceData = {
 const font = 'var(--font-body)'
 const green = '#16a34a'
 const tabs = ['Overview', 'Leads', 'Opportunities', 'Quotes', 'Sales Orders', 'Invoices', 'Customers', 'Products', 'Sales Analytics']
-const reps = ['Emily Clark', 'Michael Smith', 'Robert Brown', 'Alex Scott', 'Jessica White', 'James Pandian']
-
-const seedLeads: Lead[] = [
-  { id: 'LD-1008', leadName: 'Modernize field operations', company: 'Northstar Builders', contact: 'Olivia Martin', email: 'olivia@northstarbuild.com', phone: '+1 415 555 0182', source: 'Website', status: 'New', salesRep: 'Emily Clark', createdDate: '2026-05-14' },
-  { id: 'LD-1007', leadName: 'Inventory controls rollout', company: 'Canyon Supply Co.', contact: 'Noah Reyes', email: 'noah@canyonsupply.com', phone: '+1 512 555 0148', source: 'Referral', status: 'Contacted', salesRep: 'Michael Smith', createdDate: '2026-05-12' },
-  { id: 'LD-1006', leadName: 'Construction ERP discovery', company: 'BluePeak Construction', contact: 'Mia Chen', email: 'mia@bluepeak.com', phone: '+1 206 555 0193', source: 'Trade Show', status: 'Qualified', salesRep: 'Jessica White', createdDate: '2026-05-10' },
-  { id: 'LD-1005', leadName: 'Mobile approvals app', company: 'Urban Grid Group', contact: 'Daniel Stone', email: 'daniel@urbangrid.com', phone: '+1 303 555 0177', source: 'LinkedIn', status: 'Lost', salesRep: 'Alex Scott', createdDate: '2026-05-07', lostReason: 'Budget deferred' },
-]
-
-const seedOpportunities: Opportunity[] = [
-  { id: 'OP-2409', name: 'Enterprise CRM + project controls', customer: 'Apex Infrastructure', expectedValue: 128000, probability: 82, stage: 'Negotiation', expectedCloseDate: '2026-06-10', salesRep: 'Emily Clark' },
-  { id: 'OP-2408', name: 'Warehouse automation package', customer: 'Summit Materials', expectedValue: 86400, probability: 68, stage: 'Proposal', expectedCloseDate: '2026-06-18', salesRep: 'Michael Smith' },
-  { id: 'OP-2407', name: 'Financial workflow implementation', customer: 'Keystone Holdings', expectedValue: 54000, probability: 44, stage: 'Qualified', expectedCloseDate: '2026-07-02', salesRep: 'Jessica White' },
-  { id: 'OP-2406', name: 'Safety and HR performance suite', customer: 'HarborWorks', expectedValue: 37750, probability: 100, stage: 'Won', expectedCloseDate: '2026-05-09', salesRep: 'Robert Brown' },
-  { id: 'OP-2405', name: 'Procurement digitization', customer: 'MetroBuild Partners', expectedValue: 29100, probability: 0, stage: 'Lost', expectedCloseDate: '2026-05-02', salesRep: 'Alex Scott', lostReason: 'Chose incumbent vendor' },
-]
-
-const seedQuotes: Quote[] = [
-  { id: 'QT-2026-0418', customer: 'Apex Infrastructure', items: 'CRM licenses, implementation, reporting pack', subtotal: 118000, discount: 6000, tax: 8960, total: 120960, validUntil: '2026-06-03', status: 'Sent' },
-  { id: 'QT-2026-0417', customer: 'Summit Materials', items: 'Inventory module, barcode workflows, support', subtotal: 82000, discount: 2500, tax: 6360, total: 85860, validUntil: '2026-06-07', status: 'Draft' },
-  { id: 'QT-2026-0416', customer: 'HarborWorks', items: 'HR performance, commission tracking, onboarding', subtotal: 36000, discount: 0, tax: 2880, total: 38880, validUntil: '2026-05-28', status: 'Accepted' },
-]
-
-const seedOrders: SalesOrder[] = [
-  { id: 'SO-2026-0521', customer: 'HarborWorks', orderDate: '2026-05-09', deliveryDate: '2026-05-24', amount: 38880, paymentStatus: 'Paid', deliveryStatus: 'Delivered', salesRep: 'Robert Brown', productCategory: 'HR Suite' },
-  { id: 'SO-2026-0520', customer: 'StoneBridge Developers', orderDate: '2026-05-06', deliveryDate: '2026-05-27', amount: 64200, paymentStatus: 'Partially Paid', deliveryStatus: 'Packed', salesRep: 'Emily Clark', productCategory: 'ERP Platform' },
-  { id: 'SO-2026-0519', customer: 'GreenLine Contractors', orderDate: '2026-05-03', deliveryDate: '2026-05-26', amount: 27600, paymentStatus: 'Unpaid', deliveryStatus: 'Picking', salesRep: 'Jessica White', productCategory: 'Procurement' },
-  { id: 'SO-2026-0518', customer: 'NovaBuild', orderDate: '2026-04-26', deliveryDate: '2026-05-18', amount: 73150, paymentStatus: 'Paid', deliveryStatus: 'Delivered', salesRep: 'Michael Smith', productCategory: 'Warehouse' },
-]
-
-const seedInvoices: Invoice[] = [
-  { id: 'INV-2026-0722', customer: 'HarborWorks', issueDate: '2026-05-09', dueDate: '2026-05-24', amount: 38880, paidAmount: 38880, balanceDue: 0, status: 'Paid' },
-  { id: 'INV-2026-0721', customer: 'StoneBridge Developers', issueDate: '2026-05-06', dueDate: '2026-06-05', amount: 64200, paidAmount: 32000, balanceDue: 32200, status: 'Partially Paid' },
-  { id: 'INV-2026-0720', customer: 'GreenLine Contractors', issueDate: '2026-05-03', dueDate: '2026-06-02', amount: 27600, paidAmount: 0, balanceDue: 27600, status: 'Sent' },
-]
-
-const seedCustomers: Customer[] = [
-  { id: 'CUS-1201', name: 'HarborWorks', contact: 'Sofia Bennett', email: 'sofia@harborworks.com', phone: '+1 617 555 0114', totalPurchases: 156900, outstandingBalance: 0, lastOrderDate: '2026-05-09', status: 'Active' },
-  { id: 'CUS-1200', name: 'StoneBridge Developers', contact: 'Ethan Walsh', email: 'ethan@stonebridge.com', phone: '+1 212 555 0199', totalPurchases: 203450, outstandingBalance: 32200, lastOrderDate: '2026-05-06', status: 'Active' },
-  { id: 'CUS-1199', name: 'GreenLine Contractors', contact: 'Ava Patel', email: 'ava@greenline.com', phone: '+1 312 555 0160', totalPurchases: 73200, outstandingBalance: 27600, lastOrderDate: '2026-05-03', status: 'Active' },
-  { id: 'CUS-1198', name: 'NovaBuild', contact: 'Marcus King', email: 'marcus@novabuild.com', phone: '+1 213 555 0120', totalPurchases: 291700, outstandingBalance: 0, lastOrderDate: '2026-04-26', status: 'Active' },
-]
-
-const seedProducts: Product[] = [
-  { id: 'PRD-501', name: 'WiseFlow Enterprise CRM', sku: 'WF-CRM-ENT', category: 'CRM', price: 24000, cost: 7600, stockStatus: 'In Stock', active: true },
-  { id: 'PRD-502', name: 'Warehouse Automation Pack', sku: 'WF-WH-AUTO', category: 'Warehouse', price: 18500, cost: 9100, stockStatus: 'Low Stock', active: true },
-  { id: 'PRD-503', name: 'Financial Controls Module', sku: 'WF-FIN-CTRL', category: 'Finance', price: 15200, cost: 4200, stockStatus: 'In Stock', active: true },
-  { id: 'PRD-504', name: 'Procurement RFQ Suite', sku: 'WF-PRO-RFQ', category: 'Procurement', price: 12800, cost: 3900, stockStatus: 'In Stock', active: true },
-  { id: 'PRD-505', name: 'Legacy Data Migration', sku: 'WF-SVC-MIG', category: 'Services', price: 9500, cost: 5200, stockStatus: 'In Stock', active: false },
-]
 
 const emptyForm: SalesForm = {
   customer: '',
@@ -208,26 +158,44 @@ const emptyForm: SalesForm = {
 }
 
 const salesWorkspaceKey = 'wiseflow-sales-workspace'
+const legacyDemoSalesIdPatterns = [
+  /^LD-100[5-8]$/,
+  /^OP-240[5-9]$/,
+  /^QT-\d{4}-041[6-8]$/,
+  /^SO-\d{4}-05(1[8-9]|2[0-1])$/,
+  /^INV-\d{4}-072[0-2]$/,
+  /^CUS-1(198|199|200|201)$/,
+  /^PRD-50[1-5]$/,
+]
+const emptySalesWorkspace: SalesWorkspaceData = {
+  leads: [],
+  opportunities: [],
+  quotes: [],
+  orders: [],
+  invoices: [],
+  customers: [],
+  products: [],
+}
 
 function loadSalesWorkspace(companyId?: string): SalesWorkspaceData {
-  const seeded = companyScopedSalesData(companyId)
-  if (typeof window === 'undefined' || !companyId) return seeded
+  const empty = companyScopedSalesData(companyId)
+  if (typeof window === 'undefined' || !companyId) return empty
 
   try {
     const stored = window.localStorage.getItem(companyScopedKey(salesWorkspaceKey, companyId))
-    if (!stored) return seeded
+    if (!stored) return empty
     const parsed = JSON.parse(stored) as Partial<SalesWorkspaceData>
     return {
-      leads: normalizeCompanyRows(parsed.leads, companyId, seeded.leads),
-      opportunities: normalizeCompanyRows(parsed.opportunities, companyId, seeded.opportunities),
-      quotes: normalizeCompanyRows(parsed.quotes, companyId, seeded.quotes),
-      orders: normalizeCompanyRows(parsed.orders, companyId, seeded.orders),
-      invoices: normalizeCompanyRows(parsed.invoices, companyId, seeded.invoices),
-      customers: normalizeCompanyRows(parsed.customers, companyId, seeded.customers),
-      products: normalizeCompanyRows(parsed.products, companyId, seeded.products),
+      leads: normalizeCompanyRows(parsed.leads, companyId),
+      opportunities: normalizeCompanyRows(parsed.opportunities, companyId),
+      quotes: normalizeCompanyRows(parsed.quotes, companyId),
+      orders: normalizeCompanyRows(parsed.orders, companyId),
+      invoices: normalizeCompanyRows(parsed.invoices, companyId),
+      customers: normalizeCompanyRows(parsed.customers, companyId),
+      products: normalizeCompanyRows(parsed.products, companyId),
     }
   } catch {
-    return seeded
+    return empty
   }
 }
 
@@ -237,15 +205,7 @@ function saveSalesWorkspace(companyId: string, data: SalesWorkspaceData) {
 }
 
 function companyScopedSalesData(companyId?: string, data?: SalesWorkspaceData): SalesWorkspaceData {
-  const source = data || {
-    leads: seedLeads,
-    opportunities: seedOpportunities,
-    quotes: seedQuotes,
-    orders: seedOrders,
-    invoices: seedInvoices,
-    customers: seedCustomers,
-    products: seedProducts,
-  }
+  const source = data || emptySalesWorkspace
   return {
     leads: source.leads.map(item => ({ ...item, companyId })),
     opportunities: source.opportunities.map(item => ({ ...item, companyId })),
@@ -257,9 +217,12 @@ function companyScopedSalesData(companyId?: string, data?: SalesWorkspaceData): 
   }
 }
 
-function normalizeCompanyRows<T extends { companyId?: string }>(rows: T[] | undefined, companyId: string, fallback: T[]) {
-  if (!Array.isArray(rows)) return fallback
-  return rows.map(row => ({ ...row, companyId })).filter(row => row.companyId === companyId)
+function normalizeCompanyRows<T extends { companyId?: string }>(rows: T[] | undefined, companyId: string) {
+  if (!Array.isArray(rows)) return []
+  return rows
+    .filter(row => !isLegacyDemoSalesId(stringValue((row as { id?: unknown }).id)))
+    .map(row => ({ ...row, companyId }))
+    .filter(row => row.companyId === companyId)
 }
 
 export default function SalesPage() {
@@ -269,13 +232,13 @@ export default function SalesPage() {
   const [newMenuOpen, setNewMenuOpen] = useState(false)
   const [form, setForm] = useState<SalesForm>(emptyForm)
   const [notice, setNotice] = useState('')
-  const [leads, setLeads] = useState(seedLeads)
-  const [opportunities, setOpportunities] = useState(seedOpportunities)
-  const [quotes, setQuotes] = useState(seedQuotes)
-  const [orders, setOrders] = useState(seedOrders)
-  const [invoices, setInvoices] = useState(seedInvoices)
-  const [customers, setCustomers] = useState(seedCustomers)
-  const [products, setProducts] = useState(seedProducts)
+  const [leads, setLeads] = useState<Lead[]>([])
+  const [opportunities, setOpportunities] = useState<Opportunity[]>([])
+  const [quotes, setQuotes] = useState<Quote[]>([])
+  const [orders, setOrders] = useState<SalesOrder[]>([])
+  const [invoices, setInvoices] = useState<Invoice[]>([])
+  const [customers, setCustomers] = useState<Customer[]>([])
+  const [products, setProducts] = useState<Product[]>([])
   const [activeCompany, setActiveCompany] = useState<CompanyRecord | null>(null)
   const storageReady = useRef(false)
 
@@ -317,6 +280,7 @@ export default function SalesPage() {
   const categoryTotals = useMemo(() => totalBy(orders, order => order.productCategory), [orders])
   const pipeline = useMemo(() => buildPipeline(opportunities), [opportunities])
   const forecast = opportunities.filter(item => !['Won', 'Lost'].includes(item.stage)).reduce((sum, item) => sum + item.expectedValue * (item.probability / 100), 0)
+  const salesRepOptions = useMemo(() => getSalesRepOptions(activeCompany), [activeCompany])
 
   const createQuickOpportunity = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
@@ -339,7 +303,7 @@ export default function SalesPage() {
     }
     setOpportunities(current => [next, ...current])
     ensureCustomer(form.customer.trim(), form.salesRep.trim())
-    setForm(emptyForm)
+    setForm({ ...emptyForm, salesRep: salesRepOptions[0] || '' })
     setDrawerOpen(false)
     setNotice('Opportunity created and added to the sales pipeline.')
   }
@@ -351,10 +315,10 @@ export default function SalesPage() {
       companyId: activeCompany?.id,
       name: lead.leadName,
       customer: lead.company,
-      expectedValue: 42000,
+      expectedValue: 0,
       probability: 32,
       stage: 'Qualified',
-      expectedCloseDate: '2026-06-30',
+      expectedCloseDate: new Date().toISOString().slice(0, 10),
       salesRep: lead.salesRep,
     }, ...current])
     ensureCustomer(lead.company, lead.salesRep)
@@ -367,21 +331,22 @@ export default function SalesPage() {
   }
 
   const convertQuote = (quote: Quote) => {
+    const assignedRep = salesRepOptions[0] || getCurrentActor().fullName || getCurrentActor().name || getCurrentActor().email || ''
     const order: SalesOrder = {
       id: quote.id.replace('QT', 'SO'),
       companyId: activeCompany?.id,
       customer: quote.customer,
       orderDate: new Date().toISOString().slice(0, 10),
-      deliveryDate: '2026-06-15',
+      deliveryDate: new Date().toISOString().slice(0, 10),
       amount: quote.total,
       paymentStatus: 'Unpaid',
       deliveryStatus: 'Pending',
-      salesRep: 'Emily Clark',
-      productCategory: quote.items.includes('Inventory') ? 'Warehouse' : 'CRM',
+      salesRep: assignedRep,
+      productCategory: quote.items.split(',')[0]?.trim() || 'Uncategorized',
     }
     setQuotes(current => current.map(item => item.id === quote.id ? { ...item, status: 'Accepted' } : item))
     setOrders(current => [order, ...current])
-    ensureCustomer(quote.customer, 'Emily Clark', order.amount, order.orderDate)
+    ensureCustomer(quote.customer, assignedRep, order.amount, order.orderDate)
     setNotice(`${quote.id} converted to ${order.id}.`)
   }
 
@@ -396,7 +361,7 @@ export default function SalesPage() {
       companyId: activeCompany?.id,
       customer: order.customer,
       issueDate: new Date().toISOString().slice(0, 10),
-      dueDate: '2026-06-30',
+      dueDate: new Date().toISOString().slice(0, 10),
       amount: order.amount,
       paidAmount: 0,
       balanceDue: order.amount,
@@ -428,8 +393,8 @@ export default function SalesPage() {
         companyId: activeCompany?.id,
         name,
         contact: rep,
-        email: `${name.toLowerCase().replace(/[^a-z0-9]+/g, '.')}@example.com`,
-        phone: '+1 555 0100',
+        email: '',
+        phone: '',
         totalPurchases: amount,
         outstandingBalance: 0,
         lastOrderDate: orderDate || '-',
@@ -445,15 +410,15 @@ export default function SalesPage() {
         subtitle={`Manage the full sales workflow for ${activeCompany?.name || 'the selected company'} from lead capture to invoice, payment, delivery, and performance reporting.`}
         actions={(
           <>
-            <ToolbarButton icon={<CalendarDays size={16} />} label="May 1 - May 31, 2026" hasChevron />
+            <ToolbarButton icon={<CalendarDays size={16} />} label="Current period" hasChevron />
             <ToolbarButton icon={<Filter size={16} />} label="Filters" />
             <div style={{ position: 'relative' }}>
               <button onClick={() => setNewMenuOpen(value => !value)} style={primaryButton}><Plus size={16} /> New <ChevronDown size={14} /></button>
               {newMenuOpen ? (
                 <div style={newMenu}>
-                  <button onClick={() => { setActiveTab('Leads'); setNewMenuOpen(false) }} style={newMenuItem}><UsersRound size={15} /> New lead</button>
-                  <button onClick={() => { setDrawerOpen(true); setNewMenuOpen(false) }} style={newMenuItem}><ShoppingBag size={15} /> New opportunity</button>
-                  <button onClick={() => { setActiveTab('Quotes'); setNewMenuOpen(false) }} style={newMenuItem}><ReceiptText size={15} /> New quote</button>
+                  <button onClick={() => { setActiveTab('Leads'); setNewMenuOpen(false); setNotice('Lead creation is ready for the connected CRM form.') }} style={newMenuItem}><UsersRound size={15} /> New lead</button>
+                  <button onClick={() => { setDrawerOpen(true); setForm({ ...emptyForm, salesRep: salesRepOptions[0] || '' }); setNewMenuOpen(false) }} style={newMenuItem}><ShoppingBag size={15} /> New opportunity</button>
+                  <button onClick={() => { setActiveTab('Quotes'); setNewMenuOpen(false); setNotice('Quote creation is ready for the connected quoting form.') }} style={newMenuItem}><ReceiptText size={15} /> New quote</button>
                 </div>
               ) : null}
             </div>
@@ -515,7 +480,7 @@ export default function SalesPage() {
             <div style={formGrid}>
               <TextField label="Customer" value={form.customer} onChange={value => setForm(current => ({ ...current, customer: value }))} required />
               <TextField label="Expected Value" value={form.amount} onChange={value => setForm(current => ({ ...current, amount: value }))} type="number" prefix="$" required />
-              <SelectField label="Sales Rep" value={form.salesRep} onChange={value => setForm(current => ({ ...current, salesRep: value }))} options={reps} required />
+              <SelectField label="Sales Rep" value={form.salesRep} onChange={value => setForm(current => ({ ...current, salesRep: value }))} options={salesRepOptions} required />
               <SelectField label="Category" value={form.category} onChange={value => setForm(current => ({ ...current, category: value }))} options={['CRM', 'ERP Platform', 'Warehouse', 'Procurement', 'HR Suite', 'Services']} />
               <TextField label="Expected Close Date" value={form.closeDate} onChange={value => setForm(current => ({ ...current, closeDate: value }))} type="date" />
             </div>
@@ -537,13 +502,13 @@ function Overview({ orders, invoices, reps, categories, pipeline, onCreateInvoic
     <>
       <div className="sales-top-grid" style={topGrid}>
         <Panel title="Sales Performance" action={<select style={miniSelect}><option>By Month</option></select>}>
-          <PerformanceChart orders={orders} />
+          {orders.length ? <PerformanceChart orders={orders} /> : <EmptyState title="No sales performance yet" body="Confirmed sales orders will build the revenue chart." />}
         </Panel>
         <Panel title="Sales Pipeline" action={<select style={miniSelect}><option>This Month</option></select>}>
-          <Pipeline stages={pipeline} />
+          {pipeline.some(stage => stage.count > 0) ? <Pipeline stages={pipeline} /> : <EmptyState title="No pipeline yet" body="Qualified opportunities will appear in the funnel." />}
         </Panel>
         <Panel title="Top Sales Reps" action={<a style={viewAll}>View All</a>}>
-          <div className="sales-reps-list" style={repsList}>{reps.slice(0, 5).map((rep, index) => <SalesRep key={rep.label} rep={rep} index={index} />)}</div>
+          {reps.length ? <div className="sales-reps-list" style={repsList}>{reps.slice(0, 5).map((rep, index) => <SalesRep key={rep.label} rep={rep} index={index} />)}</div> : <EmptyState title="No rep activity yet" body="Sales reps will rank after orders are assigned." />}
         </Panel>
       </div>
       <div className="sales-bottom-grid" style={bottomGrid}>
@@ -560,7 +525,7 @@ function Overview({ orders, invoices, reps, categories, pipeline, onCreateInvoic
         </Panel>
         <div style={{ display: 'grid', gap: 16, minWidth: 0 }}>
           <Panel title="Revenue by Product Category" action={<a style={viewAll}>View All</a>}>
-            <CategoryRevenue categories={categories} />
+            {categories.length ? <CategoryRevenue categories={categories} /> : <EmptyState title="No category revenue yet" body="Product categories will populate after orders are confirmed." />}
           </Panel>
           <Panel title="Recent Invoices" action={<a style={viewAll}>View All</a>}>
             <InvoicesTab invoices={invoices.slice(0, 5)} compact />
@@ -586,6 +551,7 @@ function WorkflowStrip() {
 }
 
 function LeadsTab({ leads, onQualify }: { leads: Lead[]; onQualify: (lead: Lead) => void }) {
+  if (!leads.length) return <EmptyState title="No leads yet" body="Create or import leads to start the sales workflow." />
   return <DataTable headers={['Lead name', 'Company', 'Contact', 'Email', 'Phone', 'Source', 'Status', 'Assigned rep', 'Created', 'Actions']}>
     {leads.map(lead => <tr key={lead.id}>
       <Cell strong>{lead.leadName}</Cell><Cell>{lead.company}</Cell><Cell>{lead.contact}</Cell><Cell>{lead.email}</Cell><Cell>{lead.phone}</Cell><Cell>{lead.source}</Cell><Cell><Badge text={lead.status} /></Cell><Cell>{lead.salesRep}</Cell><Cell>{date(lead.createdDate)}</Cell>
@@ -595,6 +561,7 @@ function LeadsTab({ leads, onQualify }: { leads: Lead[]; onQualify: (lead: Lead)
 }
 
 function OpportunitiesTab({ opportunities }: { opportunities: Opportunity[] }) {
+  if (!opportunities.length) return <EmptyState title="No opportunities yet" body="Use New Opportunity to add a qualified deal." />
   return <DataTable headers={['Opportunity', 'Customer', 'Expected value', 'Probability', 'Stage', 'Expected close', 'Sales rep', 'Forecast']}>
     {opportunities.map(item => <tr key={item.id}>
       <Cell strong>{item.name}</Cell><Cell>{item.customer}</Cell><Cell>{money(item.expectedValue)}</Cell><Cell>{item.probability}%</Cell><Cell><Badge text={item.stage} /></Cell><Cell>{date(item.expectedCloseDate)}</Cell><Cell>{item.salesRep}</Cell><Cell>{money(item.expectedValue * (item.probability / 100))}</Cell>
@@ -603,6 +570,7 @@ function OpportunitiesTab({ opportunities }: { opportunities: Opportunity[] }) {
 }
 
 function QuotesTab({ quotes, onSend, onConvert }: { quotes: Quote[]; onSend: (quote: Quote) => void; onConvert: (quote: Quote) => void }) {
+  if (!quotes.length) return <EmptyState title="No quotes yet" body="Quotes will appear here after they are created from opportunities or pricing workflows." />
   return <DataTable headers={['Quote #', 'Customer', 'Items/services', 'Subtotal', 'Discount', 'Tax', 'Total', 'Valid until', 'Status', 'Actions']}>
     {quotes.map(quote => <tr key={quote.id}>
       <Cell strong>{quote.id}</Cell><Cell>{quote.customer}</Cell><Cell>{quote.items}</Cell><Cell>{money(quote.subtotal)}</Cell><Cell>{money(quote.discount)}</Cell><Cell>{money(quote.tax)}</Cell><Cell strong>{money(quote.total)}</Cell><Cell>{date(quote.validUntil)}</Cell><Cell><Badge text={quote.status} /></Cell>
@@ -612,6 +580,7 @@ function QuotesTab({ quotes, onSend, onConvert }: { quotes: Quote[]; onSend: (qu
 }
 
 function OrdersTab({ orders, onCreateInvoice, onUpdateDelivery, compact, view = 'table' }: { orders: SalesOrder[]; onCreateInvoice: (order: SalesOrder) => void; onUpdateDelivery?: (order: SalesOrder) => void; compact?: boolean; view?: 'grid' | 'table' }) {
+  if (!orders.length) return <EmptyState title="No sales orders yet" body="Accepted quotes and confirmed orders will show here." />
   if (compact && view === 'grid') {
     return <div className="sales-orders-card-grid" style={ordersCardGrid}>
       {orders.map(order => (
@@ -651,6 +620,7 @@ function ViewToggle({ value, onChange }: { value: 'grid' | 'table'; onChange: (v
 }
 
 function InvoicesTab({ invoices, onMarkPaid, compact }: { invoices: Invoice[]; onMarkPaid?: (invoice: Invoice) => void; compact?: boolean }) {
+  if (!invoices.length) return <EmptyState title="No invoices yet" body="Invoices created from sales orders will appear here." />
   return <DataTable headers={compact ? ['Invoice #', 'Customer', 'Amount', 'Status'] : ['Invoice #', 'Customer', 'Issue date', 'Due date', 'Amount', 'Paid amount', 'Balance due', 'Status', 'Actions']}>
     {invoices.map(invoice => <tr key={invoice.id}>
       <Cell strong>{invoice.id}</Cell><Cell>{invoice.customer}</Cell>{!compact && <Cell>{date(invoice.issueDate)}</Cell>}{!compact && <Cell>{date(invoice.dueDate)}</Cell>}<Cell strong>{money(invoice.amount)}</Cell>{!compact && <Cell>{money(invoice.paidAmount)}</Cell>}{!compact && <Cell>{money(invoice.balanceDue)}</Cell>}<Cell><Badge text={invoice.status} /></Cell>
@@ -660,6 +630,7 @@ function InvoicesTab({ invoices, onMarkPaid, compact }: { invoices: Invoice[]; o
 }
 
 function CustomersTab({ customers }: { customers: Customer[] }) {
+  if (!customers.length) return <EmptyState title="No customers yet" body="Customers are created from opportunities, orders, or imports." />
   return <DataTable headers={['Customer/company', 'Contact person', 'Email', 'Phone', 'Total purchases', 'Outstanding balance', 'Last order date', 'Status']}>
     {customers.map(customer => <tr key={customer.id}>
       <Cell strong>{customer.name}</Cell><Cell>{customer.contact}</Cell><Cell>{customer.email}</Cell><Cell>{customer.phone}</Cell><Cell>{money(customer.totalPurchases)}</Cell><Cell>{money(customer.outstandingBalance)}</Cell><Cell>{date(customer.lastOrderDate)}</Cell><Cell><Badge text={customer.status} /></Cell>
@@ -668,6 +639,7 @@ function CustomersTab({ customers }: { customers: Customer[] }) {
 }
 
 function ProductsTab({ products, setProducts }: { products: Product[]; setProducts: React.Dispatch<React.SetStateAction<Product[]>> }) {
+  if (!products.length) return <EmptyState title="No products yet" body="Add products or services before quoting and order fulfillment." />
   return <DataTable headers={['Product/service', 'SKU', 'Category', 'Price', 'Cost', 'Margin', 'Stock status', 'Active', 'Actions']}>
     {products.map(product => <tr key={product.id}>
       <Cell strong>{product.name}</Cell><Cell>{product.sku}</Cell><Cell>{product.category}</Cell><Cell>{money(product.price)}</Cell><Cell>{money(product.cost)}</Cell><Cell>{Math.round(((product.price - product.cost) / product.price) * 100)}%</Cell><Cell><Badge text={product.stockStatus} /></Cell><Cell>{product.active ? 'Active' : 'Inactive'}</Cell>
@@ -682,6 +654,10 @@ function AnalyticsTab({ orders, opportunities, products, customers }: { orders: 
   const byCategory = totalBy(orders, order => order.productCategory)
   const lostReasons = opportunities.filter(item => item.stage === 'Lost').map(item => item.lostReason || 'No reason captured')
   const forecast = opportunities.filter(item => !['Won', 'Lost'].includes(item.stage)).reduce((sum, item) => sum + item.expectedValue * (item.probability / 100), 0)
+  const marginProducts = products.filter(item => item.price > 0)
+  const averageMargin = marginProducts.length
+    ? Math.round(marginProducts.reduce((sum, item) => sum + ((item.price - item.cost) / item.price), 0) / marginProducts.length * 100)
+    : 0
   return (
     <div style={analyticsGrid}>
       <InsightCard title="Revenue Trend" value={money(orders.reduce((sum, item) => sum + item.amount, 0))} body="Rolling order revenue from confirmed sales orders." icon={BarChart3} />
@@ -691,7 +667,7 @@ function AnalyticsTab({ orders, opportunities, products, customers }: { orders: 
       <InsightList title="Sales by Product / Category" items={byCategory.map(item => [item.label, money(item.amount)])} />
       <InsightCard title="Pipeline Forecast" value={money(forecast)} body="Probability-weighted pipeline forecast." icon={CircleDollarSign} />
       <InsightList title="Lost Deal Reasons" items={lostReasons.map(reason => [reason, 'Review'])} />
-      <InsightCard title="Product Margin" value={`${Math.round(products.reduce((sum, item) => sum + ((item.price - item.cost) / item.price), 0) / Math.max(products.length, 1) * 100)}%`} body={`${customers.length} customer accounts tied to sales analytics.`} icon={Package} />
+      <InsightCard title="Product Margin" value={`${averageMargin}%`} body={`${customers.length} customer accounts tied to sales analytics.`} icon={Package} />
     </div>
   )
 }
@@ -754,9 +730,9 @@ function MetricCard({ icon, label, value, detail, tone }: { icon: ReactNode; lab
 }
 
 function PerformanceChart({ orders }: { orders: SalesOrder[] }) {
-  const months = ['Dec', 'Jan', 'Feb', 'Mar', 'Apr', 'May']
-  const values = [35, 54, 46, 62, 70, Math.min(100, Math.max(35, orders.reduce((sum, item) => sum + item.amount, 0) / 2200))]
-  return <div style={{ padding: '8px 12px 24px' }}><div style={chartArea}>{months.map((month, index) => <div key={month} style={chartColumn}><div style={{ ...bar, height: `${values[index]}%` }} /><small style={chartLabel}>{month}</small></div>)}</div></div>
+  const monthlyRevenue = buildMonthlyRevenue(orders)
+  const max = Math.max(...monthlyRevenue.map(item => item.amount), 1)
+  return <div style={{ padding: '8px 12px 24px' }}><div style={chartArea}>{monthlyRevenue.map(item => <div key={item.label} style={chartColumn}><div style={{ ...bar, height: `${Math.max((item.amount / max) * 100, 12)}%` }} /><small style={chartLabel}>{item.label}</small></div>)}</div></div>
 }
 
 function Pipeline({ stages }: { stages: { stage: OpportunityStage; count: number; amount: number }[] }) {
@@ -783,7 +759,11 @@ function InsightCard({ title, value, body, icon: Icon }: { title: string; value:
 }
 
 function InsightList({ title, items }: { title: string; items: [string, string][] }) {
-  return <section style={insightCard}><h3>{title}</h3><div style={{ display: 'grid', gap: 10 }}>{items.slice(0, 5).map(([label, value]) => <div key={label} style={listRow}><span>{label}</span><strong>{value}</strong></div>)}</div></section>
+  return <section style={insightCard}><h3>{title}</h3>{items.length ? <div style={{ display: 'grid', gap: 10 }}>{items.slice(0, 5).map(([label, value]) => <div key={label} style={listRow}><span>{label}</span><strong>{value}</strong></div>)}</div> : <p style={{ margin: 0, color: '#64748b', fontSize: 13 }}>No data yet.</p>}</section>
+}
+
+function EmptyState({ title, body }: { title: string; body: string }) {
+  return <div style={emptyState}><strong>{title}</strong><p>{body}</p></div>
 }
 
 function SearchFilter({ search, setSearch }: { search: string; setSearch: (value: string) => void }) {
@@ -818,6 +798,44 @@ function totalBy<T>(rows: T[], pick: (row: T) => string) {
     map.set(label, current)
   })
   return Array.from(map.values()).sort((a, b) => b.amount - a.amount)
+}
+
+function buildMonthlyRevenue(orders: SalesOrder[]) {
+  const formatter = new Intl.DateTimeFormat('en-US', { month: 'short' })
+  const totals = new Map<string, number>()
+  orders.forEach(order => {
+    const parsed = new Date(`${order.orderDate}T00:00:00`)
+    if (Number.isNaN(parsed.getTime())) return
+    const key = `${parsed.getFullYear()}-${String(parsed.getMonth() + 1).padStart(2, '0')}`
+    totals.set(key, (totals.get(key) || 0) + order.amount)
+  })
+
+  return Array.from(totals.entries())
+    .sort(([a], [b]) => a.localeCompare(b))
+    .slice(-6)
+    .map(([key, amount]) => {
+      const [year, month] = key.split('-').map(Number)
+      return { label: formatter.format(new Date(year, month - 1, 1)), amount }
+    })
+}
+
+function getSalesRepOptions(company: CompanyRecord | null) {
+  const memberNames = (company?.members || [])
+    .filter(member => member.status === 'Active' && ['Owner', 'Admin', 'Sales'].includes(member.role))
+    .map(member => member.name || member.email)
+    .filter(Boolean)
+  const actor = getCurrentActor()
+  const actorName = actor.fullName || actor.name || actor.email
+  const options = Array.from(new Set([actorName, ...memberNames].filter(Boolean))) as string[]
+  return options.length ? options : ['Unassigned']
+}
+
+function stringValue(value: unknown) {
+  return typeof value === 'string' ? value : ''
+}
+
+function isLegacyDemoSalesId(id: string) {
+  return legacyDemoSalesIdPatterns.some(pattern => pattern.test(id))
 }
 
 function buildPipeline(opportunities: Opportunity[]) {
@@ -874,6 +892,7 @@ const bottomGrid: CSSProperties = { display: 'grid', gridTemplateColumns: 'minma
 const panel: CSSProperties = { background: '#fff', border: '1px solid #e2e8f0', borderRadius: 10, boxShadow: '0 12px 28px rgba(15,23,42,.04)', overflow: 'hidden', minWidth: 0 }
 const panelHeader: CSSProperties = { minHeight: 58, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, padding: '0 18px', borderBottom: '1px solid #eef2f7', minWidth: 0 }
 const panelTitle: CSSProperties = { margin: 0, color: '#020617', fontSize: 15, fontWeight: 900 }
+const emptyState: CSSProperties = { minHeight: 154, display: 'grid', placeItems: 'center', alignContent: 'center', gap: 6, padding: 24, color: '#64748b', textAlign: 'center', fontSize: 13 }
 const tableStyle: CSSProperties = { width: '100%', borderCollapse: 'collapse', minWidth: 920 }
 const thStyle: CSSProperties = { padding: '13px 14px', color: '#475569', background: '#f8fafc', fontSize: 11, fontWeight: 900, textAlign: 'left', whiteSpace: 'nowrap' }
 const tdStyle: CSSProperties = { padding: '13px 14px', borderTop: '1px solid #edf2f7', color: '#0f172a', fontSize: 12, whiteSpace: 'nowrap' }
