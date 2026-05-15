@@ -2302,6 +2302,30 @@ h6 {
 }
 
 .mobile-menu-button { display: none; }
+.header-mobile-brand {
+  display: none;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  color: #111827;
+}
+.header-mobile-brand span {
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  background: #000;
+  color: #fff;
+  display: grid;
+  place-items: center;
+  font-size: 13px;
+  font-weight: 900;
+}
+.header-mobile-brand strong {
+  font-size: 15px;
+  font-weight: 900;
+  letter-spacing: 0;
+  white-space: nowrap;
+}
 .mobile-nav-backdrop,
 .mobile-nav-drawer   { display: none; }
 
@@ -3005,6 +3029,24 @@ html[data-theme='dark'] .hr-topbar .hr-primary-button {
   .charts-grid  { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; }
   .data-grid    { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; }
   .modules-grid { grid-template-columns: repeat(3, minmax(0, 1fr)) !important; }
+
+  .dashboard-page {
+    max-width: 100%;
+    overflow-x: hidden;
+  }
+
+  .dashboard-card,
+  .dashboard-kpi-card,
+  .dashboard-module-card {
+    min-width: 0;
+    max-width: 100%;
+  }
+
+  .dashboard-card .recharts-wrapper,
+  .dashboard-card .recharts-surface,
+  .dashboard-card .recharts-responsive-container {
+    max-width: 100% !important;
+  }
 }
 
 /* â”€â”€ Tablet portrait / large phone (â‰¤768px) â”€â”€ */
@@ -3033,6 +3075,112 @@ html[data-theme='dark'] .hr-topbar .hr-primary-button {
   .data-grid    { grid-template-columns: 1fr !important; }
   .modules-grid { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; }
   .dash-header-row { flex-direction: column !important; align-items: flex-start !important; }
+
+  .header-mobile-brand {
+    display: inline-flex !important;
+  }
+
+  .dashboard-page {
+    display: grid;
+    gap: 12px;
+  }
+
+  .dashboard-page .dash-header-row {
+    background: #fff;
+    border: 1px solid #e5e7eb;
+    border-radius: 14px;
+    padding: 14px;
+    margin-bottom: 0 !important;
+    box-shadow: 0 10px 26px rgba(15, 23, 42, 0.05);
+  }
+
+  .dashboard-page .dash-header-row h1 {
+    font-size: 22px !important;
+  }
+
+  .dashboard-page .dash-header-row p {
+    font-size: 13px !important;
+    line-height: 1.45 !important;
+  }
+
+  .dashboard-header-actions {
+    width: 100%;
+    flex-wrap: wrap;
+  }
+
+  .dashboard-header-actions > div,
+  .dashboard-header-actions button {
+    min-height: 44px !important;
+  }
+
+  .dashboard-header-actions > div {
+    flex: 1 1 160px;
+  }
+
+  .dashboard-header-actions > div > button {
+    width: 100%;
+    justify-content: center;
+  }
+
+  .dashboard-tabs {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+    margin-bottom: 0 !important;
+    padding: 0 2px;
+  }
+
+  .dashboard-tabs::-webkit-scrollbar {
+    display: none;
+  }
+
+  .dashboard-tabs button {
+    flex: 0 0 auto;
+    min-height: 44px;
+    padding: 10px 16px !important;
+    white-space: nowrap;
+  }
+
+  .dashboard-card {
+    border-radius: 14px !important;
+    padding: 14px !important;
+  }
+
+  .dashboard-card-header {
+    gap: 10px !important;
+    flex-wrap: wrap;
+  }
+
+  .dashboard-card-header h3 {
+    font-size: 14px !important;
+    line-height: 1.25;
+  }
+
+  .dashboard-card-header button,
+  .dashboard-card-header a {
+    min-height: 34px;
+  }
+
+  .dashboard-kpi-card {
+    min-height: 112px;
+    padding: 12px !important;
+  }
+
+  .dashboard-kpi-card svg {
+    max-width: 100%;
+  }
+
+  .dashboard-module-card {
+    min-height: 70px;
+    padding: 12px !important;
+  }
+
+  .dashboard-activity-row {
+    border: 1px solid #eef2f7;
+    border-radius: 12px;
+    padding: 10px;
+    background: #fff;
+  }
 
   /* Generic inline-style grids in other pages */
   .main-content > div { width: 100%; max-width: 100%; }
@@ -3089,6 +3237,10 @@ html[data-theme='dark'] .hr-topbar .hr-primary-button {
     grid-template-columns: 1fr !important;
   }
 
+  .dashboard-page .modules-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  }
+
   /* Two-pane layouts (detail pages with sidebar) */
   .main-content div[style*='300px 1fr'],
   .main-content div[style*='280px 1fr'],
@@ -3112,8 +3264,54 @@ html[data-theme='dark'] .hr-topbar .hr-primary-button {
   .main-content { padding: 16px 12px 12px; }
 
   /* KPI: still 2 columns */
-  .kpi-grid { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; gap: 6px !important; }
+  .kpi-grid { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; gap: 8px !important; }
   .modules-grid { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; gap: 6px !important; }
+
+  .dashboard-page {
+    gap: 10px;
+  }
+
+  .dashboard-page .kpi-grid {
+    display: flex !important;
+    overflow-x: auto;
+    scroll-snap-type: x mandatory;
+    -webkit-overflow-scrolling: touch;
+    padding: 0 2px 8px;
+    margin-bottom: 0 !important;
+  }
+
+  .dashboard-page .kpi-grid::-webkit-scrollbar {
+    height: 0;
+  }
+
+  .dashboard-page .dashboard-kpi-card {
+    flex: 0 0 78%;
+    scroll-snap-align: start;
+    min-height: 118px;
+  }
+
+  .dashboard-page .dashboard-card {
+    padding: 12px !important;
+  }
+
+  .dashboard-page .dashboard-card [style*='height: 152px'],
+  .dashboard-page .dashboard-card [style*='height: 148px'] {
+    height: 190px !important;
+  }
+
+  .dashboard-page .dashboard-card [style*='display: flex'][style*='align-items: center'] {
+    flex-wrap: wrap !important;
+  }
+
+  .dashboard-page .dashboard-card [style*='grid-template-columns: 1fr auto auto auto auto'],
+  .dashboard-page .dashboard-card [style*='grid-template-columns: auto 1fr auto auto auto'] {
+    grid-template-columns: 1fr !important;
+    gap: 6px !important;
+  }
+
+  .dashboard-page .dashboard-card [style*='text-align: right'] {
+    text-align: left !important;
+  }
 
   /* Large paddings â†’ compact */
   .main-content div[style*='padding: 60px'] { padding: 32px 14px !important; }
@@ -3129,6 +3327,14 @@ html[data-theme='dark'] .hr-topbar .hr-primary-button {
   .kpi-grid { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; gap: 5px !important; }
   .modules-grid { grid-template-columns: 1fr 1fr !important; gap: 5px !important; }
   .app-header { padding: 0 10px !important; }
+
+  .dashboard-page .dashboard-kpi-card {
+    flex-basis: 86%;
+  }
+
+  .dashboard-page .modules-grid {
+    grid-template-columns: 1fr !important;
+  }
 }
 
 /* â”€â”€ 1440p and wider â€” use more horizontal space â”€â”€ */

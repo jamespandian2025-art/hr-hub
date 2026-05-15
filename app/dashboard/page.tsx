@@ -14,7 +14,7 @@ import {
 } from 'lucide-react'
 import {
   Area, AreaChart, Bar, BarChart, CartesianGrid, Cell,
-  Legend, Line, LineChart, Pie, PieChart,
+  Line, LineChart, Pie, PieChart,
   ReferenceLine, ResponsiveContainer, Tooltip, XAxis, YAxis,
 } from 'recharts'
 
@@ -122,15 +122,18 @@ export default function Dashboard() {
   const [budgets, setBudgets]       = useState<BasicRecord[]>([])
 
   useEffect(() => {
-    setAccount(loadStored('flowsys-account', {}))
-    setProjects(loadStored('flowsys-projects', []))
-    setTasks(loadStored('flowsys-assigned-tasks', []))
-    setClients(loadStored('flowsys-clients', []))
-    setSuppliers(loadStored('flowsys-suppliers', []))
-    setWarehouses(loadStored('flowsys-warehouses', []))
-    setOpps(loadStored('flowsys-opportunities', []))
-    setBills(loadStored('flowsys-bills', []))
-    setBudgets(loadStored('flowsys-budgets', []))
+    const id = window.setTimeout(() => {
+      setAccount(loadStored('flowsys-account', {}))
+      setProjects(loadStored('flowsys-projects', []))
+      setTasks(loadStored('flowsys-assigned-tasks', []))
+      setClients(loadStored('flowsys-clients', []))
+      setSuppliers(loadStored('flowsys-suppliers', []))
+      setWarehouses(loadStored('flowsys-warehouses', []))
+      setOpps(loadStored('flowsys-opportunities', []))
+      setBills(loadStored('flowsys-bills', []))
+      setBudgets(loadStored('flowsys-budgets', []))
+    }, 0)
+    return () => window.clearTimeout(id)
   }, [])
 
   // Close New / Date dropdowns on outside click
@@ -435,7 +438,7 @@ export default function Dashboard() {
 
   // -- Render ----------------------------------------------------------------
   return (
-    <main style={{ fontFamily: font, paddingBottom: 16 }}>
+    <main className="dashboard-page" style={{ fontFamily: font, paddingBottom: 16 }}>
 
       {/* Page title + greeting row */}
       <div className="dash-header-row" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10, gap: 12, flexWrap: 'wrap' }}>
@@ -447,7 +450,7 @@ export default function Dashboard() {
             {greeting()}, {firstName}! ?? Here&apos;s what&apos;s happening across your business today.
           </p>
         </div>
-        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+        <div className="dashboard-header-actions" style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
 
           {/* Date range picker */}
           <div ref={dateRef} style={{ position: 'relative' }}>
@@ -506,7 +509,7 @@ export default function Dashboard() {
       </div>
 
       {/* Tabs */}
-      <div style={{ display: 'flex', gap: 2, borderBottom: '1px solid #e5e7eb', marginBottom: 14 }}>
+      <div className="dashboard-tabs" style={{ display: 'flex', gap: 2, borderBottom: '1px solid #e5e7eb', marginBottom: 14 }}>
         {['Projects', 'Sales', 'Financials', 'Operations'].map(t => (
           <button key={t} onClick={() => setTab(t)} style={{ border: 'none', borderBottom: `2px solid ${tab === t ? '#22c55e' : 'transparent'}`, background: 'transparent', color: tab === t ? '#22c55e' : '#6b7280', padding: '8px 16px', fontSize: 13, fontWeight: 600, cursor: 'pointer', transition: 'color 150ms ease' }}>{t}</button>
         ))}
@@ -1066,8 +1069,8 @@ function ChartCard({ title, sub, children, action, filter, filterOptions, onFilt
   }, [dropOpen])
 
   return (
-    <div style={{ background: '#fff', borderRadius: 12, border: '1px solid #e5e7eb', padding: '14px 16px 16px', boxShadow: '0 1px 4px rgba(0,0,0,0.05)' }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: sub ? 2 : 0 }}>
+    <div className="dashboard-card" style={{ background: '#fff', borderRadius: 12, border: '1px solid #e5e7eb', padding: '14px 16px 16px', boxShadow: '0 1px 4px rgba(0,0,0,0.05)' }}>
+      <div className="dashboard-card-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: sub ? 2 : 0 }}>
         <h3 style={{ margin: 0, fontSize: 14, fontWeight: 600, color: '#111827' }}>{title}</h3>
         {filter ? (
           <div ref={dropRef} style={{ position: 'relative', flexShrink: 0 }}>
@@ -1123,7 +1126,7 @@ function KpiCard({ label, value, t, neg = false, icon: Icon, iconColor, sparkDat
 }) {
   const positive = neg ? !t.up : t.up
   return (
-    <div style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: 11, padding: '11px 13px', boxShadow: '0 1px 3px rgba(0,0,0,0.04)' }}>
+    <div className="dashboard-kpi-card" style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: 11, padding: '11px 13px', boxShadow: '0 1px 3px rgba(0,0,0,0.04)' }}>
       <div style={{ display: 'flex', gap: 9, alignItems: 'flex-start' }}>
         <div style={{ width: 32, height: 32, borderRadius: 9, background: `${iconColor}18`, color: iconColor, display: 'grid', placeItems: 'center', flexShrink: 0 }}>
           <Icon size={15} color={iconColor} />
@@ -1182,7 +1185,7 @@ function FinBlock({ icon: Icon, iconColor, label, value, t }: {
   t: { text: string; up: boolean; zero: boolean }
 }) {
   return (
-    <div style={{ display: 'flex', gap: 10, alignItems: 'flex-start' }}>
+    <div className="dashboard-activity-row" style={{ display: 'flex', gap: 10, alignItems: 'flex-start' }}>
       <div style={{ width: 34, height: 34, borderRadius: 9, background: `${iconColor}18`, color: iconColor, display: 'grid', placeItems: 'center', flexShrink: 0 }}>
         <Icon size={16} color={iconColor} />
       </div>
@@ -1234,7 +1237,7 @@ function ModuleCard({ m }: { m: { title: string; href: string; icon: ComponentTy
   const Icon = m.icon
   return (
     <Link href={m.href} style={{ textDecoration: 'none' }}>
-      <div style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: 9, padding: '9px 12px', display: 'flex', alignItems: 'center', gap: 9, cursor: 'pointer', transition: 'border-color 150ms ease' }}>
+      <div className="dashboard-module-card" style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: 9, padding: '9px 12px', display: 'flex', alignItems: 'center', gap: 9, cursor: 'pointer', transition: 'border-color 150ms ease' }}>
         <div style={{ width: 28, height: 28, borderRadius: 7, background: `${m.color}18`, color: m.color, display: 'grid', placeItems: 'center', flexShrink: 0 }}>
           <Icon size={13} />
         </div>
@@ -1315,7 +1318,7 @@ function TabModules({ title, subtitle, modules }: { title: string; subtitle: str
           {subtitle && <div style={{ fontSize: 12, color: '#9ca3af', marginTop: 1 }}>{subtitle}</div>}
         </div>
       </div>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, minmax(0, 1fr))', gap: 8 }}>
+      <div className="modules-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(5, minmax(0, 1fr))', gap: 8 }}>
         {modules.map(m => <ModuleCard key={m.title} m={m} />)}
       </div>
     </div>

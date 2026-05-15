@@ -786,6 +786,10 @@ export default function Header({ onMenuClick, compactWorkspace = false }: Header
           >
             <Menu size={18} />
           </button>
+          <div className="header-mobile-brand">
+            <span>W</span>
+            <strong>WiseFlow</strong>
+          </div>
           <div className="header-breadcrumb" style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 12, minWidth: 0 }}>
             <Home size={13} color="#9ca3af" style={{ flexShrink: 0 }} />
             <ChevronRight size={11} color="#d1d5db" style={{ flexShrink: 0 }} />
