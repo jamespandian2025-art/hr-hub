@@ -631,7 +631,7 @@ function ViewToggle({ value, onChange }: { value: 'grid' | 'table'; onChange: (v
 function InvoicesTab({ invoices, onMarkPaid, compact, view = 'table' }: { invoices: Invoice[]; onMarkPaid?: (invoice: Invoice) => void; compact?: boolean; view?: 'grid' | 'table' }) {
   if (!invoices.length) return <EmptyState title="No invoices yet" body="Invoices created from sales orders will appear here." />
   if (compact && view === 'grid') {
-    return <div className="sales-orders-card-grid" style={ordersCardGrid}>
+    return <div className="sales-invoices-card-grid" style={invoicesCardGrid}>
       {invoices.map(invoice => (
         <article key={invoice.id} style={orderCard}>
           <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) auto', gap: 10, alignItems: 'flex-start' }}>
@@ -946,6 +946,7 @@ const repMeta: CSSProperties = { flex: 1, minWidth: 0, display: 'grid', gap: 2, 
 const avatarStyle: CSSProperties = { width: 32, height: 32, borderRadius: 999, background: '#2563eb', color: '#fff', display: 'inline-grid', placeItems: 'center', fontSize: 12, fontWeight: 900, flex: '0 0 auto' }
 const dealPill: CSSProperties = { background: '#dcfce7', color: '#15803d', borderRadius: 999, padding: '4px 9px', fontSize: 11, fontWeight: 850, whiteSpace: 'nowrap' }
 const ordersCardGrid: CSSProperties = { display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 12, padding: 14 }
+const invoicesCardGrid: CSSProperties = { display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 12, padding: 14 }
 const orderCard: CSSProperties = { border: '1px solid #e2e8f0', borderRadius: 10, padding: 14, display: 'grid', gap: 12, background: '#fff', boxShadow: '0 8px 22px rgba(15,23,42,.04)', minWidth: 0 }
 const orderCardMeta: CSSProperties = { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }
 const categoryLayout: CSSProperties = { display: 'grid', gridTemplateColumns: '150px minmax(0, 1fr)', alignItems: 'center', gap: 22, padding: 18 }

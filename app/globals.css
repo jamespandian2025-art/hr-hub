@@ -3970,10 +3970,18 @@ html body {
   .sales-page .sales-orders-card-grid {
     grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
   }
+
+  .sales-page .sales-invoices-card-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  }
 }
 
 @media (max-width: 860px) {
   .sales-page .sales-orders-card-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  }
+
+  .sales-page .sales-invoices-card-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
   }
 }
@@ -4039,7 +4047,14 @@ html body {
     padding: 12px !important;
   }
 
-  .sales-page .sales-orders-card-grid small {
+  .sales-page .sales-invoices-card-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+    gap: 10px !important;
+    padding: 12px !important;
+  }
+
+  .sales-page .sales-orders-card-grid small,
+  .sales-page .sales-invoices-card-grid small {
     display: block !important;
     color: #64748b !important;
     font-size: 10px !important;
