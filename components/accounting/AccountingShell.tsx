@@ -2,6 +2,8 @@
 
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
+import { useRouter } from 'next/navigation'
+import { useEffect, useMemo, useState } from 'react'
 import {
   ArrowLeft,
   BadgeDollarSign,
@@ -22,9 +24,35 @@ import {
   Search,
   ShieldCheck,
   WalletCards,
+  X,
 } from 'lucide-react'
+import { loadStored } from '@/app/employee/employeeData'
+import { AllowanceRequest, allowanceRequestKey, outboundNotificationsKey } from '@/app/hr/enterpriseData'
+import { LoanRequest, loanApprovalState, loanDisplayName, loanRequestKey, money as loanMoney } from '@/app/hr/loan-requests/loanData'
 
 const font = 'var(--font-body)'
+
+type FinanceOutboundNotification = {
+  id?: string | number
+  subject?: string
+  message?: string
+  recipientRole?: string
+  relatedType?: string
+  relatedId?: string | number
+  status?: string
+  target?: string
+  createdAt?: string
+}
+
+type AccountingNotification = {
+  id: string
+  title: string
+  detail: string
+  meta: string
+  target: string
+  createdAt?: string
+  tone: string
+}
 
 export const accountingNavItems = [
   { label: 'Overview', href: '/accounting', icon: LayoutDashboard, description: 'Cash, profit, receivables, and payables' },
@@ -47,8 +75,77 @@ export function getAccountingRouteMeta(pathname: string) {
 
 export default function AccountingShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname()
+  const router = useRouter()
   const activeMeta = getAccountingRouteMeta(pathname)
   const ActiveIcon = activeMeta.icon
+  const [notificationsOpen, setNotificationsOpen] = useState(false)
+  const [loanRequests, setLoanRequests] = useState<LoanRequest[]>([])
+  const [allowanceRequests, setAllowanceRequests] = useState<AllowanceRequest[]>([])
+  const [outboundNotifications, setOutboundNotifications] = useState<FinanceOutboundNotification[]>([])
+
+  useEffect(() => {
+    const loadNotifications = () => {
+      setLoanRequests(loadStored<LoanRequest[]>(loanRequestKey, []))
+      setAllowanceRequests(loadStored<AllowanceRequest[]>(allowanceRequestKey, []))
+      setOutboundNotifications(loadStored<FinanceOutboundNotification[]>(outboundNotificationsKey, []))
+    }
+
+    loadNotifications()
+    window.addEventListener('storage', loadNotifications)
+    window.addEventListener('focus', loadNotifications)
+    const timer = window.setInterval(loadNotifications, 2500)
+    return () => {
+      window.removeEventListener('storage', loadNotifications)
+      window.removeEventListener('focus', loadNotifications)
+      window.clearInterval(timer)
+    }
+  }, [])
+
+  const accountingNotifications = useMemo(() => {
+    const loanItems: AccountingNotification[] = loanRequests
+      .filter(request => request.status === 'Pending' && loanApprovalState(request).canFinanceDecide)
+      .map(request => ({
+        id: `loan-${request.id}`,
+        title: `${request.employeeName || 'Employee'} requested ${loanDisplayName(request)}`,
+        detail: `${loanMoney(request.amount)} · ${request.reason || 'Waiting for Finance approval'}`,
+        meta: 'Loan request',
+        target: '/accounting/payroll-finance',
+        createdAt: request.createdAt,
+        tone: '#16a34a',
+      }))
+
+    const allowanceItems: AccountingNotification[] = allowanceRequests
+      .filter(request => ['Pending', 'Manager Approved'].includes(request.status) && request.financeDecision !== 'Rejected')
+      .map(request => ({
+        id: `allowance-${request.id}`,
+        title: `${request.employeeName || 'Employee'} requested ${request.customType || request.type} allowance`,
+        detail: `PHP ${Number(request.amount || 0).toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} · ${request.purpose || request.reason || 'Waiting for Finance review'}`,
+        meta: 'Allowance request',
+        target: '/accounting/payroll-finance',
+        createdAt: request.createdAt,
+        tone: '#2563eb',
+      }))
+
+    const requestIds = new Set([...loanItems, ...allowanceItems].map(item => item.id.replace(/^(loan|allowance)-/, '')))
+    const outboundItems: AccountingNotification[] = outboundNotifications
+      .filter(item => String(item.recipientRole || '').toLowerCase() === 'finance')
+      .filter(item => String(item.status || '').toLowerCase() !== 'read')
+      .filter(item => !requestIds.has(String(item.relatedId || '')))
+      .map(item => ({
+        id: `finance-${item.id || item.relatedId || item.createdAt}`,
+        title: item.subject || 'Employee request needs Finance review',
+        detail: item.message || item.relatedType || 'Open Payroll Finance to review this request.',
+        meta: item.relatedType || 'Finance notification',
+        target: item.target || '/accounting/payroll-finance',
+        createdAt: item.createdAt,
+        tone: '#f97316',
+      }))
+
+    return [...loanItems, ...allowanceItems, ...outboundItems]
+      .sort((a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime())
+  }, [allowanceRequests, loanRequests, outboundNotifications])
+
+  const notificationBadgeCount = accountingNotifications.length
 
   return (
     <div className="accounting-shell" style={{ minHeight: '100vh', background: '#f7f9fc', display: 'grid', gridTemplateColumns: '250px minmax(0, 1fr)', fontFamily: font, color: '#111827' }}>
@@ -100,10 +197,52 @@ export default function AccountingShell({ children }: { children: React.ReactNod
           </label>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 10 }}>
             <button type="button" style={dateButtonStyle}><CalendarDays size={15} /> May 1 - May 31, 2024</button>
-            <button type="button" aria-label="Notifications" style={{ ...roundButtonStyle, position: 'relative' }}>
+            <button type="button" aria-label="Notifications" onClick={() => setNotificationsOpen(open => !open)} style={{ ...roundButtonStyle, position: 'relative' }}>
               <Bell size={18} />
-              <span style={{ position: 'absolute', top: 6, right: 6, minWidth: 16, height: 16, borderRadius: 999, background: '#ef4444', color: '#fff', fontSize: 10, fontWeight: 900, display: 'grid', placeItems: 'center', border: '2px solid #fff' }}>3</span>
+              {notificationBadgeCount > 0 && (
+                <span style={{ position: 'absolute', top: 6, right: 6, minWidth: 16, height: 16, borderRadius: 999, background: '#ef4444', color: '#fff', fontSize: 10, fontWeight: 900, display: 'grid', placeItems: 'center', border: '2px solid #fff' }}>{notificationBadgeCount}</span>
+              )}
             </button>
+            {notificationsOpen && (
+              <div style={notificationPanelStyle}>
+                <div style={notificationPanelHeaderStyle}>
+                  <span>
+                    <strong style={{ display: 'block', color: '#0f172a', fontSize: 16 }}>Finance notifications</strong>
+                    <small style={{ color: '#64748b', fontWeight: 700 }}>{notificationBadgeCount ? `${notificationBadgeCount} employee request${notificationBadgeCount === 1 ? '' : 's'} waiting` : 'No employee requests waiting'}</small>
+                  </span>
+                  <button type="button" aria-label="Close notifications" onClick={() => setNotificationsOpen(false)} style={smallIconButtonStyle}><X size={15} /></button>
+                </div>
+                <div style={notificationListStyle}>
+                  {accountingNotifications.length ? accountingNotifications.slice(0, 8).map(item => (
+                    <button
+                      key={item.id}
+                      type="button"
+                      onClick={() => {
+                        setNotificationsOpen(false)
+                        router.push(item.target)
+                      }}
+                      style={notificationItemStyle}
+                    >
+                      <span style={{ ...notificationDotStyle, background: item.tone }} />
+                      <span style={{ minWidth: 0 }}>
+                        <span style={notificationMetaStyle}>{item.meta} · {formatNotificationTime(item.createdAt)}</span>
+                        <strong style={notificationTitleStyle}>{item.title}</strong>
+                        <span style={notificationDetailStyle}>{item.detail}</span>
+                      </span>
+                    </button>
+                  )) : (
+                    <div style={notificationEmptyStyle}>
+                      <Bell size={20} />
+                      <strong>You are all caught up</strong>
+                      <span>Employee loan, allowance, and payroll requests will appear here for Finance review.</span>
+                    </div>
+                  )}
+                </div>
+                <button type="button" onClick={() => { setNotificationsOpen(false); router.push('/accounting/payroll-finance') }} style={notificationFooterStyle}>
+                  Open Payroll Finance
+                </button>
+              </div>
+            )}
             <button type="button" style={primaryButtonStyle}><Plus size={16} /> New <ChevronDown size={13} /></button>
           </div>
         </header>
@@ -111,6 +250,13 @@ export default function AccountingShell({ children }: { children: React.ReactNod
       </div>
     </div>
   )
+}
+
+function formatNotificationTime(value?: string) {
+  if (!value) return 'Now'
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return 'Now'
+  return date.toLocaleString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })
 }
 
 const backLinkStyle: React.CSSProperties = {
@@ -178,6 +324,121 @@ const primaryButtonStyle: React.CSSProperties = {
   gap: 7,
   padding: '0 13px',
   fontSize: 12.5,
+  fontWeight: 900,
+  cursor: 'pointer',
+}
+
+const smallIconButtonStyle: React.CSSProperties = {
+  width: 30,
+  height: 30,
+  borderRadius: 8,
+  border: '1px solid #e2e8f0',
+  background: '#fff',
+  color: '#334155',
+  display: 'grid',
+  placeItems: 'center',
+  cursor: 'pointer',
+}
+
+const notificationPanelStyle: React.CSSProperties = {
+  position: 'absolute',
+  top: 64,
+  right: 86,
+  width: 380,
+  maxWidth: 'calc(100vw - 28px)',
+  borderRadius: 14,
+  border: '1px solid #e2e8f0',
+  background: '#fff',
+  boxShadow: '0 24px 70px rgba(15,23,42,0.18)',
+  zIndex: 80,
+  overflow: 'hidden',
+}
+
+const notificationPanelHeaderStyle: React.CSSProperties = {
+  minHeight: 68,
+  padding: '14px 16px',
+  borderBottom: '1px solid #eef2f7',
+  display: 'flex',
+  alignItems: 'center',
+  justifyContent: 'space-between',
+  gap: 14,
+}
+
+const notificationListStyle: React.CSSProperties = {
+  maxHeight: 390,
+  overflowY: 'auto',
+  padding: 8,
+  display: 'grid',
+  gap: 6,
+}
+
+const notificationItemStyle: React.CSSProperties = {
+  width: '100%',
+  border: 0,
+  borderRadius: 10,
+  background: '#fff',
+  color: '#0f172a',
+  display: 'grid',
+  gridTemplateColumns: '8px minmax(0, 1fr)',
+  alignItems: 'start',
+  gap: 10,
+  padding: 10,
+  textAlign: 'left',
+  cursor: 'pointer',
+}
+
+const notificationDotStyle: React.CSSProperties = {
+  width: 8,
+  height: 8,
+  borderRadius: 999,
+  marginTop: 7,
+}
+
+const notificationMetaStyle: React.CSSProperties = {
+  display: 'block',
+  color: '#64748b',
+  fontSize: 11,
+  fontWeight: 800,
+  marginBottom: 3,
+}
+
+const notificationTitleStyle: React.CSSProperties = {
+  display: 'block',
+  color: '#0f172a',
+  fontSize: 13,
+  lineHeight: 1.25,
+  fontWeight: 900,
+}
+
+const notificationDetailStyle: React.CSSProperties = {
+  display: 'block',
+  color: '#475569',
+  fontSize: 12,
+  lineHeight: 1.35,
+  marginTop: 4,
+}
+
+const notificationEmptyStyle: React.CSSProperties = {
+  minHeight: 150,
+  borderRadius: 12,
+  background: '#f8fafc',
+  color: '#64748b',
+  display: 'grid',
+  placeItems: 'center',
+  alignContent: 'center',
+  gap: 6,
+  textAlign: 'center',
+  padding: 24,
+  fontSize: 13,
+}
+
+const notificationFooterStyle: React.CSSProperties = {
+  width: '100%',
+  minHeight: 44,
+  border: 0,
+  borderTop: '1px solid #eef2f7',
+  background: '#f8fafc',
+  color: '#16a34a',
   fontWeight: 900,
   cursor: 'pointer',
 }
