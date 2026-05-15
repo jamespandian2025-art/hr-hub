@@ -65,6 +65,8 @@ type PayrollRecord = {
 
 const payrollRecordKey = 'flowsys-hr-payroll-records'
 const financeRefreshEvent = 'wiseflow:finance-requests-changed'
+const payrollTabs = ['Payroll Overview', 'Employees', 'Earnings', 'Deductions', 'Taxes & Contributions', 'Payments', 'Journal Entries', 'Payroll History'] as const
+type PayrollTab = typeof payrollTabs[number]
 
 function money(value: number) {
   return `PHP ${Number(value || 0).toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
@@ -168,7 +170,18 @@ function buildComplianceRows(records: PayrollRecord[]) {
   ].filter(item => item.amount > 0)
 }
 
+function employeeMatchesId(employee: Employee | undefined, id?: string) {
+  if (!employee || !id) return false
+  return employee.id === id || employee.employeeId === id
+}
+
+function employeeNameFor(employees: Employee[], employeeId: string) {
+  const employee = employees.find(item => employeeMatchesId(item, employeeId))
+  return fullName(employee) || employeeId
+}
+
 export default function PayrollFinancePage() {
+  const [activeTab, setActiveTab] = useState<PayrollTab>('Payroll Overview')
   const [employees, setEmployees] = useState<Employee[]>([])
   const [loanRequests, setLoanRequests] = useState<LoanRequest[]>([])
   const [allowanceRequests, setAllowanceRequests] = useState<AllowanceRequest[]>([])
@@ -218,6 +231,66 @@ export default function PayrollFinancePage() {
   const monthlyPayroll = useMemo(() => buildPayrollTrend(payrollRuns), [payrollRuns])
   const maxPayrollValue = Math.max(1, ...monthlyPayroll.flatMap(month => [month.gross, month.net]))
   const complianceItems = useMemo(() => buildComplianceRows(currentPayrollRecords), [currentPayrollRecords])
+  const employeePayrollRows = useMemo(() => activeEmployees.map(employee => {
+    const record = currentPayrollRecords.find(item => employeeMatchesId(employee, item.employeeId))
+    const employeeLoans = loanRequests.filter(request => employeeMatchesId(employee, request.employeeId))
+    const employeeAllowances = allowanceRequests.filter(request => employeeMatchesId(employee, request.employeeId))
+    return {
+      employee,
+      record,
+      name: fullName(employee) || employee.email || employee.employeeId || employee.id,
+      code: employee.employeeId || employee.id,
+      department: employee.department || '-',
+      jobTitle: employee.jobTitle || '-',
+      gross: Number(record?.gross || 0),
+      deductions: Number(record?.deductions || 0),
+      net: Number(record?.net || 0),
+      status: record?.status || 'Pending',
+      requestCount: employeeLoans.length + employeeAllowances.length,
+    }
+  }), [activeEmployees, allowanceRequests, currentPayrollRecords, loanRequests])
+  const earningRows = useMemo(() => payrollRows.map(record => {
+    const allowanceTotal = (record.allowanceLines || []).reduce((sum, line) => sum + Number(line.amount || 0), 0)
+    return {
+      id: record.id,
+      employeeName: employeeNameFor(employees, record.employeeId),
+      period: record.period,
+      basePay: Math.max(0, Number(record.gross || 0) - allowanceTotal),
+      allowanceTotal,
+      gross: Number(record.gross || 0),
+      status: record.status,
+    }
+  }), [employees, payrollRows])
+  const deductionRows = useMemo(() => payrollRows.map(record => {
+    const statutory = Object.entries(record.deductionBreakdown || {})
+      .filter(([key]) => key !== 'loanOrCashAdvance')
+      .reduce((sum, [, value]) => sum + Number(value || 0), 0)
+    const loanTotal = Number(record.deductionBreakdown?.loanOrCashAdvance || 0) || (record.loanDeductions || []).reduce((sum, line) => sum + Number(line.amount || 0), 0)
+    return {
+      id: record.id,
+      employeeName: employeeNameFor(employees, record.employeeId),
+      period: record.period,
+      statutory,
+      loanTotal,
+      other: Math.max(0, Number(record.deductions || 0) - statutory - loanTotal),
+      total: Number(record.deductions || 0),
+      status: record.status,
+    }
+  }), [employees, payrollRows])
+  const paymentRows = useMemo(() => payrollRows.map(record => ({
+    id: record.id,
+    employeeName: employeeNameFor(employees, record.employeeId),
+    period: record.period,
+    net: Number(record.net || 0),
+    status: record.status,
+    paidAt: record.paidAt,
+    record,
+  })), [employees, payrollRows])
+  const journalRows = useMemo(() => payrollRuns.flatMap(run => [
+    { id: `${run.period}-gross`, period: run.period, account: 'Payroll Expense', debit: run.grossPay, credit: 0, status: run.status },
+    { id: `${run.period}-deductions`, period: run.period, account: 'Payroll Deductions Payable', debit: 0, credit: run.deductions, status: run.status },
+    { id: `${run.period}-net`, period: run.period, account: 'Salary Payable', debit: 0, credit: run.netPay, status: run.status },
+  ]), [payrollRuns])
   const payrollTasks: PayrollTask[] = [
     { title: 'Review Employee Requests', detail: `${pendingFinanceLoans.length + pendingFinanceAllowances.length} loan, cash advance, or allowance request${pendingFinanceLoans.length + pendingFinanceAllowances.length === 1 ? '' : 's'} waiting for Finance`, status: pendingFinanceLoans.length + pendingFinanceAllowances.length ? 'In Progress' : 'Completed' },
     { title: 'HR Final Payroll Review', detail: `${payrollReadyLoans.length + payrollReadyAllowances.length} approved request${payrollReadyLoans.length + payrollReadyAllowances.length === 1 ? '' : 's'} ready for HR payroll`, status: payrollReadyLoans.length + payrollReadyAllowances.length ? 'Pending' : 'Upcoming' },
@@ -270,6 +343,157 @@ export default function PayrollFinancePage() {
     window.dispatchEvent(new Event('storage'))
     window.dispatchEvent(new Event(financeRefreshEvent))
     setNotice(`${request.customType || request.type} allowance for ${request.employeeName || 'employee'} ${decision.toLowerCase()} by Finance.`)
+  }
+
+  function renderTabContent() {
+    if (activeTab === 'Employees') {
+      return (
+        <section className="payroll-card payroll-tab-card">
+          <h2>Employees</h2>
+          <div className="payroll-table-wrap">
+            <table className="payroll-table">
+              <thead><tr>{['Employee', 'Department', 'Position', 'Gross Pay', 'Deductions', 'Net Pay', 'Requests', 'Status'].map(col => <th key={col}>{col}</th>)}</tr></thead>
+              <tbody>{employeePayrollRows.length ? employeePayrollRows.map(row => (
+                <tr key={row.employee.id}>
+                  <td data-label="Employee"><strong>{row.name}</strong><small>{row.code}</small></td>
+                  <td data-label="Department">{row.department}</td>
+                  <td data-label="Position">{row.jobTitle}</td>
+                  <td data-label="Gross Pay">{money(row.gross)}</td>
+                  <td data-label="Deductions">{money(row.deductions)}</td>
+                  <td data-label="Net Pay">{money(row.net)}</td>
+                  <td data-label="Requests">{row.requestCount}</td>
+                  <td data-label="Status"><StatusPill value={row.status} /></td>
+                </tr>
+              )) : <tr><td colSpan={8}><div className="payroll-empty">No employee records available yet.</div></td></tr>}</tbody>
+            </table>
+          </div>
+        </section>
+      )
+    }
+
+    if (activeTab === 'Earnings') {
+      return (
+        <section className="payroll-card payroll-tab-card">
+          <h2>Earnings</h2>
+          <div className="payroll-table-wrap">
+            <table className="payroll-table">
+              <thead><tr>{['Employee', 'Period', 'Base Pay', 'Allowances', 'Gross Pay', 'Status'].map(col => <th key={col}>{col}</th>)}</tr></thead>
+              <tbody>{earningRows.length ? earningRows.map(row => (
+                <tr key={row.id}>
+                  <td data-label="Employee">{row.employeeName}</td>
+                  <td data-label="Period">{row.period}</td>
+                  <td data-label="Base Pay">{money(row.basePay)}</td>
+                  <td data-label="Allowances">{money(row.allowanceTotal)}</td>
+                  <td data-label="Gross Pay">{money(row.gross)}</td>
+                  <td data-label="Status"><StatusPill value={row.status} /></td>
+                </tr>
+              )) : <tr><td colSpan={6}><div className="payroll-empty">No earnings data yet. HR payroll records will populate this tab.</div></td></tr>}</tbody>
+            </table>
+          </div>
+        </section>
+      )
+    }
+
+    if (activeTab === 'Deductions') {
+      return (
+        <section className="payroll-card payroll-tab-card">
+          <h2>Deductions</h2>
+          <div className="payroll-table-wrap">
+            <table className="payroll-table">
+              <thead><tr>{['Employee', 'Period', 'Statutory', 'Loan / Cash Advance', 'Other', 'Total Deductions', 'Status'].map(col => <th key={col}>{col}</th>)}</tr></thead>
+              <tbody>{deductionRows.length ? deductionRows.map(row => (
+                <tr key={row.id}>
+                  <td data-label="Employee">{row.employeeName}</td>
+                  <td data-label="Period">{row.period}</td>
+                  <td data-label="Statutory">{money(row.statutory)}</td>
+                  <td data-label="Loan / Cash Advance">{money(row.loanTotal)}</td>
+                  <td data-label="Other">{money(row.other)}</td>
+                  <td data-label="Total Deductions">{money(row.total)}</td>
+                  <td data-label="Status"><StatusPill value={row.status} /></td>
+                </tr>
+              )) : <tr><td colSpan={7}><div className="payroll-empty">No deduction data yet.</div></td></tr>}</tbody>
+            </table>
+          </div>
+        </section>
+      )
+    }
+
+    if (activeTab === 'Taxes & Contributions') {
+      return (
+        <section className="payroll-card payroll-tab-card">
+          <h2>Taxes & Contributions</h2>
+          <div className="payroll-compliance-list">
+            {complianceItems.length ? complianceItems.map(item => (
+              <div key={item.title}>
+                <span className={`compliance-icon ${item.icon}`}><ShieldCheck size={17} /></span>
+                <span><strong>{item.title}</strong><small>{periodLabel(latestPeriod)}</small></span>
+                <span><strong>{money(item.amount)}</strong><small>From payroll deduction breakdown</small></span>
+                <StatusPill value="Pending" />
+              </div>
+            )) : <div className="payroll-empty">No tax or contribution data yet.</div>}
+          </div>
+        </section>
+      )
+    }
+
+    if (activeTab === 'Payments') {
+      return (
+        <section className="payroll-card payroll-tab-card">
+          <h2>Payments</h2>
+          <div className="payroll-table-wrap">
+            <table className="payroll-table">
+              <thead><tr>{['Employee', 'Period', 'Net Pay', 'Paid Date', 'Status', 'Actions'].map(col => <th key={col}>{col}</th>)}</tr></thead>
+              <tbody>{paymentRows.length ? paymentRows.map(row => (
+                <tr key={row.id}>
+                  <td data-label="Employee">{row.employeeName}</td>
+                  <td data-label="Period">{row.period}</td>
+                  <td data-label="Net Pay">{money(row.net)}</td>
+                  <td data-label="Paid Date">{formatDate(row.paidAt)}</td>
+                  <td data-label="Status"><StatusPill value={row.status} /></td>
+                  <td data-label="Actions">
+                    {row.status === 'Pending' || row.status === 'Processing' ? <button type="button" className="payroll-inline-action" onClick={() => approveFinalPayroll(row.record)}>Approve</button> : null}
+                    {row.status === 'Approved' ? <button type="button" className="payroll-inline-action" onClick={() => releasePay(row.record)}>Release Pay</button> : null}
+                  </td>
+                </tr>
+              )) : <tr><td colSpan={6}><div className="payroll-empty">No payment records yet.</div></td></tr>}</tbody>
+            </table>
+          </div>
+        </section>
+      )
+    }
+
+    if (activeTab === 'Journal Entries') {
+      return (
+        <section className="payroll-card payroll-tab-card">
+          <h2>Journal Entries</h2>
+          <div className="payroll-table-wrap">
+            <table className="payroll-table">
+              <thead><tr>{['Period', 'Account', 'Debit', 'Credit', 'Status'].map(col => <th key={col}>{col}</th>)}</tr></thead>
+              <tbody>{journalRows.length ? journalRows.map(row => (
+                <tr key={row.id}>
+                  <td data-label="Period">{row.period}</td>
+                  <td data-label="Account">{row.account}</td>
+                  <td data-label="Debit">{money(row.debit)}</td>
+                  <td data-label="Credit">{money(row.credit)}</td>
+                  <td data-label="Status"><StatusPill value={row.status} /></td>
+                </tr>
+              )) : <tr><td colSpan={5}><div className="payroll-empty">No journal entries yet. Payroll runs will generate payroll expense and payable entries.</div></td></tr>}</tbody>
+            </table>
+          </div>
+        </section>
+      )
+    }
+
+    if (activeTab === 'Payroll History') {
+      return (
+        <section className="payroll-grid payroll-lower-grid">
+          <RecentPayrollRuns payrollRuns={payrollRuns} />
+          <CompliancePanel complianceItems={complianceItems} latestPeriod={latestPeriod} />
+        </section>
+      )
+    }
+
+    return null
   }
 
   return (
@@ -336,9 +560,11 @@ export default function PayrollFinancePage() {
       </section>
 
       <nav className="payroll-tabs" aria-label="Payroll finance sections">
-        {['Payroll Overview', 'Employees', 'Earnings', 'Deductions', 'Taxes & Contributions', 'Payments', 'Journal Entries', 'Payroll History'].map((tab, index) => <button key={tab} className={index === 0 ? 'is-active' : undefined}>{tab}</button>)}
+        {payrollTabs.map(tab => <button key={tab} type="button" onClick={() => setActiveTab(tab)} className={activeTab === tab ? 'is-active' : undefined}>{tab}</button>)}
       </nav>
 
+      {activeTab === 'Payroll Overview' ? (
+        <>
       <section className="payroll-grid">
         <div className="payroll-card">
           <div className="payroll-panel-header">
@@ -432,49 +658,11 @@ export default function PayrollFinancePage() {
       </section>
 
       <section className="payroll-grid payroll-lower-grid">
-        <div className="payroll-card">
-          <h2>Recent Payroll Runs</h2>
-          <div className="payroll-table-wrap">
-            <table className="payroll-table">
-              <thead><tr>{['Pay Period', 'Pay Date', 'Employees', 'Gross Pay', 'Deductions', 'Net Pay', 'Total Cost', 'Status', 'Actions'].map(col => <th key={col}>{col}</th>)}</tr></thead>
-              <tbody>
-                {payrollRuns.length ? payrollRuns.map(run => (
-                  <tr key={run.period}>
-                    <td data-label="Pay Period">{run.period}</td>
-                    <td data-label="Pay Date">{formatDate(run.payDate)}</td>
-                    <td data-label="Employees">{run.employees}</td>
-                    <td data-label="Gross Pay">{money(run.grossPay)}</td>
-                    <td data-label="Deductions">{money(run.deductions)}</td>
-                    <td data-label="Net Pay">{money(run.netPay)}</td>
-                    <td data-label="Total Cost">{money(run.grossPay)}</td>
-                    <td data-label="Status"><StatusPill value={run.status} /></td>
-                    <td data-label="Actions"><button type="button" className="payroll-icon-button"><MoreHorizontal size={15} /></button></td>
-                  </tr>
-                )) : <tr><td colSpan={9}><div className="payroll-empty">No payroll runs yet. When HR sends final payroll, it will appear here for Finance approval and pay release.</div></td></tr>}
-              </tbody>
-            </table>
-          </div>
-          <div className="payroll-pagination"><strong>{payrollRuns.length ? `Showing ${payrollRuns.length} payroll run${payrollRuns.length === 1 ? '' : 's'}` : 'No payroll runs to show'}</strong></div>
-        </div>
-
-        <div className="payroll-card">
-          <div className="payroll-panel-header">
-            <h2>Statutory & Compliance</h2>
-            <Link href="/accounting/tax-compliance">View All</Link>
-          </div>
-          <div className="payroll-compliance-list">
-            {complianceItems.length ? complianceItems.map(item => (
-              <div key={item.title}>
-                <span className={`compliance-icon ${item.icon}`}><ShieldCheck size={17} /></span>
-                <span><strong>{item.title}</strong><small>{periodLabel(latestPeriod)}</small></span>
-                <span><strong>{money(item.amount)}</strong><small>From payroll deduction breakdown</small></span>
-                <StatusPill value="Pending" />
-              </div>
-            )) : <div className="payroll-empty">No statutory contribution data yet. Payroll deduction breakdowns will populate this section.</div>}
-          </div>
-          <Link className="payroll-calendar-link" href="/accounting/tax-compliance"><CalendarDays size={15} /> View Compliance Calendar <ChevronDown size={15} /></Link>
-        </div>
+        <RecentPayrollRuns payrollRuns={payrollRuns} />
+        <CompliancePanel complianceItems={complianceItems} latestPeriod={latestPeriod} />
       </section>
+        </>
+      ) : renderTabContent()}
     </div>
   )
 }
@@ -583,6 +771,57 @@ function PayrollQueue({ records, employees, onApprove, onRelease }: { records: P
   )
 }
 
+function RecentPayrollRuns({ payrollRuns }: { payrollRuns: ReturnType<typeof groupPayrollRuns> }) {
+  return (
+    <div className="payroll-card">
+      <h2>Recent Payroll Runs</h2>
+      <div className="payroll-table-wrap">
+        <table className="payroll-table">
+          <thead><tr>{['Pay Period', 'Pay Date', 'Employees', 'Gross Pay', 'Deductions', 'Net Pay', 'Total Cost', 'Status', 'Actions'].map(col => <th key={col}>{col}</th>)}</tr></thead>
+          <tbody>
+            {payrollRuns.length ? payrollRuns.map(run => (
+              <tr key={run.period}>
+                <td data-label="Pay Period">{run.period}</td>
+                <td data-label="Pay Date">{formatDate(run.payDate)}</td>
+                <td data-label="Employees">{run.employees}</td>
+                <td data-label="Gross Pay">{money(run.grossPay)}</td>
+                <td data-label="Deductions">{money(run.deductions)}</td>
+                <td data-label="Net Pay">{money(run.netPay)}</td>
+                <td data-label="Total Cost">{money(run.grossPay)}</td>
+                <td data-label="Status"><StatusPill value={run.status} /></td>
+                <td data-label="Actions"><button type="button" className="payroll-icon-button"><MoreHorizontal size={15} /></button></td>
+              </tr>
+            )) : <tr><td colSpan={9}><div className="payroll-empty">No payroll runs yet. When HR sends final payroll, it will appear here for Finance approval and pay release.</div></td></tr>}
+          </tbody>
+        </table>
+      </div>
+      <div className="payroll-pagination"><strong>{payrollRuns.length ? `Showing ${payrollRuns.length} payroll run${payrollRuns.length === 1 ? '' : 's'}` : 'No payroll runs to show'}</strong></div>
+    </div>
+  )
+}
+
+function CompliancePanel({ complianceItems, latestPeriod }: { complianceItems: Array<{ title: string; amount: number; icon: string }>; latestPeriod: string }) {
+  return (
+    <div className="payroll-card">
+      <div className="payroll-panel-header">
+        <h2>Statutory & Compliance</h2>
+        <Link href="/accounting/tax-compliance">View All</Link>
+      </div>
+      <div className="payroll-compliance-list">
+        {complianceItems.length ? complianceItems.map(item => (
+          <div key={item.title}>
+            <span className={`compliance-icon ${item.icon}`}><ShieldCheck size={17} /></span>
+            <span><strong>{item.title}</strong><small>{periodLabel(latestPeriod)}</small></span>
+            <span><strong>{money(item.amount)}</strong><small>From payroll deduction breakdown</small></span>
+            <StatusPill value="Pending" />
+          </div>
+        )) : <div className="payroll-empty">No statutory contribution data yet. Payroll deduction breakdowns will populate this section.</div>}
+      </div>
+      <Link className="payroll-calendar-link" href="/accounting/tax-compliance"><CalendarDays size={15} /> View Compliance Calendar <ChevronDown size={15} /></Link>
+    </div>
+  )
+}
+
 const payrollCss = `
 .payroll-page { padding: 26px 28px 40px; color: #0f172a; }
 .payroll-header { display: flex; justify-content: space-between; align-items: flex-start; gap: 18px; margin-bottom: 24px; }
@@ -606,6 +845,7 @@ const payrollCss = `
 .payroll-tabs { display: flex; gap: 32px; border-bottom: 1px solid #e8edf4; padding-left: 14px; overflow-x: auto; }
 .payroll-tabs button { border: 0; border-bottom: 2px solid transparent; background: transparent; color: #0f172a; min-height: 48px; padding: 0; font-size: 12.5px; font-weight: 900; cursor: pointer; white-space: nowrap; }
 .payroll-tabs .is-active { color: #16a34a; border-bottom-color: #16a34a; }
+.payroll-tab-card { margin-top: 16px; }
 .payroll-grid { display: grid; grid-template-columns: minmax(0, 1.2fr) minmax(360px, .9fr) minmax(330px, .8fr); gap: 16px; margin-top: 16px; }
 .payroll-lower-grid { grid-template-columns: minmax(0, 1fr) 420px; }
 .payroll-flow-card { margin-top: 16px; }
@@ -674,6 +914,7 @@ const payrollCss = `
 .payroll-table th { text-align: left; padding: 12px 10px; color: #64748b; font-size: 11px; font-weight: 900; }
 .payroll-table td { padding: 12px 10px; border-top: 1px solid #eef2f7; color: #0f172a; font-size: 12.5px; }
 .payroll-icon-button { width: 32px; height: 32px; border: 1px solid #e8edf4; border-radius: 7px; background: #fff; display: grid; place-items: center; }
+.payroll-inline-action { min-height: 30px; border: 1px solid #16a34a; border-radius: 7px; background: #16a34a; color: #fff; padding: 0 10px; font-size: 11.5px; font-weight: 900; cursor: pointer; }
 .payroll-pagination { display: flex; justify-content: space-between; align-items: center; gap: 16px; padding-top: 16px; }
 .payroll-pagination strong { font-size: 12.5px; }
 .payroll-pagination div { display: flex; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
