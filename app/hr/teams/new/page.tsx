@@ -16,6 +16,18 @@ const leadRoles = ['Team Lead', 'Manager', 'Supervisor', 'Coordinator']
 interface HRDepartment {
   id: string
   name: string
+  code?: string
+  color?: string
+  createdAt?: string
+  updatedAt?: string
+}
+
+function departmentId(name: string) {
+  return `dept_${name.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '')}`
+}
+
+function normalize(value?: string) {
+  return (value || '').trim().toLowerCase()
 }
 
 export default function AddTeamPage() {
@@ -45,12 +57,17 @@ export default function AddTeamPage() {
     const timer = window.setTimeout(() => {
       const storedTeams = ensureTeams()
       const storedDepartments = loadStored<HRDepartment[]>('flowsys-hr-departments', [])
+      const requestedDepartment = new URLSearchParams(window.location.search).get('department')?.trim() || ''
       const departmentNames = Array.from(new Set([
         ...storedDepartments.map(department => department.name),
         ...storedTeams.map(team => team.department),
+        requestedDepartment,
       ].filter(Boolean)))
       setEmployees(loadStored<Employee[]>('flowsys-hr-employees', []))
       setDepartments(departmentNames)
+      if (requestedDepartment) {
+        setForm(previous => previous.department ? previous : { ...previous, department: requestedDepartment })
+      }
     }, 0)
     return () => window.clearTimeout(timer)
   }, [])
@@ -154,6 +171,22 @@ export default function AddTeamPage() {
     }
     const nextTeams = [...currentTeams.filter(team => team.id !== newTeam.id), newTeam]
     saveStored('flowsys-hr-teams', nextTeams)
+    const currentDepartments = loadStored<HRDepartment[]>('flowsys-hr-departments', [])
+    if (!currentDepartments.some(department => normalize(department.name) === normalize(newTeam.department))) {
+      const now = new Date().toISOString()
+      saveStored('flowsys-hr-departments', [
+        ...currentDepartments,
+        {
+          id: departmentId(newTeam.department),
+          name: newTeam.department,
+          code: initials(newTeam.department),
+          color: '#16a34a',
+          createdAt: now,
+          updatedAt: now,
+        },
+      ])
+    }
+    window.dispatchEvent(new Event('storage'))
     router.push(`/hr/teams/${newTeam.id}`)
   }
 

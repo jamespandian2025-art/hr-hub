@@ -167,23 +167,26 @@ export default function HrTeamsPage() {
     return departments.map((department, index) => ({
       name: department,
       count: department === 'All Departments'
-        ? teams.reduce((sum, team) => sum + team.members.length, 0)
-        : teams.filter(team => team.department === department).reduce((sum, team) => sum + team.members.length, 0),
+        ? teams.length
+        : teams.filter(team => normalize(team.department) === normalize(department)).length,
       color: departmentRecords.find(record => record.name === department)?.color || departmentColors[index % departmentColors.length],
     }))
   }, [departmentRecords, departments, teams])
 
   const filteredTeams = useMemo(() => {
     return teams.filter(team => {
-      const matchesDepartment = selectedDepartment === 'All Departments' || team.department === selectedDepartment
+      const matchesDepartment = selectedDepartment === 'All Departments' || normalize(team.department) === normalize(selectedDepartment)
       const matchesStatus = statusFilter === 'All Status' || team.status === statusFilter
       const haystack = `${team.name} ${team.managerName} ${team.department} ${team.description}`.toLowerCase()
       return matchesDepartment && matchesStatus && haystack.includes(query.toLowerCase())
     })
   }, [query, selectedDepartment, statusFilter, teams])
 
-  const selectedTeam = teams.find(team => team.id === selectedTeamId) || filteredTeams[0] || teams[0]
+  const selectedTeam = filteredTeams.find(team => team.id === selectedTeamId) || filteredTeams[0]
   const departmentsOnly = departments.filter(department => department !== 'All Departments')
+  const addTeamHref = selectedDepartment === 'All Departments'
+    ? '/hr/teams/new'
+    : `/hr/teams/new?department=${encodeURIComponent(selectedDepartment)}`
   const managers = teams.filter(team => team.managerName).length
   const departmentManagerOptions = useMemo(() => {
     const optionMap = new Map<string, { value: string; label: string }>()
@@ -315,7 +318,7 @@ export default function HrTeamsPage() {
           <button onClick={openAddDepartment} style={{ border: '1px solid #e5e7eb', background: '#fff', color: '#111827', borderRadius: 8, padding: '10px 14px', fontSize: 12, fontWeight: 700, display: 'flex', gap: 8, alignItems: 'center', cursor: 'pointer' }}>
             <Plus size={14} /> Add Department
           </button>
-          <Link href="/hr/teams/new" style={{ textDecoration: 'none' }}>
+          <Link href={addTeamHref} style={{ textDecoration: 'none' }}>
             <button style={{ border: 'none', background: '#16a34a', color: '#fff', borderRadius: 8, padding: '10px 16px', fontSize: 12, fontWeight: 800, display: 'flex', gap: 8, alignItems: 'center', cursor: 'pointer' }}>
               <Plus size={15} /> Add Team
             </button>
@@ -352,7 +355,7 @@ export default function HrTeamsPage() {
           </div>
           <div style={{ padding: 12, display: 'grid', gap: 6 }}>
             {departmentCounts.map(department => (
-              <button key={department.name} onClick={() => setSelectedDepartment(department.name)} style={{ border: 'none', borderRadius: 9, padding: '12px 14px', background: selectedDepartment === department.name ? '#dcfce7' : 'transparent', color: selectedDepartment === department.name ? '#15803d' : '#374151', display: 'flex', alignItems: 'center', justifyContent: 'space-between', cursor: 'pointer', fontFamily: font }}>
+              <button key={department.name} onClick={() => { setSelectedDepartment(department.name); setSelectedTeamId(undefined) }} style={{ border: 'none', borderRadius: 9, padding: '12px 14px', background: selectedDepartment === department.name ? '#dcfce7' : 'transparent', color: selectedDepartment === department.name ? '#15803d' : '#374151', display: 'flex', alignItems: 'center', justifyContent: 'space-between', cursor: 'pointer', fontFamily: font }}>
                 <span style={{ display: 'flex', alignItems: 'center', gap: 10, fontSize: 13, fontWeight: 700 }}>
                   <Building2 size={16} color={department.color} /> {department.name}
                 </span>
@@ -404,7 +407,7 @@ export default function HrTeamsPage() {
                     </div>
                     <div style={{ fontSize: 15, fontWeight: 800, color: '#111827', marginBottom: 6 }}>No teams yet</div>
                     <div style={{ fontSize: 13, marginBottom: 16 }}>Create a team to start organizing employees.</div>
-                    <Link href="/hr/teams/new" style={{ textDecoration: 'none' }}>
+                    <Link href={addTeamHref} style={{ textDecoration: 'none' }}>
                       <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8, background: '#16a34a', color: '#fff', borderRadius: 8, padding: '10px 14px', fontSize: 12, fontWeight: 900 }}>
                         <Plus size={14} /> Add Team
                       </span>
@@ -508,7 +511,7 @@ export default function HrTeamsPage() {
               </div>
               <h2 style={{ margin: 0, fontSize: 18, color: '#111827' }}>No team selected</h2>
               <p style={{ margin: '8px 0 18px', color: '#6b7280', fontSize: 13, lineHeight: 1.5 }}>Team details will appear here after you create or select a team.</p>
-              <Link href="/hr/teams/new" style={{ textDecoration: 'none' }}>
+              <Link href={addTeamHref} style={{ textDecoration: 'none' }}>
                 <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8, background: '#16a34a', color: '#fff', borderRadius: 8, padding: '10px 14px', fontSize: 12, fontWeight: 900 }}>
                   <Plus size={14} /> Add Team
                 </span>
