@@ -3,18 +3,35 @@
 import Link from 'next/link'
 import type { ReactNode } from 'react'
 import { ChevronDown, CircleDollarSign, Filter, Grid3X3, LayoutList, MoreHorizontal, Search, Upload, UserCheck, UserMinus, UserPlus, UsersRound } from 'lucide-react'
-import { useMemo, useState } from 'react'
-import { ClientRecord, formatPeso, getInitials, loadClients } from './clientData'
+import { useEffect, useMemo, useState } from 'react'
+import { ClientLoadResult, ClientRecord, formatPeso, getInitials, loadClients } from './clientData'
 
 const font = 'var(--font-body)'
 const green = '#16a34a'
 
 export default function ClientsPage() {
-  const [clients] = useState<ClientRecord[]>(loadClients)
+  const [clients, setClients] = useState<ClientRecord[]>([])
+  const [loadState, setLoadState] = useState<ClientLoadResult>({ clients: [], source: 'unavailable' })
+  const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
   const [statusFilter, setStatusFilter] = useState('All Status')
   const [industryFilter, setIndustryFilter] = useState('All Industry')
   const [view, setView] = useState<'list' | 'grid'>('list')
+
+  useEffect(() => {
+    let mounted = true
+
+    loadClients().then(result => {
+      if (!mounted) return
+      setClients(result.clients)
+      setLoadState(result)
+      setLoading(false)
+    })
+
+    return () => {
+      mounted = false
+    }
+  }, [])
 
   const filteredClients = useMemo(() => {
     const query = search.trim().toLowerCase()
@@ -30,7 +47,8 @@ export default function ClientsPage() {
   const stats = useMemo(() => {
     const active = clients.filter(client => client.status === 'Active').length
     const inactive = clients.filter(client => client.status === 'Inactive').length
-    const newClients = clients.filter(client => client.createdAt.startsWith('2026-05')).length
+    const currentMonth = new Date().toISOString().slice(0, 7)
+    const newClients = clients.filter(client => client.createdAt.startsWith(currentMonth)).length
     const revenue = clients.reduce((sum, client) => sum + client.totalRevenue, 0)
 
     return [
@@ -38,14 +56,15 @@ export default function ClientsPage() {
       { label: 'Active Clients', value: active.toString(), detail: `${Math.round((active / Math.max(clients.length, 1)) * 100)}% of total`, icon: UserCheck, color: '#2563eb' },
       { label: 'New Clients', value: newClients.toString(), detail: `+${newClients} this month`, icon: UserPlus, color: '#10b981' },
       { label: 'Inactive Clients', value: inactive.toString(), detail: `${Math.round((inactive / Math.max(clients.length, 1)) * 100)}% of total`, icon: UserMinus, color: '#f97316' },
-      { label: 'Total Revenue', value: formatPeso(revenue), detail: '+18% this month', icon: CircleDollarSign, color: '#16a34a' },
+      { label: 'Total Revenue', value: formatPeso(revenue), detail: clients.length ? 'From saved client records' : 'No revenue yet', icon: CircleDollarSign, color: '#16a34a' },
     ]
   }, [clients])
 
   const industries = Array.from(new Set(clients.map(client => client.industry)))
+  const accountManagers = Array.from(new Set(clients.map(client => client.accountManager).filter(Boolean)))
 
   return (
-    <div style={{ fontFamily: font, display: 'grid', gap: 24 }}>
+    <div className="clients-page" style={{ fontFamily: font, display: 'grid', gap: 24 }}>
       <PageHeader
         crumb="Home / Client Database"
         title="Client Database"
@@ -57,6 +76,8 @@ export default function ClientsPage() {
           </>
         )}
       />
+
+      <DatabaseStatus source={loadState.source} error={loadState.error} loading={loading} />
 
       <div style={statGrid}>
         {stats.map(stat => <StatCard key={stat.label} {...stat} />)}
@@ -83,8 +104,7 @@ export default function ClientsPage() {
         </select>
         <select style={selectStyle}>
           <option>Account Manager</option>
-          <option>James Pandian</option>
-          <option>Sarah Johnson</option>
+          {accountManagers.map(manager => <option key={manager}>{manager}</option>)}
         </select>
         <button style={secondaryButton}><Filter size={16} /> Filter</button>
         <div style={{ display: 'flex', gap: 8, marginLeft: 'auto' }}>
@@ -93,7 +113,9 @@ export default function ClientsPage() {
         </div>
       </div>
 
-      {view === 'list' ? (
+      {loading ? (
+        <EmptyState message="Loading clients..." />
+      ) : view === 'list' ? (
         <ClientTable clients={filteredClients} />
       ) : (
         <div style={gridCards}>
@@ -102,6 +124,13 @@ export default function ClientsPage() {
       )}
     </div>
   )
+}
+
+function DatabaseStatus({ source, error, loading }: { source: ClientLoadResult['source']; error?: string; loading: boolean }) {
+  if (loading) return <div style={infoBox}>Checking client database...</div>
+  if (source === 'supabase') return <div style={successBox}>Client database connected.</div>
+  if (source === 'local') return <div style={infoBox}>Using locally saved clients. Supabase is not available: {error}</div>
+  return <div style={warningBox}>No client records yet. Supabase is not available: {error || 'clients table not found'}</div>
 }
 
 function ClientTable({ clients }: { clients: ClientRecord[] }) {
@@ -218,13 +247,13 @@ const subtitleStyle = { margin: '8px 0 0', color: '#475569', fontSize: 14, fontW
 const actionsWrap = { display: 'flex', gap: 12, flexWrap: 'wrap' as const }
 const primaryLink = { display: 'inline-flex', alignItems: 'center', gap: 8, height: 42, padding: '0 18px', borderRadius: 8, border: '1px solid #16a34a', background: '#16a34a', color: '#fff', textDecoration: 'none', fontSize: 13, fontWeight: 800 }
 const secondaryButton = { display: 'inline-flex', alignItems: 'center', gap: 8, height: 42, padding: '0 16px', borderRadius: 8, border: '1px solid #dbe3ea', background: '#fff', color: '#0f172a', fontSize: 13, fontWeight: 800, cursor: 'pointer' }
-const statGrid = { display: 'grid', gridTemplateColumns: 'repeat(5, minmax(150px, 1fr))', gap: 16 }
+const statGrid = { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(190px, 1fr))', gap: 16 }
 const statCard = { minHeight: 112, background: '#fff', border: '1px solid #dfe7ee', borderRadius: 12, boxShadow: '0 10px 24px rgba(15,23,42,.04)', padding: 20, display: 'flex', gap: 18, alignItems: 'center' }
 const statLabel = { color: '#475569', fontSize: 13, fontWeight: 700 }
 const statValue = { color: '#020617', fontSize: 25, fontWeight: 900, marginTop: 4 }
 const statDetail = { color: green, fontSize: 12, fontWeight: 700, marginTop: 6 }
 const filterBar = { display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' as const }
-const searchBox = { height: 44, minWidth: 320, flex: '1 1 330px', display: 'flex', alignItems: 'center', gap: 10, padding: '0 14px', border: '1px solid #dbe3ea', borderRadius: 8, background: '#fff' }
+const searchBox = { height: 44, minWidth: 0, flex: '1 1 260px', display: 'flex', alignItems: 'center', gap: 10, padding: '0 14px', border: '1px solid #dbe3ea', borderRadius: 8, background: '#fff' }
 const inputBare = { border: 'none', outline: 'none', flex: 1, background: 'transparent', fontSize: 13, color: '#0f172a' }
 const selectStyle = { height: 44, border: '1px solid #dbe3ea', borderRadius: 8, background: '#fff', color: '#0f172a', fontSize: 13, fontWeight: 700, padding: '0 14px', minWidth: 126 }
 const panel = { background: '#fff', border: '1px solid #dfe7ee', borderRadius: 12, boxShadow: '0 10px 24px rgba(15,23,42,.04)', overflow: 'auto' }
@@ -282,3 +311,8 @@ const iconButton = (active: boolean) => ({
   placeItems: 'center',
   cursor: 'pointer',
 })
+
+const statusBox = { borderRadius: 10, padding: '12px 14px', fontSize: 13, fontWeight: 800 }
+const successBox = { ...statusBox, border: '1px solid #bbf7d0', background: '#f0fdf4', color: '#166534' }
+const infoBox = { ...statusBox, border: '1px solid #dbe3ea', background: '#f8fafc', color: '#334155' }
+const warningBox = { ...statusBox, border: '1px solid #fed7aa', background: '#fff7ed', color: '#9a3412' }

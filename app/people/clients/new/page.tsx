@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation'
 import { ChevronDown, Save } from 'lucide-react'
 import type { FormEvent, ReactNode } from 'react'
 import { useMemo, useState } from 'react'
-import { ClientRecord, accountManagers, loadClients, saveClients, slugify } from '../clientData'
+import { accountManagers, buildEmptyClient, loadClients, saveClient, slugify } from '../clientData'
 
 const font = 'var(--font-body)'
 
@@ -38,6 +38,7 @@ export default function AddClientPage() {
   const router = useRouter()
   const [form, setForm] = useState(emptyForm)
   const [error, setError] = useState('')
+  const [saving, setSaving] = useState(false)
 
   const requiredMissing = useMemo(() => {
     return !form.name || !form.email || !form.phone || !form.industry || !form.companyType || !form.billingAddress || !form.accountManager
@@ -48,7 +49,7 @@ export default function AddClientPage() {
     setError('')
   }
 
-  const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
+  const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
 
     if (requiredMissing) {
@@ -56,11 +57,11 @@ export default function AddClientPage() {
       return
     }
 
-    const clients = loadClients()
+    setSaving(true)
+    const { clients } = await loadClients()
     const baseId = slugify(form.name)
     const id = clients.some(client => client.id === baseId) ? `${baseId}-${Date.now()}` : baseId
-    const now = new Date()
-    const client: ClientRecord = {
+    const client = buildEmptyClient({
       id,
       name: form.name.trim(),
       company: form.website.trim().replace(/^https?:\/\//, '') || `${slugify(form.name)}.com`,
@@ -79,38 +80,25 @@ export default function AddClientPage() {
       paymentTerms: form.paymentTerms || '-',
       tags: form.tags.split(',').map(tag => tag.trim()).filter(Boolean),
       description: form.description.trim() || 'No client description added yet.',
-      createdAt: now.toISOString().slice(0, 10),
-      lastContact: now.toLocaleDateString('en-US', { month: 'short', day: '2-digit', year: 'numeric' }),
-      totalProjects: 0,
-      activeProjects: 0,
-      completedProjects: 0,
-      onHoldProjects: 0,
-      totalRevenue: 0,
-      paidRevenue: 0,
-      outstandingRevenue: 0,
-      invoices: { total: 0, paid: 0, unpaid: 0, overdue: 0 },
-      contracts: 0,
-      documents: 0,
-      contacts: [],
-      activities: [],
-      notes: [],
-    }
+    })
 
     try {
-      saveClients([...clients, client])
+      const result = await saveClient(client)
       if (form.createAnother) {
         setForm(emptyForm)
-        setError('')
+        setError(result.source === 'local' ? `Saved locally. Supabase is not available: ${result.error}` : '')
       } else {
-        router.push(`/people/clients/${client.id}`)
+        router.push(`/people/clients/${result.client.id}`)
       }
     } catch {
-      setError('The client could not be saved in this browser. Please try again with less data.')
+      setError('The client could not be saved. Please try again with less data.')
+    } finally {
+      setSaving(false)
     }
   }
 
   return (
-    <form onSubmit={handleSubmit} style={{ fontFamily: font, display: 'grid', gap: 22 }}>
+    <form className="client-form-page" onSubmit={handleSubmit} style={{ fontFamily: font, display: 'grid', gap: 22 }}>
       <div style={pageHeader}>
         <div>
           <div style={breadcrumb}>Home / Client Database / Add Client</div>
@@ -119,7 +107,7 @@ export default function AddClientPage() {
         </div>
         <div style={{ display: 'flex', gap: 10 }}>
           <Link href="/people/clients" style={secondaryLink}>Cancel</Link>
-          <button type="submit" style={primaryButton}><Save size={16} /> Save Client</button>
+          <button type="submit" disabled={saving} style={{ ...primaryButton, opacity: saving ? .7 : 1 }}><Save size={16} /> {saving ? 'Saving...' : 'Save Client'}</button>
         </div>
       </div>
 
@@ -149,7 +137,7 @@ export default function AddClientPage() {
       </Section>
 
       <Section title="Additional Information">
-        <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr)', gap: 22 }}>
+        <div style={twoColumnGrid}>
           <TextArea label="Description / Notes" value={form.description} onChange={value => update('description', value)} placeholder="Add any additional notes about this client..." help="Internal notes visible to your team only" />
           <TextField label="Tags" value={form.tags} onChange={value => update('tags', value)} placeholder="Type tags separated by commas" help="Add tags to categorize and easily find this client" />
         </div>
@@ -240,8 +228,9 @@ const primaryButton = { display: 'inline-flex', alignItems: 'center', gap: 8, he
 const secondaryLink = { display: 'inline-flex', alignItems: 'center', height: 42, padding: '0 18px', borderRadius: 8, border: '1px solid #dbe3ea', background: '#fff', color: '#0f172a', textDecoration: 'none', fontSize: 13, fontWeight: 800 }
 const sectionStyle = { background: '#fff', border: '1px solid #dfe7ee', borderRadius: 12, padding: 24, boxShadow: '0 10px 24px rgba(15,23,42,.04)' }
 const sectionTitle = { margin: '0 0 24px', color: '#0f172a', fontSize: 17, fontWeight: 900 }
-const formGrid = { display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 22 }
-const formGrid3 = { display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 22 }
+const formGrid = { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: 22 }
+const formGrid3 = { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: 22 }
+const twoColumnGrid = { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: 22 }
 const fieldWrap = { display: 'grid', gap: 8, minWidth: 0 }
 const labelStyle = { color: '#0f172a', fontSize: 13, fontWeight: 800 }
 const inputStyle = { width: '100%', height: 42, border: '1px solid #dbe3ea', borderRadius: 8, padding: '0 12px', background: '#fff', color: '#0f172a', fontSize: 13, fontFamily: font, outline: 'none', boxSizing: 'border-box' as const }

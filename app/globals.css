@@ -3679,6 +3679,104 @@ html body {
   color-scheme: light !important;
 }
 
+@media (max-width: 720px) {
+  .clients-page,
+  .client-detail-page,
+  .client-form-page {
+    gap: 14px !important;
+  }
+
+  .clients-page table {
+    min-width: 860px !important;
+  }
+
+  .clients-page button,
+  .clients-page a,
+  .client-detail-page button,
+  .client-detail-page a,
+  .client-form-page button,
+  .client-form-page a {
+    min-height: 40px;
+  }
+
+  .client-detail-page dl > div {
+    grid-template-columns: 1fr !important;
+    gap: 4px !important;
+  }
+
+  .client-detail-page [style*='grid-template-columns: 72px'] {
+    grid-template-columns: 56px minmax(0, 1fr) !important;
+  }
+
+  .client-detail-page [style*='width: 64px'][style*='height: 64px'] {
+    width: 52px !important;
+    height: 52px !important;
+    font-size: 18px !important;
+  }
+
+  .client-detail-page [style*='border-left: 1px solid'] {
+    border-left: 0 !important;
+  }
+}
+
+@media (max-width: 1180px) {
+  .sales-top-grid,
+  .sales-bottom-grid {
+    grid-template-columns: minmax(0, 1fr) !important;
+  }
+}
+
+@media (max-width: 720px) {
+  .sales-page {
+    gap: 14px !important;
+  }
+
+  .sales-page [style*='padding: 20px'] {
+    padding: 16px !important;
+  }
+
+  .sales-page [style*='grid-template-columns: repeat(auto-fit, minmax(210px'] {
+    grid-template-columns: 1fr !important;
+  }
+
+  .sales-page [style*='grid-template-columns: 1fr 1fr'] {
+    grid-template-columns: 1fr !important;
+  }
+
+  .sales-pipeline {
+    grid-template-columns: 1fr !important;
+  }
+
+  .sales-pipeline-row {
+    display: grid !important;
+    gap: 8px !important;
+    padding: 12px 0 !important;
+    border-bottom: 1px solid #eef2f7 !important;
+  }
+
+  .sales-page [style*='text-align: right'] {
+    text-align: left !important;
+  }
+
+  .sales-page .category-revenue {
+    grid-template-columns: 1fr !important;
+    justify-items: start !important;
+  }
+
+  .sales-page [style*='width: 140px'][style*='height: 140px'] {
+    width: 120px !important;
+    height: 120px !important;
+  }
+
+  .sales-page table {
+    min-width: 640px !important;
+  }
+
+  .sales-page form {
+    width: 100vw !important;
+  }
+}
+
 .app-shell,
 .app-main,
 .main-content,

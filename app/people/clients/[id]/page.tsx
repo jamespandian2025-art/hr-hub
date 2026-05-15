@@ -4,8 +4,8 @@ import Link from 'next/link'
 import { useParams } from 'next/navigation'
 import { BriefcaseBusiness, CalendarDays, CircleDollarSign, FileText, Globe2, Mail, MapPin, MoreHorizontal, Pencil, Phone, StickyNote, UsersRound } from 'lucide-react'
 import type { ReactNode } from 'react'
-import { useMemo, useState } from 'react'
-import { ClientRecord, findClient, formatPeso, getInitials, loadClients } from '../clientData'
+import { useEffect, useState } from 'react'
+import { ClientRecord, findClient, formatPeso, getInitials } from '../clientData'
 
 const font = 'var(--font-body)'
 const green = '#16a34a'
@@ -14,10 +14,31 @@ const tabs = ['Overview', 'Projects', 'Invoices', 'Contracts', 'Activities', 'No
 
 export default function ClientDetailPage() {
   const params = useParams<{ id: string }>()
-  const [clients] = useState<ClientRecord[]>(loadClients)
+  const [client, setClient] = useState<ClientRecord>()
+  const [loading, setLoading] = useState(true)
   const [activeTab, setActiveTab] = useState('Overview')
 
-  const client = useMemo(() => findClient(clients, params.id), [clients, params.id])
+  useEffect(() => {
+    let mounted = true
+
+    findClient(params.id).then(result => {
+      if (!mounted) return
+      setClient(result.client)
+      setLoading(false)
+    })
+
+    return () => {
+      mounted = false
+    }
+  }, [params.id])
+
+  if (loading) {
+    return (
+      <div style={{ fontFamily: font, display: 'grid', placeItems: 'center', minHeight: 420 }}>
+        <div style={{ color: '#64748b', fontSize: 14, fontWeight: 800 }}>Loading client...</div>
+      </div>
+    )
+  }
 
   if (!client) {
     return (
@@ -42,7 +63,7 @@ export default function ClientDetailPage() {
   }
 
   return (
-    <div style={{ fontFamily: font, display: 'grid', gap: 22 }}>
+    <div className="client-detail-page" style={{ fontFamily: font, display: 'grid', gap: 22 }}>
       <div style={pageHeader}>
         <div>
           <div style={breadcrumb}>Home / Client Database / {client.name}</div>
@@ -307,19 +328,19 @@ const h1 = { margin: 0, color: '#020617', fontSize: 30, lineHeight: 1.1, fontWei
 const subtitle = { margin: '8px 0 0', color: '#475569', fontSize: 14, fontWeight: 600 }
 const primaryLink = { display: 'inline-flex', alignItems: 'center', height: 40, padding: '0 16px', borderRadius: 8, background: green, color: '#fff', textDecoration: 'none', fontSize: 13, fontWeight: 900 }
 const secondaryButton = { display: 'inline-flex', alignItems: 'center', gap: 8, height: 40, padding: '0 14px', borderRadius: 8, border: '1px solid #dbe3ea', background: '#fff', color: '#0f172a', fontSize: 13, fontWeight: 900, cursor: 'pointer' }
-const heroCard = { display: 'grid', gridTemplateColumns: 'minmax(320px, 1fr) minmax(420px, .9fr)', gap: 26, background: '#fff', border: '1px solid #dfe7ee', borderRadius: 14, padding: 22, boxShadow: '0 10px 24px rgba(15,23,42,.04)' }
-const clientHero = { display: 'grid', gridTemplateColumns: '72px 1fr', gap: 18, alignItems: 'flex-start' }
+const heroCard = { display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(320px, .9fr)', gap: 26, background: '#fff', border: '1px solid #dfe7ee', borderRadius: 14, padding: 22, boxShadow: '0 10px 24px rgba(15,23,42,.04)' }
+const clientHero = { display: 'grid', gridTemplateColumns: '72px minmax(0, 1fr)', gap: 18, alignItems: 'flex-start' }
 const heroAvatar = { width: 64, height: 64, borderRadius: 14, background: '#ede9fe', color: '#7c3aed', display: 'grid', placeItems: 'center', fontSize: 24, fontWeight: 900 }
-const contactGrid = { display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 12, marginTop: 28 }
+const contactGrid = { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(190px, 1fr))', gap: 12, marginTop: 28 }
 const infoPill = { display: 'flex', alignItems: 'center', gap: 10, color: '#475569', fontSize: 13, fontWeight: 700, minWidth: 0 }
 const tinyIcon = { width: 28, height: 28, borderRadius: 8, background: '#f1f5f9', color: '#64748b', display: 'grid', placeItems: 'center', flex: '0 0 auto' }
-const metricStrip = { display: 'grid', gridTemplateColumns: 'repeat(4, minmax(120px, 1fr))', borderLeft: '1px solid #e2e8f0' }
+const metricStrip = { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', borderLeft: '1px solid #e2e8f0' }
 const metricCard = { display: 'flex', gap: 12, alignItems: 'center', padding: '10px 18px', borderRight: '1px solid #e2e8f0' }
 const metricIcon = (color: string) => ({ width: 38, height: 38, borderRadius: 10, background: `${color}16`, color, display: 'grid', placeItems: 'center', flex: '0 0 auto' })
 const tabsWrap = { display: 'flex', gap: 18, borderBottom: '1px solid #dbe3ea', overflowX: 'auto' as const }
 const tabButton = (active: boolean) => ({ display: 'inline-flex', alignItems: 'center', gap: 7, padding: '0 0 14px', border: 'none', borderBottom: `2px solid ${active ? green : 'transparent'}`, background: 'transparent', color: active ? green : '#0f172a', fontSize: 13, fontWeight: 900, cursor: 'pointer', whiteSpace: 'nowrap' as const })
 const tabCount = { minWidth: 20, height: 20, borderRadius: 999, background: '#f1f5f9', color: '#475569', display: 'inline-grid', placeItems: 'center', fontSize: 11 }
-const overviewGrid = { display: 'grid', gridTemplateColumns: 'repeat(3, minmax(280px, 1fr))', gap: 18 }
+const overviewGrid = { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 18 }
 const panel = { background: '#fff', border: '1px solid #dfe7ee', borderRadius: 14, padding: 22, boxShadow: '0 10px 24px rgba(15,23,42,.04)' }
 const panelTitle = { margin: '0 0 18px', color: '#0f172a', fontSize: 16, fontWeight: 900 }
 const bodyText = { color: '#334155', fontSize: 13, lineHeight: 1.65, margin: 0 }
@@ -330,7 +351,7 @@ const contactMeta = { display: 'flex', alignItems: 'center', gap: 6, color: '#64
 const primaryBadge = { marginLeft: 8, padding: '3px 8px', borderRadius: 999, background: '#dcfce7', color: '#15803d', fontSize: 11, fontWeight: 900 }
 const activityRow = { display: 'grid', gridTemplateColumns: '34px minmax(0, 1fr) auto', gap: 12, alignItems: 'start' }
 const noteRow = { display: 'grid', gridTemplateColumns: '28px minmax(0, 1fr)', gap: 10 }
-const invoiceBoxes = { display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 10 }
+const invoiceBoxes = { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(110px, 1fr))', gap: 10 }
 const miniMetric = { minHeight: 74, border: '1px solid #dbe3ea', borderRadius: 10, display: 'grid', placeItems: 'center', textAlign: 'center' as const, padding: 10 }
 const smallAvatar = (background: string, color: string) => ({ width: 38, height: 38, borderRadius: 999, background, color, display: 'grid', placeItems: 'center', fontSize: 12, fontWeight: 900 })
 const donutCenter = { width: 92, height: 92, borderRadius: '50%', background: '#fff', display: 'grid', placeItems: 'center', color: '#0f172a', fontSize: 24, fontWeight: 900, textAlign: 'center' as const, boxShadow: 'inset 0 0 0 1px #e2e8f0' }

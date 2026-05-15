@@ -1,6 +1,9 @@
 'use client'
 
+import { getSupabaseBrowserClient, hasSupabaseConfig } from '@/lib/auth/supabaseClient'
+
 export type ClientStatus = 'Active' | 'Inactive'
+export type ClientSource = 'supabase' | 'local' | 'unavailable'
 
 export interface ClientContact {
   id: string
@@ -66,199 +69,19 @@ export interface ClientRecord {
   notes: ClientNote[]
 }
 
-export const clientsStorageKey = 'flowsys-clients'
+export interface ClientLoadResult {
+  clients: ClientRecord[]
+  source: ClientSource
+  error?: string
+}
 
+export const clientsStorageKey = 'flowsys-clients'
 export const accountManagers = ['James Pandian', 'Sarah Johnson', 'Michael Chen', 'Priya Sharma', 'Daniel Lee']
 
-export const seedClients: ClientRecord[] = [
-  {
-    id: 'horizon-technologies',
-    name: 'Horizon Technologies',
-    company: 'horizontech.com',
-    email: 'contact@horizontech.com',
-    phone: '+63 917 123 4567',
-    website: 'www.horizontech.com',
-    industry: 'Technology',
-    status: 'Active',
-    companySize: '51 - 200 employees',
-    companyType: 'Private',
-    annualRevenue: 'PHP 50M - PHP 100M',
-    taxId: '123-456-789-000',
-    billingAddress: '29th Floor, Tech Tower One, Ayala Avenue, Makati City, Metro Manila, Philippines 1226',
-    accountManager: 'James Pandian',
-    defaultCurrency: 'PHP - Philippine Peso',
-    paymentTerms: 'Net 30',
-    tags: ['Enterprise', 'Priority'],
-    description: 'Horizon Technologies is a leading provider of cloud-based software solutions and IT consulting services. They help businesses streamline operations and drive digital transformation.',
-    createdAt: '2024-01-15',
-    lastContact: 'May 06, 2026',
-    totalProjects: 5,
-    activeProjects: 3,
-    completedProjects: 1,
-    onHoldProjects: 1,
-    totalRevenue: 850000,
-    paidRevenue: 725000,
-    outstandingRevenue: 125000,
-    invoices: { total: 8, paid: 6, unpaid: 2, overdue: 0 },
-    contracts: 3,
-    documents: 6,
-    contacts: [
-      { id: 'james-anderson', name: 'James Anderson', role: 'Chief Information Officer', email: 'james.anderson@horizontech.com', phone: '+63 917 888 2345', primary: true },
-      { id: 'michelle-reyes', name: 'Michelle Reyes', role: 'Operations Manager', email: 'michelle.reyes@horizontech.com', phone: '+63 918 777 3456' },
-      { id: 'daniel-cruz', name: 'Daniel Cruz', role: 'Finance Manager', email: 'daniel.cruz@horizontech.com', phone: '+63 919 654 7890' },
-    ],
-    activities: [
-      { id: 'a1', title: 'Invoice #INV-2026-0042 paid', description: 'Amount: PHP 125,000', date: 'May 06, 2026', time: '2:50 PM', tone: 'green' },
-      { id: 'a2', title: 'Project "Website Redesign" updated', description: 'Status changed to In Progress', date: 'May 05, 2026', time: '11:15 AM', tone: 'blue' },
-      { id: 'a3', title: 'Contract renewed', description: 'Contract updated and extended for 1 year', date: 'Apr 28, 2026', time: '9:45 AM', tone: 'purple' },
-      { id: 'a4', title: 'New project "Mobile App Development" created', description: 'Budget: PHP 280,000', date: 'Apr 20, 2026', time: '4:20 PM', tone: 'orange' },
-    ],
-    notes: [
-      { id: 'n1', title: 'Follow-up on Proposal', body: 'Discussed the Q2 roadmap and submitted proposal for the mobile app phase.', date: 'May 02, 2026', author: 'James Pandian' },
-      { id: 'n2', title: 'Contract Renewal', body: 'Client agreed to renew the contract for another 12 months.', date: 'Apr 25, 2026', author: 'Sarah Johnson' },
-    ],
-  },
-  {
-    id: 'brightline-corp',
-    name: 'Brightline Corp',
-    company: 'brightline.ph',
-    email: 'info@brightline.ph',
-    phone: '+63 918 234 5678',
-    website: 'www.brightline.ph',
-    industry: 'Construction',
-    status: 'Active',
-    companySize: '11 - 50 employees',
-    companyType: 'Corporation',
-    annualRevenue: 'PHP 20M - PHP 50M',
-    taxId: '234-567-890-000',
-    billingAddress: 'Ortigas Center, Pasig City, Metro Manila',
-    accountManager: 'Sarah Johnson',
-    defaultCurrency: 'PHP - Philippine Peso',
-    paymentTerms: 'Net 15',
-    tags: ['Construction'],
-    description: 'Commercial fit-out and general construction client focused on office and retail spaces.',
-    createdAt: '2026-05-05',
-    lastContact: 'May 05, 2026',
-    totalProjects: 3,
-    activeProjects: 2,
-    completedProjects: 1,
-    onHoldProjects: 0,
-    totalRevenue: 620000,
-    paidRevenue: 590000,
-    outstandingRevenue: 30000,
-    invoices: { total: 5, paid: 4, unpaid: 1, overdue: 0 },
-    contracts: 2,
-    documents: 4,
-    contacts: [{ id: 'ana-reyes', name: 'Ana Reyes', role: 'Procurement Lead', email: 'ana@brightline.ph', phone: '+63 917 231 4567', primary: true }],
-    activities: [],
-    notes: [],
-  },
-  {
-    id: 'greenpath-solutions',
-    name: 'GreenPath Solutions',
-    company: 'greenpath.com',
-    email: 'hello@greenpath.com',
-    phone: '+63 919 345 6789',
-    website: 'www.greenpath.com',
-    industry: 'Consulting',
-    status: 'Active',
-    companySize: '51 - 200 employees',
-    companyType: 'Private',
-    annualRevenue: 'PHP 10M - PHP 20M',
-    taxId: '345-678-901-000',
-    billingAddress: 'Cebu Business Park, Cebu City',
-    accountManager: 'Michael Chen',
-    defaultCurrency: 'PHP - Philippine Peso',
-    paymentTerms: 'Net 30',
-    tags: ['Consulting', 'Retainer'],
-    description: 'Sustainability consulting firm with recurring advisory work.',
-    createdAt: '2026-05-04',
-    lastContact: 'May 04, 2026',
-    totalProjects: 4,
-    activeProjects: 2,
-    completedProjects: 2,
-    onHoldProjects: 0,
-    totalRevenue: 490000,
-    paidRevenue: 450000,
-    outstandingRevenue: 40000,
-    invoices: { total: 6, paid: 5, unpaid: 1, overdue: 0 },
-    contracts: 1,
-    documents: 3,
-    contacts: [],
-    activities: [],
-    notes: [],
-  },
-  {
-    id: 'delta-analytics',
-    name: 'Delta Analytics',
-    company: 'delta-analytics.com',
-    email: 'team@delta-analytics.com',
-    phone: '+63 920 456 7890',
-    website: 'www.delta-analytics.com',
-    industry: 'Technology',
-    status: 'Inactive',
-    companySize: '1 - 10 employees',
-    companyType: 'Startup',
-    annualRevenue: 'Below PHP 10M',
-    taxId: '456-789-012-000',
-    billingAddress: 'Bonifacio Global City, Taguig City',
-    accountManager: 'Priya Sharma',
-    defaultCurrency: 'PHP - Philippine Peso',
-    paymentTerms: 'Due on receipt',
-    tags: ['Analytics'],
-    description: 'Analytics startup with paused implementation work.',
-    createdAt: '2026-04-28',
-    lastContact: 'Apr 28, 2026',
-    totalProjects: 2,
-    activeProjects: 0,
-    completedProjects: 1,
-    onHoldProjects: 1,
-    totalRevenue: 230000,
-    paidRevenue: 180000,
-    outstandingRevenue: 50000,
-    invoices: { total: 3, paid: 2, unpaid: 1, overdue: 1 },
-    contracts: 1,
-    documents: 2,
-    contacts: [],
-    activities: [],
-    notes: [],
-  },
-  {
-    id: 'sunrise-builders',
-    name: 'Sunrise Builders',
-    company: 'sunrisebuilders.com',
-    email: 'projects@sunrise.com',
-    phone: '+63 921 567 8901',
-    website: 'www.sunrisebuilders.com',
-    industry: 'Construction',
-    status: 'Active',
-    companySize: '201 - 500 employees',
-    companyType: 'Corporation',
-    annualRevenue: 'PHP 100M+',
-    taxId: '567-890-123-000',
-    billingAddress: 'Alabang, Muntinlupa City',
-    accountManager: 'Daniel Lee',
-    defaultCurrency: 'PHP - Philippine Peso',
-    paymentTerms: 'Net 60',
-    tags: ['Enterprise', 'Construction'],
-    description: 'Large construction account with multiple active project sites.',
-    createdAt: '2026-04-27',
-    lastContact: 'Apr 27, 2026',
-    totalProjects: 6,
-    activeProjects: 4,
-    completedProjects: 2,
-    onHoldProjects: 0,
-    totalRevenue: 1120000,
-    paidRevenue: 1000000,
-    outstandingRevenue: 120000,
-    invoices: { total: 9, paid: 7, unpaid: 2, overdue: 0 },
-    contracts: 4,
-    documents: 8,
-    contacts: [],
-    activities: [],
-    notes: [],
-  },
-]
+type ClientRow = Record<string, unknown>
+
+const emptyInvoices = { total: 0, paid: 0, unpaid: 0, overdue: 0 }
+const legacyDemoClientIds = new Set(['horizon-technologies', 'brightline-corp', 'greenpath-solutions', 'delta-analytics', 'sunrise-builders'])
 
 export function slugify(value: string) {
   const slug = value
@@ -283,19 +106,220 @@ export function formatPeso(value: number) {
   return `PHP ${value.toLocaleString('en-PH', { maximumFractionDigits: 0 })}`
 }
 
-export function loadClients() {
-  if (typeof window === 'undefined') return seedClients
+export function buildEmptyClient(overrides: Partial<ClientRecord> & Pick<ClientRecord, 'id' | 'name' | 'email' | 'phone' | 'industry' | 'companyType' | 'billingAddress' | 'accountManager'>): ClientRecord {
+  const now = new Date()
+  const createdAt = overrides.createdAt || now.toISOString().slice(0, 10)
+  const website = overrides.website || ''
+
+  return {
+    company: website.replace(/^https?:\/\//, '') || `${slugify(overrides.name)}.com`,
+    website,
+    status: 'Active',
+    companySize: '-',
+    annualRevenue: '-',
+    taxId: '-',
+    defaultCurrency: 'PHP - Philippine Peso',
+    paymentTerms: '-',
+    tags: [],
+    description: 'No client description added yet.',
+    createdAt,
+    lastContact: overrides.lastContact || now.toLocaleDateString('en-US', { month: 'short', day: '2-digit', year: 'numeric' }),
+    totalProjects: 0,
+    activeProjects: 0,
+    completedProjects: 0,
+    onHoldProjects: 0,
+    totalRevenue: 0,
+    paidRevenue: 0,
+    outstandingRevenue: 0,
+    invoices: emptyInvoices,
+    contracts: 0,
+    documents: 0,
+    contacts: [],
+    activities: [],
+    notes: [],
+    ...overrides,
+  }
+}
+
+export function loadLocalClients() {
+  if (typeof window === 'undefined') return []
 
   try {
     const stored = window.localStorage.getItem(clientsStorageKey)
     const parsed = stored ? (JSON.parse(stored) as unknown[]) : []
-    const validClients = parsed.filter(isClientRecord)
-    const storedById = new Map(validClients.map(client => [client.id, client]))
-    const mergedSeeds = seedClients.map(client => storedById.get(client.id) || client)
-    const customClients = validClients.filter(client => !seedClients.some(seed => seed.id === client.id))
-    return [...mergedSeeds, ...customClients]
+    const clients = parsed.filter(isClientRecord).filter(client => !legacyDemoClientIds.has(client.id))
+    if (clients.length !== parsed.length) saveClientsLocally(clients)
+    return clients
   } catch {
-    return seedClients
+    return []
+  }
+}
+
+export async function loadClients(): Promise<ClientLoadResult> {
+  const localClients = loadLocalClients()
+  const supabase = getSupabaseBrowserClient()
+
+  if (!supabase || !hasSupabaseConfig()) {
+    return {
+      clients: localClients,
+      source: localClients.length ? 'local' : 'unavailable',
+      error: 'Supabase is not configured.',
+    }
+  }
+
+  const { data, error } = await supabase
+    .from('clients')
+    .select('*')
+    .order('created_at', { ascending: false })
+
+  if (error) {
+    return {
+      clients: localClients,
+      source: localClients.length ? 'local' : 'unavailable',
+      error: error.message,
+    }
+  }
+
+  const clients = (data || []).map(rowToClient).filter(isClientRecord)
+  saveClientsLocally(clients)
+  return { clients, source: 'supabase' }
+}
+
+export async function saveClient(client: ClientRecord): Promise<{ client: ClientRecord; source: ClientSource; error?: string }> {
+  const supabase = getSupabaseBrowserClient()
+
+  if (supabase && hasSupabaseConfig()) {
+    const { data, error } = await supabase
+      .from('clients')
+      .upsert(clientToRow(client), { onConflict: 'id' })
+      .select()
+      .single()
+
+    if (!error && data) {
+      const savedClient = rowToClient(data)
+      upsertLocalClient(savedClient)
+      return { client: savedClient, source: 'supabase' }
+    }
+
+    upsertLocalClient(client)
+    return { client, source: 'local', error: error?.message || 'Supabase save failed.' }
+  }
+
+  upsertLocalClient(client)
+  return { client, source: 'local', error: 'Supabase is not configured.' }
+}
+
+export async function findClient(rawId: string | string[] | undefined): Promise<{ client?: ClientRecord; source: ClientSource; error?: string }> {
+  const id = decodeURIComponent(Array.isArray(rawId) ? rawId[0] || '' : rawId || '')
+  const result = await loadClients()
+  return {
+    client: result.clients.find(client => client.id === id || client.name.toLowerCase() === id.toLowerCase()),
+    source: result.source,
+    error: result.error,
+  }
+}
+
+export function saveClientsLocally(clients: ClientRecord[]) {
+  if (typeof window === 'undefined') return
+  window.localStorage.setItem(clientsStorageKey, JSON.stringify(clients))
+}
+
+function upsertLocalClient(client: ClientRecord) {
+  const clients = loadLocalClients()
+  const nextClients = clients.some(existing => existing.id === client.id)
+    ? clients.map(existing => existing.id === client.id ? client : existing)
+    : [client, ...clients]
+
+  saveClientsLocally(nextClients)
+}
+
+function rowToClient(row: ClientRow): ClientRecord {
+  const metadata = objectValue(row.metadata)
+
+  return buildEmptyClient({
+    id: stringValue(row.id),
+    name: stringValue(row.name),
+    company: stringValue(row.company, stringValue(row.website)),
+    email: stringValue(row.email),
+    phone: stringValue(row.phone),
+    website: stringValue(row.website),
+    industry: stringValue(row.industry),
+    status: statusValue(row.status),
+    companySize: stringValue(row.company_size, stringValue(metadata.companySize, '-')),
+    companyType: stringValue(row.company_type, stringValue(metadata.companyType)),
+    annualRevenue: stringValue(row.annual_revenue, stringValue(metadata.annualRevenue, '-')),
+    taxId: stringValue(row.tax_id, stringValue(metadata.taxId, '-')),
+    billingAddress: stringValue(row.billing_address, stringValue(metadata.billingAddress)),
+    accountManager: stringValue(row.account_manager, stringValue(metadata.accountManager)),
+    accountManagerAvatar: stringValue(row.account_manager_avatar, stringValue(metadata.accountManagerAvatar)),
+    defaultCurrency: stringValue(row.default_currency, stringValue(metadata.defaultCurrency, 'PHP - Philippine Peso')),
+    paymentTerms: stringValue(row.payment_terms, stringValue(metadata.paymentTerms, '-')),
+    tags: stringArray(row.tags),
+    description: stringValue(row.description, stringValue(metadata.description, 'No client description added yet.')),
+    createdAt: stringValue(row.created_at, stringValue(metadata.createdAt, new Date().toISOString())).slice(0, 10),
+    lastContact: stringValue(row.last_contact, stringValue(metadata.lastContact, '-')),
+    totalProjects: numberValue(row.total_projects),
+    activeProjects: numberValue(row.active_projects),
+    completedProjects: numberValue(row.completed_projects),
+    onHoldProjects: numberValue(row.on_hold_projects),
+    totalRevenue: numberValue(row.total_revenue),
+    paidRevenue: numberValue(row.paid_revenue),
+    outstandingRevenue: numberValue(row.outstanding_revenue),
+    invoices: invoiceValue(row.invoices),
+    contracts: numberValue(row.contracts),
+    documents: numberValue(row.documents),
+    contacts: arrayValue<ClientContact>(row.contacts),
+    activities: arrayValue<ClientActivity>(row.activities),
+    notes: arrayValue<ClientNote>(row.notes),
+  })
+}
+
+function clientToRow(client: ClientRecord) {
+  return {
+    id: client.id,
+    name: client.name,
+    company: client.company,
+    email: client.email,
+    phone: client.phone,
+    website: client.website,
+    industry: client.industry,
+    status: client.status,
+    company_size: client.companySize,
+    company_type: client.companyType,
+    annual_revenue: client.annualRevenue,
+    tax_id: client.taxId,
+    billing_address: client.billingAddress,
+    account_manager: client.accountManager,
+    account_manager_avatar: client.accountManagerAvatar || null,
+    default_currency: client.defaultCurrency,
+    payment_terms: client.paymentTerms,
+    tags: client.tags,
+    description: client.description,
+    created_at: client.createdAt,
+    last_contact: client.lastContact,
+    total_projects: client.totalProjects,
+    active_projects: client.activeProjects,
+    completed_projects: client.completedProjects,
+    on_hold_projects: client.onHoldProjects,
+    total_revenue: client.totalRevenue,
+    paid_revenue: client.paidRevenue,
+    outstanding_revenue: client.outstandingRevenue,
+    invoices: client.invoices,
+    contracts: client.contracts,
+    documents: client.documents,
+    contacts: client.contacts,
+    activities: client.activities,
+    notes: client.notes,
+    metadata: {
+      companySize: client.companySize,
+      companyType: client.companyType,
+      annualRevenue: client.annualRevenue,
+      taxId: client.taxId,
+      billingAddress: client.billingAddress,
+      accountManager: client.accountManager,
+      defaultCurrency: client.defaultCurrency,
+      paymentTerms: client.paymentTerms,
+    },
   }
 }
 
@@ -314,11 +338,36 @@ function isClientRecord(value: unknown): value is ClientRecord {
   )
 }
 
-export function saveClients(clients: ClientRecord[]) {
-  window.localStorage.setItem(clientsStorageKey, JSON.stringify(clients))
+function stringValue(value: unknown, fallback = '') {
+  return typeof value === 'string' && value.trim() ? value : fallback
 }
 
-export function findClient(clients: ClientRecord[], rawId: string | string[] | undefined) {
-  const id = decodeURIComponent(Array.isArray(rawId) ? rawId[0] || '' : rawId || '')
-  return clients.find(client => client.id === id || client.name.toLowerCase() === id.toLowerCase())
+function numberValue(value: unknown) {
+  return typeof value === 'number' && Number.isFinite(value) ? value : 0
+}
+
+function objectValue(value: unknown): Record<string, unknown> {
+  return value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {}
+}
+
+function arrayValue<T>(value: unknown): T[] {
+  return Array.isArray(value) ? value as T[] : []
+}
+
+function stringArray(value: unknown) {
+  return Array.isArray(value) ? value.filter(item => typeof item === 'string') : []
+}
+
+function statusValue(value: unknown): ClientStatus {
+  return value === 'Inactive' ? 'Inactive' : 'Active'
+}
+
+function invoiceValue(value: unknown) {
+  const invoices = objectValue(value)
+  return {
+    total: numberValue(invoices.total),
+    paid: numberValue(invoices.paid),
+    unpaid: numberValue(invoices.unpaid),
+    overdue: numberValue(invoices.overdue),
+  }
 }
