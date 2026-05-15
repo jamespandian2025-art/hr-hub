@@ -1383,13 +1383,12 @@ h6 {
 }
 
 .hr-user-button {
-  min-width: 0;
-  width: min(245px, 24vw);
-  gap: 9px;
+  width: 40px;
   height: 40px;
-  border-radius: 999px;
-  padding: 4px 10px 4px 5px;
-  flex: 0 1 auto;
+  border-radius: 50%;
+  padding: 4px;
+  flex: 0 0 40px;
+  justify-content: center;
 }
 
 .hr-user-avatar {
@@ -1400,6 +1399,18 @@ h6 {
   color: #062012;
   font-size: 12px;
   font-weight: 900;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  overflow: hidden;
+}
+
+.hr-user-avatar > span {
+  width: 100%;
+  height: 100%;
+  display: block;
+  background-size: cover;
+  background-position: center;
 }
 
 .hr-user-copy {
@@ -2176,7 +2187,7 @@ h6 {
   }
 
   .hr-user-button {
-    width: min(210px, 28vw);
+    width: 40px;
   }
 
   .hr-reports-hero {
@@ -2213,7 +2224,7 @@ h6 {
 
   .hr-user-button {
     margin-left: auto;
-    width: auto;
+    width: 40px;
   }
 
   .hr-reports-metrics {
@@ -3790,7 +3801,7 @@ html[data-theme='dark'] .accounting-shell textarea::placeholder {
   }
 
   .hr-user-button {
-    padding-right: 7px;
+    padding: 4px;
   }
 
   .hr-user-copy {

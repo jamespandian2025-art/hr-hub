@@ -7,7 +7,6 @@ import {
   ArrowLeft,
   Bell,
   CalendarCheck,
-  ChevronDown,
   CreditCard,
   FileText,
   Menu,
@@ -29,6 +28,8 @@ type StoredAccount = {
   fullName?: string
   name?: string
   email?: string
+  photo?: string
+  profilePhoto?: string
   role?: string
 }
 
@@ -118,6 +119,7 @@ export default function HrShell({ children }: { children: React.ReactNode }) {
   const displayName = account.fullName || account.name || 'HR User'
   const company = account.company || 'WiseFlow Company'
   const role = account.role || 'Team member'
+  const accountPhoto = account.profilePhoto || account.photo || ''
   const pendingHrLeaveRequests = leaveNotifications.filter(request =>
     String(request.status || '').toLowerCase() === 'pending'
     && !['approved', 'rejected'].includes(String(request.hrApprovalStatus || '').toLowerCase())
@@ -289,17 +291,12 @@ export default function HrShell({ children }: { children: React.ReactNode }) {
             </div>
             <div style={{ position: 'relative' }}>
               <button type="button" className="hr-user-button" aria-label="HR account menu" onClick={() => { setAccountMenuOpen(open => !open); setLoanNotificationsOpen(false); setCreateMenuOpen(false) }}>
-                <span className="hr-user-avatar">{initials(displayName)}</span>
-                <span className="hr-user-copy">
-                  <strong>{displayName}</strong>
-                  <small>{company} - {role}</small>
-                </span>
-                <ChevronDown size={14} />
+                <span className="hr-user-avatar">{accountPhoto ? <span style={{ backgroundImage: `url(${accountPhoto})` }} /> : initials(displayName)}</span>
               </button>
               {accountMenuOpen && (
                 <div style={accountMenuStyle}>
                   <div style={accountMenuHeaderStyle}>
-                    <span className="hr-user-avatar">{initials(displayName)}</span>
+                    <span className="hr-user-avatar">{accountPhoto ? <span style={{ backgroundImage: `url(${accountPhoto})` }} /> : initials(displayName)}</span>
                     <span style={{ minWidth: 0 }}>
                       <strong style={{ display: 'block', color: '#0f172a', fontSize: 14, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{displayName}</strong>
                       <small style={{ display: 'block', color: '#64748b', fontSize: 12, marginTop: 2 }}>{company} - {role}</small>

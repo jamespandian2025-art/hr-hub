@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import type { CSSProperties, ReactNode } from 'react'
 import Link from 'next/link'
 import {
@@ -18,6 +18,7 @@ import {
   Search,
   Settings,
   ShieldCheck,
+  Upload,
   Users,
 } from 'lucide-react'
 
@@ -41,7 +42,19 @@ type SettingsSnapshot = {
   activities: ActivityItem[]
 }
 
+type StoredAccount = {
+  fullName?: string
+  name?: string
+  email?: string
+  role?: string
+  company?: string
+  photo?: string
+  profilePhoto?: string
+}
+
 const font = "var(--font-body)"
+const accountKey = 'flowsys-account'
+const sessionKey = 'flowsys-auth-session'
 
 function loadStored<T>(key: string, fallback: T): T {
   if (typeof window === 'undefined') return fallback
@@ -51,6 +64,36 @@ function loadStored<T>(key: string, fallback: T): T {
   } catch {
     return fallback
   }
+}
+
+function saveStored<T>(key: string, value: T) {
+  if (typeof window !== 'undefined') window.localStorage.setItem(key, JSON.stringify(value))
+}
+
+function readAccount(): StoredAccount {
+  return {
+    ...loadStored<StoredAccount>(sessionKey, {}),
+    ...loadStored<StoredAccount>(accountKey, {}),
+  }
+}
+
+function initials(name?: string) {
+  return String(name || 'HR')
+    .split(' ')
+    .filter(Boolean)
+    .map(part => part[0])
+    .join('')
+    .slice(0, 2)
+    .toUpperCase() || 'HR'
+}
+
+function readImageAsDataUrl(file: File) {
+  return new Promise<string>((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onload = () => resolve(String(reader.result || ''))
+    reader.onerror = reject
+    reader.readAsDataURL(file)
+  })
 }
 
 function countStored(key: string) {
@@ -86,8 +129,12 @@ function readSnapshot(): SettingsSnapshot {
 }
 
 export default function HrSettingsPage() {
+  const fileInputRef = useRef<HTMLInputElement>(null)
   const [activeTab, setActiveTab] = useState('Overview')
   const [query, setQuery] = useState('')
+  const [account, setAccount] = useState<StoredAccount>({})
+  const [profileNotice, setProfileNotice] = useState('')
+  const [profileError, setProfileError] = useState('')
   const [snapshot, setSnapshot] = useState<SettingsSnapshot>(() => ({
     departments: 0,
     locations: 0,
@@ -100,11 +147,64 @@ export default function HrSettingsPage() {
   }))
 
   useEffect(() => {
-    const load = () => setSnapshot(readSnapshot())
+    const load = () => {
+      setSnapshot(readSnapshot())
+      setAccount(readAccount())
+    }
     load()
     window.addEventListener('storage', load)
-    return () => window.removeEventListener('storage', load)
+    window.addEventListener('wiseflow:hr-account-updated', load)
+    return () => {
+      window.removeEventListener('storage', load)
+      window.removeEventListener('wiseflow:hr-account-updated', load)
+    }
   }, [])
+
+  const accountName = account.fullName || account.name || 'HR User'
+  const accountPhoto = account.profilePhoto || account.photo || ''
+
+  async function uploadProfilePhoto(file?: File) {
+    setProfileNotice('')
+    setProfileError('')
+    if (!file) return
+    if (!file.type.startsWith('image/')) {
+      setProfileError('Please choose a JPG, PNG, or WEBP image.')
+      return
+    }
+    if (file.size > 2 * 1024 * 1024) {
+      setProfileError('Profile picture must be 2MB or smaller.')
+      return
+    }
+    try {
+      const dataUrl = await readImageAsDataUrl(file)
+      const nextAccount = { ...loadStored<StoredAccount>(accountKey, {}), profilePhoto: dataUrl, photo: dataUrl }
+      const nextSession = { ...loadStored<StoredAccount>(sessionKey, {}), profilePhoto: dataUrl, photo: dataUrl }
+      saveStored(accountKey, nextAccount)
+      saveStored(sessionKey, nextSession)
+      setAccount({ ...nextSession, ...nextAccount })
+      setProfileNotice('Profile picture updated.')
+      window.dispatchEvent(new Event('storage'))
+      window.dispatchEvent(new Event('wiseflow:hr-account-updated'))
+    } catch {
+      setProfileError('Could not read this image. Please try another file.')
+    }
+  }
+
+  function removeProfilePhoto() {
+    const nextAccount = { ...loadStored<StoredAccount>(accountKey, {}) }
+    const nextSession = { ...loadStored<StoredAccount>(sessionKey, {}) }
+    delete nextAccount.profilePhoto
+    delete nextAccount.photo
+    delete nextSession.profilePhoto
+    delete nextSession.photo
+    saveStored(accountKey, nextAccount)
+    saveStored(sessionKey, nextSession)
+    setAccount({ ...nextSession, ...nextAccount })
+    setProfileNotice('Profile picture removed.')
+    setProfileError('')
+    window.dispatchEvent(new Event('storage'))
+    window.dispatchEvent(new Event('wiseflow:hr-account-updated'))
+  }
 
   const tabs = ['Overview', 'Policies', 'Workflows', 'Organization', 'Roles & Permissions', 'Document Templates', 'Integrations', 'Holiday Calendar', 'General Settings']
   const configItems = useMemo(() => [
@@ -144,6 +244,23 @@ export default function HrSettingsPage() {
 
       {activeTab === 'Overview' ? (
         <>
+          <section style={profilePanelStyle}>
+            <input ref={fileInputRef} type="file" accept="image/*" onChange={event => void uploadProfilePhoto(event.target.files?.[0])} style={{ display: 'none' }} />
+            <button type="button" onClick={() => fileInputRef.current?.click()} style={profileAvatarButtonStyle} aria-label="Upload HR profile picture">
+              {accountPhoto ? <span style={{ ...profileAvatarImageStyle, backgroundImage: `url(${accountPhoto})` }} /> : initials(accountName)}
+            </button>
+            <span style={{ minWidth: 0 }}>
+              <strong style={{ display: 'block', color: '#0f172a', fontSize: 15 }}>{accountName}</strong>
+              <small style={{ display: 'block', color: '#64748b', marginTop: 3 }}>{account.role || 'HR'} profile picture used in HR header.</small>
+              {profileNotice && <small style={{ display: 'block', color: '#15803d', fontWeight: 800, marginTop: 6 }}>{profileNotice}</small>}
+              {profileError && <small style={{ display: 'block', color: '#dc2626', fontWeight: 800, marginTop: 6 }}>{profileError}</small>}
+            </span>
+            <div style={profileActionsStyle}>
+              <button type="button" onClick={() => fileInputRef.current?.click()} style={profileActionButtonStyle}><Upload size={14} /> Upload picture</button>
+              {accountPhoto && <button type="button" onClick={removeProfilePhoto} style={{ ...profileActionButtonStyle, color: '#dc2626' }}>Remove</button>}
+            </div>
+          </section>
+
           <div style={topCardsStyle}>
             <FeatureCard icon={Building2} title="Organization Details" text="Update organization information, contacts, departments, and locations." href="/hr/teams" action="View Details" />
             <FeatureCard icon={FileText} title="HR Policies" text="Manage leave, attendance, payroll, and employee policy records." href="/hr/settings" action="View Policies" />
@@ -291,6 +408,11 @@ const searchBoxStyle: CSSProperties = { minHeight: 42, minWidth: 360, border: '1
 const plainInputStyle: CSSProperties = { border: 'none', outline: 'none', background: 'transparent', width: '100%', font: 'inherit' }
 const tabsStyle: CSSProperties = { display: 'flex', gap: 26, borderBottom: '1px solid #e5e7eb', overflowX: 'auto', marginBottom: 16 }
 const tabStyle = (active: boolean): CSSProperties => ({ border: 'none', background: 'transparent', padding: '13px 0', borderBottom: active ? '2px solid #22c55e' : '2px solid transparent', color: active ? '#16a34a' : '#334155', fontSize: 13, fontWeight: 800, cursor: 'pointer', fontFamily: font, whiteSpace: 'nowrap' })
+const profilePanelStyle: CSSProperties = { minHeight: 92, padding: 18, marginBottom: 14, background: '#fff', border: '1px solid #e5e7eb', borderRadius: 12, boxShadow: '0 8px 24px rgba(15,23,42,0.04)', display: 'grid', gridTemplateColumns: '58px minmax(0, 1fr) auto', gap: 14, alignItems: 'center' }
+const profileAvatarButtonStyle: CSSProperties = { width: 58, height: 58, borderRadius: '50%', border: '1px solid #bbf7d0', background: '#22c55e', color: '#062012', display: 'grid', placeItems: 'center', overflow: 'hidden', fontWeight: 950, fontSize: 16, cursor: 'pointer' }
+const profileAvatarImageStyle: CSSProperties = { width: '100%', height: '100%', display: 'block', backgroundSize: 'cover', backgroundPosition: 'center' }
+const profileActionsStyle: CSSProperties = { display: 'flex', gap: 8, justifyContent: 'flex-end', flexWrap: 'wrap' }
+const profileActionButtonStyle: CSSProperties = { minHeight: 36, border: '1px solid #e5e7eb', borderRadius: 8, background: '#fff', color: '#0f172a', display: 'inline-flex', alignItems: 'center', gap: 7, padding: '0 12px', fontSize: 12, fontWeight: 850, cursor: 'pointer', fontFamily: font }
 const topCardsStyle: CSSProperties = { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(210px, 1fr))', gap: 12, marginBottom: 14 }
 const featureCardStyle: CSSProperties = { minHeight: 118, padding: 18, background: '#fff', border: '1px solid #e5e7eb', borderRadius: 12, boxShadow: '0 8px 24px rgba(15,23,42,0.04)', display: 'flex', alignItems: 'flex-start', gap: 14, color: '#0f172a', textDecoration: 'none', fontSize: 13 }
 const featureIconStyle: CSSProperties = { width: 44, height: 44, borderRadius: 12, background: '#dcfce7', color: '#16a34a', display: 'grid', placeItems: 'center', flexShrink: 0 }
