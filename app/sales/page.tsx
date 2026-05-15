@@ -543,7 +543,7 @@ function Overview({ orders, invoices, reps, categories, pipeline, onCreateInvoic
           <Pipeline stages={pipeline} />
         </Panel>
         <Panel title="Top Sales Reps" action={<a style={viewAll}>View All</a>}>
-          <div style={{ display: 'grid', gap: 14 }}>{reps.slice(0, 5).map((rep, index) => <SalesRep key={rep.label} rep={rep} index={index} />)}</div>
+          <div className="sales-reps-list" style={repsList}>{reps.slice(0, 5).map((rep, index) => <SalesRep key={rep.label} rep={rep} index={index} />)}</div>
         </Panel>
       </div>
       <div className="sales-bottom-grid" style={bottomGrid}>
@@ -770,7 +770,7 @@ function Pipeline({ stages }: { stages: { stage: OpportunityStage; count: number
 
 function SalesRep({ rep, index }: { rep: { label: string; amount: number; count: number }; index: number }) {
   const colors = ['#4f46e5', '#f97316', '#ef4444', '#2563eb', '#10b981']
-  return <div style={repRow}><span style={{ ...avatarStyle, background: colors[index % colors.length] }}>{initials(rep.label)}</span><div style={{ flex: 1 }}><strong>{rep.label}</strong><span>{money(rep.amount)}</span></div><b style={dealPill}>{rep.count} Deals</b></div>
+  return <div className="sales-rep-row" style={repRow}><span style={{ ...avatarStyle, background: colors[index % colors.length] }}>{initials(rep.label)}</span><div className="sales-rep-meta" style={repMeta}><strong>{rep.label}</strong><span>{money(rep.amount)}</span></div><b style={dealPill}>{rep.count} Deals</b></div>
 }
 
 function CategoryRevenue({ categories }: { categories: { label: string; amount: number; count: number }[] }) {
@@ -892,7 +892,9 @@ const chartLabel: CSSProperties = { position: 'absolute', bottom: -24, color: '#
 const pipelineGrid: CSSProperties = { display: 'grid', gridTemplateColumns: 'minmax(90px, 130px) minmax(90px, 1fr) minmax(110px, 130px)', gap: 12, alignItems: 'center', padding: 18 }
 const pipelineLabel: CSSProperties = { display: 'grid', gap: 4, color: '#475569', fontSize: 12, fontWeight: 750 }
 const funnelBar: CSSProperties = { height: 34, borderRadius: 7, clipPath: 'polygon(8% 0, 92% 0, 80% 100%, 20% 100%)', justifySelf: 'center' }
+const repsList: CSSProperties = { display: 'grid', gap: 14, padding: 18 }
 const repRow: CSSProperties = { display: 'flex', alignItems: 'center', gap: 12, minWidth: 0 }
+const repMeta: CSSProperties = { flex: 1, minWidth: 0, display: 'grid', gap: 2, gridTemplateColumns: 'minmax(0, 1fr)', color: '#0f172a' }
 const avatarStyle: CSSProperties = { width: 32, height: 32, borderRadius: 999, background: '#2563eb', color: '#fff', display: 'inline-grid', placeItems: 'center', fontSize: 12, fontWeight: 900, flex: '0 0 auto' }
 const dealPill: CSSProperties = { background: '#dcfce7', color: '#15803d', borderRadius: 999, padding: '4px 9px', fontSize: 11, fontWeight: 850, whiteSpace: 'nowrap' }
 const ordersCardGrid: CSSProperties = { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(210px, 1fr))', gap: 12, padding: 14 }

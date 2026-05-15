@@ -3777,6 +3777,23 @@ html body {
     margin-bottom: 5px !important;
   }
 
+  .sales-page .sales-reps-list {
+    padding-left: 16px !important;
+    padding-right: 16px !important;
+  }
+
+  .sales-page .sales-rep-row {
+    gap: 10px !important;
+  }
+
+  .sales-page .sales-rep-meta strong,
+  .sales-page .sales-rep-meta span {
+    min-width: 0 !important;
+    overflow: hidden !important;
+    text-overflow: ellipsis !important;
+    white-space: nowrap !important;
+  }
+
   .sales-page [style*='grid-template-columns: repeat(auto-fit, minmax(220px'] {
     grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
     gap: 10px !important;
