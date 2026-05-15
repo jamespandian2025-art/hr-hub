@@ -260,6 +260,42 @@ button:active {
   transform: translateY(0);
 }
 
+/* Global tab hierarchy: active tabs should read as the selected surface, not only an underline. */
+[class*='tabs'] button.is-active,
+[class*='tabs'] .is-active,
+[class*='tabs'] button[style*='#16a34a'],
+[class*='tabs'] button[style*='#22c55e'],
+[class*='tabs'] button[style*='#009d4f'],
+[class*='tabs'] button[style*='rgb(22, 163, 74)'],
+[class*='tabs'] button[style*='rgb(34, 197, 94)'],
+.dashboard-tabs button.is-active,
+.sales-tabs button.is-active {
+  background: #111827 !important;
+  color: #ffffff !important;
+  border-color: #111827 !important;
+  border-bottom-color: #111827 !important;
+  border-radius: 9px !important;
+  box-shadow: none !important;
+}
+
+[class*='tabs'] button.is-active *,
+[class*='tabs'] .is-active *,
+[class*='tabs'] button[style*='#16a34a'] *,
+[class*='tabs'] button[style*='#22c55e'] *,
+[class*='tabs'] button[style*='#009d4f'] *,
+[class*='tabs'] button[style*='rgb(22, 163, 74)'] *,
+[class*='tabs'] button[style*='rgb(34, 197, 94)'] *,
+.dashboard-tabs button.is-active *,
+.sales-tabs button.is-active * {
+  color: #ffffff !important;
+}
+
+[class*='tabs'] button,
+.dashboard-tabs button,
+.sales-tabs button {
+  min-height: 36px;
+}
+
 input,
 select,
 textarea {

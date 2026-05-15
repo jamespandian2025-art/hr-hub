@@ -439,8 +439,8 @@ export default function SalesPage() {
         <MetricCard icon={<Funnel size={23} />} label="Conversion Rate" value={`${conversion}%`} detail={`${money(forecast)} forecast pipeline`} tone="#14b8a6" />
       </div>
 
-      <div style={tabsStyle}>
-        {tabs.map(tab => <button key={tab} onClick={() => setActiveTab(tab)} style={tabStyle(activeTab === tab)}>{tab}</button>)}
+      <div className="sales-tabs" style={tabsStyle}>
+        {tabs.map(tab => <button key={tab} className={activeTab === tab ? 'is-active' : undefined} onClick={() => setActiveTab(tab)} style={tabStyle(activeTab === tab)}>{tab}</button>)}
       </div>
 
       {activeTab === 'Overview' ? (
@@ -943,5 +943,5 @@ const prefixStyle: CSSProperties = { position: 'absolute', left: 12, top: 12, co
 const drawerFooter: CSSProperties = { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, padding: 28, borderTop: '1px solid #e2e8f0' }
 
 const softIcon = (color: string, size = 54): CSSProperties => ({ width: size, height: size, borderRadius: 14, background: `${color}16`, color, display: 'grid', placeItems: 'center', flex: '0 0 auto' })
-const tabStyle = (active: boolean): CSSProperties => ({ border: 0, background: 'transparent', padding: '0 0 13px', margin: 0, color: active ? green : '#334155', borderBottom: active ? `2px solid ${green}` : '2px solid transparent', fontSize: 13, fontWeight: active ? 900 : 750, cursor: 'pointer', whiteSpace: 'nowrap' })
+const tabStyle = (active: boolean): CSSProperties => ({ border: 0, background: active ? '#111827' : 'transparent', padding: '8px 13px', margin: 0, color: active ? '#fff' : '#334155', borderBottom: '2px solid transparent', borderRadius: 9, fontSize: 13, fontWeight: active ? 900 : 750, cursor: 'pointer', whiteSpace: 'nowrap' })
 const legendDot = (color: string): CSSProperties => ({ width: 8, height: 8, borderRadius: 999, background: color, display: 'inline-block', marginRight: 8 })

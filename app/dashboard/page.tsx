@@ -511,7 +511,7 @@ export default function Dashboard() {
       {/* Tabs */}
       <div className="dashboard-tabs" style={{ display: 'flex', gap: 2, borderBottom: '1px solid #e5e7eb', marginBottom: 14 }}>
         {['Projects', 'Sales', 'Financials', 'Operations'].map(t => (
-          <button key={t} onClick={() => setTab(t)} style={{ border: 'none', borderBottom: `2px solid ${tab === t ? '#22c55e' : 'transparent'}`, background: 'transparent', color: tab === t ? '#22c55e' : '#6b7280', padding: '8px 16px', fontSize: 13, fontWeight: 600, cursor: 'pointer', transition: 'color 150ms ease' }}>{t}</button>
+          <button key={t} className={tab === t ? 'is-active' : undefined} onClick={() => setTab(t)} style={{ border: 'none', borderBottom: '2px solid transparent', background: tab === t ? '#111827' : 'transparent', color: tab === t ? '#fff' : '#6b7280', borderRadius: 9, padding: '8px 16px', fontSize: 13, fontWeight: 700, cursor: 'pointer', transition: 'background 150ms ease, color 150ms ease' }}>{t}</button>
         ))}
       </div>
 
