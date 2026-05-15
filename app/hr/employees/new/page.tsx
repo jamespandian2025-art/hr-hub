@@ -163,29 +163,22 @@ function generatePortalPassword() {
 
 const credentialEmailKey = 'flowsys-hr-credential-email-outbox'
 
-async function openCredentialEmail(employee: { employeeId?: string; firstName?: string; lastName?: string; email?: string; portalEmail?: string; portalPassword?: string; jobTitle?: string }) {
+type CredentialEmailResult = {
+  sent: boolean
+  message: string
+}
+
+async function openCredentialEmail(employee: { employeeId?: string; firstName?: string; lastName?: string; email?: string; portalEmail?: string; portalPassword?: string; jobTitle?: string }): Promise<CredentialEmailResult> {
   const recipient = employee.email?.trim()
-  if (!recipient || !employee.portalEmail || !employee.portalPassword) return false
+  if (!recipient || !employee.portalEmail || !employee.portalPassword) {
+    return { sent: false, message: 'Missing employee work email, portal email, or temporary password.' }
+  }
 
   const employeeName = [employee.firstName, employee.lastName].filter(Boolean).join(' ').trim() || 'Employee'
   const loginUrl = `${window.location.origin}/employee/login`
-  const subject = `WiseFlow employee portal login details`
-  const body = [
-    `Hello ${employeeName},`,
-    '',
-    'Your WiseFlow Employee Self-Service portal account is ready.',
-    '',
-    `Login page: ${loginUrl}`,
-    `Login email: ${employee.portalEmail}`,
-    `Temporary password: ${employee.portalPassword}`,
-    '',
-    'Please sign in and change your temporary password after your first login.',
-    '',
-    'Thank you,',
-    'WiseFlow HR',
-  ].join('\n')
 
   let status = 'Prepared'
+  let message = 'Email provider is not configured on the server.'
   try {
     const response = await fetch('/api/hr/employee-credentials', {
       method: 'POST',
@@ -200,8 +193,10 @@ async function openCredentialEmail(employee: { employeeId?: string; firstName?: 
     })
     const result = await response.json()
     status = result?.ok ? 'Sent' : 'Prepared'
+    message = result?.ok ? `Login details sent to ${recipient}.` : result?.error || 'Email provider could not send the login details.'
   } catch {
     status = 'Prepared'
+    message = 'Could not contact the email service. Please try again.'
   }
 
   const outbox = loadStored<object[]>(credentialEmailKey, [])
@@ -214,12 +209,12 @@ async function openCredentialEmail(employee: { employeeId?: string; firstName?: 
       recipient,
       portalEmail: employee.portalEmail,
       status,
+      message,
       createdAt: new Date().toISOString(),
     },
   ]))
 
-  if (status !== 'Sent') window.open(`mailto:${encodeURIComponent(recipient)}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`, '_blank')
-  return true
+  return { sent: status === 'Sent', message }
 }
 
 function formatFileSize(bytes: number) {
@@ -548,13 +543,13 @@ export default function AddEmployeePage() {
 
       if (emailCredentials) {
         try {
-          const emailOpened = await openCredentialEmail(newEmp)
-          if (!emailOpened && !warning) {
-            warning = 'Employee saved, but the login email could not be opened. You can share the credentials manually from the employee profile.'
+          const emailResult = await openCredentialEmail(newEmp)
+          if (!emailResult.sent && !warning) {
+            warning = `Employee saved, but login details were not emailed. ${emailResult.message}`
           }
         } catch (error) {
           console.error('Could not open credential email', error)
-          if (!warning) warning = 'Employee saved, but the login email could not be opened. You can share the credentials manually from the employee profile.'
+          if (!warning) warning = 'Employee saved, but login details were not emailed. Could not contact the email service.'
         }
       }
 

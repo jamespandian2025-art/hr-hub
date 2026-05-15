@@ -139,25 +139,9 @@ async function openCredentialEmail(employee: Employee): Promise<CredentialEmailR
   }
 
   const loginUrl = `${window.location.origin}/employee/login`
-  const subject = 'WiseFlow employee portal login details'
-  const body = [
-    `Hello ${fullName(employee) || 'Employee'},`,
-    '',
-    'Your WiseFlow Employee Self-Service portal account is ready.',
-    '',
-    `Login page: ${loginUrl}`,
-    `Login email: ${employee.portalEmail}`,
-    `Temporary password: ${employee.portalPassword}`,
-    '',
-    'Please sign in and change your temporary password after your first login.',
-    '',
-    'Thank you,',
-    'WiseFlow HR',
-  ].join('\n')
-
   let status = 'Prepared'
-  let message = 'Email provider is not configured. An email draft was opened instead.'
-  let fallback = true
+  let message = 'Email provider is not configured on the server.'
+  let fallback = false
   try {
     const response = await fetch('/api/hr/employee-credentials', {
       method: 'POST',
@@ -172,14 +156,14 @@ async function openCredentialEmail(employee: Employee): Promise<CredentialEmailR
     })
     const result = await response.json()
     status = result?.ok ? 'Sent' : 'Prepared'
-    fallback = !result?.ok
+    fallback = Boolean(result?.configurationRequired)
     message = result?.ok
       ? `Login details sent to ${recipient}.`
-      : result?.error || 'Email provider could not send the login details. An email draft was opened instead.'
+      : result?.error || 'Email provider could not send the login details.'
   } catch {
     status = 'Prepared'
-    fallback = true
-    message = 'Could not contact the email service. An email draft was opened instead.'
+    fallback = false
+    message = 'Could not contact the email service. Please try again.'
   }
 
   const outbox = loadStored<object[]>(credentialEmailKey, [])
@@ -196,7 +180,6 @@ async function openCredentialEmail(employee: Employee): Promise<CredentialEmailR
       createdAt: new Date().toISOString(),
     },
   ]))
-  if (status !== 'Sent') window.open(`mailto:${encodeURIComponent(recipient)}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`, '_blank')
   return { sent: status === 'Sent', fallback, message }
 }
 

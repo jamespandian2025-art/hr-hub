@@ -106,17 +106,17 @@ export async function POST(request: Request) {
   if (!fromEmail) {
     return Response.json({
       ok: false,
-      fallback: 'mailto',
-      error: 'Email sender is not configured. Add RESEND_FROM_EMAIL, BREVO_FROM_EMAIL, SENDGRID_FROM_EMAIL, or EMAIL_FROM.',
-    }, { status: 200 })
+      configurationRequired: true,
+      error: 'Email sender is not configured on the server. Add RESEND_FROM_EMAIL, BREVO_FROM_EMAIL, SENDGRID_FROM_EMAIL, or EMAIL_FROM in Vercel.',
+    }, { status: 503 })
   }
 
   if (!process.env.RESEND_API_KEY && !process.env.BREVO_API_KEY && !process.env.SENDINBLUE_API_KEY && !process.env.SENDGRID_API_KEY) {
     return Response.json({
       ok: false,
-      fallback: 'mailto',
-      error: 'Email provider API key is not configured. Add RESEND_API_KEY, BREVO_API_KEY, or SENDGRID_API_KEY in Vercel.',
-    }, { status: 200 })
+      configurationRequired: true,
+      error: 'Email provider API key is not configured on the server. Add RESEND_API_KEY, BREVO_API_KEY, or SENDGRID_API_KEY in Vercel.',
+    }, { status: 503 })
   }
 
   const subject = 'WiseFlow employee portal login details'
@@ -158,18 +158,17 @@ export async function POST(request: Request) {
   if (!response) {
     return Response.json({
       ok: false,
-      fallback: 'mailto',
+      configurationRequired: true,
       error: 'No supported email provider is configured.',
-    }, { status: 200 })
+    }, { status: 503 })
   }
 
   if (!response.ok) {
     const providerError = await response.text().catch(() => '')
     return Response.json({
       ok: false,
-      fallback: 'mailto',
       error: providerError ? `Email provider rejected the request: ${providerError.slice(0, 280)}` : 'Email provider rejected the request.',
-    }, { status: 200 })
+    }, { status: 502 })
   }
 
   return Response.json({ ok: true, provider: process.env.RESEND_API_KEY ? 'resend' : process.env.SENDGRID_API_KEY ? 'sendgrid' : 'brevo' })
