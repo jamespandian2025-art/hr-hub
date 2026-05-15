@@ -1,11 +1,11 @@
 import type { Metadata } from 'next'
-import { Unbounded } from 'next/font/google'
+import { Space_Grotesk } from 'next/font/google'
 import './globals.css'
 import AppShell from '../components/AppShell'
 
-const unbounded = Unbounded({
+const spaceGrotesk = Space_Grotesk({
   subsets: ['latin'],
-  variable: '--font-unbounded',
+  variable: '--font-space-grotesk',
 })
 
 export const metadata: Metadata = {
@@ -19,7 +19,7 @@ export default function RootLayout({
   children: React.ReactNode
 }) {
   return (
-    <html lang="en" className={unbounded.variable}>
+    <html lang="en" className={spaceGrotesk.variable}>
       <body>
         <AppShell>{children}</AppShell>
       </body>
