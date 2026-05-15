@@ -53,6 +53,34 @@ export async function POST(request: Request, context: RouteContext) {
         status: 'Unread',
       }, actor)
     }
+    if (collection === 'loan-requests' && String(record.status || '').toLowerCase() !== 'draft') {
+      await createNotification({
+        id: `notification-loan-${record.id}`,
+        targetRole: 'Finance',
+        audience: ['Finance', 'Admin'],
+        type: 'Loan request',
+        title: `${record.employeeName || 'Employee'} requested ${record.customLoanType || record.requestType || 'loan'}`,
+        detail: `PHP ${Number(record.amount || 0).toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} needs Finance review`,
+        relatedCollection: 'loan-requests',
+        relatedId: record.id,
+        employeeId: record.employeeId,
+        status: 'Unread',
+      }, actor)
+    }
+    if (collection === 'allowance-requests' && String(record.status || '').toLowerCase() !== 'draft') {
+      await createNotification({
+        id: `notification-allowance-${record.id}`,
+        targetRole: 'Finance',
+        audience: ['Finance', 'Admin'],
+        type: 'Allowance request',
+        title: `${record.employeeName || 'Employee'} requested ${record.customType || record.type || 'allowance'}`,
+        detail: `PHP ${Number(record.amount || 0).toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} needs Finance review`,
+        relatedCollection: 'allowance-requests',
+        relatedId: record.id,
+        employeeId: record.employeeId,
+        status: 'Unread',
+      }, actor)
+    }
     return Response.json({ ok: true, record }, { status: 201 })
   } catch (error) {
     return jsonError(error)

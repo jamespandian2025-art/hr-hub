@@ -29,6 +29,7 @@ import {
 import { loadStored } from '@/app/employee/employeeData'
 import { AllowanceRequest, allowanceRequestKey, outboundNotificationsKey } from '@/app/hr/enterpriseData'
 import { LoanRequest, loanApprovalState, loanDisplayName, loanRequestKey, money as loanMoney } from '@/app/hr/loan-requests/loanData'
+import { listHrRecords } from '@/lib/hrms/client'
 
 const font = 'var(--font-body)'
 
@@ -52,6 +53,15 @@ type AccountingNotification = {
   target: string
   createdAt?: string
   tone: string
+}
+
+function uniqueRows<T extends { id?: string }>(rows: T[]) {
+  const map = new Map<string, T>()
+  rows.forEach((row, index) => {
+    const key = row.id || `row-${index}`
+    map.set(key, { ...map.get(key), ...row })
+  })
+  return Array.from(map.values())
 }
 
 export const accountingNavItems = [
@@ -84,17 +94,38 @@ export default function AccountingShell({ children }: { children: React.ReactNod
   const [outboundNotifications, setOutboundNotifications] = useState<FinanceOutboundNotification[]>([])
 
   useEffect(() => {
-    const loadNotifications = () => {
-      setLoanRequests(loadStored<LoanRequest[]>(loanRequestKey, []))
-      setAllowanceRequests(loadStored<AllowanceRequest[]>(allowanceRequestKey, []))
+    let cancelled = false
+    const loadNotifications = async () => {
+      const localLoans = loadStored<LoanRequest[]>(loanRequestKey, [])
+      const localAllowances = loadStored<AllowanceRequest[]>(allowanceRequestKey, [])
+      try {
+        const headers = {
+          'x-hr-role': 'Finance',
+          'x-hr-user-name': 'Accounting Notifications',
+        }
+        const [serverLoans, serverAllowances] = await Promise.all([
+          listHrRecords<LoanRequest>('loan-requests', headers),
+          listHrRecords<AllowanceRequest>('allowance-requests', headers),
+        ])
+        if (!cancelled) {
+          setLoanRequests(uniqueRows([...localLoans, ...serverLoans]))
+          setAllowanceRequests(uniqueRows([...localAllowances, ...serverAllowances]))
+        }
+      } catch {
+        if (!cancelled) {
+          setLoanRequests(localLoans)
+          setAllowanceRequests(localAllowances)
+        }
+      }
       setOutboundNotifications(loadStored<FinanceOutboundNotification[]>(outboundNotificationsKey, []))
     }
 
-    loadNotifications()
+    void loadNotifications()
     window.addEventListener('storage', loadNotifications)
     window.addEventListener('focus', loadNotifications)
     const timer = window.setInterval(loadNotifications, 2500)
     return () => {
+      cancelled = true
       window.removeEventListener('storage', loadNotifications)
       window.removeEventListener('focus', loadNotifications)
       window.clearInterval(timer)

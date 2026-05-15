@@ -1,15 +1,17 @@
 'use client'
 
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Car, Plus, ReceiptText, Utensils } from 'lucide-react'
 import EmployeeEmptyPage from '@/components/employee/EmployeeEmptyPage'
 import { allowanceRequestKey, AllowanceRequest, appendAuditLog, isFuelEligible, loadStored, saveStored } from '@/app/hr/enterpriseData'
-import { useEmployeePortalData } from '../employeeData'
+import { matchesEmployeeId, useEmployeePortalData } from '../employeeData'
+import { createHrRecord, listHrRecords } from '@/lib/hrms/client'
 
 type AllowanceSelection = 'Meal' | 'Fuel' | 'Manual'
 
 export default function EmployeeAllowancesPage() {
   const { employee, employeeName } = useEmployeePortalData()
+  const [requests, setRequests] = useState<AllowanceRequest[]>([])
   const [type, setType] = useState<AllowanceSelection>('Meal')
   const [manualType, setManualType] = useState('')
   const [date, setDate] = useState(new Date().toISOString().slice(0, 10))
@@ -18,13 +20,44 @@ export default function EmployeeAllowancesPage() {
   const [remarks, setRemarks] = useState('')
   const [attachmentName, setAttachmentName] = useState('')
   const [notice, setNotice] = useState('')
-  const requests = loadStored<AllowanceRequest[]>(allowanceRequestKey, [])
-  const myRequests = useMemo(() => requests.filter(item => item.employeeId === employee.id || item.employeeCode === employee.employeeId), [employee.employeeId, employee.id, requests])
+  const myRequests = useMemo(() => requests.filter(item => matchesEmployeeId(item.employeeId, employee) || matchesEmployeeId(item.employeeCode, employee)), [employee, requests])
   const fuelAllowed = isFuelEligible(employee.jobTitle)
   const isManual = type === 'Manual'
   const displayType = isManual ? manualType.trim() || 'Custom Allowance' : type
 
-  const submit = () => {
+  useEffect(() => {
+    let cancelled = false
+    const loadRequests = async () => {
+      const localRequests = loadStored<AllowanceRequest[]>(allowanceRequestKey, [])
+      try {
+        const serverRequests = await listHrRecords<AllowanceRequest>('allowance-requests', {
+          'x-hr-role': 'Employee',
+          'x-hr-user-id': employee.id || employee.employeeId || '',
+          'x-hr-user-name': employeeName,
+        })
+        const map = new Map<string, AllowanceRequest>()
+        ;[...localRequests, ...serverRequests].forEach((request, index) => map.set(request.id || `allowance-${index}`, { ...map.get(request.id), ...request }))
+        const merged = Array.from(map.values())
+        if (cancelled) return
+        setRequests(merged)
+        saveStored(allowanceRequestKey, merged)
+      } catch {
+        if (!cancelled) setRequests(localRequests)
+      }
+    }
+    void loadRequests()
+    window.addEventListener('focus', loadRequests)
+    window.addEventListener('wiseflow:finance-requests-changed', loadRequests)
+    const timer = window.setInterval(loadRequests, 2500)
+    return () => {
+      cancelled = true
+      window.removeEventListener('focus', loadRequests)
+      window.removeEventListener('wiseflow:finance-requests-changed', loadRequests)
+      window.clearInterval(timer)
+    }
+  }, [employee.id, employee.employeeId, employeeName])
+
+  const submit = async () => {
     setNotice('')
     const amountValue = Number(amount || 0)
     if (isManual && !manualType.trim()) {
@@ -57,7 +90,15 @@ export default function EmployeeAllowancesPage() {
       createdAt: now,
       updatedAt: now,
     }
-    saveStored(allowanceRequestKey, [request, ...requests])
+    let savedRequest = request
+    try {
+      savedRequest = await createHrRecord<AllowanceRequest>('allowance-requests', request as unknown as Record<string, unknown>)
+    } catch (error) {
+      console.error('Could not sync allowance request to Finance inbox', error)
+    }
+    const nextRequests = [savedRequest, ...requests.filter(item => item.id !== savedRequest.id)]
+    setRequests(nextRequests)
+    saveStored(allowanceRequestKey, nextRequests)
     window.dispatchEvent(new Event('storage'))
     window.dispatchEvent(new Event('wiseflow:finance-requests-changed'))
     appendAuditLog({ action: 'allowance.change', targetType: 'Allowance Request', targetId: request.id, summary: `${employeeName} filed ${displayType} allowance for ${amountValue}.` })

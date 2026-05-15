@@ -195,12 +195,26 @@ export default function PayrollFinancePage() {
       setEmployees(loadStored<Employee[]>(employeeKey, []))
       const localLoans = loadAllStoredRows<LoanRequest>(loanRequestKey, loadStored)
       try {
-        const serverLoans = await listHrRecords<LoanRequest>('loan-requests')
-        if (!cancelled) setLoanRequests(uniqueRows([...serverLoans, ...localLoans]))
+        const serverLoans = await listHrRecords<LoanRequest>('loan-requests', {
+          'x-hr-role': 'Finance',
+          'x-hr-user-name': 'Payroll Finance',
+        })
+        const nextLoans = uniqueRows([...localLoans, ...serverLoans])
+        if (!cancelled) setLoanRequests(current => nextLoans.length > 0 || current.length === 0 ? nextLoans : current)
       } catch {
-        if (!cancelled) setLoanRequests(localLoans)
+        if (!cancelled) setLoanRequests(current => localLoans.length > 0 || current.length === 0 ? localLoans : current)
       }
-      setAllowanceRequests(loadAllStoredRows<AllowanceRequest>(allowanceRequestKey, loadEnterpriseStored))
+      const localAllowances = loadAllStoredRows<AllowanceRequest>(allowanceRequestKey, loadEnterpriseStored)
+      try {
+        const serverAllowances = await listHrRecords<AllowanceRequest>('allowance-requests', {
+          'x-hr-role': 'Finance',
+          'x-hr-user-name': 'Payroll Finance',
+        })
+        const nextAllowances = uniqueRows([...localAllowances, ...serverAllowances])
+        if (!cancelled) setAllowanceRequests(current => nextAllowances.length > 0 || current.length === 0 ? nextAllowances : current)
+      } catch {
+        if (!cancelled) setAllowanceRequests(current => localAllowances.length > 0 || current.length === 0 ? localAllowances : current)
+      }
       setPayrollRecords(loadAllStoredRows<PayrollRecord>(payrollRecordKey, loadStored))
     }
 
@@ -345,7 +359,7 @@ export default function PayrollFinancePage() {
     setNotice('Payroll released and marked paid by Finance.')
   }
 
-  function saveAllowanceDecision(request: AllowanceRequest, decision: 'Approved' | 'Rejected') {
+  async function saveAllowanceDecision(request: AllowanceRequest, decision: 'Approved' | 'Rejected') {
     const now = new Date().toISOString()
     const next = allowanceRequests.map(item => item.id === request.id ? {
       ...item,
@@ -355,6 +369,14 @@ export default function PayrollFinancePage() {
     } : item)
     setAllowanceRequests(next)
     saveEnterpriseStored(allowanceRequestKey, next)
+    const changed = next.find(item => item.id === request.id)
+    if (changed) {
+      try {
+        await updateHrRecord<AllowanceRequest>('allowance-requests', request.id, changed as unknown as Record<string, unknown>)
+      } catch (error) {
+        console.error('Could not sync Finance allowance decision', error)
+      }
+    }
     window.dispatchEvent(new Event('storage'))
     window.dispatchEvent(new Event(financeRefreshEvent))
     setNotice(`${request.customType || request.type} allowance for ${request.employeeName || 'employee'} ${decision.toLowerCase()} by Finance.`)

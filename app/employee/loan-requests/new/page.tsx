@@ -87,13 +87,14 @@ export default function NewLoanRequestPage() {
       updatedAt: now,
     }
 
-    const requests = loadStored<LoanRequest[]>(loanRequestKey, [])
-    saveStored(loanRequestKey, [request, ...requests])
+    let savedRequest = request
     try {
-      await createHrRecord<LoanRequest>('loan-requests', request as unknown as Record<string, unknown>)
+      savedRequest = await createHrRecord<LoanRequest>('loan-requests', request as unknown as Record<string, unknown>)
     } catch (error) {
       console.error('Could not sync loan request to Finance inbox', error)
     }
+    const requests = loadStored<LoanRequest[]>(loanRequestKey, [])
+    saveStored(loanRequestKey, [savedRequest, ...requests.filter(item => item.id !== savedRequest.id)])
     window.dispatchEvent(new Event('storage'))
     window.dispatchEvent(new Event('wiseflow:finance-requests-changed'))
     appendSystemNotification(

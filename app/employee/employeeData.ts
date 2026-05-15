@@ -334,10 +334,10 @@ export function leaveBalanceFor(requests: LeaveRequest[]) {
   })
 }
 
-function uniqueLeaveRequests(rows: LeaveRequest[]) {
-  const map = new Map<string, LeaveRequest>()
+function uniqueRecordsById<T extends { id?: string }>(rows: T[]) {
+  const map = new Map<string, T>()
   rows.forEach((row, index) => {
-    const key = row.id || `leave-${index}`
+    const key = row.id || `record-${index}`
     map.set(key, { ...map.get(key), ...row })
   })
   return Array.from(map.values())
@@ -392,7 +392,7 @@ export function useEmployeePortalData() {
           'x-hr-user-id': employee.id || employee.employeeId || '',
           'x-hr-user-name': employeeName,
         })
-        const merged = uniqueLeaveRequests([...localRequests, ...serverRequests])
+        const merged = uniqueRecordsById([...localRequests, ...serverRequests])
         if (cancelled) return
         setLeaveRequests(merged)
         saveStored(leaveRequestKey, merged)
@@ -408,6 +408,37 @@ export function useEmployeePortalData() {
       cancelled = true
       window.removeEventListener('focus', syncEmployeeLeaves)
       window.removeEventListener('wiseflow:hr-data-changed', syncEmployeeLeaves)
+      window.clearInterval(timer)
+    }
+  }, [employee.id, employee.employeeId, employeeName])
+
+  useEffect(() => {
+    let cancelled = false
+    const syncEmployeeLoans = async () => {
+      if (!employee.id && !employee.employeeId) return
+      const localRequests = loadStored<LoanRequest[]>(loanRequestKey, [])
+      try {
+        const serverRequests = await listHrRecords<LoanRequest>('loan-requests', {
+          'x-hr-role': 'Employee',
+          'x-hr-user-id': employee.id || employee.employeeId || '',
+          'x-hr-user-name': employeeName,
+        })
+        const merged = uniqueRecordsById([...localRequests, ...serverRequests])
+        if (cancelled) return
+        setLoanRequests(merged)
+        saveStored(loanRequestKey, merged)
+      } catch {
+        if (!cancelled) setLoanRequests(localRequests)
+      }
+    }
+    void syncEmployeeLoans()
+    window.addEventListener('focus', syncEmployeeLoans)
+    window.addEventListener('wiseflow:finance-requests-changed', syncEmployeeLoans)
+    const timer = window.setInterval(syncEmployeeLoans, 2500)
+    return () => {
+      cancelled = true
+      window.removeEventListener('focus', syncEmployeeLoans)
+      window.removeEventListener('wiseflow:finance-requests-changed', syncEmployeeLoans)
       window.clearInterval(timer)
     }
   }, [employee.id, employee.employeeId, employeeName])
