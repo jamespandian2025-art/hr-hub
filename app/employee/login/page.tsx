@@ -30,6 +30,7 @@ function generatedPortalEmail(employee: Employee) {
 
 function loginEmailMatches(employee: Employee, loginEmail: string) {
   const normalizedEmail = text(loginEmail)
+  const localPart = compact(normalizedEmail.split('@')[0])
   const exactMatches = [
     employee.portalEmail,
     employee.email,
@@ -38,7 +39,13 @@ function loginEmailMatches(employee: Employee, loginEmail: string) {
 
   if (exactMatches) return true
 
-  const localPart = compact(normalizedEmail.split('@')[0])
+  const employeeIdMatches = [employee.employeeId, employee.id]
+    .map(compact)
+    .filter(value => value.length >= 4)
+    .some(value => localPart.includes(value))
+
+  if (employeeIdMatches) return true
+
   const nameTokens = [employee.firstName, employee.middleName, employee.lastName]
     .flatMap(value => text(value).split(/\s+/))
     .filter(value => value.length > 1)
