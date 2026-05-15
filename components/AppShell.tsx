@@ -11,13 +11,13 @@ const sidebarKey = 'wf-sidebar-collapsed'
 
 const THEME_MAP: Record<string, string> = {
   'Light': 'light',
-  'Dark': 'dark',
+  'Dark': 'light',
   'WiseFlow Light': 'light',
-  'WiseFlow Dark': 'dark',
-  'Vercel Dark': 'dark',
-  'Google Blue': 'google-blue',
-  'Google Green': 'google-green',
-  'Graphite Pro': 'graphite',
+  'WiseFlow Dark': 'light',
+  'Vercel Dark': 'light',
+  'Google Blue': 'light',
+  'Google Green': 'light',
+  'Graphite Pro': 'light',
 }
 
 const applyTheme = () => {
@@ -25,14 +25,14 @@ const applyTheme = () => {
     const stored = window.localStorage.getItem(accountKey)
     const account = stored ? JSON.parse(stored) as { theme?: string } : null
     const savedPreference = account?.theme
-    const preference = !savedPreference || savedPreference === 'Google Green' ? 'Vercel Dark' : savedPreference
+    const preference = savedPreference && THEME_MAP[savedPreference] ? savedPreference : 'WiseFlow Light'
     const mapped = THEME_MAP[preference]
     const theme = mapped || (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light')
     document.documentElement.dataset.theme = theme
     document.documentElement.dataset.themePreference = preference
   } catch {
-    document.documentElement.dataset.theme = 'dark'
-    document.documentElement.dataset.themePreference = 'Vercel Dark'
+    document.documentElement.dataset.theme = 'light'
+    document.documentElement.dataset.themePreference = 'WiseFlow Light'
   }
 }
 

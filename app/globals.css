@@ -3629,3 +3629,295 @@ html[data-theme='dark'] .accounting-shell textarea::placeholder {
     width: 92vw;
   }
 }
+
+/* Whole-system monochrome pass */
+:root,
+html[data-theme='light'],
+html[data-theme='dark'],
+html[data-theme='google-blue'],
+html[data-theme='google-green'],
+html[data-theme='graphite'] {
+  --color-bg: #ffffff;
+  --color-surface: #ffffff;
+  --color-surface-raised: #ffffff;
+  --color-border: #d4d4d4;
+  --color-border-subtle: #e5e5e5;
+  --color-text-primary: #000000;
+  --color-text-secondary: #262626;
+  --color-text-muted: #737373;
+  --color-accent: #000000;
+  --color-accent-hover: #1f1f1f;
+  --color-accent-light: #f5f5f5;
+  --color-success: #000000;
+  --color-success-light: #f5f5f5;
+  --color-warning: #000000;
+  --color-warning-light: #f5f5f5;
+  --color-danger: #000000;
+  --color-danger-light: #f5f5f5;
+  --color-info: #000000;
+  --color-info-light: #f5f5f5;
+  --color-overlay: rgba(0, 0, 0, 0.08);
+  --color-scrim: rgba(0, 0, 0, 0.48);
+  --shadow-sm: none;
+  --shadow-md: none;
+  --shadow-lg: none;
+  --wf-green: #000000;
+  --wf-green-bright: #262626;
+  --wf-green-dark: #000000;
+  --wf-black: #000000;
+  --wf-space: #262626;
+  --wf-gray: #737373;
+  --wf-paper: #ffffff;
+  --wf-soft: #ffffff;
+  --wf-border: #d4d4d4;
+}
+
+html,
+html body {
+  background: #ffffff !important;
+  color: #000000 !important;
+  color-scheme: light !important;
+}
+
+.app-shell,
+.app-main,
+.main-content,
+.main-content > main,
+.main-content > div,
+.client-portal-shell,
+.employee-workspace,
+.employee-main,
+.employee-page,
+.hr-workspace,
+.hr-main,
+.hr-content,
+.hr-module-page,
+.accounting-shell,
+.accounting-shell main,
+.accounting-shell [class$='-page'],
+.procurement-sidepanel + div,
+[class$='-page'],
+[class*='-page '] {
+  background: #ffffff !important;
+  color: #000000 !important;
+}
+
+.desktop-sidebar,
+.mobile-nav-drawer,
+.desktop-sidebar aside,
+.mobile-nav-drawer aside,
+.hr-sidebar,
+.hr-mobile-sidebar,
+.employee-sidebar,
+.procurement-sidepanel,
+.accounting-shell aside {
+  background: #000000 !important;
+  color: rgb(237, 237, 237) !important;
+  border-color: #242424 !important;
+  box-shadow: none !important;
+}
+
+.app-header,
+.hr-topbar,
+.employee-topbar,
+.accounting-shell header,
+.procurement-sidepanel + div > header,
+[class*='topbar'],
+[class*='header']:not(.desktop-sidebar):not(.mobile-nav-drawer) {
+  background: #ffffff !important;
+  border-color: #d4d4d4 !important;
+  color: #000000 !important;
+  box-shadow: none !important;
+}
+
+[class*='card'],
+[class*='panel'],
+[class*='table-card'],
+[class*='details'],
+[class*='metric'],
+[class*='summary'],
+[class*='breakdown'],
+[class*='filter-panel'],
+[class*='filterbar'],
+[class*='filters'],
+[style*='background: #fff' i],
+[style*='background:#fff' i],
+[style*='background: #ffffff' i],
+[style*='background:#ffffff' i],
+[style*='background: rgb(255, 255, 255)' i],
+[style*='background: #f8fafc' i],
+[style*='background: #f9fafb' i],
+[style*='background: #fafafa' i],
+[style*='background: #f7f9fc' i],
+[style*='background: #f5f5f5' i],
+[style*='background: #f3f4f6' i],
+[style*='background: #f1f5f9' i] {
+  background: #ffffff !important;
+  border-color: #d4d4d4 !important;
+  box-shadow: none !important;
+  color: #000000 !important;
+}
+
+button,
+input,
+select,
+textarea,
+[role='button'] {
+  border-color: #d4d4d4 !important;
+  color: #000000 !important;
+  accent-color: #000000;
+}
+
+input,
+select,
+textarea,
+[style*='background: transparent' i] {
+  color: #000000 !important;
+}
+
+input::placeholder,
+textarea::placeholder {
+  color: #737373 !important;
+}
+
+table,
+thead,
+tbody,
+tr,
+th,
+td {
+  border-color: #d4d4d4 !important;
+}
+
+thead,
+thead th,
+thead td,
+[style*='background: #f8fafc' i],
+[style*='background: #fafafa' i] {
+  background: #f5f5f5 !important;
+  color: #000000 !important;
+}
+
+[style*='color: #16a34a' i],
+[style*='color:#16a34a' i],
+[style*='color: #22c55e' i],
+[style*='color:#22c55e' i],
+[style*='color: #15803d' i],
+[style*='color:#15803d' i],
+[style*='color: #008b4a' i],
+[style*='color:#008b4a' i],
+[style*='color: #0f8a4b' i],
+[style*='color:#0f8a4b' i],
+[style*='color: #2563eb' i],
+[style*='color:#2563eb' i],
+[style*='color: #1d4ed8' i],
+[style*='color:#1d4ed8' i],
+[style*='color: #1a73e8' i],
+[style*='color:#1a73e8' i],
+[style*='color: #4285f4' i],
+[style*='color:#4285f4' i],
+[style*='color: #7c3aed' i],
+[style*='color:#7c3aed' i],
+[style*='color: #8b5cf6' i],
+[style*='color:#8b5cf6' i],
+[style*='color: #f97316' i],
+[style*='color:#f97316' i],
+[style*='color: #f59e0b' i],
+[style*='color:#f59e0b' i],
+[style*='color: #ef4444' i],
+[style*='color:#ef4444' i],
+[style*='color: #dc2626' i],
+[style*='color:#dc2626' i],
+[style*='color: #b91c1c' i],
+[style*='color:#b91c1c' i],
+[style*='color: red' i] {
+  color: #000000 !important;
+}
+
+[style*='background: #16a34a' i],
+[style*='background:#16a34a' i],
+[style*='background: #22c55e' i],
+[style*='background:#22c55e' i],
+[style*='background: #15803d' i],
+[style*='background:#15803d' i],
+[style*='background: #2563eb' i],
+[style*='background:#2563eb' i],
+[style*='background: #1a73e8' i],
+[style*='background:#1a73e8' i],
+[style*='background: #4285f4' i],
+[style*='background:#4285f4' i],
+[style*='background: #7c3aed' i],
+[style*='background:#7c3aed' i],
+[style*='background: #8b5cf6' i],
+[style*='background:#8b5cf6' i],
+[style*='background: #111827' i],
+[style*='background:#111827' i],
+[style*='background: #0f172a' i],
+[style*='background:#0f172a' i] {
+  background: #000000 !important;
+  border-color: #000000 !important;
+  color: #ffffff !important;
+}
+
+[style*='background: #dcfce7' i],
+[style*='background:#dcfce7' i],
+[style*='background: #ecfdf5' i],
+[style*='background:#ecfdf5' i],
+[style*='background: #e6f4ea' i],
+[style*='background:#e6f4ea' i],
+[style*='background: #dbeafe' i],
+[style*='background:#dbeafe' i],
+[style*='background: #e8f0fe' i],
+[style*='background:#e8f0fe' i],
+[style*='background: #ede9fe' i],
+[style*='background:#ede9fe' i],
+[style*='background: #f3e8ff' i],
+[style*='background:#f3e8ff' i],
+[style*='background: #ffedd5' i],
+[style*='background:#ffedd5' i],
+[style*='background: #fef2f2' i],
+[style*='background:#fef2f2' i],
+[style*='background: #fee2e2' i],
+[style*='background:#fee2e2' i],
+[style*='background: #fce8e6' i],
+[style*='background:#fce8e6' i],
+[style*='background: #fef7e0' i],
+[style*='background:#fef7e0' i] {
+  background: #f5f5f5 !important;
+  border-color: #d4d4d4 !important;
+  color: #000000 !important;
+}
+
+[style*='border: 1px solid #16a34a' i],
+[style*='border: 1px solid #22c55e' i],
+[style*='border: 1px solid #2563eb' i],
+[style*='border: 1px solid #1a73e8' i],
+[style*='border: 1px solid #7c3aed' i],
+[style*='border: 1px solid #ef4444' i],
+[style*='border-color: #16a34a' i],
+[style*='border-color: #1a73e8' i],
+[style*='border-color: #ef4444' i] {
+  border-color: #000000 !important;
+}
+
+.desktop-sidebar *,
+.mobile-nav-drawer *,
+.hr-sidebar *,
+.hr-mobile-sidebar *,
+.employee-sidebar *,
+.procurement-sidepanel *,
+.accounting-shell aside * {
+  color: inherit;
+}
+
+.desktop-sidebar [class*='active'],
+.mobile-nav-drawer [class*='active'],
+.hr-sidebar .is-active,
+.hr-mobile-sidebar .is-active,
+.employee-sidebar .is-active,
+.procurement-sidepanel .active,
+.accounting-shell aside .active {
+  background: #1f1f1f !important;
+  color: rgb(237, 237, 237) !important;
+  box-shadow: 0 0 0 1px #ffffff !important;
+}

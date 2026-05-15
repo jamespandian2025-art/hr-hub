@@ -168,7 +168,7 @@ const allowanceRequestsKey = 'flowsys-hr-allowance-requests'
 const initialAccount: AccountState = {
   company: 'Livewise Construction',
   email: 'livewiseofficial@gmail.com',
-  theme: 'Vercel Dark',
+  theme: 'WiseFlow Light',
   density: 'Comfortable',
   emailNotifications: true,
   desktopNotifications: false,
@@ -332,13 +332,13 @@ export default function Header({ onMenuClick, compactWorkspace = false }: Header
     if (!accountSaveReady.current) { accountSaveReady.current = true; return }
     window.localStorage.setItem(storageKey, JSON.stringify(account))
     const THEME_MAP: Record<string, string> = {
-      'Light': 'light', 'Dark': 'dark',
-      'WiseFlow Light': 'light', 'WiseFlow Dark': 'dark',
-      'Vercel Dark': 'dark',
-      'Google Blue': 'google-blue', 'Google Green': 'google-green', 'Graphite Pro': 'graphite',
+      'Light': 'light', 'Dark': 'light',
+      'WiseFlow Light': 'light', 'WiseFlow Dark': 'light',
+      'Vercel Dark': 'light',
+      'Google Blue': 'light', 'Google Green': 'light', 'Graphite Pro': 'light',
     }
     const savedPreference = account.theme
-    const preference = !savedPreference || savedPreference === 'Google Green' ? 'Vercel Dark' : savedPreference
+    const preference = savedPreference && THEME_MAP[savedPreference] ? savedPreference : 'WiseFlow Light'
     const mapped = THEME_MAP[preference]
     const theme = mapped || (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light')
     document.documentElement.dataset.theme = theme

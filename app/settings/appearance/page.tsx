@@ -22,67 +22,67 @@ const THEMES: {
 }[] = [
   {
     name: 'WiseFlow Light',
-    description: 'Clean white workspace with a Google blue accent. Default.',
-    accent: '#1A73E8',
-    bg: '#F8FAFD',
+    description: 'Clean black and white workspace. Default.',
+    accent: '#000000',
+    bg: '#FFFFFF',
     surface: '#FFFFFF',
-    sidebar: '#FFFFFF',
-    sidebarText: '#202124',
-    border: '#E5E7EB',
-    text: '#202124',
+    sidebar: '#000000',
+    sidebarText: '#EDEDED',
+    border: '#D4D4D4',
+    text: '#000000',
   },
   {
     name: 'WiseFlow Dark',
-    description: 'Dark navy workspace for reduced eye strain at night.',
-    accent: '#4285F4',
-    bg: '#0F172A',
-    surface: '#111827',
-    sidebar: '#0F172A',
-    sidebarText: '#E2E8F0',
-    border: '#1E293B',
-    text: '#F1F5F9',
+    description: 'Monochrome dark preview with no color accent.',
+    accent: '#FFFFFF',
+    bg: '#000000',
+    surface: '#0A0A0A',
+    sidebar: '#000000',
+    sidebarText: '#EDEDED',
+    border: '#242424',
+    text: '#FFFFFF',
   },
   {
     name: 'Google Blue',
-    description: 'Light blue tint inspired by Google Workspace.',
-    accent: '#4285F4',
-    bg: '#F6F9FE',
+    description: 'Monochrome light workspace.',
+    accent: '#000000',
+    bg: '#FFFFFF',
     surface: '#FFFFFF',
-    sidebar: '#FFFFFF',
-    sidebarText: '#202124',
-    border: '#D2E3FC',
-    text: '#202124',
+    sidebar: '#000000',
+    sidebarText: '#EDEDED',
+    border: '#D4D4D4',
+    text: '#000000',
   },
   {
     name: 'Google Green',
-    description: 'Soft green tint with a Google Sheets-inspired accent.',
-    accent: '#34A853',
-    bg: '#F4FBF6',
+    description: 'Monochrome light workspace.',
+    accent: '#000000',
+    bg: '#FFFFFF',
     surface: '#FFFFFF',
-    sidebar: '#FFFFFF',
-    sidebarText: '#202124',
-    border: '#D1FAE5',
-    text: '#202124',
+    sidebar: '#000000',
+    sidebarText: '#EDEDED',
+    border: '#D4D4D4',
+    text: '#000000',
   },
   {
     name: 'Graphite Pro',
-    description: 'Deep charcoal with a purple accent for focused work.',
-    accent: '#8B5CF6',
-    bg: '#111111',
-    surface: '#1A1A1A',
-    sidebar: '#0A0A0A',
-    sidebarText: '#E4E4E7',
-    border: '#27272A',
-    text: '#F4F4F5',
+    description: 'Monochrome dark preview with no color accent.',
+    accent: '#FFFFFF',
+    bg: '#000000',
+    surface: '#0A0A0A',
+    sidebar: '#000000',
+    sidebarText: '#EDEDED',
+    border: '#242424',
+    text: '#FFFFFF',
   },
 ]
 
 const THEME_MAP: Record<string, string> = {
   'WiseFlow Light': 'light',
-  'WiseFlow Dark': 'dark',
-  'Google Blue': 'google-blue',
-  'Google Green': 'google-green',
-  'Graphite Pro': 'graphite',
+  'WiseFlow Dark': 'light',
+  'Google Blue': 'light',
+  'Google Green': 'light',
+  'Graphite Pro': 'light',
 }
 
 function applyThemeToDOM(name: string) {
@@ -182,13 +182,13 @@ function ThemePreviewCard({
 
 export default function AppearancePage() {
   const [current, setCurrent] = useState<ThemeName>(() => {
-    if (typeof window === 'undefined') return 'Google Green'
+    if (typeof window === 'undefined') return 'WiseFlow Light'
     try {
       const stored = window.localStorage.getItem(storageKey)
       const account = stored ? JSON.parse(stored) as { theme?: string } : null
-      return account?.theme && THEME_MAP[account.theme] ? account.theme as ThemeName : 'Google Green'
+      return account?.theme && THEME_MAP[account.theme] ? account.theme as ThemeName : 'WiseFlow Light'
     } catch {
-      return 'Google Green'
+      return 'WiseFlow Light'
     }
   })
   const [previewing, setPreviewing] = useState<ThemeName | null>(null)

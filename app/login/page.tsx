@@ -133,7 +133,7 @@ export default function LoginPage() {
         fullName: userName,
         email: userEmail,
         role,
-        theme: account.theme || 'Google Green',
+        theme: account.theme || 'WiseFlow Light',
       }))
       const stored = window.localStorage.getItem(onboardingKey)
       const onboarding = stored ? JSON.parse(stored) as { complete?: boolean } : null
