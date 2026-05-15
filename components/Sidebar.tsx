@@ -430,6 +430,7 @@ export default function Sidebar({ collapsed, onToggle }: { collapsed: boolean; o
                 return (
                   <div key={item.label}>
                     <button
+                      className={`main-sidebar-row${groupActive ? ' is-active' : ''}${isHovered ? ' is-hovered' : ''}`}
                       onClick={() => {
                         if (item.href) {
                           if (item.newTab) window.open(item.href, '_blank', 'noopener,noreferrer')
@@ -562,6 +563,7 @@ export default function Sidebar({ collapsed, onToggle }: { collapsed: boolean; o
                                 style={{ textDecoration: 'none' }}
                               >
                                 <div
+                                  className={`main-sidebar-subrow${childActive ? ' is-active' : ''}${childHovered ? ' is-hovered' : ''}`}
                                   onMouseEnter={() => setHoveredItem(childHoverKey)}
                                   onMouseLeave={() => setHoveredItem(null)}
                                   style={{
@@ -610,6 +612,7 @@ export default function Sidebar({ collapsed, onToggle }: { collapsed: boolean; o
                   title={collapsed ? item.label : undefined}
                 >
                   <div
+                    className={`main-sidebar-row${groupActive ? ' is-active' : ''}${isHovered ? ' is-hovered' : ''}`}
                     onMouseEnter={() => setHoveredItem(hoverKey)}
                     onMouseLeave={() => setHoveredItem(null)}
                     style={{

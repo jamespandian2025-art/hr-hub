@@ -3921,3 +3921,33 @@ thead td,
   color: rgb(237, 237, 237) !important;
   box-shadow: 0 0 0 1px #ffffff !important;
 }
+
+.desktop-sidebar .main-sidebar-row,
+.desktop-sidebar .main-sidebar-row *,
+.desktop-sidebar .main-sidebar-subrow,
+.desktop-sidebar .main-sidebar-subrow *,
+.mobile-nav-drawer .main-sidebar-row,
+.mobile-nav-drawer .main-sidebar-row *,
+.mobile-nav-drawer .main-sidebar-subrow,
+.mobile-nav-drawer .main-sidebar-subrow * {
+  color: #a1a1a1 !important;
+}
+
+.desktop-sidebar .main-sidebar-row.is-active,
+.desktop-sidebar .main-sidebar-row.is-active *,
+.desktop-sidebar .main-sidebar-row.is-hovered,
+.desktop-sidebar .main-sidebar-row.is-hovered *,
+.desktop-sidebar .main-sidebar-subrow.is-active,
+.desktop-sidebar .main-sidebar-subrow.is-active *,
+.desktop-sidebar .main-sidebar-subrow.is-hovered,
+.desktop-sidebar .main-sidebar-subrow.is-hovered *,
+.mobile-nav-drawer .main-sidebar-row.is-active,
+.mobile-nav-drawer .main-sidebar-row.is-active *,
+.mobile-nav-drawer .main-sidebar-row.is-hovered,
+.mobile-nav-drawer .main-sidebar-row.is-hovered *,
+.mobile-nav-drawer .main-sidebar-subrow.is-active,
+.mobile-nav-drawer .main-sidebar-subrow.is-active *,
+.mobile-nav-drawer .main-sidebar-subrow.is-hovered,
+.mobile-nav-drawer .main-sidebar-subrow.is-hovered * {
+  color: rgb(237, 237, 237) !important;
+}
