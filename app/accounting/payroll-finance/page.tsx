@@ -30,6 +30,7 @@ import {
   saveLoanRequests,
 } from '@/app/hr/loan-requests/loanData'
 import { AllowanceRequest, allowanceRequestKey, loadStored as loadEnterpriseStored, saveStored as saveEnterpriseStored } from '@/app/hr/enterpriseData'
+import { listHrRecords, updateHrRecord } from '@/lib/hrms/client'
 
 const font = 'var(--font-body)'
 
@@ -189,9 +190,16 @@ export default function PayrollFinancePage() {
   const [notice, setNotice] = useState('')
 
   useEffect(() => {
-    const loadFinanceData = () => {
+    let cancelled = false
+    const loadFinanceData = async () => {
       setEmployees(loadStored<Employee[]>(employeeKey, []))
-      setLoanRequests(loadAllStoredRows<LoanRequest>(loanRequestKey, loadStored))
+      const localLoans = loadAllStoredRows<LoanRequest>(loanRequestKey, loadStored)
+      try {
+        const serverLoans = await listHrRecords<LoanRequest>('loan-requests')
+        if (!cancelled) setLoanRequests(uniqueRows([...serverLoans, ...localLoans]))
+      } catch {
+        if (!cancelled) setLoanRequests(localLoans)
+      }
       setAllowanceRequests(loadAllStoredRows<AllowanceRequest>(allowanceRequestKey, loadEnterpriseStored))
       setPayrollRecords(loadAllStoredRows<PayrollRecord>(payrollRecordKey, loadStored))
     }
@@ -202,6 +210,7 @@ export default function PayrollFinancePage() {
     window.addEventListener(financeRefreshEvent, loadFinanceData)
     const timer = window.setInterval(loadFinanceData, 2500)
     return () => {
+      cancelled = true
       window.removeEventListener('storage', loadFinanceData)
       window.removeEventListener('focus', loadFinanceData)
       window.removeEventListener(financeRefreshEvent, loadFinanceData)
@@ -304,11 +313,17 @@ export default function PayrollFinancePage() {
     { title: 'Net Pay', value: money(netPay), detail: grossPay ? `${((netPay / grossPay) * 100).toFixed(1)}% of gross pay` : 'No final payroll yet', icon: FileText, tone: '#ef4444' },
   ]
 
-  function saveLoanDecision(request: LoanRequest, decision: 'Approved' | 'Rejected') {
+  async function saveLoanDecision(request: LoanRequest, decision: 'Approved' | 'Rejected') {
     const employee = resolveLoanEmployee(request, employees)
-    const nextRequests = loanRequests.map(item => item.id === request.id ? decideLoanRequest(item, employee, 'finance', decision) : item)
+    const decided = decideLoanRequest(request, employee, 'finance', decision)
+    const nextRequests = loanRequests.map(item => item.id === request.id ? decided : item)
     setLoanRequests(nextRequests)
     saveLoanRequests(nextRequests)
+    try {
+      await updateHrRecord<LoanRequest>('loan-requests', request.id, decided as unknown as Record<string, unknown>)
+    } catch (error) {
+      console.error('Could not sync Finance loan decision', error)
+    }
     window.dispatchEvent(new Event(financeRefreshEvent))
     setNotice(`${loanDisplayName(request)} for ${request.employeeName || fullName(employee) || 'employee'} ${decision.toLowerCase()} by Finance. ${decision === 'Approved' ? 'HR can now include it in final payroll.' : 'The employee request was rejected.'}`)
   }

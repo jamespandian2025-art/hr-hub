@@ -11,6 +11,7 @@ import {
 } from '../../employeeData'
 import { appendSystemNotification, calculateLoanScheduledDeduction, LoanRequest, LoanRequestType, money } from '@/app/hr/loan-requests/loanData'
 import { appendAuditLog } from '@/app/hr/enterpriseData'
+import { createHrRecord } from '@/lib/hrms/client'
 
 export default function NewLoanRequestPage() {
   const router = useRouter()
@@ -46,7 +47,7 @@ export default function NewLoanRequestPage() {
     ['Approval Route', 'Finance approval, then payroll deduction'],
   ], [amountValue, effectiveMonths, effectiveSchedule, isCashAdvance, repaymentAmount, selectedRequestType])
 
-  const submit = () => {
+  const submit = async () => {
     setNotice('')
     if (!amountValue || amountValue <= 0) {
       setNotice('Please enter a valid amount.')
@@ -88,6 +89,11 @@ export default function NewLoanRequestPage() {
 
     const requests = loadStored<LoanRequest[]>(loanRequestKey, [])
     saveStored(loanRequestKey, [request, ...requests])
+    try {
+      await createHrRecord<LoanRequest>('loan-requests', request as unknown as Record<string, unknown>)
+    } catch (error) {
+      console.error('Could not sync loan request to Finance inbox', error)
+    }
     window.dispatchEvent(new Event('storage'))
     window.dispatchEvent(new Event('wiseflow:finance-requests-changed'))
     appendSystemNotification(
