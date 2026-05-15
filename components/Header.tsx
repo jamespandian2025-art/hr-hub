@@ -543,8 +543,9 @@ export default function Header({ onMenuClick, compactWorkspace = false }: Header
   const financeAllowanceNotifications = allowanceRequests.filter(request =>
     request.status === 'Pending' || request.status === 'Manager Approved'
   )
+  const isFinanceWorkspace = role === 'Finance' || pathname.startsWith('/financials') || pathname.startsWith('/accounting')
   const financeOutboundNotifications = outboundNotifications.filter(item =>
-    (role === 'Finance' || pathname.startsWith('/financials')) &&
+    isFinanceWorkspace &&
     item.recipientRole === 'Finance'
   )
   const requestNotificationItems = [
@@ -563,7 +564,7 @@ export default function Header({ onMenuClick, compactWorkspace = false }: Header
       priority: true,
       target: item.target || '/financials/loan-management',
     })),
-    ...(role === 'Finance' || pathname.startsWith('/financials') ? financeLoanNotifications.map(request => ({
+    ...(isFinanceWorkspace ? financeLoanNotifications.map(request => ({
       id: `loan-finance-${request.id}`,
       title: `[FINANCE] ${request.employeeName || 'Employee'} requested ${request.customLoanType || request.requestType}`,
       lines: [
@@ -576,9 +577,9 @@ export default function Header({ onMenuClick, compactWorkspace = false }: Header
       age: `${Math.max(0, Math.floor((nowMs - new Date(request.createdAt).getTime()) / 86400000))} days ago`,
       mentioned: true,
       priority: true,
-      target: '/financials/loan-management',
+      target: '/accounting/payroll-finance',
     })) : []),
-    ...(role === 'Finance' || pathname.startsWith('/financials') ? financeAllowanceNotifications.map(request => ({
+    ...(isFinanceWorkspace ? financeAllowanceNotifications.map(request => ({
       id: `allowance-finance-${request.id}`,
       title: `[FINANCE] ${request.employeeName} filed ${request.type} allowance`,
       lines: [
@@ -591,7 +592,7 @@ export default function Header({ onMenuClick, compactWorkspace = false }: Header
       age: `${Math.max(0, Math.floor((nowMs - new Date(request.createdAt).getTime()) / 86400000))} days ago`,
       mentioned: true,
       priority: true,
-      target: '/financials/loan-management',
+      target: '/accounting/payroll-finance',
     })) : []),
   ]
   const changeOrderNotificationItems = latestRequests.map((order, index) => ({

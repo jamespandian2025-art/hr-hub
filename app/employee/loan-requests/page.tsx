@@ -79,7 +79,7 @@ function LoanTable({ requests, empty, employees, onApprove, onReject }: { reques
     <div style={requestListStyle}>
       {requests.map(request => {
           const employee = resolveLoanEmployee(request, employees)
-          const state = loanApprovalState(request, employee)
+          const state = loanApprovalState(request)
           return (
             <article key={request.id} style={requestCardStyle}>
               <div style={requestTopStyle}>

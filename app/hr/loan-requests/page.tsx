@@ -37,7 +37,7 @@ export default function HrLoanRequestsPage() {
 
   const rows = useMemo(() => requests.map(request => {
     const employee = resolveLoanEmployee(request, employees)
-    const state = loanApprovalState(request, employee)
+    const state = loanApprovalState(request)
     return { request, employee, state }
   }), [employees, requests])
 

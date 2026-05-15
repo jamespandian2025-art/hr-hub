@@ -196,7 +196,7 @@ export function resolveLoanEmployee(request: LoanRequest, employees: Employee[])
   )
 }
 
-export function loanApprovalState(request: LoanRequest, employee?: Employee) {
+export function loanApprovalState(request: LoanRequest) {
   let step = request.approvalStep
   if (request.status === 'Rejected' || request.status === 'Cancelled' || request.status === 'Processed') step = 'complete'
   else if (request.status === 'Approved') step = 'payroll'
@@ -217,8 +217,9 @@ export function loanApprovalState(request: LoanRequest, employee?: Employee) {
 }
 
 export function decideLoanRequest(request: LoanRequest, employee: Employee | undefined, actor: LoanApprovalActor, decision: 'Approved' | 'Rejected') {
+  const employeeName = fullName(employee) || request.employeeName || 'employee'
   const now = new Date().toISOString()
-  const state = loanApprovalState(request, employee)
+  const state = loanApprovalState(request)
   const log = (nextDecision: LoanApprovalDecision): LoanApprovalLog => ({
     id: `LOG-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
     actor,
@@ -237,7 +238,7 @@ export function decideLoanRequest(request: LoanRequest, employee: Employee | und
       approvalLogs: [...(request.approvalLogs || []), log('Rejected')],
       updatedAt: now,
     }
-    logSensitiveAction({ action: 'loan.approval', targetType: 'Loan Request', targetId: request.id, summary: `Finance rejected ${request.requestType} request.` })
+    logSensitiveAction({ action: 'loan.approval', targetType: 'Loan Request', targetId: request.id, summary: `Finance rejected ${request.requestType} request for ${employeeName}.` })
     return next
   }
   const next = {
@@ -250,18 +251,18 @@ export function decideLoanRequest(request: LoanRequest, employee: Employee | und
     approvalLogs: [...(request.approvalLogs || []), log('Approved')],
     updatedAt: now,
   }
-  logSensitiveAction({ action: 'loan.approval', targetType: 'Loan Request', targetId: request.id, summary: `Finance approved ${request.requestType} request for payroll deduction.` })
+  logSensitiveAction({ action: 'loan.approval', targetType: 'Loan Request', targetId: request.id, summary: `Finance approved ${request.requestType} request for ${employeeName} payroll deduction.` })
   return next
 }
 
-export function appendSystemNotification(subject: string, message: string, target = '/hr/loan-requests') {
+export function appendSystemNotification(subject: string, message: string, target = '/accounting/payroll-finance') {
   if (typeof window === 'undefined') return
   const current = loadStored<Array<Record<string, unknown>>>(outboundNotificationsKey, [])
   saveStored(outboundNotificationsKey, [
     {
       id: Date.now(),
       channel: 'Email',
-      recipientRole: 'Admin',
+      recipientRole: 'Finance',
       subject,
       message,
       relatedType: 'Loan Request',

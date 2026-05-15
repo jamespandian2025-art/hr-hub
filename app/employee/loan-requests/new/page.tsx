@@ -91,7 +91,7 @@ export default function NewLoanRequestPage() {
     appendSystemNotification(
       `${employeeName} requested ${selectedRequestType.toLowerCase()}`,
       `${employeeName} submitted a ${money(amountValue)} ${selectedRequestType.toLowerCase()} request. Finance must approve payment terms before payroll deduction.`,
-      '/financials/loan-management',
+      '/accounting/payroll-finance',
     )
     appendAuditLog({ action: 'loan.change', targetType: 'Loan Request', targetId: request.id, summary: `${employeeName} submitted ${selectedRequestType} for finance review.` })
     router.push('/employee/loan-requests')
