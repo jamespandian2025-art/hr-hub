@@ -14,6 +14,7 @@ import {
   saveStored,
   useEmployeePortalData,
 } from '../../employeeData'
+import { employeeLeaveOutboxKey } from '@/app/hr/leave-requests/leaveData'
 import { createHrRecord } from '@/lib/hrms/client'
 
 const leaveTypes = ['Annual Leave', 'Sick Leave', 'Personal Leave', 'Maternity Leave', 'Paternity Leave', 'Emergency Leave', 'Unpaid Leave', 'Work From Home']
@@ -103,6 +104,8 @@ export default function ApplyLeavePage() {
     const request = buildRequest('Pending')
     const requests = loadStored<LeaveRequest[]>(leaveRequestKey, [])
     saveStored(leaveRequestKey, [request, ...requests])
+    const outbox = loadStored<LeaveRequest[]>(employeeLeaveOutboxKey, [])
+    saveStored(employeeLeaveOutboxKey, [request, ...outbox.filter(item => item.id !== request.id)])
     try {
       await createHrRecord<LeaveRequest>('leave-requests', request as unknown as Record<string, unknown>)
     } catch (error) {

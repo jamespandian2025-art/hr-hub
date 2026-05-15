@@ -65,6 +65,7 @@ export interface LeaveRow extends LeaveRequest {
 
 export const employeeKey = 'flowsys-hr-employees'
 export const leaveRequestKey = 'flowsys-hr-leave-requests'
+export const employeeLeaveOutboxKey = 'wiseflow-employee-leave-request-outbox'
 
 export function loadStored<T>(key: string, fallback: T): T {
   if (typeof window === 'undefined') return fallback
@@ -96,9 +97,15 @@ function loadAllStoredRows<T extends { id?: string }>(key: string) {
   const rows = Array.isArray(baseRows) ? [...baseRows] : []
   for (let index = 0; index < window.localStorage.length; index += 1) {
     const scopedKey = window.localStorage.key(index)
-    if (!scopedKey || scopedKey === key || !scopedKey.startsWith(`${key}:`)) continue
+    if (!scopedKey || scopedKey === key) continue
+    const canContainLeaveRequests = scopedKey.startsWith(`${key}:`)
+      || scopedKey === employeeLeaveOutboxKey
+      || (/leave/i.test(scopedKey) && /request|outbox|hr|employee|wiseflow|flowsys/i.test(scopedKey))
+    if (!canContainLeaveRequests) continue
     const scopedRows = loadStored<T[]>(scopedKey, [])
-    if (Array.isArray(scopedRows)) rows.push(...scopedRows)
+    if (Array.isArray(scopedRows)) {
+      rows.push(...scopedRows.filter(row => row && typeof row === 'object' && 'leaveType' in row && 'employeeId' in row))
+    }
   }
   return uniqueById(rows)
 }
@@ -113,7 +120,7 @@ export function isLegacySeedLeaveRequest(request: LeaveRequest) {
 
 export function loadLeaveRequests() {
   const stored = loadAllStoredRows<LeaveRequest>(leaveRequestKey)
-  const realRequests = stored.filter(request => !isLegacySeedLeaveRequest(request))
+  const realRequests = stored.filter(request => String(request.status || '') !== 'Draft' && !isLegacySeedLeaveRequest(request))
   return realRequests
 }
 

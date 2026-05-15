@@ -11,6 +11,7 @@ import {
 } from 'lucide-react'
 import { Cell, Pie, PieChart, ResponsiveContainer } from 'recharts'
 import { listHrRecords } from '@/lib/hrms/client'
+import { loadLeaveRequests } from '@/app/hr/leave-requests/leaveData'
 
 // â”€â”€â”€ Types â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
@@ -163,7 +164,7 @@ export default function HROverview() {
     let cancelled = false
     const loadOverview = async () => {
       setEmployees(loadStored('flowsys-hr-employees', []))
-      const localLeaves = loadStored<LeaveRequest[]>('flowsys-hr-leave-requests', [])
+      const localLeaves = loadLeaveRequests() as LeaveRequest[]
       try {
         const serverLeaves = await listHrRecords<LeaveRequest>('leave-requests')
         if (!cancelled) setLeaves(uniqueLeaveRequests([...serverLeaves, ...localLeaves]))
