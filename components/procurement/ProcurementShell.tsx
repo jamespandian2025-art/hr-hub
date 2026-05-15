@@ -19,6 +19,18 @@ import {
 
 const font = "var(--font-body)"
 
+const sidebarColors = {
+  bg: '#000000',
+  surface: '#1f1f1f',
+  surfaceHover: '#1a1a1a',
+  border: '#242424',
+  text: 'rgb(237, 237, 237)',
+  muted: '#a1a1a1',
+  faint: '#737373',
+  icon: '#a1a1a1',
+  activeRing: '#ffffff',
+}
+
 const procurementNavItems = [
   { label: 'Overview', href: '/procurement', icon: ShoppingCart, description: 'Purchasing snapshot and activity' },
   { label: 'Pricebook', href: '/procurement/pricebook', icon: ReceiptText, description: 'Items, catalog, and pricing' },
@@ -39,31 +51,34 @@ export default function ProcurementShell({ children }: { children: React.ReactNo
   }
 
   return (
-    <div style={{ minHeight: '100vh', background: '#f8fafc', display: 'grid', gridTemplateColumns: '244px minmax(0, 1fr)', fontFamily: font, color: '#0f172a' }}>
-      <aside style={{ minHeight: '100vh', position: 'sticky', top: 0, alignSelf: 'start', background: 'linear-gradient(180deg, #07111f 0%, #0b1725 100%)', color: '#fff', padding: '18px 14px', display: 'flex', flexDirection: 'column', gap: 14 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10, color: '#fff', padding: '0 6px 4px' }}>
-          <span style={{ width: 36, height: 36, borderRadius: 999, background: '#22c55e', color: '#052e16', display: 'grid', placeItems: 'center', fontWeight: 900, fontSize: 14 }}>PR</span>
+    <div style={{ minHeight: '100vh', background: '#f8fafc', display: 'grid', gridTemplateColumns: '252px minmax(0, 1fr)', fontFamily: font, color: '#0f172a' }}>
+      <style>{procurementShellCss}</style>
+      <aside className="procurement-sidepanel" style={{ minHeight: '100vh', height: '100vh', position: 'sticky', top: 0, alignSelf: 'start', background: sidebarColors.bg, color: sidebarColors.text, padding: '20px 0', display: 'flex', flexDirection: 'column', overflowY: 'auto', overflowX: 'hidden' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, color: sidebarColors.text, padding: '0 14px 24px' }}>
+          <span style={{ width: 34, height: 34, borderRadius: 9, background: sidebarColors.text, color: sidebarColors.bg, display: 'grid', placeItems: 'center', fontWeight: 800, fontSize: 16 }}>P</span>
           <span>
-            <span style={{ display: 'block', fontSize: 18, fontWeight: 900, lineHeight: 1 }}>Procurement</span>
-            <span style={{ display: 'block', fontSize: 11, color: '#94a3b8', marginTop: 3 }}>Supply workspace</span>
+            <span style={{ display: 'block', fontSize: 17, fontWeight: 800, lineHeight: 1, color: sidebarColors.text, letterSpacing: 0 }}>Procurement</span>
+            <span style={{ display: 'block', fontSize: 12, color: sidebarColors.muted, marginTop: 4, fontWeight: 500 }}>Supply workspace</span>
           </span>
         </div>
 
-        <Link href="/dashboard" style={{ minHeight: 38, border: '1px solid rgba(255,255,255,0.12)', background: 'rgba(255,255,255,0.04)', color: '#e2e8f0', borderRadius: 10, padding: '0 12px', display: 'flex', alignItems: 'center', gap: 9, fontSize: 13, fontWeight: 750, textDecoration: 'none' }}>
+        <Link href="/dashboard" className="procurement-back-link">
           <ArrowLeft size={15} />
           Back to WiseFlow
         </Link>
 
-        <nav style={{ display: 'grid', gap: 4, alignContent: 'start', flex: 1, overflowY: 'auto', paddingRight: 2 }}>
-          <div style={{ display: 'grid', gap: 4, alignContent: 'start' }}>
-            <div style={{ fontSize: 10, letterSpacing: '0.14em', color: '#94a3b8', fontWeight: 800, padding: '0 6px 5px', textTransform: 'uppercase' }}>Workspace</div>
+        <nav style={{ display: 'grid', gap: 3, alignContent: 'start', flex: 1, overflowY: 'auto' }} aria-label="Procurement workspace navigation">
+          <div style={{ display: 'grid', gap: 3, alignContent: 'start' }}>
+            <div style={{ fontSize: 10, letterSpacing: '1px', color: sidebarColors.faint, fontWeight: 600, padding: '0 22px 5px', textTransform: 'uppercase', whiteSpace: 'nowrap' }}>Workspace</div>
             {procurementNavItems.map(item => {
               const Icon = item.icon
               const active = isActive(item.href)
               return (
                 <Link key={item.href} href={item.href} style={{ textDecoration: 'none' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 10, minHeight: 38, padding: '7px 10px', borderRadius: 8, background: active ? 'rgba(34,197,94,0.18)' : 'transparent', color: active ? '#fff' : '#cbd5e1', boxShadow: active ? 'inset 3px 0 0 #22c55e' : 'none', fontSize: 13, fontWeight: active ? 850 : 650 }}>
-                    <Icon size={16} color={active ? '#22c55e' : '#cbd5e1'} />
+                  <div className={`procurement-nav-row${active ? ' active' : ''}`}>
+                    <span style={{ width: 18, display: 'inline-flex', justifyContent: 'center', flexShrink: 0 }}>
+                      <Icon size={16} />
+                    </span>
                     <span style={{ flex: 1 }}>{item.label}</span>
                   </div>
                 </Link>
@@ -130,3 +145,76 @@ const roundButtonStyle: React.CSSProperties = {
   placeItems: 'center',
   cursor: 'pointer',
 }
+
+const procurementShellCss = `
+.procurement-back-link {
+  min-height: 36px;
+  margin: 0 8px 14px;
+  padding: 0 10px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: ${sidebarColors.muted};
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 20px;
+  text-decoration: none;
+  transition: background 150ms ease, color 150ms ease, box-shadow 150ms ease;
+}
+.procurement-back-link svg {
+  color: ${sidebarColors.icon};
+  transition: color 150ms ease;
+}
+.procurement-back-link:hover {
+  background: ${sidebarColors.surfaceHover};
+  color: ${sidebarColors.text};
+}
+.procurement-back-link:hover svg {
+  color: ${sidebarColors.text};
+}
+.procurement-nav-row {
+  min-height: 36px;
+  margin: 0 8px 2px;
+  padding: 8px 10px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  border-radius: 0;
+  background: transparent;
+  color: ${sidebarColors.muted};
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 20px;
+  transition: background 150ms ease, color 150ms ease, box-shadow 150ms ease;
+}
+.procurement-nav-row svg {
+  color: ${sidebarColors.icon};
+  transition: color 150ms ease;
+}
+.procurement-nav-row:hover {
+  background: ${sidebarColors.surfaceHover};
+  color: ${sidebarColors.text};
+}
+.procurement-nav-row:hover svg {
+  color: ${sidebarColors.text};
+}
+.procurement-nav-row.active {
+  background: ${sidebarColors.surface};
+  color: ${sidebarColors.text};
+  box-shadow: 0 0 0 1px ${sidebarColors.activeRing};
+  font-weight: 600;
+}
+.procurement-nav-row.active svg {
+  color: ${sidebarColors.text};
+}
+@media (max-width: 900px) {
+  .procurement-sidepanel {
+    position: relative !important;
+    height: auto !important;
+    min-height: auto !important;
+  }
+}
+`
