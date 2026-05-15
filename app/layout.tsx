@@ -1,11 +1,11 @@
 import type { Metadata } from 'next'
-import { Public_Sans } from 'next/font/google'
+import { Unbounded } from 'next/font/google'
 import './globals.css'
 import AppShell from '../components/AppShell'
 
-const publicSans = Public_Sans({
+const unbounded = Unbounded({
   subsets: ['latin'],
-  variable: '--font-public-sans',
+  variable: '--font-unbounded',
 })
 
 export const metadata: Metadata = {
@@ -19,7 +19,7 @@ export default function RootLayout({
   children: React.ReactNode
 }) {
   return (
-    <html lang="en" className={publicSans.variable}>
+    <html lang="en" className={unbounded.variable}>
       <body>
         <AppShell>{children}</AppShell>
       </body>
