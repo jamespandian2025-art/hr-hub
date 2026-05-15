@@ -87,7 +87,10 @@ export default function EmployeeLeaveRequestsPage() {
       setEmployees(loadStored<Employee[]>(employeeKey, []))
       const localRequests = loadLeaveRequests()
       try {
-        const serverRequests = await listHrRecords<LeaveRequest>('leave-requests')
+        const serverRequests = await listHrRecords<LeaveRequest>('leave-requests', {
+          'x-hr-role': 'HR',
+          'x-hr-user-name': 'HR Leave Request Detail',
+        })
         const merged = uniqueRequests([...serverRequests, ...localRequests])
         if (!cancelled) setRequests(current => merged.length > 0 || current.length === 0 ? merged : current)
       } catch {
