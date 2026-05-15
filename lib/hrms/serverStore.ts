@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto'
 import { mkdir, readFile, rename, writeFile } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
 import path from 'node:path'
 import {
   canAccessCollection,
@@ -39,7 +40,8 @@ export type AuditLogRecord = {
   createdAt: string
 }
 
-const dataDir = path.join(process.cwd(), '.data', 'hrhub')
+const dataDir = process.env.HRHUB_DATA_DIR
+  || (process.env.VERCEL ? path.join(tmpdir(), 'hrhub') : path.join(process.cwd(), '.data', 'hrhub'))
 
 function collectionFile(collection: HrCollection) {
   return path.join(dataDir, `${collection}.json`)
