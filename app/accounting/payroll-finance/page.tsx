@@ -29,33 +29,14 @@ import {
   resolveLoanEmployee,
   saveLoanRequests,
 } from '@/app/hr/loan-requests/loanData'
+import { AllowanceRequest, allowanceRequestKey, loadStored as loadEnterpriseStored, saveStored as saveEnterpriseStored } from '@/app/hr/enterpriseData'
 
 const font = 'var(--font-body)'
 
-type PayrollRun = {
-  period: string
-  payDate: string
-  employees: number
-  grossPay: number
-  deductions: number
-  netPay: number
-  status: 'Completed' | 'In Progress'
-}
-
 type PayrollTask = {
-  month: string
-  day: string
   title: string
   detail: string
   status: 'Completed' | 'In Progress' | 'Pending' | 'Upcoming'
-}
-
-type ComplianceItem = {
-  title: string
-  period: string
-  amount: number
-  paidDate: string
-  icon: 'tax' | 'sss' | 'health' | 'housing'
 }
 
 type PayrollStatus = 'Paid' | 'Pending' | 'Processing' | 'Approved'
@@ -66,6 +47,15 @@ type PayrollRecord = {
   period: string
   gross: number
   deductions: number
+  deductionBreakdown?: {
+    sss?: number
+    philHealth?: number
+    pagIbig?: number
+    tax?: number
+    loanOrCashAdvance?: number
+  }
+  allowanceLines?: Array<{ allowanceId: string; type: string; amount: number; date?: string; purpose?: string }>
+  loanDeductions?: Array<{ loanId: string; type: string; amount: number }>
   net: number
   status: PayrollStatus
   source?: 'payroll-run'
@@ -73,51 +63,92 @@ type PayrollRecord = {
   createdAt: string
 }
 
-const payrollRuns: PayrollRun[] = [
-  { period: 'May 1 - May 31, 2024', payDate: 'May 31, 2024', employees: 72, grossPay: 198450, deductions: 28650, netPay: 169800, status: 'In Progress' },
-  { period: 'Apr 1 - Apr 30, 2024', payDate: 'Apr 30, 2024', employees: 70, grossPay: 187250, deductions: 27150, netPay: 160100, status: 'Completed' },
-  { period: 'Mar 1 - Mar 31, 2024', payDate: 'Mar 31, 2024', employees: 69, grossPay: 182400, deductions: 26650, netPay: 155750, status: 'Completed' },
-  { period: 'Feb 1 - Feb 29, 2024', payDate: 'Feb 29, 2024', employees: 68, grossPay: 178300, deductions: 25900, netPay: 152400, status: 'Completed' },
-  { period: 'Jan 1 - Jan 31, 2024', payDate: 'Jan 31, 2024', employees: 67, grossPay: 175100, deductions: 25200, netPay: 149900, status: 'Completed' },
-]
-
-const payrollTasks: PayrollTask[] = [
-  { month: 'MAY', day: '28', title: 'Review Attendance', detail: 'Review employee attendance and exceptions', status: 'Completed' },
-  { month: 'MAY', day: '29', title: 'Process Payroll', detail: 'Calculate salaries, deductions and taxes', status: 'In Progress' },
-  { month: 'MAY', day: '30', title: 'Management Approval', detail: 'Review and approve payroll summary', status: 'Pending' },
-  { month: 'MAY', day: '31', title: 'Disburse Payments', detail: 'Disburse salary payments to employees', status: 'Upcoming' },
-  { month: 'JUN', day: '01', title: 'File Government Reports', detail: 'Submit statutory reports and remittances', status: 'Upcoming' },
-]
-
-const complianceItems: ComplianceItem[] = [
-  { title: 'Tax Withholding (BIR)', period: 'May 2024', amount: 18450, paidDate: 'May 20, 2024', icon: 'tax' },
-  { title: 'SSS Contribution', period: 'May 2024', amount: 9850, paidDate: 'May 20, 2024', icon: 'sss' },
-  { title: 'PhilHealth Contribution', period: 'May 2024', amount: 4250, paidDate: 'May 20, 2024', icon: 'health' },
-  { title: 'Pag-IBIG Contribution', period: 'May 2024', amount: 3150, paidDate: 'May 20, 2024', icon: 'housing' },
-]
-
-const monthlyPayroll = [
-  { label: "Dec '23", gross: 210000, net: 151000 },
-  { label: "Jan '24", gross: 208000, net: 165000 },
-  { label: "Feb '24", gross: 198000, net: 151000 },
-  { label: "Mar '24", gross: 190000, net: 148000 },
-  { label: "Apr '24", gross: 198000, net: 156000 },
-  { label: "May '24", gross: 218000, net: 176000 },
-]
-
 const payrollRecordKey = 'flowsys-hr-payroll-records'
 
 function money(value: number) {
-  return `$${value.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+  return `PHP ${Number(value || 0).toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
 }
 
 function StatusPill({ value }: { value: string }) {
   return <span className={`payroll-pill ${value.toLowerCase().replaceAll(' ', '-')}`}>{value}</span>
 }
 
+function isActiveEmployee(employee: Employee) {
+  return !['archived', 'deleted', 'inactive', 'terminated', 'resigned'].includes(String(employee.employmentStatus || '').trim().toLowerCase())
+}
+
+function latestFirst<T extends { createdAt?: string; paidAt?: string }>(rows: T[]) {
+  return [...rows].sort((a, b) => new Date(b.createdAt || b.paidAt || 0).getTime() - new Date(a.createdAt || a.paidAt || 0).getTime())
+}
+
+function groupPayrollRuns(records: PayrollRecord[]) {
+  const map = new Map<string, { period: string; payDate: string; employees: number; grossPay: number; deductions: number; netPay: number; status: PayrollStatus; createdAt: string }>()
+  records.forEach(record => {
+    const period = record.period || 'Unassigned period'
+    const current = map.get(period) || {
+      period,
+      payDate: record.paidAt || record.createdAt || '',
+      employees: 0,
+      grossPay: 0,
+      deductions: 0,
+      netPay: 0,
+      status: 'Paid' as PayrollStatus,
+      createdAt: record.createdAt || '',
+    }
+    const nextStatus: PayrollStatus = current.status === 'Paid' && record.status === 'Paid' ? 'Paid' : record.status === 'Approved' ? 'Approved' : record.status === 'Processing' ? 'Processing' : 'Pending'
+    map.set(period, {
+      ...current,
+      payDate: record.paidAt || current.payDate || record.createdAt || '',
+      employees: current.employees + 1,
+      grossPay: current.grossPay + Number(record.gross || 0),
+      deductions: current.deductions + Number(record.deductions || 0),
+      netPay: current.netPay + Number(record.net || 0),
+      status: nextStatus,
+      createdAt: record.createdAt || current.createdAt,
+    })
+  })
+  return latestFirst(Array.from(map.values()))
+}
+
+function formatDate(value?: string) {
+  if (!value) return '-'
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return '-'
+  return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+}
+
+function periodLabel(value?: string) {
+  return value || 'No payroll period yet'
+}
+
+function buildPayrollTrend(runs: ReturnType<typeof groupPayrollRuns>) {
+  return runs.slice(0, 6).reverse().map(run => ({
+    label: run.period.split('-').at(0)?.trim().slice(0, 8) || run.period.slice(0, 8),
+    gross: run.grossPay,
+    net: run.netPay,
+  }))
+}
+
+function buildComplianceRows(records: PayrollRecord[]) {
+  const totals = records.reduce((sum, record) => {
+    sum.sss += Number(record.deductionBreakdown?.sss || 0)
+    sum.philHealth += Number(record.deductionBreakdown?.philHealth || 0)
+    sum.pagIbig += Number(record.deductionBreakdown?.pagIbig || 0)
+    sum.tax += Number(record.deductionBreakdown?.tax || 0)
+    return sum
+  }, { sss: 0, philHealth: 0, pagIbig: 0, tax: 0 })
+  return [
+    { title: 'Tax Withholding (BIR)', amount: totals.tax, icon: 'tax' },
+    { title: 'SSS Contribution', amount: totals.sss, icon: 'sss' },
+    { title: 'PhilHealth Contribution', amount: totals.philHealth, icon: 'health' },
+    { title: 'Pag-IBIG Contribution', amount: totals.pagIbig, icon: 'housing' },
+  ].filter(item => item.amount > 0)
+}
+
 export default function PayrollFinancePage() {
   const [employees, setEmployees] = useState<Employee[]>([])
   const [loanRequests, setLoanRequests] = useState<LoanRequest[]>([])
+  const [allowanceRequests, setAllowanceRequests] = useState<AllowanceRequest[]>([])
   const [payrollRecords, setPayrollRecords] = useState<PayrollRecord[]>([])
   const [notice, setNotice] = useState('')
 
@@ -125,6 +156,7 @@ export default function PayrollFinancePage() {
     const loadFinanceData = () => {
       setEmployees(loadStored<Employee[]>(employeeKey, []))
       setLoanRequests(loadStored<LoanRequest[]>(loanRequestKey, []))
+      setAllowanceRequests(loadEnterpriseStored<AllowanceRequest[]>(allowanceRequestKey, []))
       setPayrollRecords(loadStored<PayrollRecord[]>(payrollRecordKey, []))
     }
 
@@ -137,22 +169,39 @@ export default function PayrollFinancePage() {
     }
   }, [])
 
-  const current = payrollRuns[0]
+  const activeEmployees = useMemo(() => employees.filter(isActiveEmployee), [employees])
+  const payrollRows = useMemo(() => latestFirst(payrollRecords.filter(record => record.source === 'payroll-run')), [payrollRecords])
+  const payrollRuns = useMemo(() => groupPayrollRuns(payrollRows), [payrollRows])
+  const latestPeriod = payrollRuns[0]?.period || ''
+  const currentPayrollRecords = useMemo(() => latestPeriod ? payrollRows.filter(record => record.period === latestPeriod) : [], [latestPeriod, payrollRows])
   const pendingFinanceLoans = useMemo(() => loanRequests.filter(request => request.status === 'Pending' && loanApprovalState(request).canFinanceDecide), [loanRequests])
+  const pendingFinanceAllowances = useMemo(() => allowanceRequests.filter(request => ['Pending', 'Manager Approved'].includes(request.status) && request.financeDecision !== 'Rejected'), [allowanceRequests])
   const payrollReadyLoans = useMemo(() => loanRequests.filter(request => request.status === 'Approved' && request.approvalStep === 'payroll'), [loanRequests])
+  const payrollReadyAllowances = useMemo(() => allowanceRequests.filter(request => request.status === 'Finance Approved' && !request.payrollPeriod), [allowanceRequests])
   const finalPayrollQueue = useMemo(() => payrollRecords.filter(record => record.source === 'payroll-run' && record.status !== 'Paid'), [payrollRecords])
   const payrollNetPending = finalPayrollQueue.reduce((sum, record) => sum + Number(record.net || 0), 0)
-  const employerContributions = complianceItems.reduce((sum, item) => sum + item.amount, 0) - 6050
-  const totalPayrollCost = current.grossPay + employerContributions
-  const totalDeductions = current.deductions
-  const costPerEmployee = totalPayrollCost / current.employees
-  const avgDepartmentCost = totalPayrollCost / 12
+  const grossPay = currentPayrollRecords.reduce((sum, record) => sum + Number(record.gross || 0), 0)
+  const totalDeductions = currentPayrollRecords.reduce((sum, record) => sum + Number(record.deductions || 0), 0)
+  const netPay = currentPayrollRecords.reduce((sum, record) => sum + Number(record.net || 0), 0)
+  const employerContributions = 0
+  const totalPayrollCost = grossPay + employerContributions
+  const costPerEmployee = activeEmployees.length ? totalPayrollCost / activeEmployees.length : 0
+  const departments = new Set(activeEmployees.map(employee => employee.department).filter(Boolean))
+  const avgDepartmentCost = departments.size ? totalPayrollCost / departments.size : 0
+  const monthlyPayroll = useMemo(() => buildPayrollTrend(payrollRuns), [payrollRuns])
+  const maxPayrollValue = Math.max(1, ...monthlyPayroll.flatMap(month => [month.gross, month.net]))
+  const complianceItems = useMemo(() => buildComplianceRows(currentPayrollRecords), [currentPayrollRecords])
+  const payrollTasks: PayrollTask[] = [
+    { title: 'Review Employee Requests', detail: `${pendingFinanceLoans.length + pendingFinanceAllowances.length} loan, cash advance, or allowance request${pendingFinanceLoans.length + pendingFinanceAllowances.length === 1 ? '' : 's'} waiting for Finance`, status: pendingFinanceLoans.length + pendingFinanceAllowances.length ? 'In Progress' : 'Completed' },
+    { title: 'HR Final Payroll Review', detail: `${payrollReadyLoans.length + payrollReadyAllowances.length} approved request${payrollReadyLoans.length + payrollReadyAllowances.length === 1 ? '' : 's'} ready for HR payroll`, status: payrollReadyLoans.length + payrollReadyAllowances.length ? 'Pending' : 'Upcoming' },
+    { title: 'Finance Approval & Pay Release', detail: `${finalPayrollQueue.length} payroll record${finalPayrollQueue.length === 1 ? '' : 's'} waiting for approval or release`, status: finalPayrollQueue.length ? 'Pending' : 'Upcoming' },
+  ]
   const metrics = [
-    { title: 'Total Payroll Cost', value: money(totalPayrollCost), detail: '8.6% vs last pay period', icon: Banknote, tone: '#16a34a', up: true },
-    { title: 'Gross Pay', value: money(current.grossPay), detail: `${current.employees} Employees`, icon: UserRound, tone: '#2563eb' },
-    { title: 'Deductions', value: money(totalDeductions), detail: `${((totalDeductions / current.grossPay) * 100).toFixed(1)}% of gross pay`, icon: Coins, tone: '#7c3aed' },
-    { title: 'Employer Contributions', value: money(employerContributions), detail: `${((employerContributions / totalPayrollCost) * 100).toFixed(1)}% of gross pay`, icon: Landmark, tone: '#f59e0b' },
-    { title: 'Net Pay', value: money(current.netPay), detail: `${((current.netPay / current.grossPay) * 100).toFixed(1)}% of gross pay`, icon: FileText, tone: '#ef4444' },
+    { title: 'Total Payroll Cost', value: money(totalPayrollCost), detail: periodLabel(latestPeriod), icon: Banknote, tone: '#16a34a', up: totalPayrollCost > 0 },
+    { title: 'Gross Pay', value: money(grossPay), detail: `${currentPayrollRecords.length || activeEmployees.length} employee${(currentPayrollRecords.length || activeEmployees.length) === 1 ? '' : 's'}`, icon: UserRound, tone: '#2563eb' },
+    { title: 'Deductions', value: money(totalDeductions), detail: grossPay ? `${((totalDeductions / grossPay) * 100).toFixed(1)}% of gross pay` : 'No payroll deductions yet', icon: Coins, tone: '#7c3aed' },
+    { title: 'Requests Waiting', value: String(pendingFinanceLoans.length + pendingFinanceAllowances.length), detail: 'Employee requests for Finance review', icon: Landmark, tone: '#f59e0b' },
+    { title: 'Net Pay', value: money(netPay), detail: grossPay ? `${((netPay / grossPay) * 100).toFixed(1)}% of gross pay` : 'No final payroll yet', icon: FileText, tone: '#ef4444' },
   ]
 
   function saveLoanDecision(request: LoanRequest, decision: 'Approved' | 'Rejected') {
@@ -180,6 +229,20 @@ export default function PayrollFinancePage() {
     setNotice('Payroll released and marked paid by Finance.')
   }
 
+  function saveAllowanceDecision(request: AllowanceRequest, decision: 'Approved' | 'Rejected') {
+    const now = new Date().toISOString()
+    const next = allowanceRequests.map(item => item.id === request.id ? {
+      ...item,
+      status: decision === 'Approved' ? 'Finance Approved' as const : 'Rejected' as const,
+      financeDecision: decision,
+      updatedAt: now,
+    } : item)
+    setAllowanceRequests(next)
+    saveEnterpriseStored(allowanceRequestKey, next)
+    window.dispatchEvent(new Event('storage'))
+    setNotice(`${request.customType || request.type} allowance for ${request.employeeName || 'employee'} ${decision.toLowerCase()} by Finance.`)
+  }
+
   return (
     <div className="payroll-page" style={{ fontFamily: font }}>
       <style>{payrollCss}</style>
@@ -190,9 +253,9 @@ export default function PayrollFinancePage() {
         </div>
         <div className="payroll-actions">
           <button type="button"><CalendarDays size={15} /> Period</button>
-          <button type="button"><CalendarDays size={15} /> May 1 - May 31, 2024 <ChevronDown size={14} /></button>
+          <button type="button"><CalendarDays size={15} /> {periodLabel(latestPeriod)} <ChevronDown size={14} /></button>
           <button type="button"><Filter size={15} /> Filters</button>
-          <button type="button" className="is-primary"><Play size={15} /> Run Payroll <ChevronDown size={13} /></button>
+          <Link href="/hr/payroll" className="is-primary"><Play size={15} /> Open HR Payroll <ChevronDown size={13} /></Link>
         </div>
       </div>
 
@@ -226,33 +289,37 @@ export default function PayrollFinancePage() {
           </div>
           <div className="payroll-chart">
             <div className="payroll-chart-legend"><span className="gross" /> Gross Pay <span className="net" /> Net Pay <span className="total" /> Total Payroll Cost</div>
-            <div className="payroll-bars">
-              {monthlyPayroll.map((month, index) => (
-                <div key={month.label} className="payroll-month">
-                  <div>
-                    <span className="bar gross" style={{ height: `${(month.gross / 260000) * 100}%` }} />
-                    <span className="bar net" style={{ height: `${(month.net / 260000) * 100}%` }} />
-                    <i style={{ bottom: `${Math.min(92, 58 + index * 6)}%` }} />
+            {monthlyPayroll.length ? (
+              <div className="payroll-bars">
+                {monthlyPayroll.map((month, index) => (
+                  <div key={`${month.label}-${index}`} className="payroll-month">
+                    <div>
+                      <span className="bar gross" style={{ height: `${(month.gross / maxPayrollValue) * 100}%` }} />
+                      <span className="bar net" style={{ height: `${(month.net / maxPayrollValue) * 100}%` }} />
+                      <i style={{ bottom: `${Math.min(92, ((month.gross + month.net) / 2 / maxPayrollValue) * 100)}%` }} />
+                    </div>
+                    <small>{month.label}</small>
                   </div>
-                  <small>{month.label}</small>
-                </div>
-              ))}
-            </div>
+                ))}
+              </div>
+            ) : <div className="payroll-empty">Payroll chart will appear after HR sends payroll records to Finance.</div>}
           </div>
         </div>
 
         <div className="payroll-card">
           <h2>Payroll Cost Breakdown</h2>
-          <div className="payroll-breakdown">
-            <div className="payroll-donut" style={{ background: `conic-gradient(#16a34a 0 ${(current.grossPay / totalPayrollCost) * 100}%, #2563eb ${(current.grossPay / totalPayrollCost) * 100}% ${((current.grossPay + employerContributions) / totalPayrollCost) * 100}%, #7c3aed ${((current.grossPay + employerContributions) / totalPayrollCost) * 100}% 100%)` }}>
-              <span><strong>{money(totalPayrollCost).replace('.00', '')}</strong><small>Total Cost</small></span>
+          {totalPayrollCost > 0 ? (
+            <div className="payroll-breakdown">
+              <div className="payroll-donut" style={{ background: `conic-gradient(#16a34a 0 ${(grossPay / Math.max(totalPayrollCost, 1)) * 100}%, #2563eb ${(grossPay / Math.max(totalPayrollCost, 1)) * 100}% ${((grossPay + employerContributions) / Math.max(totalPayrollCost, 1)) * 100}%, #7c3aed ${((grossPay + employerContributions) / Math.max(totalPayrollCost, 1)) * 100}% 100%)` }}>
+                <span><strong>{money(totalPayrollCost).replace('.00', '')}</strong><small>Total Cost</small></span>
+              </div>
+              <div className="payroll-breakdown-list">
+                <p><span style={{ background: '#16a34a' }} /> Gross Pay <strong>{money(grossPay)} ({((grossPay / Math.max(totalPayrollCost, 1)) * 100).toFixed(1)}%)</strong></p>
+                <p><span style={{ background: '#2563eb' }} /> Employer Contributions <strong>{money(employerContributions)} ({((employerContributions / Math.max(totalPayrollCost, 1)) * 100).toFixed(1)}%)</strong></p>
+                <p><span style={{ background: '#7c3aed' }} /> Deductions <strong>{money(totalDeductions)} ({((totalDeductions / Math.max(totalPayrollCost, 1)) * 100).toFixed(1)}%)</strong></p>
+              </div>
             </div>
-            <div className="payroll-breakdown-list">
-              <p><span style={{ background: '#16a34a' }} /> Gross Pay <strong>{money(current.grossPay)} ({((current.grossPay / totalPayrollCost) * 100).toFixed(1)}%)</strong></p>
-              <p><span style={{ background: '#2563eb' }} /> Employer Contributions <strong>{money(employerContributions)} ({((employerContributions / totalPayrollCost) * 100).toFixed(1)}%)</strong></p>
-              <p><span style={{ background: '#7c3aed' }} /> Deductions <strong>{money(totalDeductions)} ({((totalDeductions / totalPayrollCost) * 100).toFixed(1)}%)</strong></p>
-            </div>
-          </div>
+          ) : <div className="payroll-empty">No payroll cost data yet. HR payroll records will populate this breakdown.</div>}
           <div className="payroll-cost-row">
             <span>Cost per Employee <strong>{money(costPerEmployee)}</strong></span>
             <span>Cost per Department (Avg.) <strong>{money(avgDepartmentCost)}</strong></span>
@@ -266,8 +333,8 @@ export default function PayrollFinancePage() {
           </div>
           <div className="payroll-task-list">
             {payrollTasks.map(task => (
-              <div key={`${task.month}-${task.day}-${task.title}`}>
-                <time><small>{task.month}</small><strong>{task.day}</strong></time>
+              <div key={task.title}>
+                <time><small>LIVE</small><strong>{task.status === 'Completed' ? '✓' : '•'}</strong></time>
                 <span><strong>{task.title}</strong><small>{task.detail}</small></span>
                 <StatusPill value={task.status} />
               </div>
@@ -286,9 +353,9 @@ export default function PayrollFinancePage() {
         </div>
         <div className="payroll-flow-steps">
           {[
-            ['1', 'Employee Requests', `${loanRequests.length} total`],
-            ['2', 'Finance Approves', `${pendingFinanceLoans.length} waiting`],
-            ['3', 'HR Final Payroll', `${payrollReadyLoans.length} ready for payroll`],
+            ['1', 'Employee Requests', `${loanRequests.length + allowanceRequests.length} total`],
+            ['2', 'Finance Approves', `${pendingFinanceLoans.length + pendingFinanceAllowances.length} waiting`],
+            ['3', 'HR Final Payroll', `${payrollReadyLoans.length + payrollReadyAllowances.length} ready for payroll`],
             ['4', 'Finance Release Pay', money(payrollNetPending)],
           ].map(([step, title, detail]) => (
             <div key={step}>
@@ -301,11 +368,19 @@ export default function PayrollFinancePage() {
         <div className="payroll-request-grid">
           <section>
             <h3>Loan & Cash Advance Requests</h3>
-            <RequestList
+            <LoanRequestList
               requests={loanRequests}
               employees={employees}
               onApprove={request => saveLoanDecision(request, 'Approved')}
               onReject={request => saveLoanDecision(request, 'Rejected')}
+            />
+          </section>
+          <section>
+            <h3>Allowance Requests</h3>
+            <AllowanceRequestList
+              requests={allowanceRequests}
+              onApprove={request => saveAllowanceDecision(request, 'Approved')}
+              onReject={request => saveAllowanceDecision(request, 'Rejected')}
             />
           </section>
           <section>
@@ -322,23 +397,23 @@ export default function PayrollFinancePage() {
             <table className="payroll-table">
               <thead><tr>{['Pay Period', 'Pay Date', 'Employees', 'Gross Pay', 'Deductions', 'Net Pay', 'Total Cost', 'Status', 'Actions'].map(col => <th key={col}>{col}</th>)}</tr></thead>
               <tbody>
-                {payrollRuns.map(run => (
+                {payrollRuns.length ? payrollRuns.map(run => (
                   <tr key={run.period}>
                     <td data-label="Pay Period">{run.period}</td>
-                    <td data-label="Pay Date">{run.payDate}</td>
+                    <td data-label="Pay Date">{formatDate(run.payDate)}</td>
                     <td data-label="Employees">{run.employees}</td>
                     <td data-label="Gross Pay">{money(run.grossPay)}</td>
                     <td data-label="Deductions">{money(run.deductions)}</td>
                     <td data-label="Net Pay">{money(run.netPay)}</td>
-                    <td data-label="Total Cost">{money(run.grossPay + employerContributions)}</td>
+                    <td data-label="Total Cost">{money(run.grossPay)}</td>
                     <td data-label="Status"><StatusPill value={run.status} /></td>
                     <td data-label="Actions"><button type="button" className="payroll-icon-button"><MoreHorizontal size={15} /></button></td>
                   </tr>
-                ))}
+                )) : <tr><td colSpan={9}><div className="payroll-empty">No payroll runs yet. When HR sends final payroll, it will appear here for Finance approval and pay release.</div></td></tr>}
               </tbody>
             </table>
           </div>
-          <div className="payroll-pagination"><strong>Showing 1 to {payrollRuns.length} of 12 payroll runs</strong><div>{['‹', '1', '2', '3', '...', '12', '›'].map((p, i) => <button key={`${p}-${i}`} className={p === '1' ? 'is-active' : undefined}>{p}</button>)}<button>5 / page <ChevronDown size={14} /></button></div></div>
+          <div className="payroll-pagination"><strong>{payrollRuns.length ? `Showing ${payrollRuns.length} payroll run${payrollRuns.length === 1 ? '' : 's'}` : 'No payroll runs to show'}</strong></div>
         </div>
 
         <div className="payroll-card">
@@ -347,14 +422,14 @@ export default function PayrollFinancePage() {
             <Link href="/accounting/tax-compliance">View All</Link>
           </div>
           <div className="payroll-compliance-list">
-            {complianceItems.map(item => (
+            {complianceItems.length ? complianceItems.map(item => (
               <div key={item.title}>
                 <span className={`compliance-icon ${item.icon}`}><ShieldCheck size={17} /></span>
-                <span><strong>{item.title}</strong><small>{item.period}</small></span>
-                <span><strong>{money(item.amount)}</strong><small>Paid on {item.paidDate}</small></span>
-                <StatusPill value="Paid" />
+                <span><strong>{item.title}</strong><small>{periodLabel(latestPeriod)}</small></span>
+                <span><strong>{money(item.amount)}</strong><small>From payroll deduction breakdown</small></span>
+                <StatusPill value="Pending" />
               </div>
-            ))}
+            )) : <div className="payroll-empty">No statutory contribution data yet. Payroll deduction breakdowns will populate this section.</div>}
           </div>
           <Link className="payroll-calendar-link" href="/accounting/tax-compliance"><CalendarDays size={15} /> View Compliance Calendar <ChevronDown size={15} /></Link>
         </div>
@@ -363,7 +438,7 @@ export default function PayrollFinancePage() {
   )
 }
 
-function RequestList({ requests, employees, onApprove, onReject }: { requests: LoanRequest[]; employees: Employee[]; onApprove: (request: LoanRequest) => void; onReject: (request: LoanRequest) => void }) {
+function LoanRequestList({ requests, employees, onApprove, onReject }: { requests: LoanRequest[]; employees: Employee[]; onApprove: (request: LoanRequest) => void; onReject: (request: LoanRequest) => void }) {
   if (!requests.length) return <div className="payroll-empty">No employee loan or cash advance requests yet.</div>
   return (
     <div className="payroll-request-list">
@@ -389,6 +464,41 @@ function RequestList({ requests, employees, onApprove, onReject }: { requests: L
             {state.canFinanceDecide ? (
               <div className="request-actions">
                 <button type="button" className="approve" onClick={() => onApprove(request)}><CheckCircle2 size={14} /> Approve for HR Payroll</button>
+                <button type="button" onClick={() => onReject(request)}><XCircle size={14} /> Reject</button>
+              </div>
+            ) : null}
+          </article>
+        )
+      })}
+    </div>
+  )
+}
+
+function AllowanceRequestList({ requests, onApprove, onReject }: { requests: AllowanceRequest[]; onApprove: (request: AllowanceRequest) => void; onReject: (request: AllowanceRequest) => void }) {
+  if (!requests.length) return <div className="payroll-empty">No employee allowance requests yet.</div>
+  return (
+    <div className="payroll-request-list">
+      {requests.map(request => {
+        const waitingFinance = ['Pending', 'Manager Approved'].includes(request.status) && request.financeDecision !== 'Rejected'
+        return (
+          <article key={request.id}>
+            <div className="request-card-head">
+              <span>
+                <strong>{request.employeeName || 'Employee'}</strong>
+                <small>{request.employeeCode || request.department || '-'}</small>
+              </span>
+              <StatusPill value={request.status === 'Finance Approved' ? 'Completed' : request.status === 'Rejected' ? 'Rejected' : 'In Progress'} />
+            </div>
+            <div className="request-card-body">
+              <span><small>Request</small><strong>{request.customType || request.type} Allowance</strong></span>
+              <span><small>Amount</small><strong>{money(request.amount)}</strong></span>
+              <span><small>Date</small><strong>{request.date || '-'}</strong></span>
+              <span><small>Finance</small><strong>{request.financeDecision || 'Pending'}</strong></span>
+            </div>
+            <p>{request.purpose || request.reason || request.remarks || 'No reason provided.'}</p>
+            {waitingFinance ? (
+              <div className="request-actions">
+                <button type="button" className="approve" onClick={() => onApprove(request)}><CheckCircle2 size={14} /> Approve for Payroll</button>
                 <button type="button" onClick={() => onReject(request)}><XCircle size={14} /> Reject</button>
               </div>
             ) : null}
@@ -438,7 +548,7 @@ const payrollCss = `
 .payroll-title { margin: 0; font-size: 28px; line-height: 1.1; font-weight: 950; }
 .payroll-subtitle { margin: 8px 0 0; color: #334155; font-size: 13.5px; }
 .payroll-actions { display: flex; gap: 12px; flex-wrap: wrap; justify-content: flex-end; }
-.payroll-actions button, .payroll-panel-header button, .payroll-pagination button { min-height: 38px; border-radius: 8px; border: 1px solid #e8edf4; background: #fff; color: #0f172a; display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 0 12px; font-size: 12.5px; font-weight: 850; cursor: pointer; }
+.payroll-actions button, .payroll-actions a, .payroll-panel-header button, .payroll-pagination button { min-height: 38px; border-radius: 8px; border: 1px solid #e8edf4; background: #fff; color: #0f172a; display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 0 12px; font-size: 12.5px; font-weight: 850; cursor: pointer; text-decoration: none; }
 .payroll-actions .is-primary { border-color: #16a34a; background: #16a34a; color: #fff; font-weight: 950; }
 .payroll-metrics { display: grid; grid-template-columns: repeat(5, minmax(170px, 1fr)); gap: 18px; margin-bottom: 18px; }
 .payroll-card { background: #fff; border: 1px solid #e8edf4; border-radius: 8px; padding: 18px; box-shadow: 0 1px 2px rgba(15, 23, 42, .03); }
