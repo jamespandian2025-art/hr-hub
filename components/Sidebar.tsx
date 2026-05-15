@@ -12,7 +12,6 @@ import {
   ChevronRight,
   ClipboardList,
   FolderKanban,
-  HandCoins,
   LayoutDashboard,
   Settings,
   ShoppingCart,
@@ -71,7 +70,6 @@ const navSections: NavSection[] = [
   {
     section: 'FINANCE & PEOPLE',
     items: [
-      { label: 'Financial', href: '/financial', icon: HandCoins, match: ['/financials'] },
       {
         label: 'Accounting',
         href: '/accounting',
