@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
-import { CheckCircle2, Clock3, HandCoins, Search, ShieldCheck, XCircle } from 'lucide-react'
+import { CheckCircle2, Clock3, Eye, HandCoins, Search, ShieldCheck, XCircle } from 'lucide-react'
 import type { ComponentType } from 'react'
 import type { Employee } from '@/app/employee/employeeData'
 import { employeeKey, fullName, initials, loadStored } from '@/app/employee/employeeData'
@@ -143,7 +143,9 @@ export default function HrLoanRequestsPage() {
                   <Td>{formatDateTime(request.createdAt)}</Td>
                   <Td>
                     <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                      <span style={{ color: '#64748b', fontSize: 12 }}>{state.step === 'finance' ? 'Waiting Finance' : 'View only'}</span>
+                      <Link href={`/hr/loan-requests/${encodeURIComponent(request.id)}`} style={detailLinkStyle}>
+                        <Eye size={14} /> Open details
+                      </Link>
                     </div>
                   </Td>
                 </tr>
@@ -200,4 +202,5 @@ const trStyle = { background: '#fff' } as const
 const mutedLine = { display: 'block', color: '#64748b', marginTop: 4, fontSize: 12 } as const
 const avatarStyle = { width: 36, height: 36, borderRadius: '50%', objectFit: 'cover' } as const
 const avatarFallback = { width: 36, height: 36, borderRadius: '50%', display: 'grid', placeItems: 'center', background: '#dcfce7', color: '#15803d', fontWeight: 900 } as const
+const detailLinkStyle = { minHeight: 32, border: '1px solid #dbeafe', background: '#eff6ff', color: '#1d4ed8', borderRadius: 8, padding: '0 10px', display: 'inline-flex', alignItems: 'center', gap: 7, textDecoration: 'none', fontSize: 12, fontWeight: 900 } as const
 const financeLinkStyle = { minHeight: 38, border: '1px solid #bfdbfe', background: '#eff6ff', color: '#1d4ed8', borderRadius: 8, padding: '0 13px', display: 'inline-flex', alignItems: 'center', gap: 8, textDecoration: 'none', fontSize: 12, fontWeight: 900 } as const

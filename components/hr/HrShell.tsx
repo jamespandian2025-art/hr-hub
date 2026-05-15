@@ -66,7 +66,9 @@ type HrSystemNotification = {
 function notificationTarget(notification: HrSystemNotification) {
   const collection = String(notification.relatedCollection || '').toLowerCase()
   const type = String(notification.type || '').toLowerCase()
-  if (collection === 'loan-requests' || type.includes('loan')) return '/hr/loan-requests'
+  if (collection === 'loan-requests' || type.includes('loan')) {
+    return notification.relatedId ? `/hr/loan-requests/${encodeURIComponent(notification.relatedId)}` : '/hr/loan-requests'
+  }
   if (collection === 'allowance-requests' || type.includes('allowance')) return '/hr/payroll'
   if (collection === 'payroll-records' || type.includes('payroll')) return '/hr/payroll'
   if (collection === 'leave-requests' || type.includes('leave')) {
