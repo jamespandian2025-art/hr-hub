@@ -497,6 +497,7 @@ export default function SalesPage() {
 
 function Overview({ orders, invoices, reps, categories, pipeline, onCreateInvoice }: { orders: SalesOrder[]; invoices: Invoice[]; reps: { label: string; amount: number; count: number }[]; categories: { label: string; amount: number; count: number }[]; pipeline: { stage: OpportunityStage; count: number; amount: number }[]; onCreateInvoice: (order: SalesOrder) => void }) {
   const [ordersView, setOrdersView] = useState<'grid' | 'table'>('grid')
+  const [invoicesView, setInvoicesView] = useState<'grid' | 'table'>('grid')
 
   return (
     <>
@@ -515,9 +516,9 @@ function Overview({ orders, invoices, reps, categories, pipeline, onCreateInvoic
         <Panel
           title="Recent Sales Orders"
           action={(
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
-              <ViewToggle value={ordersView} onChange={setOrdersView} />
+            <div className="sales-panel-actions" style={panelActions}>
               <a style={viewAll}>View All</a>
+              <ViewToggle value={ordersView} onChange={setOrdersView} />
             </div>
           )}
         >
@@ -527,8 +528,16 @@ function Overview({ orders, invoices, reps, categories, pipeline, onCreateInvoic
           <Panel title="Revenue by Product Category" action={<a style={viewAll}>View All</a>}>
             {categories.length ? <CategoryRevenue categories={categories} /> : <EmptyState title="No category revenue yet" body="Product categories will populate after orders are confirmed." />}
           </Panel>
-          <Panel title="Recent Invoices" action={<a style={viewAll}>View All</a>}>
-            <InvoicesTab invoices={invoices.slice(0, 5)} compact />
+          <Panel
+            title="Recent Invoices"
+            action={(
+              <div className="sales-panel-actions" style={panelActions}>
+                <a style={viewAll}>View All</a>
+                <ViewToggle value={invoicesView} onChange={setInvoicesView} />
+              </div>
+            )}
+          >
+            <InvoicesTab invoices={invoices.slice(0, 5)} compact view={invoicesView} />
           </Panel>
         </div>
       </div>
@@ -619,8 +628,27 @@ function ViewToggle({ value, onChange }: { value: 'grid' | 'table'; onChange: (v
   )
 }
 
-function InvoicesTab({ invoices, onMarkPaid, compact }: { invoices: Invoice[]; onMarkPaid?: (invoice: Invoice) => void; compact?: boolean }) {
+function InvoicesTab({ invoices, onMarkPaid, compact, view = 'table' }: { invoices: Invoice[]; onMarkPaid?: (invoice: Invoice) => void; compact?: boolean; view?: 'grid' | 'table' }) {
   if (!invoices.length) return <EmptyState title="No invoices yet" body="Invoices created from sales orders will appear here." />
+  if (compact && view === 'grid') {
+    return <div className="sales-orders-card-grid" style={ordersCardGrid}>
+      {invoices.map(invoice => (
+        <article key={invoice.id} style={orderCard}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10, alignItems: 'flex-start' }}>
+            <div style={{ minWidth: 0 }}>
+              <strong style={{ display: 'block', color: '#020617', fontSize: 13 }}>{invoice.id}</strong>
+              <span style={{ display: 'block', color: '#475569', fontSize: 12, fontWeight: 750, marginTop: 4, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{invoice.customer}</span>
+            </div>
+            <strong style={{ color: '#020617', fontSize: 13, whiteSpace: 'nowrap' }}>{money(invoice.amount)}</strong>
+          </div>
+          <div style={orderCardMeta}>
+            <span><small>Paid</small><strong style={{ color: '#0f172a', fontSize: 12 }}>{money(invoice.paidAmount)}</strong></span>
+            <span><small>Status</small><Badge text={invoice.status} /></span>
+          </div>
+        </article>
+      ))}
+    </div>
+  }
   return <DataTable headers={compact ? ['Invoice #', 'Customer', 'Amount', 'Status'] : ['Invoice #', 'Customer', 'Issue date', 'Due date', 'Amount', 'Paid amount', 'Balance due', 'Status', 'Actions']}>
     {invoices.map(invoice => <tr key={invoice.id}>
       <Cell strong>{invoice.id}</Cell><Cell>{invoice.customer}</Cell>{!compact && <Cell>{date(invoice.issueDate)}</Cell>}{!compact && <Cell>{date(invoice.dueDate)}</Cell>}<Cell strong>{money(invoice.amount)}</Cell>{!compact && <Cell>{money(invoice.paidAmount)}</Cell>}{!compact && <Cell>{money(invoice.balanceDue)}</Cell>}<Cell><Badge text={invoice.status} /></Cell>
@@ -897,6 +925,7 @@ const tableStyle: CSSProperties = { width: '100%', borderCollapse: 'collapse', m
 const thStyle: CSSProperties = { padding: '13px 14px', color: '#475569', background: '#f8fafc', fontSize: 11, fontWeight: 900, textAlign: 'left', whiteSpace: 'nowrap' }
 const tdStyle: CSSProperties = { padding: '13px 14px', borderTop: '1px solid #edf2f7', color: '#0f172a', fontSize: 12, whiteSpace: 'nowrap' }
 const viewAll: CSSProperties = { color: '#2563eb', fontSize: 12, fontWeight: 800, textDecoration: 'none', whiteSpace: 'nowrap' }
+const panelActions: CSSProperties = { display: 'inline-flex', alignItems: 'center', gap: 10, flexWrap: 'nowrap', justifyContent: 'flex-end' }
 const viewToggle: CSSProperties = { display: 'inline-grid', gridTemplateColumns: '1fr 1fr', border: '1px solid #dbe3ea', borderRadius: 8, overflow: 'hidden', background: '#fff' }
 const viewToggleButton = (active: boolean): CSSProperties => ({ width: 30, height: 30, border: 0, borderRight: active ? 0 : '1px solid #e2e8f0', background: active ? '#16a34a' : '#fff', color: active ? '#fff' : '#475569', display: 'grid', placeItems: 'center', cursor: 'pointer' })
 const miniSelect: CSSProperties = { height: 34, border: '1px solid #dbe3ea', borderRadius: 8, padding: '0 10px', background: '#fff', color: '#334155', fontSize: 12, fontWeight: 750 }

@@ -4003,7 +4003,25 @@ html body {
   }
 
   .sales-page .sales-view-toggle {
-    order: 2 !important;
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+    flex: 0 0 auto !important;
+    width: auto !important;
+    order: 0 !important;
+  }
+
+  .sales-page .sales-view-toggle button {
+    width: 30px !important;
+    min-width: 30px !important;
+    height: 30px !important;
+    padding: 0 !important;
+  }
+
+  .sales-page .sales-panel-actions {
+    display: inline-flex !important;
+    align-items: center !important;
+    flex-wrap: nowrap !important;
+    gap: 8px !important;
+    white-space: nowrap !important;
   }
 
   .sales-page .sales-orders-card-grid {
