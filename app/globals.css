@@ -44,8 +44,8 @@ html[data-theme='light'] {
   --wf-paper:             #FFFFFF;
   --wf-soft:              #F8FAFD;
   --wf-border:            #E5E7EB;
-  --font-display:         "Geist", Arial, "Apple Color Emoji", "Segoe UI Emoji", sans-serif;
-  --font-body:            "Geist", Arial, "Apple Color Emoji", "Segoe UI Emoji", sans-serif;
+  --font-display:         var(--font-inter), Inter, Arial, "Apple Color Emoji", "Segoe UI Emoji", sans-serif;
+  --font-body:            var(--font-inter), Inter, Arial, "Apple Color Emoji", "Segoe UI Emoji", sans-serif;
 }
 
 /* â”€â”€ 2. WiseFlow Dark â”€â”€ */
@@ -213,8 +213,8 @@ html[data-theme='graphite'] {
   --wf-soft:              #000000;
   --wf-border:            #2A2A2A;
   --wf-paper:             #0A0A0A;
-  --font-display:         "Geist", Arial, "Apple Color Emoji", "Segoe UI Emoji", sans-serif;
-  --font-body:            "Geist", Arial, "Apple Color Emoji", "Segoe UI Emoji", sans-serif;
+  --font-display:         var(--font-inter), Inter, Arial, "Apple Color Emoji", "Segoe UI Emoji", sans-serif;
+  --font-body:            var(--font-inter), Inter, Arial, "Apple Color Emoji", "Segoe UI Emoji", sans-serif;
 }
 
 * {
@@ -3130,6 +3130,90 @@ svg {
 
   .mobile-nav-drawer {
     width: min(320px, 88vw);
+  }
+}
+
+/* Accounting is a finance workspace with the white, black-text surface requested by design. */
+html[data-theme='dark'] .accounting-shell,
+html[data-theme='dark'] .accounting-shell main,
+html[data-theme='dark'] .accounting-shell [class$='-page'],
+html[data-theme='dark'] .accounting-shell [class*='-page '] {
+  background: #ffffff !important;
+  color: #0f172a !important;
+}
+
+html[data-theme='dark'] .accounting-shell [style*='background: #fff'],
+html[data-theme='dark'] .accounting-shell [style*='background:#fff'],
+html[data-theme='dark'] .accounting-shell [style*='background: #ffffff'],
+html[data-theme='dark'] .accounting-shell [style*='background:#ffffff'],
+html[data-theme='dark'] .accounting-shell [style*='background: #f7f9fc'],
+html[data-theme='dark'] .accounting-shell [style*='background: #f8fafc'],
+html[data-theme='dark'] .accounting-shell [style*='background: #f9fafb'],
+html[data-theme='dark'] .accounting-shell [style*='background: rgb(255, 255, 255)'] {
+  background: #ffffff !important;
+}
+
+html[data-theme='dark'] .accounting-shell thead,
+html[data-theme='dark'] .accounting-shell thead th,
+html[data-theme='dark'] .accounting-shell [style*='background: #f8fafc'] {
+  background: #f8fafc !important;
+}
+
+html[data-theme='dark'] .accounting-shell [style*='border: 1px solid #e8edf4'],
+html[data-theme='dark'] .accounting-shell [style*='border: 1px solid #eef2f7'],
+html[data-theme='dark'] .accounting-shell [style*='borderBottom: 1px solid #e8edf4'],
+html[data-theme='dark'] .accounting-shell [style*='border-bottom: 1px solid #e8edf4'] {
+  border-color: #e8edf4 !important;
+}
+
+html[data-theme='dark'] .accounting-shell h1,
+html[data-theme='dark'] .accounting-shell h2,
+html[data-theme='dark'] .accounting-shell h3,
+html[data-theme='dark'] .accounting-shell input,
+html[data-theme='dark'] .accounting-shell button:not([style*='background: #16a34a']) {
+  color: #0f172a !important;
+}
+
+html[data-theme='dark'] .accounting-shell [style*='color: #334155'],
+html[data-theme='dark'] .accounting-shell [style*='color:#334155'],
+html[data-theme='dark'] .accounting-shell [style*='color: #475569'],
+html[data-theme='dark'] .accounting-shell [style*='color:#475569'],
+html[data-theme='dark'] .accounting-shell [style*='color: #64748b'],
+html[data-theme='dark'] .accounting-shell [style*='color:#64748b'],
+html[data-theme='dark'] .accounting-shell [style*='color: #6b7280'],
+html[data-theme='dark'] .accounting-shell [style*='color:#6b7280'],
+html[data-theme='dark'] .accounting-shell [style*='color: #9ca3af'],
+html[data-theme='dark'] .accounting-shell [style*='color:#9ca3af'] {
+  color: #111827 !important;
+}
+
+html[data-theme='dark'] .accounting-shell input,
+html[data-theme='dark'] .accounting-shell textarea,
+html[data-theme='dark'] .accounting-shell select,
+html[data-theme='dark'] .accounting-shell button:not([style*='background: #16a34a']):not([style*='background: #047857']):not([style*='background: #dc2626']) {
+  background: #ffffff !important;
+  border-color: #e8edf4 !important;
+}
+
+html[data-theme='dark'] .accounting-shell input::placeholder,
+html[data-theme='dark'] .accounting-shell textarea::placeholder {
+  color: #111827 !important;
+}
+
+@media (max-width: 900px) {
+  .accounting-shell {
+    display: block !important;
+  }
+
+  .accounting-shell aside {
+    position: relative !important;
+    min-height: auto !important;
+  }
+
+  .accounting-shell header {
+    grid-template-columns: 1fr !important;
+    height: auto !important;
+    padding: 14px 16px !important;
   }
 }
 

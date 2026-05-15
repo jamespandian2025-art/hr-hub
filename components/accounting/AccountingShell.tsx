@@ -51,7 +51,7 @@ export default function AccountingShell({ children }: { children: React.ReactNod
   const ActiveIcon = activeMeta.icon
 
   return (
-    <div style={{ minHeight: '100vh', background: '#f7f9fc', display: 'grid', gridTemplateColumns: '250px minmax(0, 1fr)', fontFamily: font, color: '#111827' }}>
+    <div className="accounting-shell" style={{ minHeight: '100vh', background: '#f7f9fc', display: 'grid', gridTemplateColumns: '250px minmax(0, 1fr)', fontFamily: font, color: '#111827' }}>
       <style>{accountingShellCss}</style>
       <aside style={{ minHeight: '100vh', position: 'sticky', top: 0, alignSelf: 'start', background: '#000', color: '#ededed', padding: '18px 10px', display: 'flex', flexDirection: 'column', gap: 14 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '0 6px 4px' }}>

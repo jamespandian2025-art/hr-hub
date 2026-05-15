@@ -1,5 +1,6 @@
 'use client'
 
+import { use } from 'react'
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import {
@@ -176,13 +177,15 @@ const sectionData: Record<string, {
   },
 }
 
-export default function AccountingSectionPage({ params }: { params: { section: string } }) {
-  if (params.section === 'accounting') return <AccountingDashboardPage />
-  if (params.section === 'bills') return <BillsDashboardPage />
-  if (params.section === 'expenses') return <ExpensesDashboardPage />
+export default function AccountingSectionPage({ params }: { params: Promise<{ section: string }> }) {
+  const { section } = use(params)
 
-  const data = sectionData[params.section]
-  const navMeta = accountingNavItems.find(item => item.href.endsWith(`/${params.section}`))
+  if (section === 'accounting') return <AccountingDashboardPage />
+  if (section === 'bills') return <BillsDashboardPage />
+  if (section === 'expenses') return <ExpensesDashboardPage />
+
+  const data = sectionData[section]
+  const navMeta = accountingNavItems.find(item => item.href.endsWith(`/${section}`))
   if (!data || !navMeta) notFound()
   const Icon = navMeta.icon
 
