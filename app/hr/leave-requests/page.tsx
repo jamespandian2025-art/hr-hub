@@ -55,7 +55,15 @@ export default function HrLeaveRequestsPage() {
     }
     load()
     window.addEventListener('storage', load)
-    return () => window.removeEventListener('storage', load)
+    window.addEventListener('focus', load)
+    window.addEventListener('wiseflow:hr-data-changed', load)
+    const timer = window.setInterval(load, 2500)
+    return () => {
+      window.removeEventListener('storage', load)
+      window.removeEventListener('focus', load)
+      window.removeEventListener('wiseflow:hr-data-changed', load)
+      window.clearInterval(timer)
+    }
   }, [])
 
   useEffect(() => {
@@ -111,6 +119,8 @@ export default function HrLeaveRequestsPage() {
   function persist(next: LeaveRequest[]) {
     setRequests(next)
     saveStored(leaveRequestKey, next)
+    window.dispatchEvent(new Event('storage'))
+    window.dispatchEvent(new Event('wiseflow:hr-data-changed'))
   }
 
   function updateStatus(row: LeaveRow, status: LeaveStatus) {

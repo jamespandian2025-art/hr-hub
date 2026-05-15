@@ -81,6 +81,28 @@ export function saveStored<T>(key: string, value: T) {
   window.localStorage.setItem(key, JSON.stringify(value))
 }
 
+function uniqueById<T extends { id?: string }>(rows: T[]) {
+  const map = new Map<string, T>()
+  rows.forEach((row, index) => {
+    const key = row.id || `row-${index}`
+    map.set(key, { ...map.get(key), ...row })
+  })
+  return Array.from(map.values())
+}
+
+function loadAllStoredRows<T extends { id?: string }>(key: string) {
+  const baseRows = loadStored<T[]>(key, [])
+  if (typeof window === 'undefined') return Array.isArray(baseRows) ? baseRows : []
+  const rows = Array.isArray(baseRows) ? [...baseRows] : []
+  for (let index = 0; index < window.localStorage.length; index += 1) {
+    const scopedKey = window.localStorage.key(index)
+    if (!scopedKey || scopedKey === key || !scopedKey.startsWith(`${key}:`)) continue
+    const scopedRows = loadStored<T[]>(scopedKey, [])
+    if (Array.isArray(scopedRows)) rows.push(...scopedRows)
+  }
+  return uniqueById(rows)
+}
+
 export function isLegacySeedLeaveRequest(request: LeaveRequest) {
   const id = String(request.id || '')
   const leaveType = String(request.leaveType || '').toLowerCase()
@@ -90,9 +112,8 @@ export function isLegacySeedLeaveRequest(request: LeaveRequest) {
 }
 
 export function loadLeaveRequests() {
-  const stored = loadStored<LeaveRequest[]>(leaveRequestKey, [])
+  const stored = loadAllStoredRows<LeaveRequest>(leaveRequestKey)
   const realRequests = stored.filter(request => !isLegacySeedLeaveRequest(request))
-  if (realRequests.length !== stored.length) saveStored(leaveRequestKey, realRequests)
   return realRequests
 }
 
