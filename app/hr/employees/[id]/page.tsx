@@ -102,6 +102,7 @@ function formatDate(d?: string) {
 
 const credentialEmailKey = 'flowsys-hr-credential-email-outbox'
 const payrollScheduleKey = 'flowsys-hr-payroll-schedule'
+type CredentialEmailResult = { sent: boolean; fallback: boolean; message: string }
 
 function slug(value?: string) {
   return String(value || '')
@@ -131,9 +132,11 @@ function generatePortalPassword() {
   return `WF-${randomToken(4)}-${randomToken(4)}`
 }
 
-async function openCredentialEmail(employee: Employee) {
+async function openCredentialEmail(employee: Employee): Promise<CredentialEmailResult> {
   const recipient = employee.email?.trim()
-  if (!recipient || !employee.portalEmail || !employee.portalPassword) return false
+  if (!recipient || !employee.portalEmail || !employee.portalPassword) {
+    return { sent: false, fallback: false, message: 'Missing employee work email, portal email, or temporary password.' }
+  }
 
   const loginUrl = `${window.location.origin}/employee/login`
   const subject = 'WiseFlow employee portal login details'
@@ -153,6 +156,8 @@ async function openCredentialEmail(employee: Employee) {
   ].join('\n')
 
   let status = 'Prepared'
+  let message = 'Email provider is not configured. An email draft was opened instead.'
+  let fallback = true
   try {
     const response = await fetch('/api/hr/employee-credentials', {
       method: 'POST',
@@ -167,8 +172,14 @@ async function openCredentialEmail(employee: Employee) {
     })
     const result = await response.json()
     status = result?.ok ? 'Sent' : 'Prepared'
+    fallback = !result?.ok
+    message = result?.ok
+      ? `Login details sent to ${recipient}.`
+      : result?.error || 'Email provider could not send the login details. An email draft was opened instead.'
   } catch {
     status = 'Prepared'
+    fallback = true
+    message = 'Could not contact the email service. An email draft was opened instead.'
   }
 
   const outbox = loadStored<object[]>(credentialEmailKey, [])
@@ -180,12 +191,13 @@ async function openCredentialEmail(employee: Employee) {
       employeeName: fullName(employee),
       recipient,
       portalEmail: employee.portalEmail,
+      message,
       status,
       createdAt: new Date().toISOString(),
     },
   ]))
   if (status !== 'Sent') window.open(`mailto:${encodeURIComponent(recipient)}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`, '_blank')
-  return true
+  return { sent: status === 'Sent', fallback, message }
 }
 
 function statusBadge(s: string): { bg: string; text: string } {
@@ -431,6 +443,8 @@ export default function EmployeeProfilePage() {
   const [editError, setEditError] = useState('')
   const [selectedPayslipId, setSelectedPayslipId] = useState<string | null>(null)
   const [credentialNotice, setCredentialNotice] = useState('')
+  const [credentialNoticeTone, setCredentialNoticeTone] = useState<'success' | 'warning' | 'error'>('success')
+  const [sendingLogin, setSendingLogin] = useState(false)
   const [attendanceDraft, setAttendanceDraft] = useState<Partial<AttendanceRecord>>({
     date: toInputDate(new Date()),
     status: 'Present',
@@ -675,9 +689,13 @@ export default function EmployeeProfilePage() {
   async function sendLoginDetails() {
     if (!employee) return
     if (!employee.email?.trim()) {
+      setCredentialNoticeTone('error')
       setCredentialNotice('Add a work email before sending login details.')
       return
     }
+    setSendingLogin(true)
+    setCredentialNoticeTone('success')
+    setCredentialNotice('Sending login details...')
 
     const updatedEmployee = {
       ...employee,
@@ -693,8 +711,13 @@ export default function EmployeeProfilePage() {
       return isSameRecord ? updatedEmployee : item
     })))
     setEmployee(updatedEmployee)
-    const sent = await openCredentialEmail(updatedEmployee)
-    setCredentialNotice(sent ? `Login email handled for ${updatedEmployee.email}.` : 'Could not prepare the login email.')
+    try {
+      const result = await openCredentialEmail(updatedEmployee)
+      setCredentialNoticeTone(result.sent ? 'success' : result.fallback ? 'warning' : 'error')
+      setCredentialNotice(result.message)
+    } finally {
+      setSendingLogin(false)
+    }
   }
 
   function saveEmployeeEdits() {
@@ -974,13 +997,13 @@ export default function EmployeeProfilePage() {
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
               <span style={{ fontSize: 14, fontWeight: 600, color: '#111827' }}>Personal Information</span>
               <div style={{ display: 'flex', gap: 6 }}>
-                <button onClick={sendLoginDetails} style={{ display: 'inline-flex', alignItems: 'center', gap: 5, border: '1px solid #bbf7d0', background: '#f0fdf4', borderRadius: 7, padding: '4px 10px', fontSize: 12, color: '#15803d', cursor: 'pointer', fontWeight: 700 }}>
-                  <Mail size={12} /> Send login
+                <button onClick={sendLoginDetails} disabled={sendingLogin} style={{ display: 'inline-flex', alignItems: 'center', gap: 5, border: '1px solid #bbf7d0', background: '#f0fdf4', borderRadius: 7, padding: '4px 10px', fontSize: 12, color: '#15803d', cursor: sendingLogin ? 'wait' : 'pointer', fontWeight: 700, opacity: sendingLogin ? 0.75 : 1 }}>
+                  <Mail size={12} /> {sendingLogin ? 'Sending...' : 'Send login'}
                 </button>
                 <button onClick={() => openEditor('personal')} style={{ border: '1px solid #e5e7eb', background: '#fff', borderRadius: 7, padding: '4px 12px', fontSize: 12, color: '#374151', cursor: 'pointer' }}>Edit</button>
               </div>
             </div>
-            {credentialNotice && <div style={{ padding: '8px 10px', borderRadius: 8, background: '#f0fdf4', color: '#15803d', fontSize: 12, fontWeight: 600, marginBottom: 10 }}>{credentialNotice}</div>}
+            {credentialNotice && <div style={{ padding: '8px 10px', borderRadius: 8, background: credentialNoticeTone === 'success' ? '#f0fdf4' : credentialNoticeTone === 'warning' ? '#fffbeb' : '#fef2f2', color: credentialNoticeTone === 'success' ? '#15803d' : credentialNoticeTone === 'warning' ? '#92400e' : '#dc2626', fontSize: 12, fontWeight: 700, marginBottom: 10 }}>{credentialNotice}</div>}
             {[
               ['Full Name',         name],
               ['Employee ID',       employee.employeeId],
