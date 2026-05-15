@@ -81,6 +81,35 @@ function canUseEmployeePortal(employee: Employee) {
   return !['archived', 'deleted', 'inactive', 'terminated', 'resigned'].includes(status)
 }
 
+function uniqueEmployees(rows: Employee[]) {
+  const map = new Map<string, Employee>()
+  rows.forEach(employee => {
+    const key = employee.id || employee.employeeId || employee.portalEmail || employee.email
+    if (!key) return
+    map.set(String(key), { ...map.get(String(key)), ...employee })
+  })
+  return Array.from(map.values())
+}
+
+function loadEmployeePortalEmployees() {
+  const baseEmployees = loadStored<Employee[]>(employeeKey, [])
+  if (typeof window === 'undefined') return Array.isArray(baseEmployees) ? baseEmployees : []
+  const scopedEmployees: Employee[] = []
+  for (let index = 0; index < window.localStorage.length; index += 1) {
+    const key = window.localStorage.key(index)
+    if (!key || key === employeeKey || !key.startsWith(`${employeeKey}:`)) continue
+    const rows = loadStored<Employee[]>(key, [])
+    if (Array.isArray(rows)) scopedEmployees.push(...rows)
+  }
+  return uniqueEmployees([...(Array.isArray(baseEmployees) ? baseEmployees : []), ...scopedEmployees])
+}
+
+function rememberEmployeeForPortal(employee: Employee) {
+  const current = loadStored<Employee[]>(employeeKey, [])
+  const next = uniqueEmployees([...(Array.isArray(current) ? current : []), employee])
+  saveStored(employeeKey, next)
+}
+
 function personMatches(value: unknown, employee: Employee) {
   const rawCandidate = text(value)
   const candidate = compact(rawCandidate)
@@ -118,7 +147,7 @@ export default function EmployeeLoginPage() {
       setNotice('Please enter your temporary password.')
       return
     }
-    const storedEmployees = loadStored<Employee[]>(employeeKey, [])
+    const storedEmployees = loadEmployeePortalEmployees()
     const employees = Array.isArray(storedEmployees) ? storedEmployees.filter(canUseEmployeePortal) : []
     if (!employees.length) {
       setNotice('No active employee portal accounts are available yet.')
@@ -148,6 +177,7 @@ export default function EmployeeLoginPage() {
       saveStored(employeeKey, updated)
       signedInEmployee = { ...employee, portalEmail: generatedEmail }
     }
+    rememberEmployeeForPortal(signedInEmployee)
     const account = {
       userId: signedInEmployee.id,
       employeeId: signedInEmployee.employeeId,
