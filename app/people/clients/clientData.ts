@@ -1,6 +1,7 @@
 'use client'
 
 import { getSupabaseBrowserClient, hasSupabaseConfig } from '@/lib/auth/supabaseClient'
+import { companyScopedKey, getActiveCompany } from '@/lib/tenant/company'
 
 export type ClientStatus = 'Active' | 'Inactive'
 export type ClientSource = 'supabase' | 'local' | 'unavailable'
@@ -34,6 +35,7 @@ export interface ClientNote {
 
 export interface ClientRecord {
   id: string
+  companyId?: string
   name: string
   company: string
   email: string
@@ -110,8 +112,10 @@ export function buildEmptyClient(overrides: Partial<ClientRecord> & Pick<ClientR
   const now = new Date()
   const createdAt = overrides.createdAt || now.toISOString().slice(0, 10)
   const website = overrides.website || ''
+  const activeCompany = getActiveCompany()
 
   return {
+    companyId: activeCompany?.id,
     company: website.replace(/^https?:\/\//, '') || `${slugify(overrides.name)}.com`,
     website,
     status: 'Active',
@@ -143,11 +147,17 @@ export function buildEmptyClient(overrides: Partial<ClientRecord> & Pick<ClientR
 
 export function loadLocalClients() {
   if (typeof window === 'undefined') return []
+  const activeCompany = getActiveCompany()
+  const scopedKey = companyScopedKey(clientsStorageKey, activeCompany?.id)
 
   try {
-    const stored = window.localStorage.getItem(clientsStorageKey)
+    const stored = window.localStorage.getItem(scopedKey)
     const parsed = stored ? (JSON.parse(stored) as unknown[]) : []
-    const clients = parsed.filter(isClientRecord).filter(client => !legacyDemoClientIds.has(client.id))
+    const clients = parsed
+      .filter(isClientRecord)
+      .filter(client => !legacyDemoClientIds.has(client.id))
+      .map(client => ({ ...client, companyId: client.companyId || activeCompany?.id }))
+      .filter(client => !activeCompany?.id || client.companyId === activeCompany.id)
     if (clients.length !== parsed.length) saveClientsLocally(clients)
     return clients
   } catch {
@@ -170,6 +180,7 @@ export async function loadClients(): Promise<ClientLoadResult> {
   const { data, error } = await supabase
     .from('clients')
     .select('*')
+    .eq('company_id', getActiveCompany()?.id || '')
     .order('created_at', { ascending: false })
 
   if (error) {
@@ -221,7 +232,9 @@ export async function findClient(rawId: string | string[] | undefined): Promise<
 
 export function saveClientsLocally(clients: ClientRecord[]) {
   if (typeof window === 'undefined') return
-  window.localStorage.setItem(clientsStorageKey, JSON.stringify(clients))
+  const activeCompany = getActiveCompany()
+  const scopedClients = clients.map(client => ({ ...client, companyId: client.companyId || activeCompany?.id }))
+  window.localStorage.setItem(companyScopedKey(clientsStorageKey, activeCompany?.id), JSON.stringify(scopedClients))
 }
 
 function upsertLocalClient(client: ClientRecord) {
@@ -238,6 +251,7 @@ function rowToClient(row: ClientRow): ClientRecord {
 
   return buildEmptyClient({
     id: stringValue(row.id),
+    companyId: stringValue(row.company_id, getActiveCompany()?.id),
     name: stringValue(row.name),
     company: stringValue(row.company, stringValue(row.website)),
     email: stringValue(row.email),
@@ -277,6 +291,7 @@ function rowToClient(row: ClientRow): ClientRecord {
 function clientToRow(client: ClientRecord) {
   return {
     id: client.id,
+    company_id: client.companyId || getActiveCompany()?.id,
     name: client.name,
     company: client.company,
     email: client.email,

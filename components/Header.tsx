@@ -5,6 +5,19 @@ import { usePathname, useRouter } from 'next/navigation'
 import ThemeSwitcher from './ThemeSwitcher'
 import { logoutUser } from '@/lib/auth/logout'
 import {
+  type CompanyRecord,
+  type CompanyRole,
+  companyChangeEvent,
+  createCompany as createTenantCompany,
+  ensureDefaultCompany,
+  inviteCompanyMember,
+  loadCompanies,
+  removeCompanyMember,
+  rolePermissions,
+  setActiveCompanyId,
+  updateCompanySettings,
+} from '@/lib/tenant/company'
+import {
   BadgeDollarSign,
   BarChart3,
   Bell,
@@ -54,10 +67,11 @@ type HeaderProps = {
   compactWorkspace?: boolean
 }
 
-type Panel = 'company' | 'invitations' | 'settings' | 'preferences' | 'logout' | null
+type Panel = 'company' | 'invitations' | 'settings' | 'companySettings' | 'preferences' | 'logout' | null
 
 interface AccountState {
   company: string
+  companyId?: string
   email: string
   fullName?: string
   name?: string
@@ -268,8 +282,18 @@ export default function Header({ onMenuClick, compactWorkspace = false }: Header
   const [toolsOpen, setToolsOpen] = useState(false)
   const [toolsSearch, setToolsSearch] = useState('')
   const [companyName, setCompanyName] = useState('')
+  const [companyType, setCompanyType] = useState('Operating Company')
+  const [companies, setCompanies] = useState<CompanyRecord[]>([])
+  const [activeCompany, setActiveCompany] = useState<CompanyRecord | null>(null)
+  const [companySettingsDraft, setCompanySettingsDraft] = useState({
+    name: '',
+    type: '',
+    currency: 'USD',
+    timezone: 'UTC',
+    fiscalYearStart: 'January',
+  })
   const [inviteEmail, setInviteEmail] = useState('')
-  const [inviteRole, setInviteRole] = useState('Member')
+  const [inviteRole, setInviteRole] = useState<CompanyRole>('Member')
   const [inviteSending, setInviteSending] = useState(false)
   const [notice, setNotice] = useState('')
   const [nowMs] = useState(() => Date.now())
@@ -279,9 +303,46 @@ export default function Header({ onMenuClick, compactWorkspace = false }: Header
 
   // Load stored account after mount to avoid SSR/client hydration mismatch
   useEffect(() => {
-    const id = window.setTimeout(() => setAccount(loadAccount()), 0)
+    const id = window.setTimeout(() => {
+      const loadedAccount = loadAccount()
+      const selectedCompany = ensureDefaultCompany(loadedAccount)
+      const allCompanies = loadCompanies()
+      setAccount({ ...loadedAccount, company: selectedCompany.name, companyId: selectedCompany.id } as AccountState)
+      setCompanies(allCompanies)
+      setActiveCompany(selectedCompany)
+      setCompanySettingsDraft({
+        name: selectedCompany.name,
+        type: selectedCompany.type,
+        currency: selectedCompany.settings.currency,
+        timezone: selectedCompany.settings.timezone,
+        fiscalYearStart: selectedCompany.settings.fiscalYearStart,
+      })
+    }, 0)
     return () => window.clearTimeout(id)
   }, [])
+
+  useEffect(() => {
+    const refreshCompanies = () => {
+      const selectedCompany = ensureDefaultCompany(account)
+      setCompanies(loadCompanies())
+      setActiveCompany(selectedCompany)
+      setAccount(previous => ({ ...previous, company: selectedCompany.name, companyId: selectedCompany.id } as AccountState))
+      setCompanySettingsDraft({
+        name: selectedCompany.name,
+        type: selectedCompany.type,
+        currency: selectedCompany.settings.currency,
+        timezone: selectedCompany.settings.timezone,
+        fiscalYearStart: selectedCompany.settings.fiscalYearStart,
+      })
+    }
+
+    window.addEventListener(companyChangeEvent, refreshCompanies)
+    window.addEventListener('storage', refreshCompanies)
+    return () => {
+      window.removeEventListener(companyChangeEvent, refreshCompanies)
+      window.removeEventListener('storage', refreshCompanies)
+    }
+  }, [account.email])
 
   useEffect(() => {
     const handleClick = (event: MouseEvent) => {
@@ -351,15 +412,53 @@ export default function Header({ onMenuClick, compactWorkspace = false }: Header
     setOpen(false)
     setToolsOpen(false)
     setNotice('')
-    if (nextPanel === 'company') setCompanyName('')
+    if (nextPanel === 'company') {
+      setCompanyName('')
+      setCompanyType('Operating Company')
+    }
+    if (nextPanel === 'companySettings' && activeCompany) {
+      setCompanySettingsDraft({
+        name: activeCompany.name,
+        type: activeCompany.type,
+        currency: activeCompany.settings.currency,
+        timezone: activeCompany.settings.timezone,
+        fiscalYearStart: activeCompany.settings.fiscalYearStart,
+      })
+    }
   }
 
   const createCompany = () => {
     const trimmed = companyName.trim()
     if (!trimmed) return
-    setAccount(previous => ({ ...previous, company: trimmed }))
+    const company = createTenantCompany(trimmed, { type: companyType.trim() || 'Operating Company' })
+    setCompanies(loadCompanies())
+    setActiveCompany(company)
+    setAccount(previous => ({ ...previous, company: company.name, companyId: company.id } as AccountState))
     setCompanyName('')
+    setCompanyType('Operating Company')
     setNotice('Company created and selected.')
+  }
+
+  const switchCompany = (companyId: string) => {
+    const company = setActiveCompanyId(companyId)
+    if (!company) {
+      setNotice('You do not have access to that company workspace.')
+      return
+    }
+    setActiveCompany(company)
+    setCompanies(loadCompanies())
+    setAccount(previous => ({ ...previous, company: company.name, companyId: company.id } as AccountState))
+    setNotice(`Switched to ${company.name}.`)
+  }
+
+  const saveCompanySettings = () => {
+    if (!activeCompany) return
+    const company = updateCompanySettings(activeCompany.id, companySettingsDraft)
+    if (!company) return
+    setActiveCompany(company)
+    setCompanies(loadCompanies())
+    setAccount(previous => ({ ...previous, company: company.name, companyId: company.id } as AccountState))
+    setNotice('Company settings saved.')
   }
 
   const logout = async () => {
@@ -392,6 +491,11 @@ export default function Header({ onMenuClick, compactWorkspace = false }: Header
         return
       }
 
+      if (activeCompany) {
+        inviteCompanyMember(activeCompany.id, trimmed, inviteRole)
+        setActiveCompany(ensureDefaultCompany(account))
+        setCompanies(loadCompanies())
+      }
       setAccount(previous => ({
         ...previous,
         invitations: [
@@ -415,6 +519,13 @@ export default function Header({ onMenuClick, compactWorkspace = false }: Header
 
   const removeInvite = (id: number) => {
     setAccount(previous => ({ ...previous, invitations: previous.invitations.filter(invitation => invitation.id !== id) }))
+  }
+
+  const removeTenantInvite = (memberId: string) => {
+    if (!activeCompany) return
+    removeCompanyMember(activeCompany.id, memberId)
+    setActiveCompany(ensureDefaultCompany(account))
+    setCompanies(loadCompanies())
   }
 
   const isDarkTheme = account.theme === 'Dark'
@@ -763,11 +874,24 @@ export default function Header({ onMenuClick, compactWorkspace = false }: Header
           {open && (
             <div className="profile-menu" style={{ position: 'absolute', top: 52, right: 8, width: 280, background: '#fff', border: '1px solid #eef2f7', borderRadius: 12, boxShadow: '0 24px 70px rgba(15,23,42,0.22)', overflow: 'hidden', zIndex: 100, color: '#111827' }}>
               <div style={{ padding: 20, textAlign: 'center' }}>
-                <div style={{ fontWeight: 600 }}>{account.company}</div>
+                <div style={{ fontWeight: 600 }}>{activeCompany?.name || account.company}</div>
                 <div style={{ fontSize: 12, color: '#6b7280' }}>{account.email}</div>
+              </div>
+              <div style={{ padding: '0 14px 12px', display: 'grid', gap: 6, borderBottom: '1px solid #eef2f7' }}>
+                <div style={tinyLabelStyle}>Company switcher</div>
+                {companies.map(company => (
+                  <button key={company.id} onClick={() => switchCompany(company.id)} style={{ border: '1px solid #e5e7eb', background: activeCompany?.id === company.id ? '#ecfdf5' : '#fff', color: '#111827', borderRadius: 8, padding: '8px 10px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, cursor: 'pointer', textAlign: 'left' }}>
+                    <span style={{ minWidth: 0 }}>
+                      <span style={{ display: 'block', fontSize: 13, fontWeight: 700, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{company.name}</span>
+                      <span style={{ display: 'block', fontSize: 11, color: '#64748b', marginTop: 2 }}>{company.type}</span>
+                    </span>
+                    {activeCompany?.id === company.id && <Check size={14} color="#16a34a" />}
+                  </button>
+                ))}
               </div>
               {[
                 { label: 'Create Company', icon: Plus, panel: 'company' as Panel },
+                { label: 'Company Settings', icon: Building2, panel: 'companySettings' as Panel },
                 { label: 'Invitations', icon: Mail, panel: 'invitations' as Panel },
                 { label: 'Account settings', icon: Settings, panel: 'settings' as Panel },
                 { label: 'Preferences', icon: SlidersHorizontal, panel: 'preferences' as Panel },
@@ -1008,6 +1132,7 @@ export default function Header({ onMenuClick, compactWorkspace = false }: Header
                 <div>
                   <div style={{ fontSize: 18, fontWeight: 600, color: '#111827' }}>
                     {panel === 'company' && 'Create Company'}
+                    {panel === 'companySettings' && 'Company Settings'}
                     {panel === 'invitations' && 'Invitations'}
                     {panel === 'settings' && 'Account settings'}
                     {panel === 'preferences' && 'Preferences'}
@@ -1022,7 +1147,16 @@ export default function Header({ onMenuClick, compactWorkspace = false }: Header
                 {panel === 'company' && (
                   <div style={{ display: 'grid', gap: 14 }}>
                     <label style={fieldGroupStyle}><span style={labelStyle}>New company name</span><input value={companyName} onChange={event => setCompanyName(event.target.value)} placeholder="Example: New Construction Company" style={fieldStyle} /></label>
-                    <div style={infoCardStyle}><div style={tinyLabelStyle}>Current company</div><div style={{ fontSize: 15, color: '#111827', fontWeight: 600 }}>{account.company}</div></div>
+                    <label style={fieldGroupStyle}><span style={labelStyle}>Company type</span><input value={companyType} onChange={event => setCompanyType(event.target.value)} placeholder="Operating Company" style={fieldStyle} /></label>
+                    <div style={infoCardStyle}><div style={tinyLabelStyle}>Current company</div><div style={{ fontSize: 15, color: '#111827', fontWeight: 600 }}>{activeCompany?.name || account.company}</div></div>
+                    <div style={{ display: 'grid', gap: 8 }}>
+                      {companies.map(company => (
+                        <button key={company.id} onClick={() => switchCompany(company.id)} style={{ ...secondaryButtonStyle, justifyContent: 'space-between', display: 'flex' }}>
+                          <span>{company.name}</span>
+                          {activeCompany?.id === company.id ? <Check size={15} /> : <ChevronRight size={15} />}
+                        </button>
+                      ))}
+                    </div>
                     <button onClick={createCompany} disabled={!companyName.trim()} style={{ ...primaryButtonStyle, opacity: companyName.trim() ? 1 : 0.45 }}>Create and switch</button>
                   </div>
                 )}
@@ -1030,9 +1164,46 @@ export default function Header({ onMenuClick, compactWorkspace = false }: Header
                   <div style={{ display: 'grid', gap: 14 }}>
                     <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) 150px auto', gap: 10, alignItems: 'end' }}>
                       <label style={fieldGroupStyle}><span style={labelStyle}>Email</span><input value={inviteEmail} onChange={event => setInviteEmail(event.target.value)} placeholder="teammate@example.com" style={fieldStyle} /></label>
-                      <label style={fieldGroupStyle}><span style={labelStyle}>Role</span><select value={inviteRole} onChange={event => setInviteRole(event.target.value)} style={fieldStyle}><option>Member</option><option>HR</option><option>Finance</option><option>Project Manager</option><option>Admin</option></select></label>
+                      <label style={fieldGroupStyle}><span style={labelStyle}>Role</span><select value={inviteRole} onChange={event => setInviteRole(event.target.value as CompanyRole)} style={fieldStyle}><option>Member</option><option>Sales</option><option>HR</option><option>Finance</option><option>Project Manager</option><option>Warehouse</option><option>Procurement</option><option>Admin</option></select></label>
                       <button onClick={sendInvite} disabled={!inviteEmail.trim() || inviteSending} style={{ ...primaryButtonStyle, height: 40, opacity: inviteEmail.trim() && !inviteSending ? 1 : 0.45 }}>{inviteSending ? 'Sending...' : 'Invite'}</button>
                     </div>
+                    <div style={infoCardStyle}><div style={tinyLabelStyle}>Permissions for {inviteRole}</div><div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 8 }}>{rolePermissions(inviteRole).map(permission => <span key={permission} style={permissionPillStyle}>{permission}</span>)}</div></div>
+                    {(activeCompany?.members || []).filter(member => member.status === 'Pending').map(member => (
+                      <div key={member.id} style={inviteRowStyle}>
+                        <div>
+                          <div style={{ fontSize: 13, color: '#111827', fontWeight: 600 }}>{member.email}</div>
+                          <div style={{ fontSize: 12, color: '#6b7280', marginTop: 3 }}>{member.role}</div>
+                        </div>
+                        <span style={{ fontSize: 11, color: '#d97706', background: '#fef3c7', borderRadius: 20, padding: '4px 9px', fontWeight: 600 }}>{member.status}</span>
+                        <button onClick={() => removeTenantInvite(member.id)} style={dangerIconButtonStyle}><Trash2 size={15} /></button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                {panel === 'companySettings' && (
+                  <div style={{ display: 'grid', gap: 14 }}>
+                    <label style={fieldGroupStyle}><span style={labelStyle}>Company name</span><input value={companySettingsDraft.name} onChange={event => setCompanySettingsDraft(previous => ({ ...previous, name: event.target.value }))} style={fieldStyle} /></label>
+                    <label style={fieldGroupStyle}><span style={labelStyle}>Company type</span><input value={companySettingsDraft.type} onChange={event => setCompanySettingsDraft(previous => ({ ...previous, type: event.target.value }))} style={fieldStyle} /></label>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+                      <label style={fieldGroupStyle}><span style={labelStyle}>Currency</span><select value={companySettingsDraft.currency} onChange={event => setCompanySettingsDraft(previous => ({ ...previous, currency: event.target.value }))} style={fieldStyle}><option>USD</option><option>PHP</option><option>EUR</option><option>GBP</option></select></label>
+                      <label style={fieldGroupStyle}><span style={labelStyle}>Fiscal year starts</span><select value={companySettingsDraft.fiscalYearStart} onChange={event => setCompanySettingsDraft(previous => ({ ...previous, fiscalYearStart: event.target.value }))} style={fieldStyle}><option>January</option><option>April</option><option>July</option><option>October</option></select></label>
+                    </div>
+                    <label style={fieldGroupStyle}><span style={labelStyle}>Timezone</span><input value={companySettingsDraft.timezone} onChange={event => setCompanySettingsDraft(previous => ({ ...previous, timezone: event.target.value }))} style={fieldStyle} /></label>
+                    <div style={infoCardStyle}>
+                      <div style={tinyLabelStyle}>Members and permissions</div>
+                      <div style={{ display: 'grid', gap: 8, marginTop: 10 }}>
+                        {(activeCompany?.members || []).map(member => (
+                          <div key={member.id} style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) auto', gap: 10, alignItems: 'center' }}>
+                            <div style={{ minWidth: 0 }}>
+                              <div style={{ fontSize: 13, fontWeight: 700, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{member.name || member.email}</div>
+                              <div style={{ fontSize: 11, color: '#64748b' }}>{member.role} · {member.permissions.join(', ')}</div>
+                            </div>
+                            <span style={permissionPillStyle}>{member.status}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                    <button onClick={saveCompanySettings} style={primaryButtonStyle}>Save company settings</button>
                   </div>
                 )}
                 {panel === 'settings' && (
@@ -1128,12 +1299,25 @@ export default function Header({ onMenuClick, compactWorkspace = false }: Header
         {open && (
           <div className="profile-menu" style={{ position: 'absolute', top: 50, right: 0, width: 280, background: '#fff', border: '1px solid #eef2f7', borderRadius: 16, boxShadow: '0 24px 70px rgba(15,23,42,0.16)', overflow: 'hidden', zIndex: 80 }}>
             <div style={{ padding: 20, textAlign: 'center' }}>
-              <div style={{ fontWeight: 600 }}>{account.company}</div>
+              <div style={{ fontWeight: 600 }}>{activeCompany?.name || account.company}</div>
               <div style={{ fontSize: 12, color: '#6b7280' }}>{account.email}</div>
+            </div>
+            <div style={{ padding: '0 14px 12px', display: 'grid', gap: 6, borderBottom: '1px solid #eef2f7' }}>
+              <div style={tinyLabelStyle}>Company switcher</div>
+              {companies.map(company => (
+                <button key={company.id} onClick={() => switchCompany(company.id)} style={{ border: '1px solid #e5e7eb', background: activeCompany?.id === company.id ? '#ecfdf5' : '#fff', color: '#111827', borderRadius: 8, padding: '8px 10px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, cursor: 'pointer', textAlign: 'left' }}>
+                  <span style={{ minWidth: 0 }}>
+                    <span style={{ display: 'block', fontSize: 13, fontWeight: 700, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{company.name}</span>
+                    <span style={{ display: 'block', fontSize: 11, color: '#64748b', marginTop: 2 }}>{company.type}</span>
+                  </span>
+                  {activeCompany?.id === company.id && <Check size={14} color="#16a34a" />}
+                </button>
+              ))}
             </div>
 
             {[
               { label: 'Create Company', icon: Plus, panel: 'company' as Panel },
+              { label: 'Company Settings', icon: Building2, panel: 'companySettings' as Panel },
               { label: 'Invitations', icon: Mail, panel: 'invitations' as Panel },
               { label: 'Account settings', icon: Settings, panel: 'settings' as Panel },
               { label: 'Preferences', icon: SlidersHorizontal, panel: 'preferences' as Panel },
@@ -1162,6 +1346,7 @@ export default function Header({ onMenuClick, compactWorkspace = false }: Header
               <div>
                 <div style={{ fontSize: 18, fontWeight: 600, color: '#111827' }}>
                   {panel === 'company' && 'Create Company'}
+                  {panel === 'companySettings' && 'Company Settings'}
                   {panel === 'invitations' && 'Invitations'}
                   {panel === 'settings' && 'Account settings'}
                   {panel === 'preferences' && 'Preferences'}
@@ -1181,9 +1366,21 @@ export default function Header({ onMenuClick, compactWorkspace = false }: Header
                     <span style={labelStyle}>New company name</span>
                     <input value={companyName} onChange={event => setCompanyName(event.target.value)} placeholder="Example: New Construction Company" style={fieldStyle} />
                   </label>
+                  <label style={fieldGroupStyle}>
+                    <span style={labelStyle}>Company type</span>
+                    <input value={companyType} onChange={event => setCompanyType(event.target.value)} placeholder="Operating Company" style={fieldStyle} />
+                  </label>
                   <div style={infoCardStyle}>
                     <div style={tinyLabelStyle}>Current company</div>
-                    <div style={{ fontSize: 15, color: '#111827', fontWeight: 600 }}>{account.company}</div>
+                    <div style={{ fontSize: 15, color: '#111827', fontWeight: 600 }}>{activeCompany?.name || account.company}</div>
+                  </div>
+                  <div style={{ display: 'grid', gap: 8 }}>
+                    {companies.map(company => (
+                      <button key={company.id} onClick={() => switchCompany(company.id)} style={{ ...secondaryButtonStyle, justifyContent: 'space-between', display: 'flex' }}>
+                        <span>{company.name}</span>
+                        {activeCompany?.id === company.id ? <Check size={15} /> : <ChevronRight size={15} />}
+                      </button>
+                    ))}
                   </div>
                   <button onClick={createCompany} disabled={!companyName.trim()} style={{ ...primaryButtonStyle, opacity: companyName.trim() ? 1 : 0.45 }}>Create and switch</button>
                 </div>
@@ -1198,19 +1395,34 @@ export default function Header({ onMenuClick, compactWorkspace = false }: Header
                     </label>
                     <label style={fieldGroupStyle}>
                       <span style={labelStyle}>Role</span>
-                      <select value={inviteRole} onChange={event => setInviteRole(event.target.value)} style={fieldStyle}>
+                      <select value={inviteRole} onChange={event => setInviteRole(event.target.value as CompanyRole)} style={fieldStyle}>
                         <option>Member</option>
+                        <option>Sales</option>
                         <option>HR</option>
                         <option>Finance</option>
                         <option>Project Manager</option>
+                        <option>Warehouse</option>
+                        <option>Procurement</option>
                         <option>Admin</option>
                       </select>
                     </label>
                     <button onClick={sendInvite} disabled={!inviteEmail.trim() || inviteSending} style={{ ...primaryButtonStyle, height: 40, opacity: inviteEmail.trim() && !inviteSending ? 1 : 0.45 }}>{inviteSending ? 'Sending...' : 'Invite'}</button>
                   </div>
-                  {account.invitations.length === 0 ? (
+                  <div style={infoCardStyle}><div style={tinyLabelStyle}>Permissions for {inviteRole}</div><div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 8 }}>{rolePermissions(inviteRole).map(permission => <span key={permission} style={permissionPillStyle}>{permission}</span>)}</div></div>
+                  {(activeCompany?.members || []).filter(member => member.status === 'Pending').length === 0 && account.invitations.length === 0 ? (
                     <div style={{ padding: 24, textAlign: 'center', color: '#9ca3af', border: '1px dashed #e5e7eb', borderRadius: 12 }}>No invitations yet.</div>
-                  ) : account.invitations.map(invitation => (
+                  ) : null}
+                  {(activeCompany?.members || []).filter(member => member.status === 'Pending').map(member => (
+                    <div key={member.id} style={inviteRowStyle}>
+                      <div>
+                        <div style={{ fontSize: 13, color: '#111827', fontWeight: 600 }}>{member.email}</div>
+                        <div style={{ fontSize: 12, color: '#6b7280', marginTop: 3 }}>{member.role}</div>
+                      </div>
+                      <span style={{ fontSize: 11, color: '#d97706', background: '#fef3c7', borderRadius: 20, padding: '4px 9px', fontWeight: 600 }}>{member.status}</span>
+                      <button onClick={() => removeTenantInvite(member.id)} style={dangerIconButtonStyle}><Trash2 size={15} /></button>
+                    </div>
+                  ))}
+                  {account.invitations.map(invitation => (
                     <div key={invitation.id} style={inviteRowStyle}>
                       <div>
                         <div style={{ fontSize: 13, color: '#111827', fontWeight: 600 }}>{invitation.email}</div>
@@ -1220,6 +1432,33 @@ export default function Header({ onMenuClick, compactWorkspace = false }: Header
                       <button onClick={() => removeInvite(invitation.id)} style={dangerIconButtonStyle}><Trash2 size={15} /></button>
                     </div>
                   ))}
+                </div>
+              )}
+
+              {panel === 'companySettings' && (
+                <div style={{ display: 'grid', gap: 14 }}>
+                  <label style={fieldGroupStyle}><span style={labelStyle}>Company name</span><input value={companySettingsDraft.name} onChange={event => setCompanySettingsDraft(previous => ({ ...previous, name: event.target.value }))} style={fieldStyle} /></label>
+                  <label style={fieldGroupStyle}><span style={labelStyle}>Company type</span><input value={companySettingsDraft.type} onChange={event => setCompanySettingsDraft(previous => ({ ...previous, type: event.target.value }))} style={fieldStyle} /></label>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+                    <label style={fieldGroupStyle}><span style={labelStyle}>Currency</span><select value={companySettingsDraft.currency} onChange={event => setCompanySettingsDraft(previous => ({ ...previous, currency: event.target.value }))} style={fieldStyle}><option>USD</option><option>PHP</option><option>EUR</option><option>GBP</option></select></label>
+                    <label style={fieldGroupStyle}><span style={labelStyle}>Fiscal year starts</span><select value={companySettingsDraft.fiscalYearStart} onChange={event => setCompanySettingsDraft(previous => ({ ...previous, fiscalYearStart: event.target.value }))} style={fieldStyle}><option>January</option><option>April</option><option>July</option><option>October</option></select></label>
+                  </div>
+                  <label style={fieldGroupStyle}><span style={labelStyle}>Timezone</span><input value={companySettingsDraft.timezone} onChange={event => setCompanySettingsDraft(previous => ({ ...previous, timezone: event.target.value }))} style={fieldStyle} /></label>
+                  <div style={infoCardStyle}>
+                    <div style={tinyLabelStyle}>Members and permissions</div>
+                    <div style={{ display: 'grid', gap: 8, marginTop: 10 }}>
+                      {(activeCompany?.members || []).map(member => (
+                        <div key={member.id} style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) auto', gap: 10, alignItems: 'center' }}>
+                          <div style={{ minWidth: 0 }}>
+                            <div style={{ fontSize: 13, fontWeight: 700, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{member.name || member.email}</div>
+                            <div style={{ fontSize: 11, color: '#64748b' }}>{member.role} · {member.permissions.join(', ')}</div>
+                          </div>
+                          <span style={permissionPillStyle}>{member.status}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                  <button onClick={saveCompanySettings} style={primaryButtonStyle}>Save company settings</button>
                 </div>
               )}
 
@@ -1376,6 +1615,7 @@ const checkRowStyle = { display: 'flex', alignItems: 'center', gap: 10, fontSize
 const noticeStyle = { marginBottom: 14, padding: '10px 12px', borderRadius: 10, background: '#ecfdf5', color: '#047857', fontSize: 13, fontWeight: 600, display: 'flex', alignItems: 'center', gap: 8 }
 const infoCardStyle = { border: '1px solid #e5e7eb', borderRadius: 12, padding: 14 }
 const inviteRowStyle = { display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) auto auto', gap: 10, alignItems: 'center', border: '1px solid #f3f4f6', borderRadius: 12, padding: 12 }
+const permissionPillStyle = { display: 'inline-flex', alignItems: 'center', borderRadius: 999, background: '#ecfdf5', color: '#047857', padding: '4px 8px', fontSize: 11, fontWeight: 700 }
 const notificationButtonStyle = {
   width: 38,
   height: 38,

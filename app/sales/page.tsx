@@ -1,7 +1,7 @@
 'use client'
 
 import type { CSSProperties, FormEvent, ReactNode } from 'react'
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import {
   BarChart3,
   CalendarDays,
@@ -25,6 +25,7 @@ import {
   Warehouse,
   X,
 } from 'lucide-react'
+import { type CompanyRecord, companyChangeEvent, companyScopedKey, getActiveCompany } from '@/lib/tenant/company'
 
 type LeadStatus = 'New' | 'Contacted' | 'Qualified' | 'Lost'
 type OpportunityStage = 'Lead' | 'Qualified' | 'Proposal' | 'Negotiation' | 'Won' | 'Lost'
@@ -35,6 +36,7 @@ type InvoiceStatus = 'Draft' | 'Sent' | 'Viewed' | 'Partially Paid' | 'Paid' | '
 
 type Lead = {
   id: string
+  companyId?: string
   leadName: string
   company: string
   contact: string
@@ -49,6 +51,7 @@ type Lead = {
 
 type Opportunity = {
   id: string
+  companyId?: string
   name: string
   customer: string
   expectedValue: number
@@ -61,6 +64,7 @@ type Opportunity = {
 
 type Quote = {
   id: string
+  companyId?: string
   customer: string
   items: string
   subtotal: number
@@ -73,6 +77,7 @@ type Quote = {
 
 type SalesOrder = {
   id: string
+  companyId?: string
   customer: string
   orderDate: string
   deliveryDate: string
@@ -85,6 +90,7 @@ type SalesOrder = {
 
 type Invoice = {
   id: string
+  companyId?: string
   customer: string
   issueDate: string
   dueDate: string
@@ -96,6 +102,7 @@ type Invoice = {
 
 type Customer = {
   id: string
+  companyId?: string
   name: string
   contact: string
   email: string
@@ -108,6 +115,7 @@ type Customer = {
 
 type Product = {
   id: string
+  companyId?: string
   name: string
   sku: string
   category: string
@@ -123,6 +131,16 @@ type SalesForm = {
   salesRep: string
   category: string
   closeDate: string
+}
+
+type SalesWorkspaceData = {
+  leads: Lead[]
+  opportunities: Opportunity[]
+  quotes: Quote[]
+  orders: SalesOrder[]
+  invoices: Invoice[]
+  customers: Customer[]
+  products: Product[]
 }
 
 const font = 'var(--font-body)'
@@ -187,6 +205,61 @@ const emptyForm: SalesForm = {
   closeDate: new Date().toISOString().slice(0, 10),
 }
 
+const salesWorkspaceKey = 'wiseflow-sales-workspace'
+
+function loadSalesWorkspace(companyId?: string): SalesWorkspaceData {
+  const seeded = companyScopedSalesData(companyId)
+  if (typeof window === 'undefined' || !companyId) return seeded
+
+  try {
+    const stored = window.localStorage.getItem(companyScopedKey(salesWorkspaceKey, companyId))
+    if (!stored) return seeded
+    const parsed = JSON.parse(stored) as Partial<SalesWorkspaceData>
+    return {
+      leads: normalizeCompanyRows(parsed.leads, companyId, seeded.leads),
+      opportunities: normalizeCompanyRows(parsed.opportunities, companyId, seeded.opportunities),
+      quotes: normalizeCompanyRows(parsed.quotes, companyId, seeded.quotes),
+      orders: normalizeCompanyRows(parsed.orders, companyId, seeded.orders),
+      invoices: normalizeCompanyRows(parsed.invoices, companyId, seeded.invoices),
+      customers: normalizeCompanyRows(parsed.customers, companyId, seeded.customers),
+      products: normalizeCompanyRows(parsed.products, companyId, seeded.products),
+    }
+  } catch {
+    return seeded
+  }
+}
+
+function saveSalesWorkspace(companyId: string, data: SalesWorkspaceData) {
+  if (typeof window === 'undefined') return
+  window.localStorage.setItem(companyScopedKey(salesWorkspaceKey, companyId), JSON.stringify(companyScopedSalesData(companyId, data)))
+}
+
+function companyScopedSalesData(companyId?: string, data?: SalesWorkspaceData): SalesWorkspaceData {
+  const source = data || {
+    leads: seedLeads,
+    opportunities: seedOpportunities,
+    quotes: seedQuotes,
+    orders: seedOrders,
+    invoices: seedInvoices,
+    customers: seedCustomers,
+    products: seedProducts,
+  }
+  return {
+    leads: source.leads.map(item => ({ ...item, companyId })),
+    opportunities: source.opportunities.map(item => ({ ...item, companyId })),
+    quotes: source.quotes.map(item => ({ ...item, companyId })),
+    orders: source.orders.map(item => ({ ...item, companyId })),
+    invoices: source.invoices.map(item => ({ ...item, companyId })),
+    customers: source.customers.map(item => ({ ...item, companyId })),
+    products: source.products.map(item => ({ ...item, companyId })),
+  }
+}
+
+function normalizeCompanyRows<T extends { companyId?: string }>(rows: T[] | undefined, companyId: string, fallback: T[]) {
+  if (!Array.isArray(rows)) return fallback
+  return rows.map(row => ({ ...row, companyId })).filter(row => row.companyId === companyId)
+}
+
 export default function SalesPage() {
   const [activeTab, setActiveTab] = useState('Overview')
   const [query, setQuery] = useState('')
@@ -201,6 +274,37 @@ export default function SalesPage() {
   const [invoices, setInvoices] = useState(seedInvoices)
   const [customers, setCustomers] = useState(seedCustomers)
   const [products, setProducts] = useState(seedProducts)
+  const [activeCompany, setActiveCompany] = useState<CompanyRecord | null>(null)
+  const storageReady = useRef(false)
+
+  useEffect(() => {
+    const loadWorkspace = () => {
+      const company = getActiveCompany()
+      setActiveCompany(company)
+      const data = loadSalesWorkspace(company?.id)
+      setLeads(data.leads)
+      setOpportunities(data.opportunities)
+      setQuotes(data.quotes)
+      setOrders(data.orders)
+      setInvoices(data.invoices)
+      setCustomers(data.customers)
+      setProducts(data.products)
+      storageReady.current = true
+    }
+
+    loadWorkspace()
+    window.addEventListener(companyChangeEvent, loadWorkspace)
+    window.addEventListener('storage', loadWorkspace)
+    return () => {
+      window.removeEventListener(companyChangeEvent, loadWorkspace)
+      window.removeEventListener('storage', loadWorkspace)
+    }
+  }, [])
+
+  useEffect(() => {
+    if (!storageReady.current || !activeCompany?.id) return
+    saveSalesWorkspace(activeCompany.id, { leads, opportunities, quotes, orders, invoices, customers, products })
+  }, [activeCompany?.id, customers, invoices, leads, opportunities, orders, products, quotes])
 
   const revenue = orders.reduce((sum, order) => sum + order.amount, 0)
   const paidRevenue = invoices.reduce((sum, invoice) => sum + invoice.paidAmount, 0)
@@ -222,6 +326,7 @@ export default function SalesPage() {
 
     const next: Opportunity = {
       id: nextCode('OP', opportunities.map(item => item.id)),
+      companyId: activeCompany?.id,
       name: `${form.customer.trim()} sales opportunity`,
       customer: form.customer.trim(),
       expectedValue: value,
@@ -241,6 +346,7 @@ export default function SalesPage() {
     setLeads(current => current.map(item => item.id === lead.id ? { ...item, status: 'Qualified' } : item))
     setOpportunities(current => [{
       id: `OP-${lead.id.replace('LD-', '')}`,
+      companyId: activeCompany?.id,
       name: lead.leadName,
       customer: lead.company,
       expectedValue: 42000,
@@ -261,6 +367,7 @@ export default function SalesPage() {
   const convertQuote = (quote: Quote) => {
     const order: SalesOrder = {
       id: quote.id.replace('QT', 'SO'),
+      companyId: activeCompany?.id,
       customer: quote.customer,
       orderDate: new Date().toISOString().slice(0, 10),
       deliveryDate: '2026-06-15',
@@ -284,6 +391,7 @@ export default function SalesPage() {
     }
     setInvoices(current => [{
       id,
+      companyId: activeCompany?.id,
       customer: order.customer,
       issueDate: new Date().toISOString().slice(0, 10),
       dueDate: '2026-06-30',
@@ -315,6 +423,7 @@ export default function SalesPage() {
       }
       return [{
         id: nextCode('CUS', current.map(customer => customer.id)),
+        companyId: activeCompany?.id,
         name,
         contact: rep,
         email: `${name.toLowerCase().replace(/[^a-z0-9]+/g, '.')}@example.com`,
@@ -331,7 +440,7 @@ export default function SalesPage() {
     <div className="sales-page" style={{ fontFamily: font, display: 'grid', gap: 22, color: '#0f172a' }}>
       <PageHeader
         title="Sales"
-        subtitle="Manage the full sales workflow from lead capture to invoice, payment, delivery, and performance reporting."
+        subtitle={`Manage the full sales workflow for ${activeCompany?.name || 'the selected company'} from lead capture to invoice, payment, delivery, and performance reporting.`}
         actions={(
           <>
             <ToolbarButton icon={<CalendarDays size={16} />} label="May 1 - May 31, 2026" hasChevron />

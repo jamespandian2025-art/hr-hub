@@ -1,25 +1,35 @@
 'use client'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
+import { Check } from 'lucide-react'
+import { type CompanyRecord, companyChangeEvent, getActiveCompany, loadCompanies, setActiveCompanyId } from '@/lib/tenant/company'
 
 const font = "var(--font-body)"
 
-const companies = [
-  {
-    id: 1,
-    name: 'Livewise Construction',
-    type: 'CONSTRUCTION',
-    role: 'Admin',
-  },
-  {
-    id: 2,
-    name: 'Livewise Ergo Furniture',
-    type: 'CONSTRUCTION',
-    role: 'Admin',
-  },
-]
-
 export default function ProfileDropdown() {
-  const [activeCompany, setActiveCompany] = useState(1)
+  const [companies, setCompanies] = useState<CompanyRecord[]>([])
+  const [activeCompany, setActiveCompany] = useState<CompanyRecord | null>(null)
+
+  useEffect(() => {
+    const refresh = () => {
+      setCompanies(loadCompanies())
+      setActiveCompany(getActiveCompany())
+    }
+    const id = window.setTimeout(refresh, 0)
+    window.addEventListener(companyChangeEvent, refresh)
+    window.addEventListener('storage', refresh)
+    return () => {
+      window.clearTimeout(id)
+      window.removeEventListener(companyChangeEvent, refresh)
+      window.removeEventListener('storage', refresh)
+    }
+  }, [])
+
+  const switchCompany = (companyId: string) => {
+    const company = setActiveCompanyId(companyId)
+    if (!company) return
+    setActiveCompany(company)
+    setCompanies(loadCompanies())
+  }
 
   return (
     <div style={{
@@ -52,7 +62,7 @@ export default function ProfileDropdown() {
         </div>
 
         <div style={{ marginTop: '12px', fontWeight: 600 }}>
-          Livewise Construction
+          {activeCompany?.name || 'WiseFlow Company'}
         </div>
 
         <div style={{
@@ -76,7 +86,7 @@ export default function ProfileDropdown() {
         {companies.map(company => (
           <div
             key={company.id}
-            onClick={() => setActiveCompany(company.id)}
+            onClick={() => switchCompany(company.id)}
             style={{
               display: 'flex',
               alignItems: 'center',
@@ -86,7 +96,7 @@ export default function ProfileDropdown() {
               cursor: 'pointer',
               marginBottom: '6px',
               background:
-                activeCompany === company.id ? '#f9fafb' : 'transparent'
+                activeCompany?.id === company.id ? '#f9fafb' : 'transparent'
             }}
           >
             <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
@@ -100,7 +110,7 @@ export default function ProfileDropdown() {
                 justifyContent: 'center',
                 fontSize: '12px'
               }}>
-                ??
+                {company.name.slice(0, 2).toUpperCase()}
               </div>
 
               <div>
@@ -124,7 +134,7 @@ export default function ProfileDropdown() {
               borderRadius: '6px',
               fontWeight: 600
             }}>
-              {company.role}
+              {activeCompany?.id === company.id ? <Check size={13} /> : 'Member'}
             </div>
           </div>
         ))}
