@@ -3777,6 +3777,17 @@ html body {
     margin-bottom: 5px !important;
   }
 
+  .sales-page [style*='grid-template-columns: repeat(auto-fit, minmax(220px'] {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+    gap: 10px !important;
+  }
+
+  .sales-page [style*='border: 1px solid #eef2f7'][style*='align-items: flex-start'] {
+    flex-direction: column !important;
+    gap: 8px !important;
+    padding: 10px !important;
+  }
+
   .sales-page [style*='grid-template-columns: repeat(auto-fit, minmax(210px'] {
     grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
   }
