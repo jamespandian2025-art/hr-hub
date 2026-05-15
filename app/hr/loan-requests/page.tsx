@@ -15,8 +15,18 @@ import {
   money,
   resolveLoanEmployee,
 } from './loanData'
+import { listHrRecords } from '@/lib/hrms/client'
 
 type Filter = 'All' | 'Waiting Finance' | 'Approved for Payroll' | 'Processed' | 'Rejected'
+
+function uniqueLoanRequests(rows: LoanRequest[]) {
+  const map = new Map<string, LoanRequest>()
+  rows.forEach((row, index) => {
+    const key = row.id || `loan-${index}`
+    map.set(key, { ...map.get(key), ...row })
+  })
+  return Array.from(map.values())
+}
 
 export default function HrLoanRequestsPage() {
   const [employees, setEmployees] = useState<Employee[]>([])
@@ -26,13 +36,33 @@ export default function HrLoanRequestsPage() {
   const [notice, setNotice] = useState('')
 
   useEffect(() => {
-    const load = () => {
+    let cancelled = false
+    const load = async () => {
       setEmployees(loadStored<Employee[]>(employeeKey, []))
-      setRequests(loadLoanRequests())
+      const localRequests = loadLoanRequests()
+      try {
+        const serverRequests = await listHrRecords<LoanRequest>('loan-requests', {
+          'x-hr-role': 'HR',
+          'x-hr-user-name': 'HR Loan Request View',
+        })
+        const merged = uniqueLoanRequests([...serverRequests, ...localRequests])
+        if (!cancelled) setRequests(current => merged.length > 0 || current.length === 0 ? merged : current)
+      } catch {
+        if (!cancelled) setRequests(current => localRequests.length > 0 || current.length === 0 ? localRequests : current)
+      }
     }
-    load()
+    void load()
     window.addEventListener('storage', load)
-    return () => window.removeEventListener('storage', load)
+    window.addEventListener('focus', load)
+    window.addEventListener('wiseflow:finance-requests-changed', load)
+    const timer = window.setInterval(load, 2500)
+    return () => {
+      cancelled = true
+      window.removeEventListener('storage', load)
+      window.removeEventListener('focus', load)
+      window.removeEventListener('wiseflow:finance-requests-changed', load)
+      window.clearInterval(timer)
+    }
   }, [])
 
   const rows = useMemo(() => requests.map(request => {
@@ -170,6 +200,4 @@ const trStyle = { background: '#fff' } as const
 const mutedLine = { display: 'block', color: '#64748b', marginTop: 4, fontSize: 12 } as const
 const avatarStyle = { width: 36, height: 36, borderRadius: '50%', objectFit: 'cover' } as const
 const avatarFallback = { width: 36, height: 36, borderRadius: '50%', display: 'grid', placeItems: 'center', background: '#dcfce7', color: '#15803d', fontWeight: 900 } as const
-const smallPrimaryButtonStyle = { minHeight: 34, border: '1px solid #16a34a', background: '#16a34a', color: '#fff', borderRadius: 8, padding: '0 12px', fontWeight: 900, cursor: 'pointer' } as const
-const smallDangerButtonStyle = { minHeight: 34, border: '1px solid #fecaca', background: '#fff', color: '#dc2626', borderRadius: 8, padding: '0 12px', fontWeight: 900, cursor: 'pointer' } as const
 const financeLinkStyle = { minHeight: 38, border: '1px solid #bfdbfe', background: '#eff6ff', color: '#1d4ed8', borderRadius: 8, padding: '0 13px', display: 'inline-flex', alignItems: 'center', gap: 8, textDecoration: 'none', fontSize: 12, fontWeight: 900 } as const

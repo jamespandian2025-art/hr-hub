@@ -63,6 +63,18 @@ type HrSystemNotification = {
   updatedAt?: string
 }
 
+function notificationTarget(notification: HrSystemNotification) {
+  const collection = String(notification.relatedCollection || '').toLowerCase()
+  const type = String(notification.type || '').toLowerCase()
+  if (collection === 'loan-requests' || type.includes('loan')) return '/hr/loan-requests'
+  if (collection === 'allowance-requests' || type.includes('allowance')) return '/hr/payroll'
+  if (collection === 'payroll-records' || type.includes('payroll')) return '/hr/payroll'
+  if (collection === 'leave-requests' || type.includes('leave')) {
+    return notification.employeeId ? `/hr/leave-requests/${encodeURIComponent(notification.employeeId)}` : '/hr/leave-requests'
+  }
+  return '/hr/approvals'
+}
+
 function uniqueLeaveNotifications(rows: LeaveNotification[]) {
   const map = new Map<string, LeaveNotification>()
   rows.forEach((row, index) => {
@@ -204,7 +216,7 @@ export default function HrShell({ children }: { children: React.ReactNode }) {
         type: notification.type || 'Notification',
         time: notification.updatedAt || notification.createdAt,
         tone: '#1a73e8',
-        target: notification.employeeId ? `/hr/leave-requests/${encodeURIComponent(notification.employeeId)}` : '/hr/leave-requests',
+        target: notificationTarget(notification),
       })),
     ...leaveNotifications
       .filter(request => String(request.status || '').toLowerCase() !== 'draft' && !notifiedLeaveIds.has(request.id))
