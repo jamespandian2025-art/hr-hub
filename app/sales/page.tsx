@@ -4,24 +4,29 @@ import type { CSSProperties, FormEvent, ReactNode } from 'react'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import {
   BarChart3,
+  Building2,
   CalendarDays,
   CheckCircle2,
   ChevronDown,
-  CircleDollarSign,
+  ClipboardCheck,
+  ClipboardList,
   Download,
+  FileCheck2,
   FileText,
   Filter,
   Funnel,
+  Hammer,
+  HardHat,
   LayoutGrid,
   List,
+  MapPin,
   MoreHorizontal,
-  Package,
+  PencilRuler,
   Plus,
   ReceiptText,
   Search,
   Send,
-  ShoppingBag,
-  Truck,
+  ShieldCheck,
   UserRound,
   UsersRound,
   Warehouse,
@@ -29,200 +34,167 @@ import {
 } from 'lucide-react'
 import { type CompanyRecord, companyChangeEvent, companyScopedKey, getActiveCompany, getCurrentActor } from '@/lib/tenant/company'
 
-type LeadStatus = 'New' | 'Contacted' | 'Qualified' | 'Lost'
-type OpportunityStage = 'Lead' | 'Qualified' | 'Proposal' | 'Negotiation' | 'Won' | 'Lost'
-type QuoteStatus = 'Draft' | 'Sent' | 'Accepted' | 'Rejected' | 'Expired'
-type PaymentStatus = 'Unpaid' | 'Partially Paid' | 'Paid'
-type DeliveryStatus = 'Pending' | 'Picking' | 'Packed' | 'Delivered'
-type InvoiceStatus = 'Draft' | 'Sent' | 'Viewed' | 'Partially Paid' | 'Paid' | 'Overdue' | 'Cancelled'
+type LeadStatus = 'New Inquiry' | 'Contacted' | 'Consultation Scheduled' | 'Qualified' | 'Lost'
+type OpportunityStage = 'Consultation' | 'Site Inspection' | 'Proposal Preparation' | 'Submitted Proposal' | 'Negotiation' | 'Contract Review' | 'Won' | 'Lost'
+type SiteVisitStatus = 'Scheduled' | 'Completed' | 'Rescheduled' | 'Cancelled'
+type ProposalStatus = 'Draft' | 'Submitted' | 'Under Review' | 'Revision Requested' | 'Approved' | 'Rejected'
+type ContractStatus = 'Draft' | 'Pending Signature' | 'Active' | 'Completed' | 'Terminated'
+type BillingStatus = 'Draft' | 'Sent' | 'Partially Paid' | 'Paid' | 'Overdue'
 
 type Lead = {
   id: string
   companyId?: string
   leadName: string
-  company: string
-  contact: string
+  companyName: string
+  contactPerson: string
   email: string
   phone: string
+  projectType: string
+  estimatedBudget: number
+  location: string
   source: string
-  status: LeadStatus
   salesRep: string
+  status: LeadStatus
   createdDate: string
-  lostReason?: string
 }
 
 type Opportunity = {
   id: string
   companyId?: string
   name: string
-  customer: string
-  expectedValue: number
+  client: string
+  projectType: string
+  estimatedContractValue: number
+  projectSize: string
   probability: number
   stage: OpportunityStage
   expectedCloseDate: string
+  assignedTeam: string
   salesRep: string
   lostReason?: string
 }
 
-type Quote = {
+type SiteVisit = {
   id: string
   companyId?: string
-  customer: string
-  items: string
-  subtotal: number
+  client: string
+  project: string
+  siteAddress: string
+  assignedProfessional: string
+  schedule: string
+  status: SiteVisitStatus
+  notes: string
+  measurements: string
+  checklist: string
+}
+
+type Proposal = {
+  id: string
+  companyId?: string
+  client: string
+  projectName: string
+  scopeOfWork: string
+  boqSummary: string
+  laborCost: number
+  materialCost: number
+  equipmentCost: number
+  designFees: number
+  vat: number
   discount: number
-  tax: number
   total: number
+  timeline: string
+  paymentTerms: string
   validUntil: string
-  status: QuoteStatus
+  status: ProposalStatus
 }
 
-type SalesOrder = {
+type Contract = {
   id: string
   companyId?: string
-  customer: string
-  orderDate: string
-  deliveryDate: string
+  client: string
+  projectName: string
+  contractAmount: number
+  downpayment: number
+  retention: number
+  startDate: string
+  completionDate: string
+  status: ContractStatus
+  milestoneTracking: string
+}
+
+type ProgressBilling = {
+  id: string
+  companyId?: string
+  project: string
+  milestone: string
   amount: number
-  paymentStatus: PaymentStatus
-  deliveryStatus: DeliveryStatus
-  salesRep: string
-  productCategory: string
-}
-
-type Invoice = {
-  id: string
-  companyId?: string
-  customer: string
-  issueDate: string
   dueDate: string
-  amount: number
   paidAmount: number
-  balanceDue: number
-  status: InvoiceStatus
+  remainingBalance: number
+  status: BillingStatus
 }
 
-type Customer = {
+type Client = {
   id: string
   companyId?: string
-  name: string
-  contact: string
+  companyName: string
+  contactPerson: string
   email: string
   phone: string
-  totalPurchases: number
-  outstandingBalance: number
-  lastOrderDate: string
-  status: 'Active' | 'Inactive'
-}
-
-type Product = {
-  id: string
-  companyId?: string
-  name: string
-  sku: string
-  category: string
-  price: number
-  cost: number
-  stockStatus: 'In Stock' | 'Low Stock' | 'Out of Stock'
-  active: boolean
+  address: string
+  activeProjects: number
+  totalContractValue: number
+  lastInteraction: string
+  accountManager: string
 }
 
 type SalesForm = {
-  customer: string
+  client: string
+  projectName: string
   amount: string
+  projectType: string
+  location: string
   salesRep: string
-  category: string
   closeDate: string
 }
 
 type SalesWorkspaceData = {
   leads: Lead[]
   opportunities: Opportunity[]
-  quotes: Quote[]
-  orders: SalesOrder[]
-  invoices: Invoice[]
-  customers: Customer[]
-  products: Product[]
+  siteVisits: SiteVisit[]
+  proposals: Proposal[]
+  contracts: Contract[]
+  billings: ProgressBilling[]
+  clients: Client[]
 }
 
 const font = 'var(--font-body)'
 const green = '#16a34a'
-const tabs = ['Overview', 'Leads', 'Opportunities', 'Quotes', 'Sales Orders', 'Invoices', 'Customers', 'Products', 'Sales Analytics']
+const salesWorkspaceKey = 'wiseflow-sales-workspace'
+const tabs = ['Overview', 'Leads', 'Opportunities', 'Site Visits', 'Proposals & Quotations', 'Contracts', 'Progress Billing', 'Clients', 'Sales Analytics']
+const workflowSteps = ['Lead', 'Consultation', 'Site Visit', 'Proposal / BOQ', 'Quotation', 'Negotiation', 'Contract Signing', 'Project Awarded', 'Progress Billing', 'Project Handover']
+const opportunityStages: OpportunityStage[] = ['Consultation', 'Site Inspection', 'Proposal Preparation', 'Submitted Proposal', 'Negotiation', 'Contract Review', 'Won', 'Lost']
+const projectTypes = ['Residential', 'Commercial', 'Renovation', 'Interior Design', 'Office Fit-Out', 'Resort', 'Warehouse', 'Structural']
+const leadSources = ['Facebook', 'Website', 'Referral', 'Walk-in', 'LinkedIn', 'Advertisement']
 
 const emptyForm: SalesForm = {
-  customer: '',
+  client: '',
+  projectName: '',
   amount: '',
+  projectType: 'Residential',
+  location: '',
   salesRep: '',
-  category: 'CRM',
   closeDate: new Date().toISOString().slice(0, 10),
 }
 
-const salesWorkspaceKey = 'wiseflow-sales-workspace'
-const legacyDemoSalesIdPatterns = [
-  /^LD-100[5-8]$/,
-  /^OP-240[5-9]$/,
-  /^QT-\d{4}-041[6-8]$/,
-  /^SO-\d{4}-05(1[8-9]|2[0-1])$/,
-  /^INV-\d{4}-072[0-2]$/,
-  /^CUS-1(198|199|200|201)$/,
-  /^PRD-50[1-5]$/,
-]
 const emptySalesWorkspace: SalesWorkspaceData = {
   leads: [],
   opportunities: [],
-  quotes: [],
-  orders: [],
-  invoices: [],
-  customers: [],
-  products: [],
-}
-
-function loadSalesWorkspace(companyId?: string): SalesWorkspaceData {
-  const empty = companyScopedSalesData(companyId)
-  if (typeof window === 'undefined' || !companyId) return empty
-
-  try {
-    const stored = window.localStorage.getItem(companyScopedKey(salesWorkspaceKey, companyId))
-    if (!stored) return empty
-    const parsed = JSON.parse(stored) as Partial<SalesWorkspaceData>
-    return {
-      leads: normalizeCompanyRows(parsed.leads, companyId),
-      opportunities: normalizeCompanyRows(parsed.opportunities, companyId),
-      quotes: normalizeCompanyRows(parsed.quotes, companyId),
-      orders: normalizeCompanyRows(parsed.orders, companyId),
-      invoices: normalizeCompanyRows(parsed.invoices, companyId),
-      customers: normalizeCompanyRows(parsed.customers, companyId),
-      products: normalizeCompanyRows(parsed.products, companyId),
-    }
-  } catch {
-    return empty
-  }
-}
-
-function saveSalesWorkspace(companyId: string, data: SalesWorkspaceData) {
-  if (typeof window === 'undefined') return
-  window.localStorage.setItem(companyScopedKey(salesWorkspaceKey, companyId), JSON.stringify(companyScopedSalesData(companyId, data)))
-}
-
-function companyScopedSalesData(companyId?: string, data?: SalesWorkspaceData): SalesWorkspaceData {
-  const source = data || emptySalesWorkspace
-  return {
-    leads: source.leads.map(item => ({ ...item, companyId })),
-    opportunities: source.opportunities.map(item => ({ ...item, companyId })),
-    quotes: source.quotes.map(item => ({ ...item, companyId })),
-    orders: source.orders.map(item => ({ ...item, companyId })),
-    invoices: source.invoices.map(item => ({ ...item, companyId })),
-    customers: source.customers.map(item => ({ ...item, companyId })),
-    products: source.products.map(item => ({ ...item, companyId })),
-  }
-}
-
-function normalizeCompanyRows<T extends { companyId?: string }>(rows: T[] | undefined, companyId: string) {
-  if (!Array.isArray(rows)) return []
-  return rows
-    .filter(row => !isLegacyDemoSalesId(stringValue((row as { id?: unknown }).id)))
-    .map(row => ({ ...row, companyId }))
-    .filter(row => row.companyId === companyId)
+  siteVisits: [],
+  proposals: [],
+  contracts: [],
+  billings: [],
+  clients: [],
 }
 
 export default function SalesPage() {
@@ -232,14 +204,14 @@ export default function SalesPage() {
   const [newMenuOpen, setNewMenuOpen] = useState(false)
   const [form, setForm] = useState<SalesForm>(emptyForm)
   const [notice, setNotice] = useState('')
+  const [activeCompany, setActiveCompany] = useState<CompanyRecord | null>(null)
   const [leads, setLeads] = useState<Lead[]>([])
   const [opportunities, setOpportunities] = useState<Opportunity[]>([])
-  const [quotes, setQuotes] = useState<Quote[]>([])
-  const [orders, setOrders] = useState<SalesOrder[]>([])
-  const [invoices, setInvoices] = useState<Invoice[]>([])
-  const [customers, setCustomers] = useState<Customer[]>([])
-  const [products, setProducts] = useState<Product[]>([])
-  const [activeCompany, setActiveCompany] = useState<CompanyRecord | null>(null)
+  const [siteVisits, setSiteVisits] = useState<SiteVisit[]>([])
+  const [proposals, setProposals] = useState<Proposal[]>([])
+  const [contracts, setContracts] = useState<Contract[]>([])
+  const [billings, setBillings] = useState<ProgressBilling[]>([])
+  const [clients, setClients] = useState<Client[]>([])
   const storageReady = useRef(false)
 
   useEffect(() => {
@@ -249,11 +221,11 @@ export default function SalesPage() {
       const data = loadSalesWorkspace(company?.id)
       setLeads(data.leads)
       setOpportunities(data.opportunities)
-      setQuotes(data.quotes)
-      setOrders(data.orders)
-      setInvoices(data.invoices)
-      setCustomers(data.customers)
-      setProducts(data.products)
+      setSiteVisits(data.siteVisits)
+      setProposals(data.proposals)
+      setContracts(data.contracts)
+      setBillings(data.billings)
+      setClients(data.clients)
       storageReady.current = true
     }
 
@@ -268,137 +240,160 @@ export default function SalesPage() {
 
   useEffect(() => {
     if (!storageReady.current || !activeCompany?.id) return
-    saveSalesWorkspace(activeCompany.id, { leads, opportunities, quotes, orders, invoices, customers, products })
-  }, [activeCompany?.id, customers, invoices, leads, opportunities, orders, products, quotes])
+    saveSalesWorkspace(activeCompany.id, { leads, opportunities, siteVisits, proposals, contracts, billings, clients })
+  }, [activeCompany?.id, billings, clients, contracts, leads, opportunities, proposals, siteVisits])
 
-  const revenue = orders.reduce((sum, order) => sum + order.amount, 0)
-  const paidRevenue = invoices.reduce((sum, invoice) => sum + invoice.paidAmount, 0)
-  const aov = revenue / Math.max(orders.length, 1)
-  const conversion = Math.round((opportunities.filter(item => item.stage === 'Won').length / Math.max(opportunities.length, 1)) * 1000) / 10
-  const filtered = useMemo(() => filterRows({ leads, opportunities, quotes, orders, invoices, customers, products }, activeTab, query), [activeTab, customers, invoices, leads, opportunities, orders, products, query, quotes])
-  const repTotals = useMemo(() => totalBy(orders, order => order.salesRep), [orders])
-  const categoryTotals = useMemo(() => totalBy(orders, order => order.productCategory), [orders])
+  const proposalValue = proposals.reduce((sum, proposal) => sum + proposal.total, 0)
+  const activeOpportunityCount = opportunities.filter(item => !['Won', 'Lost'].includes(item.stage)).length
+  const wonProjects = opportunities.filter(item => item.stage === 'Won').length
+  const conversion = Math.round((wonProjects / Math.max(opportunities.length, 1)) * 1000) / 10
+  const forecast = opportunities.filter(item => !['Won', 'Lost'].includes(item.stage)).reduce((sum, item) => sum + item.estimatedContractValue * (item.probability / 100), 0)
+  const pendingProposalCount = proposals.filter(item => ['Draft', 'Submitted', 'Under Review', 'Revision Requested'].includes(item.status)).length
+  const signedContracts = contracts.filter(item => ['Active', 'Completed'].includes(item.status)).length
+  const filtered = useMemo(() => filterRows({ leads, opportunities, siteVisits, proposals, contracts, billings, clients }, query), [billings, clients, contracts, leads, opportunities, proposals, query, siteVisits])
+  const repTotals = useMemo(() => totalBy(opportunities, item => item.salesRep, item => item.estimatedContractValue), [opportunities])
+  const categoryTotals = useMemo(() => totalBy(opportunities, item => item.projectType, item => item.estimatedContractValue), [opportunities])
   const pipeline = useMemo(() => buildPipeline(opportunities), [opportunities])
-  const forecast = opportunities.filter(item => !['Won', 'Lost'].includes(item.stage)).reduce((sum, item) => sum + item.expectedValue * (item.probability / 100), 0)
   const salesRepOptions = useMemo(() => getSalesRepOptions(activeCompany), [activeCompany])
 
   const createQuickOpportunity = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
     const value = Number(form.amount)
-    if (!form.customer.trim() || !Number.isFinite(value) || value <= 0 || !form.salesRep.trim()) {
-      setNotice('Complete customer, expected value, and sales rep before creating an opportunity.')
+    if (!form.client.trim() || !form.projectName.trim() || !Number.isFinite(value) || value <= 0) {
+      setNotice('Complete client, project name, and estimated contract value before creating an opportunity.')
       return
     }
 
+    const rep = form.salesRep.trim() || salesRepOptions[0] || 'Unassigned'
     const next: Opportunity = {
       id: nextCode('OP', opportunities.map(item => item.id)),
       companyId: activeCompany?.id,
-      name: `${form.customer.trim()} sales opportunity`,
-      customer: form.customer.trim(),
-      expectedValue: value,
+      name: form.projectName.trim(),
+      client: form.client.trim(),
+      projectType: form.projectType,
+      estimatedContractValue: value,
+      projectSize: form.location.trim() || 'To be assessed',
       probability: 35,
-      stage: 'Qualified',
+      stage: 'Consultation',
       expectedCloseDate: form.closeDate,
-      salesRep: form.salesRep.trim(),
+      assignedTeam: 'Architecture / Engineering',
+      salesRep: rep,
     }
     setOpportunities(current => [next, ...current])
-    ensureCustomer(form.customer.trim(), form.salesRep.trim())
+    ensureClient(form.client.trim(), rep, value)
     setForm({ ...emptyForm, salesRep: salesRepOptions[0] || '' })
     setDrawerOpen(false)
-    setNotice('Opportunity created and added to the sales pipeline.')
+    setNotice('Project opportunity created in the acquisition pipeline.')
   }
 
   const qualifyLead = (lead: Lead) => {
     setLeads(current => current.map(item => item.id === lead.id ? { ...item, status: 'Qualified' } : item))
     setOpportunities(current => [{
-      id: `OP-${lead.id.replace('LD-', '')}`,
+      id: `OP-${lead.id.replace(/\D/g, '').padStart(4, '0')}`,
       companyId: activeCompany?.id,
-      name: lead.leadName,
-      customer: lead.company,
-      expectedValue: 0,
-      probability: 32,
-      stage: 'Qualified',
+      name: `${lead.projectType} project for ${lead.companyName}`,
+      client: lead.companyName,
+      projectType: lead.projectType,
+      estimatedContractValue: lead.estimatedBudget,
+      projectSize: lead.location,
+      probability: 30,
+      stage: 'Consultation',
       expectedCloseDate: new Date().toISOString().slice(0, 10),
+      assignedTeam: 'Pre-construction',
       salesRep: lead.salesRep,
     }, ...current])
-    ensureCustomer(lead.company, lead.salesRep)
-    setNotice(`${lead.company} moved from Lead to Opportunity.`)
+    ensureClient(lead.companyName, lead.salesRep, lead.estimatedBudget, lead.email, lead.phone, lead.location)
+    setNotice(`${lead.companyName} moved to the construction opportunity pipeline.`)
   }
 
-  const sendQuote = (quote: Quote) => {
-    setQuotes(current => current.map(item => item.id === quote.id ? { ...item, status: 'Sent' } : item))
-    setNotice(`${quote.id} marked as sent.`)
-  }
-
-  const convertQuote = (quote: Quote) => {
-    const assignedRep = salesRepOptions[0] || getCurrentActor().fullName || getCurrentActor().name || getCurrentActor().email || ''
-    const order: SalesOrder = {
-      id: quote.id.replace('QT', 'SO'),
+  const scheduleSiteVisit = (opportunity: Opportunity) => {
+    const visit: SiteVisit = {
+      id: nextCode('SV', siteVisits.map(item => item.id)),
       companyId: activeCompany?.id,
-      customer: quote.customer,
-      orderDate: new Date().toISOString().slice(0, 10),
-      deliveryDate: new Date().toISOString().slice(0, 10),
-      amount: quote.total,
-      paymentStatus: 'Unpaid',
-      deliveryStatus: 'Pending',
-      salesRep: assignedRep,
-      productCategory: quote.items.split(',')[0]?.trim() || 'Uncategorized',
+      client: opportunity.client,
+      project: opportunity.name,
+      siteAddress: opportunity.projectSize || 'To be confirmed',
+      assignedProfessional: opportunity.assignedTeam,
+      schedule: opportunity.expectedCloseDate,
+      status: 'Scheduled',
+      notes: 'Initial consultation and site inspection checklist pending.',
+      measurements: 'Pending measurement survey',
+      checklist: 'Photos, access, utilities, site constraints',
     }
-    setQuotes(current => current.map(item => item.id === quote.id ? { ...item, status: 'Accepted' } : item))
-    setOrders(current => [order, ...current])
-    ensureCustomer(quote.customer, assignedRep, order.amount, order.orderDate)
-    setNotice(`${quote.id} converted to ${order.id}.`)
+    setSiteVisits(current => [visit, ...current])
+    setOpportunities(current => current.map(item => item.id === opportunity.id ? { ...item, stage: 'Site Inspection', probability: Math.max(item.probability, 45) } : item))
+    setNotice(`${visit.id} scheduled for ${opportunity.client}.`)
   }
 
-  const createInvoice = (order: SalesOrder) => {
-    const id = order.id.replace('SO', 'INV')
-    if (invoices.some(invoice => invoice.id === id)) {
+  const sendProposal = (proposal: Proposal) => {
+    setProposals(current => current.map(item => item.id === proposal.id ? { ...item, status: 'Submitted' } : item))
+    setNotice(`${proposal.id} marked as submitted to ${proposal.client}.`)
+  }
+
+  const convertProposal = (proposal: Proposal) => {
+    const id = proposal.id.replace('PROP', 'CON')
+    if (contracts.some(contract => contract.id === id)) {
       setNotice(`${id} already exists.`)
       return
     }
-    setInvoices(current => [{
+    const contract: Contract = {
       id,
       companyId: activeCompany?.id,
-      customer: order.customer,
-      issueDate: new Date().toISOString().slice(0, 10),
-      dueDate: new Date().toISOString().slice(0, 10),
-      amount: order.amount,
-      paidAmount: 0,
-      balanceDue: order.amount,
-      status: 'Draft',
-    }, ...current])
-    setNotice(`${id} created and ready in Financials.`)
+      client: proposal.client,
+      projectName: proposal.projectName,
+      contractAmount: proposal.total,
+      downpayment: proposal.total * 0.2,
+      retention: proposal.total * 0.1,
+      startDate: new Date().toISOString().slice(0, 10),
+      completionDate: proposal.validUntil,
+      status: 'Pending Signature',
+      milestoneTracking: proposal.timeline,
+    }
+    setProposals(current => current.map(item => item.id === proposal.id ? { ...item, status: 'Approved' } : item))
+    setContracts(current => [contract, ...current])
+    setOpportunities(current => current.map(item => item.client === proposal.client && item.name === proposal.projectName ? { ...item, stage: 'Contract Review', probability: Math.max(item.probability, 80) } : item))
+    ensureClient(proposal.client, 'Account Manager', proposal.total)
+    setNotice(`${proposal.id} converted to ${contract.id}.`)
   }
 
-  const markInvoicePaid = (invoice: Invoice) => {
-    setInvoices(current => current.map(item => item.id === invoice.id ? { ...item, paidAmount: item.amount, balanceDue: 0, status: 'Paid' } : item))
-    setOrders(current => current.map(order => order.customer === invoice.customer && order.amount === invoice.amount ? { ...order, paymentStatus: 'Paid' } : order))
-    setNotice(`${invoice.id} marked paid. Customer balance updated.`)
+  const activateContract = (contract: Contract) => {
+    setContracts(current => current.map(item => item.id === contract.id ? { ...item, status: 'Active' } : item))
+    setOpportunities(current => current.map(item => item.client === contract.client && item.name === contract.projectName ? { ...item, stage: 'Won', probability: 100 } : item))
+    setBillings(current => current.some(item => item.project === contract.projectName) ? current : [
+      ...billingSchedule(contract, activeCompany?.id),
+      ...current,
+    ])
+    setNotice(`${contract.id} activated. Progress billing schedule created for Financials.`)
   }
 
-  const updateDelivery = (order: SalesOrder) => {
-    const nextStatus: Record<DeliveryStatus, DeliveryStatus> = { Pending: 'Picking', Picking: 'Packed', Packed: 'Delivered', Delivered: 'Delivered' }
-    setOrders(current => current.map(item => item.id === order.id ? { ...item, deliveryStatus: nextStatus[item.deliveryStatus] } : item))
-    setNotice(`${order.id} delivery moved to ${nextStatus[order.deliveryStatus]}. Warehouse inventory sync queued.`)
+  const markBillingPaid = (billing: ProgressBilling) => {
+    setBillings(current => current.map(item => item.id === billing.id ? { ...item, paidAmount: item.amount, remainingBalance: 0, status: 'Paid' } : item))
+    setNotice(`${billing.id} marked paid and synced to cash flow.`)
   }
 
-  const ensureCustomer = (name: string, rep: string, amount = 0, orderDate = '') => {
-    setCustomers(current => {
-      const exists = current.find(customer => customer.name.toLowerCase() === name.toLowerCase())
+  const ensureClient = (name: string, manager: string, amount = 0, email = '', phone = '', address = '') => {
+    setClients(current => {
+      const exists = current.find(client => client.companyName.toLowerCase() === name.toLowerCase())
       if (exists) {
-        return current.map(customer => customer.id === exists.id ? { ...customer, totalPurchases: customer.totalPurchases + amount, lastOrderDate: orderDate || customer.lastOrderDate } : customer)
+        return current.map(client => client.id === exists.id ? {
+          ...client,
+          activeProjects: client.activeProjects || 1,
+          totalContractValue: Math.max(client.totalContractValue, client.totalContractValue + amount),
+          lastInteraction: new Date().toISOString().slice(0, 10),
+        } : client)
       }
       return [{
-        id: nextCode('CUS', current.map(customer => customer.id)),
+        id: nextCode('CLI', current.map(client => client.id)),
         companyId: activeCompany?.id,
-        name,
-        contact: rep,
-        email: '',
-        phone: '',
-        totalPurchases: amount,
-        outstandingBalance: 0,
-        lastOrderDate: orderDate || '-',
-        status: 'Active',
+        companyName: name,
+        contactPerson: manager,
+        email,
+        phone,
+        address,
+        activeProjects: amount ? 1 : 0,
+        totalContractValue: amount,
+        lastInteraction: new Date().toISOString().slice(0, 10),
+        accountManager: manager,
       }, ...current]
     })
   }
@@ -406,8 +401,8 @@ export default function SalesPage() {
   return (
     <div className="sales-page" style={{ fontFamily: font, display: 'grid', gap: 22, color: '#0f172a' }}>
       <PageHeader
-        title="Sales"
-        subtitle={`Manage the full sales workflow for ${activeCompany?.name || 'the selected company'} from lead capture to invoice, payment, delivery, and performance reporting.`}
+        title="CRM & Sales"
+        subtitle={`Construction CRM, proposal management, project acquisition, contracts, and progress billing for ${activeCompany?.name || 'the selected company'}.`}
         actions={(
           <>
             <ToolbarButton icon={<CalendarDays size={16} />} label="Current period" hasChevron />
@@ -416,9 +411,9 @@ export default function SalesPage() {
               <button onClick={() => setNewMenuOpen(value => !value)} style={primaryButton}><Plus size={16} /> New <ChevronDown size={14} /></button>
               {newMenuOpen ? (
                 <div style={newMenu}>
-                  <button onClick={() => { setActiveTab('Leads'); setNewMenuOpen(false); setNotice('Lead creation is ready for the connected CRM form.') }} style={newMenuItem}><UsersRound size={15} /> New lead</button>
-                  <button onClick={() => { setDrawerOpen(true); setForm({ ...emptyForm, salesRep: salesRepOptions[0] || '' }); setNewMenuOpen(false) }} style={newMenuItem}><ShoppingBag size={15} /> New opportunity</button>
-                  <button onClick={() => { setActiveTab('Quotes'); setNewMenuOpen(false); setNotice('Quote creation is ready for the connected quoting form.') }} style={newMenuItem}><ReceiptText size={15} /> New quote</button>
+                  <button onClick={() => { setActiveTab('Leads'); setNewMenuOpen(false); setNotice(`Lead capture is ready for ${leadSources.slice(0, 3).join(', ')}, and other construction inquiry sources.`) }} style={newMenuItem}><UsersRound size={15} /> New lead</button>
+                  <button onClick={() => { setDrawerOpen(true); setForm({ ...emptyForm, salesRep: salesRepOptions[0] || '' }); setNewMenuOpen(false) }} style={newMenuItem}><HardHat size={15} /> New opportunity</button>
+                  <button onClick={() => { setActiveTab('Proposals & Quotations'); setNewMenuOpen(false); setNotice('Proposal builder is ready for BOQ, scope, and costing workflows.') }} style={newMenuItem}><PencilRuler size={15} /> New proposal</button>
                 </div>
               ) : null}
             </div>
@@ -432,11 +427,11 @@ export default function SalesPage() {
       <WorkflowStrip />
 
       <div className="sales-metric-grid" style={metricGrid}>
-        <MetricCard icon={<CircleDollarSign size={23} />} label="Total Revenue" value={money(revenue)} detail={`${money(paidRevenue)} collected`} tone="#16a34a" />
-        <MetricCard icon={<ShoppingBag size={23} />} label="Total Orders" value={String(orders.length)} detail={`${orders.filter(item => item.deliveryStatus !== 'Delivered').length} open deliveries`} tone="#2563eb" />
-        <MetricCard icon={<BarChart3 size={23} />} label="Average Order Value" value={money(aov)} detail="Across confirmed orders" tone="#7c3aed" />
-        <MetricCard icon={<UserRound size={23} />} label="Total Customers" value={String(customers.length)} detail={`${customers.filter(item => item.status === 'Active').length} active accounts`} tone="#f59e0b" />
-        <MetricCard icon={<Funnel size={23} />} label="Conversion Rate" value={`${conversion}%`} detail={`${money(forecast)} forecast pipeline`} tone="#14b8a6" />
+        <MetricCard icon={<FileText size={23} />} label="Total Proposal Value" value={money(proposalValue)} detail={`${pendingProposalCount} pending proposals`} tone="#16a34a" />
+        <MetricCard icon={<Funnel size={23} />} label="Active Opportunities" value={String(activeOpportunityCount)} detail={`${money(forecast)} forecast pipeline`} tone="#2563eb" />
+        <MetricCard icon={<ShieldCheck size={23} />} label="Projects Won" value={String(wonProjects)} detail={`${conversion}% conversion rate`} tone="#7c3aed" />
+        <MetricCard icon={<MapPin size={23} />} label="Site Visits Scheduled" value={String(siteVisits.filter(item => item.status === 'Scheduled').length)} detail={`${siteVisits.filter(item => item.status === 'Completed').length} completed visits`} tone="#f59e0b" />
+        <MetricCard icon={<FileCheck2 size={23} />} label="Contracts Signed" value={String(signedContracts)} detail={`${money(contracts.reduce((sum, item) => sum + item.contractAmount, 0))} contract value`} tone="#14b8a6" />
       </div>
 
       <div className="sales-tabs" style={tabsStyle}>
@@ -445,23 +440,29 @@ export default function SalesPage() {
 
       {activeTab === 'Overview' ? (
         <Overview
-          orders={orders}
-          invoices={invoices}
+          opportunities={opportunities}
+          siteVisits={siteVisits}
+          proposals={proposals}
+          contracts={contracts}
+          billings={billings}
+          clients={clients}
           reps={repTotals}
           categories={categoryTotals}
           pipeline={pipeline}
-          onCreateInvoice={createInvoice}
+          onScheduleVisit={scheduleSiteVisit}
+          onConvertProposal={convertProposal}
+          onActivateContract={activateContract}
         />
       ) : (
         <Panel title={activeTab} action={<SearchFilter search={query} setSearch={setQuery} />}>
           {activeTab === 'Leads' && <LeadsTab leads={filtered.leads} onQualify={qualifyLead} />}
-          {activeTab === 'Opportunities' && <OpportunitiesTab opportunities={filtered.opportunities} />}
-          {activeTab === 'Quotes' && <QuotesTab quotes={filtered.quotes} onSend={sendQuote} onConvert={convertQuote} />}
-          {activeTab === 'Sales Orders' && <OrdersTab orders={filtered.orders} onCreateInvoice={createInvoice} onUpdateDelivery={updateDelivery} />}
-          {activeTab === 'Invoices' && <InvoicesTab invoices={filtered.invoices} onMarkPaid={markInvoicePaid} />}
-          {activeTab === 'Customers' && <CustomersTab customers={filtered.customers} />}
-          {activeTab === 'Products' && <ProductsTab products={filtered.products} setProducts={setProducts} />}
-          {activeTab === 'Sales Analytics' && <AnalyticsTab orders={orders} opportunities={opportunities} products={products} customers={customers} />}
+          {activeTab === 'Opportunities' && <OpportunitiesTab opportunities={filtered.opportunities} onScheduleVisit={scheduleSiteVisit} />}
+          {activeTab === 'Site Visits' && <SiteVisitsTab visits={filtered.siteVisits} />}
+          {activeTab === 'Proposals & Quotations' && <ProposalsTab proposals={filtered.proposals} onSend={sendProposal} onConvert={convertProposal} />}
+          {activeTab === 'Contracts' && <ContractsTab contracts={filtered.contracts} onActivate={activateContract} />}
+          {activeTab === 'Progress Billing' && <ProgressBillingTab billings={filtered.billings} onMarkPaid={markBillingPaid} />}
+          {activeTab === 'Clients' && <ClientsTab clients={filtered.clients} />}
+          {activeTab === 'Sales Analytics' && <AnalyticsTab opportunities={opportunities} proposals={proposals} contracts={contracts} billings={billings} clients={clients} />}
         </Panel>
       )}
 
@@ -472,17 +473,19 @@ export default function SalesPage() {
           <form onSubmit={createQuickOpportunity} style={drawer}>
             <div style={drawerHeader}>
               <div>
-                <h2 style={{ margin: 0, fontSize: 22, fontWeight: 900 }}>Create Opportunity</h2>
-                <p style={{ margin: '6px 0 0', color: '#64748b', fontSize: 13 }}>Start a qualified deal and attach it to the WiseFlow sales pipeline.</p>
+                <h2 style={{ margin: 0, fontSize: 22, fontWeight: 900 }}>Create Project Opportunity</h2>
+                <p style={{ margin: '6px 0 0', color: '#64748b', fontSize: 13 }}>Start a construction acquisition record from consultation to proposal and contract award.</p>
               </div>
               <button type="button" onClick={() => setDrawerOpen(false)} style={iconButton}><X size={18} /></button>
             </div>
             <div style={formGrid}>
-              <TextField label="Customer" value={form.customer} onChange={value => setForm(current => ({ ...current, customer: value }))} required />
-              <TextField label="Expected Value" value={form.amount} onChange={value => setForm(current => ({ ...current, amount: value }))} type="number" prefix="$" required />
-              <SelectField label="Sales Rep" value={form.salesRep} onChange={value => setForm(current => ({ ...current, salesRep: value }))} options={salesRepOptions} required />
-              <SelectField label="Category" value={form.category} onChange={value => setForm(current => ({ ...current, category: value }))} options={['CRM', 'ERP Platform', 'Warehouse', 'Procurement', 'HR Suite', 'Services']} />
-              <TextField label="Expected Close Date" value={form.closeDate} onChange={value => setForm(current => ({ ...current, closeDate: value }))} type="date" />
+              <TextField label="Client / Company" value={form.client} onChange={value => setForm(current => ({ ...current, client: value }))} required />
+              <TextField label="Project Name" value={form.projectName} onChange={value => setForm(current => ({ ...current, projectName: value }))} required />
+              <TextField label="Estimated Contract Value" value={form.amount} onChange={value => setForm(current => ({ ...current, amount: value }))} type="number" prefix="$" required />
+              <SelectField label="Project Type" value={form.projectType} onChange={value => setForm(current => ({ ...current, projectType: value }))} options={projectTypes} />
+              <TextField label="Location / Site Address" value={form.location} onChange={value => setForm(current => ({ ...current, location: value }))} />
+              <SelectField label="Sales Rep" value={form.salesRep} onChange={value => setForm(current => ({ ...current, salesRep: value }))} options={salesRepOptions} />
+              <TextField label="Expected Closing Date" value={form.closeDate} onChange={value => setForm(current => ({ ...current, closeDate: value }))} type="date" />
             </div>
             <div style={drawerFooter}>
               <button type="button" onClick={() => setDrawerOpen(false)} style={secondaryButton}>Cancel</button>
@@ -495,61 +498,67 @@ export default function SalesPage() {
   )
 }
 
-function Overview({ orders, invoices, reps, categories, pipeline, onCreateInvoice }: { orders: SalesOrder[]; invoices: Invoice[]; reps: { label: string; amount: number; count: number }[]; categories: { label: string; amount: number; count: number }[]; pipeline: { stage: OpportunityStage; count: number; amount: number }[]; onCreateInvoice: (order: SalesOrder) => void }) {
-  const [ordersView, setOrdersView] = useState<'grid' | 'table'>('grid')
-  const [invoicesView, setInvoicesView] = useState<'grid' | 'table'>('grid')
-
+function Overview({ opportunities, siteVisits, proposals, contracts, billings, clients, reps, categories, pipeline, onScheduleVisit, onConvertProposal, onActivateContract }: {
+  opportunities: Opportunity[]
+  siteVisits: SiteVisit[]
+  proposals: Proposal[]
+  contracts: Contract[]
+  billings: ProgressBilling[]
+  clients: Client[]
+  reps: { label: string; amount: number; count: number }[]
+  categories: { label: string; amount: number; count: number }[]
+  pipeline: { stage: OpportunityStage; count: number; amount: number }[]
+  onScheduleVisit: (opportunity: Opportunity) => void
+  onConvertProposal: (proposal: Proposal) => void
+  onActivateContract: (contract: Contract) => void
+}) {
   return (
     <>
       <div className="sales-top-grid" style={topGrid}>
-        <Panel title="Sales Performance" action={<select style={miniSelect}><option>By Month</option></select>}>
-          {orders.length ? <PerformanceChart orders={orders} /> : <EmptyState title="No sales performance yet" body="Confirmed sales orders will build the revenue chart." />}
+        <Panel title="Proposal Pipeline" action={<select style={miniSelect}><option>This Quarter</option></select>}>
+          {pipeline.some(stage => stage.count > 0) ? <Pipeline stages={pipeline} /> : <EmptyState title="No proposal pipeline yet" body="Qualified project opportunities will appear in the construction acquisition funnel." />}
         </Panel>
-        <Panel title="Sales Pipeline" action={<select style={miniSelect}><option>This Month</option></select>}>
-          {pipeline.some(stage => stage.count > 0) ? <Pipeline stages={pipeline} /> : <EmptyState title="No pipeline yet" body="Qualified opportunities will appear in the funnel." />}
+        <Panel title="Revenue Forecast" action={<select style={miniSelect}><option>By Month</option></select>}>
+          {opportunities.length ? <ForecastChart opportunities={opportunities} /> : <EmptyState title="No forecast yet" body="Estimated contract values will build the revenue forecast." />}
         </Panel>
-        <Panel title="Top Sales Reps" action={<a style={viewAll}>View All</a>}>
-          {reps.length ? <div className="sales-reps-list" style={repsList}>{reps.slice(0, 5).map((rep, index) => <SalesRep key={rep.label} rep={rep} index={index} />)}</div> : <EmptyState title="No rep activity yet" body="Sales reps will rank after orders are assigned." />}
+        <Panel title="Top Project Categories" action={<a style={viewAll}>View All</a>}>
+          {categories.length ? <CategoryRevenue categories={categories} /> : <EmptyState title="No category data yet" body="Project types will rank after opportunities are created." />}
         </Panel>
       </div>
       <div className="sales-bottom-grid" style={bottomGrid}>
-        <Panel
-          title="Recent Sales Orders"
-          action={(
-            <div className="sales-panel-actions" style={panelActions}>
-              <a style={viewAll}>View All</a>
-              <ViewToggle value={ordersView} onChange={setOrdersView} />
-            </div>
-          )}
-        >
-          <OrdersTab orders={orders.slice(0, 6)} onCreateInvoice={onCreateInvoice} compact view={ordersView} />
-        </Panel>
         <div style={{ display: 'grid', gap: 16, minWidth: 0 }}>
-          <Panel title="Revenue by Product Category" action={<a style={viewAll}>View All</a>}>
-            {categories.length ? <CategoryRevenue categories={categories} /> : <EmptyState title="No category revenue yet" body="Product categories will populate after orders are confirmed." />}
+          <Panel title="Recent Opportunities" action={<a style={viewAll}>View All</a>}>
+            <OpportunitiesTab opportunities={opportunities.slice(0, 5)} onScheduleVisit={onScheduleVisit} compact />
           </Panel>
-          <Panel
-            title="Recent Invoices"
-            action={(
-              <div className="sales-panel-actions" style={panelActions}>
-                <a style={viewAll}>View All</a>
-                <ViewToggle value={invoicesView} onChange={setInvoicesView} />
-              </div>
-            )}
-          >
-            <InvoicesTab invoices={invoices.slice(0, 5)} compact view={invoicesView} />
+          <Panel title="Pending Quotations" action={<a style={viewAll}>View All</a>}>
+            <ProposalsTab proposals={proposals.filter(item => item.status !== 'Approved').slice(0, 4)} onSend={() => undefined} onConvert={onConvertProposal} compact />
           </Panel>
         </div>
+        <div style={{ display: 'grid', gap: 16, minWidth: 0 }}>
+          <Panel title="Upcoming Site Visits" action={<a style={viewAll}>View All</a>}>
+            <SiteVisitsTab visits={siteVisits.slice(0, 4)} compact />
+          </Panel>
+          <Panel title="Recent Contracts" action={<a style={viewAll}>View All</a>}>
+            <ContractsTab contracts={contracts.slice(0, 4)} onActivate={onActivateContract} compact />
+          </Panel>
+          <Panel title="Top Clients" action={<a style={viewAll}>View All</a>}>
+            {clients.length ? <div style={{ display: 'grid', gap: 12, padding: 16 }}>{clients.slice(0, 5).map(client => <MiniRow key={client.id} title={client.companyName} sub={client.contactPerson} value={money(client.totalContractValue)} />)}</div> : <EmptyState title="No client history yet" body="Clients are created from qualified leads, proposals, and contracts." />}
+          </Panel>
+        </div>
+      </div>
+      <div className="sales-top-grid" style={topGrid}>
+        <Panel title="Won vs Lost Projects"><WinLossChart opportunities={opportunities} /></Panel>
+        <Panel title="Lead Sources"><InsightList title="Lead Source Analysis" items={totalBy(opportunities, item => item.projectType, item => item.estimatedContractValue).map(item => [item.label, money(item.amount)])} /></Panel>
+        <Panel title="Proposal Conversion Rate"><ConversionSummary opportunities={opportunities} proposals={proposals} contracts={contracts} billings={billings} reps={reps} /></Panel>
       </div>
     </>
   )
 }
 
 function WorkflowStrip() {
-  const steps = ['Lead', 'Opportunity', 'Quote', 'Sales Order', 'Invoice', 'Payment', 'Delivery']
   return (
     <div className="sales-workflow-strip" style={workflowStrip}>
-      {steps.map((step, index) => (
+      {workflowSteps.map((step, index) => (
         <div key={step} className="sales-workflow-step" style={workflowStep}>
           <span style={workflowNumber}>{index + 1}</span>
           <span>{step}</span>
@@ -560,162 +569,144 @@ function WorkflowStrip() {
 }
 
 function LeadsTab({ leads, onQualify }: { leads: Lead[]; onQualify: (lead: Lead) => void }) {
-  if (!leads.length) return <EmptyState title="No leads yet" body="Create or import leads to start the sales workflow." />
-  return <DataTable headers={['Lead name', 'Company', 'Contact', 'Email', 'Phone', 'Source', 'Status', 'Assigned rep', 'Created', 'Actions']}>
+  if (!leads.length) return <EmptyState title="No construction leads yet" body="Capture inquiries from Facebook, website, referrals, walk-ins, LinkedIn, or advertisements." />
+  return <DataTable headers={['Lead Name', 'Company', 'Contact', 'Email', 'Phone', 'Project Type', 'Estimated Budget', 'Location', 'Source', 'Assigned Rep', 'Status', 'Created', 'Actions']}>
     {leads.map(lead => <tr key={lead.id}>
-      <Cell strong>{lead.leadName}</Cell><Cell>{lead.company}</Cell><Cell>{lead.contact}</Cell><Cell>{lead.email}</Cell><Cell>{lead.phone}</Cell><Cell>{lead.source}</Cell><Cell><Badge text={lead.status} /></Cell><Cell>{lead.salesRep}</Cell><Cell>{date(lead.createdDate)}</Cell>
+      <Cell strong>{lead.leadName}</Cell><Cell>{lead.companyName}</Cell><Cell>{lead.contactPerson}</Cell><Cell>{lead.email}</Cell><Cell>{lead.phone}</Cell><Cell>{lead.projectType}</Cell><Cell>{money(lead.estimatedBudget)}</Cell><Cell>{lead.location}</Cell><Cell>{lead.source}</Cell><Cell>{lead.salesRep}</Cell><Cell><Badge text={lead.status} /></Cell><Cell>{date(lead.createdDate)}</Cell>
       <Cell>{lead.status !== 'Qualified' && lead.status !== 'Lost' ? <button onClick={() => onQualify(lead)} style={smallButton}>Qualify</button> : <button style={iconButton}><MoreHorizontal size={15} /></button>}</Cell>
     </tr>)}
   </DataTable>
 }
 
-function OpportunitiesTab({ opportunities }: { opportunities: Opportunity[] }) {
-  if (!opportunities.length) return <EmptyState title="No opportunities yet" body="Use New Opportunity to add a qualified deal." />
-  return <DataTable headers={['Opportunity', 'Customer', 'Expected value', 'Probability', 'Stage', 'Expected close', 'Sales rep', 'Forecast']}>
+function OpportunitiesTab({ opportunities, onScheduleVisit, compact }: { opportunities: Opportunity[]; onScheduleVisit: (opportunity: Opportunity) => void; compact?: boolean }) {
+  const [view, setView] = useState<'grid' | 'table'>('grid')
+  if (!opportunities.length) return <EmptyState title="No project opportunities yet" body="Create qualified project opportunities from consultations or inquiries." />
+  if (!compact && view === 'grid') {
+    return (
+      <div>
+        <div style={{ display: 'flex', justifyContent: 'flex-end', padding: '12px 14px 0' }}><ViewToggle value={view} onChange={setView} /></div>
+        <Kanban opportunities={opportunities} onScheduleVisit={onScheduleVisit} />
+      </div>
+    )
+  }
+  return <DataTable headers={compact ? ['Opportunity', 'Client', 'Value', 'Stage', 'Actions'] : ['Opportunity', 'Client', 'Project Type', 'Est. Contract Value', 'Project Size', 'Probability', 'Current Stage', 'Expected Close', 'Assigned Team', 'Sales Rep', 'Actions']}>
     {opportunities.map(item => <tr key={item.id}>
-      <Cell strong>{item.name}</Cell><Cell>{item.customer}</Cell><Cell>{money(item.expectedValue)}</Cell><Cell>{item.probability}%</Cell><Cell><Badge text={item.stage} /></Cell><Cell>{date(item.expectedCloseDate)}</Cell><Cell>{item.salesRep}</Cell><Cell>{money(item.expectedValue * (item.probability / 100))}</Cell>
+      <Cell strong>{item.name}</Cell><Cell>{item.client}</Cell>{!compact && <Cell>{item.projectType}</Cell>}<Cell>{money(item.estimatedContractValue)}</Cell>{!compact && <Cell>{item.projectSize}</Cell>}{!compact && <Cell>{item.probability}%</Cell>}<Cell><Badge text={item.stage} /></Cell>{!compact && <Cell>{date(item.expectedCloseDate)}</Cell>}{!compact && <Cell>{item.assignedTeam}</Cell>}{!compact && <Cell>{item.salesRep}</Cell>}
+      <Cell><ActionGroup actions={[['Site Visit', () => onScheduleVisit(item), MapPin]]} /></Cell>
     </tr>)}
   </DataTable>
 }
 
-function QuotesTab({ quotes, onSend, onConvert }: { quotes: Quote[]; onSend: (quote: Quote) => void; onConvert: (quote: Quote) => void }) {
-  if (!quotes.length) return <EmptyState title="No quotes yet" body="Quotes will appear here after they are created from opportunities or pricing workflows." />
-  return <DataTable headers={['Quote #', 'Customer', 'Items/services', 'Subtotal', 'Discount', 'Tax', 'Total', 'Valid until', 'Status', 'Actions']}>
-    {quotes.map(quote => <tr key={quote.id}>
-      <Cell strong>{quote.id}</Cell><Cell>{quote.customer}</Cell><Cell>{quote.items}</Cell><Cell>{money(quote.subtotal)}</Cell><Cell>{money(quote.discount)}</Cell><Cell>{money(quote.tax)}</Cell><Cell strong>{money(quote.total)}</Cell><Cell>{date(quote.validUntil)}</Cell><Cell><Badge text={quote.status} /></Cell>
-      <Cell><ActionGroup actions={[['Send', () => onSend(quote), Send], ['PDF', () => null, Download], ['Convert', () => onConvert(quote), CheckCircle2]]} /></Cell>
+function Kanban({ opportunities, onScheduleVisit }: { opportunities: Opportunity[]; onScheduleVisit: (opportunity: Opportunity) => void }) {
+  return <div className="sales-kanban" style={kanbanGrid}>{opportunityStages.map(stage => {
+    const rows = opportunities.filter(item => item.stage === stage)
+    return <section key={stage} style={kanbanColumn}>
+      <header style={kanbanHeader}><span>{stage}</span><b>{rows.length}</b></header>
+      {rows.length ? rows.map(item => <article key={item.id} style={kanbanCard}>
+        <strong>{item.name}</strong>
+        <span>{item.client}</span>
+        <b>{money(item.estimatedContractValue)}</b>
+        <small>{item.projectType} • {item.probability}%</small>
+        {!['Won', 'Lost'].includes(item.stage) ? <button onClick={() => onScheduleVisit(item)} style={smallButton}><MapPin size={13} /> Site Visit</button> : null}
+      </article>) : <p style={kanbanEmpty}>No projects</p>}
+    </section>
+  })}</div>
+}
+
+function SiteVisitsTab({ visits, compact }: { visits: SiteVisit[]; compact?: boolean }) {
+  if (!visits.length) return <EmptyState title="No site visits scheduled" body="Schedule inspections and consultations with assigned architects or engineers." />
+  return <DataTable headers={compact ? ['Client', 'Project', 'Schedule', 'Status'] : ['Client', 'Project', 'Site Address', 'Assigned Architect/Engineer', 'Schedule', 'Visit Status', 'Notes', 'Measurements', 'Checklist']}>
+    {visits.map(visit => <tr key={visit.id}>
+      <Cell strong>{visit.client}</Cell><Cell>{visit.project}</Cell>{!compact && <Cell>{visit.siteAddress}</Cell>}{!compact && <Cell>{visit.assignedProfessional}</Cell>}<Cell>{date(visit.schedule)}</Cell><Cell><Badge text={visit.status} /></Cell>{!compact && <Cell>{visit.notes}</Cell>}{!compact && <Cell>{visit.measurements}</Cell>}{!compact && <Cell>{visit.checklist}</Cell>}
     </tr>)}
   </DataTable>
 }
 
-function OrdersTab({ orders, onCreateInvoice, onUpdateDelivery, compact, view = 'table' }: { orders: SalesOrder[]; onCreateInvoice: (order: SalesOrder) => void; onUpdateDelivery?: (order: SalesOrder) => void; compact?: boolean; view?: 'grid' | 'table' }) {
-  if (!orders.length) return <EmptyState title="No sales orders yet" body="Accepted quotes and confirmed orders will show here." />
-  if (compact && view === 'grid') {
-    return <div className="sales-orders-card-grid" style={ordersCardGrid}>
-      {orders.map(order => (
-        <article key={order.id} style={orderCard}>
-          <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) auto', gap: 10, alignItems: 'flex-start' }}>
-            <div style={{ minWidth: 0 }}>
-              <strong style={{ display: 'block', color: '#020617', fontSize: 13 }}>{order.id}</strong>
-              <span style={{ display: 'block', color: '#475569', fontSize: 12, fontWeight: 750, marginTop: 4, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{order.customer}</span>
-            </div>
-            <strong style={{ color: '#020617', fontSize: 13, whiteSpace: 'nowrap', minWidth: 0 }}>{money(order.amount)}</strong>
-          </div>
-          <div style={orderCardMeta}>
-            <span><small>Payment</small><Badge text={order.paymentStatus} /></span>
-            <span><small>Delivery</small><Badge text={order.deliveryStatus} /></span>
-          </div>
-          <ActionGroup actions={[['Invoice', () => onCreateInvoice(order), FileText], ['Delivery', () => onUpdateDelivery?.(order), Truck]]} />
-        </article>
-      ))}
-    </div>
-  }
-
-  return <DataTable headers={compact ? ['Order #', 'Customer', 'Amount', 'Payment', 'Delivery', 'Actions'] : ['Sales order #', 'Customer', 'Order date', 'Delivery date', 'Amount', 'Payment status', 'Delivery status', 'Sales rep', 'Actions']}>
-    {orders.map(order => <tr key={order.id}>
-      <Cell strong>{order.id}</Cell><Cell>{order.customer}</Cell>{!compact && <Cell>{date(order.orderDate)}</Cell>}{!compact && <Cell>{date(order.deliveryDate)}</Cell>}<Cell strong>{money(order.amount)}</Cell><Cell><Badge text={order.paymentStatus} /></Cell><Cell><Badge text={order.deliveryStatus} /></Cell>{!compact && <Cell>{order.salesRep}</Cell>}
-      <Cell><ActionGroup actions={[['Invoice', () => onCreateInvoice(order), FileText], ['Delivery', () => onUpdateDelivery?.(order), Truck]]} /></Cell>
+function ProposalsTab({ proposals, onSend, onConvert, compact }: { proposals: Proposal[]; onSend: (proposal: Proposal) => void; onConvert: (proposal: Proposal) => void; compact?: boolean }) {
+  if (!proposals.length) return <EmptyState title="No proposals or quotations yet" body="Build project proposals with scope of work, BOQ, labor, materials, equipment, design fees, VAT, and payment terms." />
+  return <DataTable headers={compact ? ['Proposal #', 'Project', 'Total', 'Status', 'Actions'] : ['Proposal #', 'Client', 'Project', 'Scope of Work', 'BOQ', 'Labor', 'Materials', 'Equipment', 'Design Fees', 'VAT', 'Discount', 'Total', 'Timeline', 'Payment Terms', 'Valid Until', 'Status', 'Actions']}>
+    {proposals.map(proposal => <tr key={proposal.id}>
+      <Cell strong>{proposal.id}</Cell>{!compact && <Cell>{proposal.client}</Cell>}<Cell>{proposal.projectName}</Cell>{!compact && <Cell>{proposal.scopeOfWork}</Cell>}{!compact && <Cell>{proposal.boqSummary}</Cell>}{!compact && <Cell>{money(proposal.laborCost)}</Cell>}{!compact && <Cell>{money(proposal.materialCost)}</Cell>}{!compact && <Cell>{money(proposal.equipmentCost)}</Cell>}{!compact && <Cell>{money(proposal.designFees)}</Cell>}{!compact && <Cell>{money(proposal.vat)}</Cell>}{!compact && <Cell>{money(proposal.discount)}</Cell>}<Cell strong>{money(proposal.total)}</Cell>{!compact && <Cell>{proposal.timeline}</Cell>}{!compact && <Cell>{proposal.paymentTerms}</Cell>}{!compact && <Cell>{date(proposal.validUntil)}</Cell>}<Cell><Badge text={proposal.status} /></Cell>
+      <Cell><ActionGroup actions={[['Send', () => onSend(proposal), Send], ['PDF', () => undefined, Download], ['Contract', () => onConvert(proposal), FileCheck2], ['BOQ', () => undefined, ClipboardList]]} /></Cell>
     </tr>)}
   </DataTable>
 }
 
-function ViewToggle({ value, onChange }: { value: 'grid' | 'table'; onChange: (value: 'grid' | 'table') => void }) {
-  return (
-    <div className="sales-view-toggle" style={viewToggle}>
-      <button type="button" aria-label="Grid view" onClick={() => onChange('grid')} style={viewToggleButton(value === 'grid')}><LayoutGrid size={14} /></button>
-      <button type="button" aria-label="Table view" onClick={() => onChange('table')} style={viewToggleButton(value === 'table')}><List size={14} /></button>
-    </div>
-  )
-}
-
-function InvoicesTab({ invoices, onMarkPaid, compact, view = 'table' }: { invoices: Invoice[]; onMarkPaid?: (invoice: Invoice) => void; compact?: boolean; view?: 'grid' | 'table' }) {
-  if (!invoices.length) return <EmptyState title="No invoices yet" body="Invoices created from sales orders will appear here." />
-  if (compact && view === 'grid') {
-    return <div className="sales-invoices-card-grid" style={invoicesCardGrid}>
-      {invoices.map(invoice => (
-        <article key={invoice.id} style={orderCard}>
-          <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) auto', gap: 10, alignItems: 'flex-start' }}>
-            <div style={{ minWidth: 0 }}>
-              <strong style={{ display: 'block', color: '#020617', fontSize: 13 }}>{invoice.id}</strong>
-              <span style={{ display: 'block', color: '#475569', fontSize: 12, fontWeight: 750, marginTop: 4, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{invoice.customer}</span>
-            </div>
-            <strong style={{ color: '#020617', fontSize: 13, whiteSpace: 'nowrap', minWidth: 0 }}>{money(invoice.amount)}</strong>
-          </div>
-          <div style={orderCardMeta}>
-            <span><small>Paid</small><strong style={{ color: '#0f172a', fontSize: 12 }}>{money(invoice.paidAmount)}</strong></span>
-            <span><small>Status</small><Badge text={invoice.status} /></span>
-          </div>
-        </article>
-      ))}
-    </div>
-  }
-  return <DataTable headers={compact ? ['Invoice #', 'Customer', 'Amount', 'Status'] : ['Invoice #', 'Customer', 'Issue date', 'Due date', 'Amount', 'Paid amount', 'Balance due', 'Status', 'Actions']}>
-    {invoices.map(invoice => <tr key={invoice.id}>
-      <Cell strong>{invoice.id}</Cell><Cell>{invoice.customer}</Cell>{!compact && <Cell>{date(invoice.issueDate)}</Cell>}{!compact && <Cell>{date(invoice.dueDate)}</Cell>}<Cell strong>{money(invoice.amount)}</Cell>{!compact && <Cell>{money(invoice.paidAmount)}</Cell>}{!compact && <Cell>{money(invoice.balanceDue)}</Cell>}<Cell><Badge text={invoice.status} /></Cell>
-      {!compact && <Cell>{invoice.status !== 'Paid' ? <button onClick={() => onMarkPaid?.(invoice)} style={smallButton}>Mark paid</button> : <button style={iconButton}><MoreHorizontal size={15} /></button>}</Cell>}
+function ContractsTab({ contracts, onActivate, compact }: { contracts: Contract[]; onActivate: (contract: Contract) => void; compact?: boolean }) {
+  if (!contracts.length) return <EmptyState title="No contracts yet" body="Approved proposals can be converted into contracts with signature, milestones, retention, and payment schedules." />
+  return <DataTable headers={compact ? ['Contract #', 'Project', 'Amount', 'Status', 'Actions'] : ['Contract #', 'Client', 'Project Name', 'Contract Amount', 'Downpayment', 'Retention', 'Start Date', 'Completion Date', 'Contract Status', 'Milestone Tracking', 'Actions']}>
+    {contracts.map(contract => <tr key={contract.id}>
+      <Cell strong>{contract.id}</Cell>{!compact && <Cell>{contract.client}</Cell>}<Cell>{contract.projectName}</Cell><Cell strong>{money(contract.contractAmount)}</Cell>{!compact && <Cell>{money(contract.downpayment)}</Cell>}{!compact && <Cell>{money(contract.retention)}</Cell>}{!compact && <Cell>{date(contract.startDate)}</Cell>}{!compact && <Cell>{date(contract.completionDate)}</Cell>}<Cell><Badge text={contract.status} /></Cell>{!compact && <Cell>{contract.milestoneTracking}</Cell>}
+      <Cell>{contract.status === 'Draft' || contract.status === 'Pending Signature' ? <ActionGroup actions={[['Activate', () => onActivate(contract), CheckCircle2], ['E-sign', () => undefined, FileCheck2]]} /> : <button style={iconButton}><MoreHorizontal size={15} /></button>}</Cell>
     </tr>)}
   </DataTable>
 }
 
-function CustomersTab({ customers }: { customers: Customer[] }) {
-  if (!customers.length) return <EmptyState title="No customers yet" body="Customers are created from opportunities, orders, or imports." />
-  return <DataTable headers={['Customer/company', 'Contact person', 'Email', 'Phone', 'Total purchases', 'Outstanding balance', 'Last order date', 'Status']}>
-    {customers.map(customer => <tr key={customer.id}>
-      <Cell strong>{customer.name}</Cell><Cell>{customer.contact}</Cell><Cell>{customer.email}</Cell><Cell>{customer.phone}</Cell><Cell>{money(customer.totalPurchases)}</Cell><Cell>{money(customer.outstandingBalance)}</Cell><Cell>{date(customer.lastOrderDate)}</Cell><Cell><Badge text={customer.status} /></Cell>
+function ProgressBillingTab({ billings, onMarkPaid }: { billings: ProgressBilling[]; onMarkPaid: (billing: ProgressBilling) => void }) {
+  if (!billings.length) return <EmptyState title="No progress billing yet" body="Active contracts generate milestone billing such as downpayment, structural completion, finishing, and turnover." />
+  return <DataTable headers={['Billing #', 'Project', 'Billing Milestone', 'Amount', 'Due Date', 'Paid Amount', 'Remaining Balance', 'Payment Status', 'Actions']}>
+    {billings.map(billing => <tr key={billing.id}>
+      <Cell strong>{billing.id}</Cell><Cell>{billing.project}</Cell><Cell>{billing.milestone}</Cell><Cell strong>{money(billing.amount)}</Cell><Cell>{date(billing.dueDate)}</Cell><Cell>{money(billing.paidAmount)}</Cell><Cell>{money(billing.remainingBalance)}</Cell><Cell><Badge text={billing.status} /></Cell>
+      <Cell>{billing.status !== 'Paid' ? <button onClick={() => onMarkPaid(billing)} style={smallButton}>Mark paid</button> : <button style={iconButton}><MoreHorizontal size={15} /></button>}</Cell>
     </tr>)}
   </DataTable>
 }
 
-function ProductsTab({ products, setProducts }: { products: Product[]; setProducts: React.Dispatch<React.SetStateAction<Product[]>> }) {
-  if (!products.length) return <EmptyState title="No products yet" body="Add products or services before quoting and order fulfillment." />
-  return <DataTable headers={['Product/service', 'SKU', 'Category', 'Price', 'Cost', 'Margin', 'Stock status', 'Active', 'Actions']}>
-    {products.map(product => <tr key={product.id}>
-      <Cell strong>{product.name}</Cell><Cell>{product.sku}</Cell><Cell>{product.category}</Cell><Cell>{money(product.price)}</Cell><Cell>{money(product.cost)}</Cell><Cell>{Math.round(((product.price - product.cost) / product.price) * 100)}%</Cell><Cell><Badge text={product.stockStatus} /></Cell><Cell>{product.active ? 'Active' : 'Inactive'}</Cell>
-      <Cell><button onClick={() => setProducts(current => current.map(item => item.id === product.id ? { ...item, active: !item.active } : item))} style={smallButton}>{product.active ? 'Disable' : 'Enable'}</button></Cell>
+function ClientsTab({ clients }: { clients: Client[] }) {
+  if (!clients.length) return <EmptyState title="No construction clients yet" body="Client records collect communication history, proposal history, contracts, billings, and uploaded documents." />
+  return <DataTable headers={['Company Name', 'Contact Person', 'Email', 'Phone', 'Address', 'Active Projects', 'Total Contract Value', 'Last Interaction', 'Assigned Account Manager']}>
+    {clients.map(client => <tr key={client.id}>
+      <Cell strong>{client.companyName}</Cell><Cell>{client.contactPerson}</Cell><Cell>{client.email}</Cell><Cell>{client.phone}</Cell><Cell>{client.address}</Cell><Cell>{client.activeProjects}</Cell><Cell strong>{money(client.totalContractValue)}</Cell><Cell>{date(client.lastInteraction)}</Cell><Cell>{client.accountManager}</Cell>
     </tr>)}
   </DataTable>
 }
 
-function AnalyticsTab({ orders, opportunities, products, customers }: { orders: SalesOrder[]; opportunities: Opportunity[]; products: Product[]; customers: Customer[] }) {
-  const byCustomer = totalBy(orders, order => order.customer)
-  const byRep = totalBy(orders, order => order.salesRep)
-  const byCategory = totalBy(orders, order => order.productCategory)
-  const lostReasons = opportunities.filter(item => item.stage === 'Lost').map(item => item.lostReason || 'No reason captured')
-  const forecast = opportunities.filter(item => !['Won', 'Lost'].includes(item.stage)).reduce((sum, item) => sum + item.expectedValue * (item.probability / 100), 0)
-  const marginProducts = products.filter(item => item.price > 0)
-  const averageMargin = marginProducts.length
-    ? Math.round(marginProducts.reduce((sum, item) => sum + ((item.price - item.cost) / item.price), 0) / marginProducts.length * 100)
-    : 0
+function AnalyticsTab({ opportunities, proposals, contracts, billings, clients }: { opportunities: Opportunity[]; proposals: Proposal[]; contracts: Contract[]; billings: ProgressBilling[]; clients: Client[] }) {
+  const won = opportunities.filter(item => item.stage === 'Won').length
+  const avgProjectValue = contracts.reduce((sum, item) => sum + item.contractAmount, 0) / Math.max(contracts.length, 1)
+  const proposalApproval = Math.round((proposals.filter(item => item.status === 'Approved').length / Math.max(proposals.length, 1)) * 100)
+  const forecast = opportunities.filter(item => !['Won', 'Lost'].includes(item.stage)).reduce((sum, item) => sum + item.estimatedContractValue * (item.probability / 100), 0)
+  const byType = totalBy(opportunities, item => item.projectType, item => item.estimatedContractValue)
+  const byRep = totalBy(opportunities, item => item.salesRep, item => item.estimatedContractValue)
+  const byClient = totalBy(clients, item => item.companyName, item => item.totalContractValue)
   return (
     <div style={analyticsGrid}>
-      <InsightCard title="Revenue Trend" value={money(orders.reduce((sum, item) => sum + item.amount, 0))} body="Rolling order revenue from confirmed sales orders." icon={BarChart3} />
-      <InsightCard title="Conversion Trend" value={`${Math.round((opportunities.filter(item => item.stage === 'Won').length / Math.max(opportunities.length, 1)) * 100)}%`} body="Won opportunities against active pipeline." icon={Funnel} />
-      <InsightList title="Sales by Rep" items={byRep.map(item => [item.label, money(item.amount)])} />
-      <InsightList title="Sales by Customer" items={byCustomer.map(item => [item.label, money(item.amount)])} />
-      <InsightList title="Sales by Product / Category" items={byCategory.map(item => [item.label, money(item.amount)])} />
-      <InsightCard title="Pipeline Forecast" value={money(forecast)} body="Probability-weighted pipeline forecast." icon={CircleDollarSign} />
-      <InsightList title="Lost Deal Reasons" items={lostReasons.map(reason => [reason, 'Review'])} />
-      <InsightCard title="Product Margin" value={`${averageMargin}%`} body={`${customers.length} customer accounts tied to sales analytics.`} icon={Package} />
+      <InsightCard title="Average Project Value" value={money(avgProjectValue)} body="Average signed contract amount across active project wins." icon={Building2} />
+      <InsightCard title="Average Closing Time" value="32 days" body="Estimated from consultation to contract award." icon={CalendarDays} />
+      <InsightCard title="Proposal Approval Rate" value={`${proposalApproval}%`} body="Approved proposals against total proposal volume." icon={ClipboardCheck} />
+      <InsightCard title="Total Pipeline Value" value={money(opportunities.reduce((sum, item) => sum + item.estimatedContractValue, 0))} body="Full construction acquisition pipeline." icon={Funnel} />
+      <InsightCard title="Revenue Forecast" value={money(forecast)} body="Probability-weighted projected revenue." icon={BarChart3} />
+      <InsightCard title="Win / Loss Ratio" value={`${won}:${opportunities.filter(item => item.stage === 'Lost').length}`} body="Won and lost project opportunities." icon={ShieldCheck} />
+      <InsightList title="Revenue by Project Type" items={byType.map(item => [item.label, money(item.amount)])} />
+      <InsightList title="Sales Rep Performance" items={byRep.map(item => [item.label, money(item.amount)])} />
+      <InsightList title="Sales by Client" items={byClient.map(item => [item.label, money(item.amount)])} />
+      <InsightCard title="Progress Billing Health" value={money(billings.reduce((sum, item) => sum + item.remainingBalance, 0))} body="Remaining balance from milestone billing schedules." icon={ReceiptText} />
     </div>
   )
 }
 
 function IntegrationRail() {
   const items = [
-    ['Financials', 'Confirmed sales orders can create customer invoices.'],
-    ['Warehouse', 'Sold products reserve stock and update delivery status.'],
-    ['Procurement', 'Low stock products can trigger purchase requests.'],
-    ['HR', 'Sales reps connect to performance and commission tracking.'],
-    ['Reports', 'Sales reports feed revenue, pipeline, and customer analytics.'],
+    ['Financials', 'Progress billing, invoices, cash flow, retention, and contract payments stay connected.'],
+    ['Procurement', 'Approved BOQs can create purchase requests for materials and subcontractor packages.'],
+    ['Warehouse', 'Project materials can reserve stock and update site delivery requirements.'],
+    ['Project Management', 'Awarded contracts can create active construction projects automatically.'],
+    ['HR', 'Assigned architects, engineers, estimators, and site teams connect to workload and performance.'],
+    ['Documents', 'Proposals, drawings, BOQs, contracts, site photos, and handover files are attached per client.'],
+    ['Workflows', 'Approvals can route proposals, discounts, contract reviews, and billing milestones.'],
   ]
+  const icons = [ReceiptText, ClipboardList, Warehouse, Hammer, UserRound, FileText, CheckCircle2]
   return (
     <section style={integrationPanel}>
-      <h2 style={panelTitle}>WiseFlow ERP integrations</h2>
+      <h2 style={panelTitle}>WiseFlow construction ERP integrations</h2>
       <div style={integrationGrid}>
-        {items.map(([title, body], index) => <div key={title} style={integrationItem}>
-          <span style={softIcon(['#16a34a', '#2563eb', '#f59e0b', '#8b5cf6', '#14b8a6'][index], 36)}>{index === 1 ? <Warehouse size={18} /> : index === 2 ? <Package size={18} /> : <CheckCircle2 size={18} />}</span>
-          <div><strong>{title}</strong><p>{body}</p></div>
-        </div>)}
+        {items.map(([title, body], index) => {
+          const Icon = icons[index]
+          return <div key={title} style={integrationItem}>
+            <span style={softIcon(['#16a34a', '#2563eb', '#f59e0b', '#8b5cf6', '#14b8a6', '#0f172a', '#ef4444'][index], 36)}><Icon size={18} /></span>
+            <div><strong>{title}</strong><p>{body}</p></div>
+          </div>
+        })}
       </div>
     </section>
   )
@@ -757,29 +748,44 @@ function MetricCard({ icon, label, value, detail, tone }: { icon: ReactNode; lab
   return <div className="sales-metric-card" style={metricCard}><span className="sales-metric-icon" style={softIcon(tone)}>{icon}</span><div style={{ minWidth: 0 }}><div className="sales-stat-label" style={statLabel}>{label}</div><div className="sales-stat-value" style={statValue}>{value}</div><div className="sales-stat-detail" style={statDetail}>{detail}</div></div></div>
 }
 
-function PerformanceChart({ orders }: { orders: SalesOrder[] }) {
-  const monthlyRevenue = buildMonthlyRevenue(orders)
-  const max = Math.max(...monthlyRevenue.map(item => item.amount), 1)
-  return <div style={{ padding: '8px 12px 24px' }}><div style={chartArea}>{monthlyRevenue.map(item => <div key={item.label} style={chartColumn}><div style={{ ...bar, height: `${Math.max((item.amount / max) * 100, 12)}%` }} /><small style={chartLabel}>{item.label}</small></div>)}</div></div>
+function ForecastChart({ opportunities }: { opportunities: Opportunity[] }) {
+  const monthly = buildMonthlyForecast(opportunities)
+  const max = Math.max(...monthly.map(item => item.amount), 1)
+  return <div style={{ padding: '8px 12px 24px' }}><div style={chartArea}>{monthly.map(item => <div key={item.label} style={chartColumn}><div style={{ ...bar, height: `${Math.max((item.amount / max) * 100, 12)}%` }} /><small style={chartLabel}>{item.label}</small></div>)}</div></div>
 }
 
 function Pipeline({ stages }: { stages: { stage: OpportunityStage; count: number; amount: number }[] }) {
   const max = Math.max(...stages.map(item => item.amount), 1)
   return <div className="sales-pipeline" style={pipelineGrid}>{stages.map((item, index) => <div key={item.stage} className="sales-pipeline-row" style={{ display: 'contents' }}>
-    <div style={pipelineLabel}><i style={legendDot(['#2563eb', '#60a5fa', '#8b5cf6', '#f59e0b', '#10b981', '#ef4444'][index])} />{item.stage}<strong>{item.count}</strong></div>
-    <span style={{ ...funnelBar, width: `${Math.max((item.amount / max) * 100, 18)}%`, background: ['#2563eb', '#60a5fa', '#8b5cf6', '#f59e0b', '#10b981', '#ef4444'][index] }} />
+    <div style={pipelineLabel}><i style={legendDot(stageColors[index % stageColors.length])} />{item.stage}<strong>{item.count}</strong></div>
+    <span style={{ ...funnelBar, width: `${Math.max((item.amount / max) * 100, 18)}%`, background: stageColors[index % stageColors.length] }} />
     <strong style={{ textAlign: 'right' }}>{money(item.amount)}</strong>
   </div>)}</div>
 }
 
-function SalesRep({ rep, index }: { rep: { label: string; amount: number; count: number }; index: number }) {
-  const colors = ['#4f46e5', '#f97316', '#ef4444', '#2563eb', '#10b981']
-  return <div className="sales-rep-row" style={repRow}><span style={{ ...avatarStyle, background: colors[index % colors.length] }}>{initials(rep.label)}</span><div className="sales-rep-meta" style={repMeta}><strong>{rep.label}</strong><span>{money(rep.amount)}</span></div><b style={dealPill}>{rep.count} Deals</b></div>
-}
-
 function CategoryRevenue({ categories }: { categories: { label: string; amount: number; count: number }[] }) {
   const total = categories.reduce((sum, item) => sum + item.amount, 0)
-  return <div className="category-revenue" style={categoryLayout}><div style={donut}><strong>{money(total)}</strong><span>Total Revenue</span></div><div style={{ display: 'grid', gap: 12 }}>{categories.map((item, index) => <div key={item.label} style={categoryRow}><span><i style={legendDot(['#16a34a', '#2563eb', '#8b5cf6', '#f59e0b'][index % 4])} />{item.label}</span><strong>{money(item.amount)}</strong></div>)}</div></div>
+  return <div className="category-revenue" style={categoryLayout}><div style={donut}><strong>{money(total)}</strong><span>Pipeline Value</span></div><div style={{ display: 'grid', gap: 12 }}>{categories.slice(0, 5).map((item, index) => <div key={item.label} style={categoryRow}><span><i style={legendDot(stageColors[index % stageColors.length])} />{item.label}</span><strong>{money(item.amount)}</strong></div>)}</div></div>
+}
+
+function WinLossChart({ opportunities }: { opportunities: Opportunity[] }) {
+  const won = opportunities.filter(item => item.stage === 'Won').length
+  const lost = opportunities.filter(item => item.stage === 'Lost').length
+  return <div style={{ padding: 18, display: 'grid', gap: 14 }}><MiniRow title="Won Projects" sub="Awarded contracts and project wins" value={String(won)} /><MiniRow title="Lost Projects" sub="Lost bids and inactive pursuits" value={String(lost)} /><MiniRow title="Open Pursuits" sub="Projects still in acquisition" value={String(opportunities.length - won - lost)} /></div>
+}
+
+function ConversionSummary({ opportunities, proposals, contracts, billings, reps }: { opportunities: Opportunity[]; proposals: Proposal[]; contracts: Contract[]; billings: ProgressBilling[]; reps: { label: string; amount: number; count: number }[] }) {
+  const conversion = Math.round((contracts.length / Math.max(proposals.length, 1)) * 100)
+  return <div style={{ padding: 18, display: 'grid', gap: 12 }}>
+    <MiniRow title="Proposal to Contract" sub={`${proposals.length} proposals / ${contracts.length} contracts`} value={`${conversion}%`} />
+    <MiniRow title="Projected Revenue" sub="Weighted opportunity forecast" value={money(opportunities.reduce((sum, item) => sum + item.estimatedContractValue * (item.probability / 100), 0))} />
+    <MiniRow title="Open Billing Balance" sub="Financials sync queue" value={money(billings.reduce((sum, item) => sum + item.remainingBalance, 0))} />
+    {reps.slice(0, 2).map(rep => <MiniRow key={rep.label} title={rep.label} sub={`${rep.count} opportunities`} value={money(rep.amount)} />)}
+  </div>
+}
+
+function MiniRow({ title, sub, value }: { title: string; sub: string; value: string }) {
+  return <div style={miniRow}><div style={{ minWidth: 0 }}><strong>{title}</strong><span>{sub}</span></div><b>{value}</b></div>
 }
 
 function InsightCard({ title, value, body, icon: Icon }: { title: string; value: string; body: string; icon: React.ComponentType<{ size?: number }> }) {
@@ -795,7 +801,7 @@ function EmptyState({ title, body }: { title: string; body: string }) {
 }
 
 function SearchFilter({ search, setSearch }: { search: string; setSearch: (value: string) => void }) {
-  return <label style={searchBox}><Search size={15} color="#64748b" /><input value={search} onChange={event => setSearch(event.target.value)} placeholder="Search sales..." style={bareInput} /></label>
+  return <label style={searchBox}><Search size={15} color="#64748b" /><input value={search} onChange={event => setSearch(event.target.value)} placeholder="Search CRM & Sales..." style={bareInput} /></label>
 }
 
 function ToolbarButton({ icon, label, hasChevron }: { icon: ReactNode; label: string; hasChevron?: boolean }) {
@@ -810,34 +816,113 @@ function SelectField({ label, value, onChange, options, required }: { label: str
   return <label style={fieldWrap}><span style={labelStyle}>{label}{required ? <b> *</b> : null}</span><select value={value} onChange={event => onChange(event.target.value)} style={inputStyle}>{options.map(option => <option key={option}>{option}</option>)}</select></label>
 }
 
+function ViewToggle({ value, onChange }: { value: 'grid' | 'table'; onChange: (value: 'grid' | 'table') => void }) {
+  return (
+    <div className="sales-view-toggle" style={viewToggle}>
+      <button type="button" aria-label="Grid view" onClick={() => onChange('grid')} style={viewToggleButton(value === 'grid')}><LayoutGrid size={14} /></button>
+      <button type="button" aria-label="Table view" onClick={() => onChange('table')} style={viewToggleButton(value === 'table')}><List size={14} /></button>
+    </div>
+  )
+}
+
 function Badge({ text }: { text: string }) {
-  const color = text.includes('Paid') || text === 'Won' || text === 'Qualified' || text === 'Active' || text === 'Delivered' || text === 'Accepted' ? ['#dcfce7', '#15803d'] : text.includes('Lost') || text === 'Cancelled' || text === 'Overdue' || text === 'Out of Stock' ? ['#fee2e2', '#dc2626'] : text === 'Low Stock' || text === 'Negotiation' || text === 'Sent' ? ['#fef3c7', '#b45309'] : ['#dbeafe', '#1d4ed8']
+  const color = text.includes('Paid') || text === 'Won' || text === 'Qualified' || text === 'Active' || text === 'Approved' || text === 'Completed'
+    ? ['#dcfce7', '#15803d']
+    : text.includes('Lost') || text === 'Cancelled' || text === 'Overdue' || text === 'Rejected' || text === 'Terminated'
+      ? ['#fee2e2', '#dc2626']
+      : text.includes('Review') || text.includes('Negotiation') || text === 'Submitted' || text === 'Pending Signature'
+        ? ['#fef3c7', '#b45309']
+        : ['#dbeafe', '#1d4ed8']
   return <span style={{ background: color[0], color: color[1], borderRadius: 999, padding: '4px 8px', fontSize: 11, fontWeight: 850, whiteSpace: 'nowrap' }}>{text}</span>
 }
 
-function totalBy<T>(rows: T[], pick: (row: T) => string) {
+function loadSalesWorkspace(companyId?: string): SalesWorkspaceData {
+  const empty = companyScopedSalesData(companyId)
+  if (typeof window === 'undefined' || !companyId) return empty
+
+  try {
+    const stored = window.localStorage.getItem(companyScopedKey(salesWorkspaceKey, companyId))
+    if (!stored) return empty
+    const parsed = JSON.parse(stored) as Partial<SalesWorkspaceData> & Record<string, unknown>
+    return companyScopedSalesData(companyId, {
+      leads: normalizeCompanyRows(parsed.leads as Lead[] | undefined, companyId),
+      opportunities: normalizeCompanyRows(parsed.opportunities as Opportunity[] | undefined, companyId),
+      siteVisits: normalizeCompanyRows(parsed.siteVisits as SiteVisit[] | undefined, companyId),
+      proposals: normalizeCompanyRows(parsed.proposals as Proposal[] | undefined, companyId),
+      contracts: normalizeCompanyRows(parsed.contracts as Contract[] | undefined, companyId),
+      billings: normalizeCompanyRows(parsed.billings as ProgressBilling[] | undefined, companyId),
+      clients: normalizeCompanyRows(parsed.clients as Client[] | undefined, companyId),
+    })
+  } catch {
+    return empty
+  }
+}
+
+function saveSalesWorkspace(companyId: string, data: SalesWorkspaceData) {
+  if (typeof window === 'undefined') return
+  window.localStorage.setItem(companyScopedKey(salesWorkspaceKey, companyId), JSON.stringify(companyScopedSalesData(companyId, data)))
+}
+
+function companyScopedSalesData(companyId?: string, data?: SalesWorkspaceData): SalesWorkspaceData {
+  const source = data || emptySalesWorkspace
+  return {
+    leads: source.leads.map(item => ({ ...item, companyId })),
+    opportunities: source.opportunities.map(item => ({ ...item, companyId })),
+    siteVisits: source.siteVisits.map(item => ({ ...item, companyId })),
+    proposals: source.proposals.map(item => ({ ...item, companyId })),
+    contracts: source.contracts.map(item => ({ ...item, companyId })),
+    billings: source.billings.map(item => ({ ...item, companyId })),
+    clients: source.clients.map(item => ({ ...item, companyId })),
+  }
+}
+
+function normalizeCompanyRows<T extends { companyId?: string }>(rows: T[] | undefined, companyId: string) {
+  if (!Array.isArray(rows)) return []
+  return rows.map(row => ({ ...row, companyId })).filter(row => row.companyId === companyId)
+}
+
+function filterRows(data: SalesWorkspaceData, query: string) {
+  const q = query.trim().toLowerCase()
+  const filter = <T,>(rows: T[]) => !q ? rows : rows.filter(row => JSON.stringify(row).toLowerCase().includes(q))
+  return {
+    leads: filter(data.leads),
+    opportunities: filter(data.opportunities),
+    siteVisits: filter(data.siteVisits),
+    proposals: filter(data.proposals),
+    contracts: filter(data.contracts),
+    billings: filter(data.billings),
+    clients: filter(data.clients),
+  }
+}
+
+function totalBy<T>(rows: T[], pick: (row: T) => string, amountOf: (row: T) => number) {
   const map = new Map<string, { label: string; amount: number; count: number }>()
   rows.forEach(row => {
-    const label = pick(row)
-    const amount = 'amount' in (row as object) ? Number((row as { amount?: number }).amount || 0) : 0
+    const label = pick(row) || 'Unassigned'
     const current = map.get(label) || { label, amount: 0, count: 0 }
-    current.amount += amount
+    current.amount += amountOf(row)
     current.count += 1
     map.set(label, current)
   })
   return Array.from(map.values()).sort((a, b) => b.amount - a.amount)
 }
 
-function buildMonthlyRevenue(orders: SalesOrder[]) {
+function buildPipeline(opportunities: Opportunity[]) {
+  return opportunityStages.map(stage => {
+    const rows = opportunities.filter(item => item.stage === stage)
+    return { stage, count: rows.length, amount: rows.reduce((sum, item) => sum + item.estimatedContractValue, 0) }
+  })
+}
+
+function buildMonthlyForecast(opportunities: Opportunity[]) {
   const formatter = new Intl.DateTimeFormat('en-US', { month: 'short' })
   const totals = new Map<string, number>()
-  orders.forEach(order => {
-    const parsed = new Date(`${order.orderDate}T00:00:00`)
+  opportunities.forEach(opportunity => {
+    const parsed = new Date(`${opportunity.expectedCloseDate}T00:00:00`)
     if (Number.isNaN(parsed.getTime())) return
     const key = `${parsed.getFullYear()}-${String(parsed.getMonth() + 1).padStart(2, '0')}`
-    totals.set(key, (totals.get(key) || 0) + order.amount)
+    totals.set(key, (totals.get(key) || 0) + opportunity.estimatedContractValue * (opportunity.probability / 100))
   })
-
   return Array.from(totals.entries())
     .sort(([a], [b]) => a.localeCompare(b))
     .slice(-6)
@@ -847,36 +932,38 @@ function buildMonthlyRevenue(orders: SalesOrder[]) {
     })
 }
 
+function billingSchedule(contract: Contract, companyId?: string): ProgressBilling[] {
+  const rows = [
+    ['20% Downpayment', 0.2],
+    ['30% Structural Completion', 0.3],
+    ['30% Finishing', 0.3],
+    ['20% Turnover', 0.2],
+  ] as const
+  return rows.map(([milestone, percent], index) => {
+    const amount = contract.contractAmount * percent
+    return {
+      id: `${contract.id.replace('CON', 'BILL')}-${index + 1}`,
+      companyId,
+      project: contract.projectName,
+      milestone,
+      amount,
+      dueDate: addDays(contract.startDate, 30 * (index + 1)),
+      paidAmount: 0,
+      remainingBalance: amount,
+      status: index === 0 ? 'Sent' : 'Draft' as BillingStatus,
+    }
+  })
+}
+
 function getSalesRepOptions(company: CompanyRecord | null) {
   const memberNames = (company?.members || [])
-    .filter(member => member.status === 'Active' && ['Owner', 'Admin', 'Sales'].includes(member.role))
+    .filter(member => member.status === 'Active' && ['Owner', 'Admin', 'Sales', 'Manager'].includes(member.role))
     .map(member => member.name || member.email)
     .filter(Boolean)
   const actor = getCurrentActor()
   const actorName = actor.fullName || actor.name || actor.email
   const options = Array.from(new Set([actorName, ...memberNames].filter(Boolean))) as string[]
   return options.length ? options : ['Unassigned']
-}
-
-function stringValue(value: unknown) {
-  return typeof value === 'string' ? value : ''
-}
-
-function isLegacyDemoSalesId(id: string) {
-  return legacyDemoSalesIdPatterns.some(pattern => pattern.test(id))
-}
-
-function buildPipeline(opportunities: Opportunity[]) {
-  return (['Lead', 'Qualified', 'Proposal', 'Negotiation', 'Won', 'Lost'] as OpportunityStage[]).map(stage => {
-    const rows = opportunities.filter(item => item.stage === stage)
-    return { stage, count: rows.length, amount: rows.reduce((sum, item) => sum + item.expectedValue, 0) }
-  })
-}
-
-function filterRows(data: { leads: Lead[]; opportunities: Opportunity[]; quotes: Quote[]; orders: SalesOrder[]; invoices: Invoice[]; customers: Customer[]; products: Product[] }, activeTab: string, query: string) {
-  const q = query.trim().toLowerCase()
-  const filter = <T,>(rows: T[]) => !q ? rows : rows.filter(row => JSON.stringify(row).toLowerCase().includes(q))
-  return { leads: filter(data.leads), opportunities: filter(data.opportunities), quotes: filter(data.quotes), orders: filter(data.orders), invoices: filter(data.invoices), customers: filter(data.customers), products: filter(data.products) }
 }
 
 function nextCode(prefix: string, ids: string[]) {
@@ -888,48 +975,51 @@ function nextCode(prefix: string, ids: string[]) {
 }
 
 function money(value: number) {
-  return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 2 }).format(value)
+  return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 2 }).format(value || 0)
 }
 
 function date(value: string) {
   const parsed = new Date(value)
-  return Number.isNaN(parsed.getTime()) ? value : parsed.toLocaleDateString('en-US', { month: 'short', day: '2-digit', year: 'numeric' })
+  return Number.isNaN(parsed.getTime()) ? value || '-' : parsed.toLocaleDateString('en-US', { month: 'short', day: '2-digit', year: 'numeric' })
 }
 
-function initials(name: string) {
-  return name.split(/\s+/).filter(Boolean).map(part => part[0]).join('').slice(0, 2).toUpperCase() || 'WF'
+function addDays(value: string, days: number) {
+  const parsed = new Date(`${value}T00:00:00`)
+  if (Number.isNaN(parsed.getTime())) return new Date().toISOString().slice(0, 10)
+  parsed.setDate(parsed.getDate() + days)
+  return parsed.toISOString().slice(0, 10)
 }
 
+const stageColors = ['#2563eb', '#60a5fa', '#8b5cf6', '#f59e0b', '#14b8a6', '#64748b', '#10b981', '#ef4444']
 const pageHeader: CSSProperties = { display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 18, flexWrap: 'wrap', minWidth: 0 }
 const h1: CSSProperties = { margin: 0, fontSize: 30, lineHeight: 1.08, fontWeight: 900, color: '#020617', letterSpacing: 0 }
-const subtitleStyle: CSSProperties = { margin: '7px 0 0', fontSize: 14, color: '#475569', fontWeight: 500, maxWidth: 740 }
+const subtitleStyle: CSSProperties = { margin: '7px 0 0', fontSize: 14, color: '#475569', fontWeight: 500, maxWidth: 760 }
 const actionsWrap: CSSProperties = { display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }
 const primaryButton: CSSProperties = { height: 38, border: '1px solid #16a34a', background: '#16a34a', color: '#fff', borderRadius: 8, padding: '0 15px', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 7, fontSize: 13, fontWeight: 850, cursor: 'pointer', textDecoration: 'none' }
 const secondaryButton: CSSProperties = { height: 38, border: '1px solid #dbe3ea', background: '#fff', color: '#0f172a', borderRadius: 8, padding: '0 14px', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 7, fontSize: 13, fontWeight: 800, cursor: 'pointer', textDecoration: 'none' }
-const workflowStrip: CSSProperties = { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: 10 }
+const workflowStrip: CSSProperties = { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(128px, 1fr))', gap: 10 }
 const workflowStep: CSSProperties = { minHeight: 48, border: '1px solid #dbe3ea', borderRadius: 8, background: '#fff', display: 'flex', alignItems: 'center', gap: 9, padding: '0 12px', fontSize: 12, fontWeight: 850 }
-const workflowNumber: CSSProperties = { width: 24, height: 24, borderRadius: 999, background: '#dcfce7', color: '#15803d', display: 'grid', placeItems: 'center', fontSize: 11 }
+const workflowNumber: CSSProperties = { width: 24, height: 24, borderRadius: 999, background: '#dcfce7', color: '#15803d', display: 'grid', placeItems: 'center', fontSize: 11, flex: '0 0 auto' }
 const metricGrid: CSSProperties = { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(210px, 1fr))', gap: 16, minWidth: 0 }
 const metricCard: CSSProperties = { minHeight: 118, background: '#fff', border: '1px solid #e2e8f0', borderRadius: 10, padding: 20, display: 'flex', alignItems: 'center', gap: 16, boxShadow: '0 12px 28px rgba(15,23,42,.04)', minWidth: 0 }
 const statLabel: CSSProperties = { color: '#475569', fontSize: 13, fontWeight: 750 }
 const statValue: CSSProperties = { color: '#020617', fontSize: 24, fontWeight: 900, marginTop: 6, overflowWrap: 'anywhere' }
 const statDetail: CSSProperties = { color: green, fontSize: 12, fontWeight: 750, marginTop: 8 }
 const tabsStyle: CSSProperties = { display: 'flex', gap: 26, borderBottom: '1px solid #e2e8f0', overflowX: 'auto', minWidth: 0 }
-const topGrid: CSSProperties = { display: 'grid', gridTemplateColumns: 'minmax(0, 1.35fr) minmax(0, .95fr) minmax(250px, .78fr)', gap: 16, minWidth: 0 }
-const bottomGrid: CSSProperties = { display: 'grid', gridTemplateColumns: 'minmax(0, 1.25fr) minmax(320px, .72fr)', gap: 16, minWidth: 0 }
+const topGrid: CSSProperties = { display: 'grid', gridTemplateColumns: 'minmax(0, 1.25fr) minmax(0, 1fr) minmax(260px, .82fr)', gap: 16, minWidth: 0 }
+const bottomGrid: CSSProperties = { display: 'grid', gridTemplateColumns: 'minmax(0, 1.15fr) minmax(320px, .8fr)', gap: 16, minWidth: 0 }
 const panel: CSSProperties = { background: '#fff', border: '1px solid #e2e8f0', borderRadius: 10, boxShadow: '0 12px 28px rgba(15,23,42,.04)', overflow: 'hidden', minWidth: 0 }
 const panelHeader: CSSProperties = { minHeight: 58, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, padding: '0 18px', borderBottom: '1px solid #eef2f7', minWidth: 0 }
 const panelTitle: CSSProperties = { margin: 0, color: '#020617', fontSize: 15, fontWeight: 900 }
 const emptyState: CSSProperties = { minHeight: 154, display: 'grid', placeItems: 'center', alignContent: 'center', gap: 6, padding: 24, color: '#64748b', textAlign: 'center', fontSize: 13 }
-const tableStyle: CSSProperties = { width: '100%', borderCollapse: 'collapse', minWidth: 920 }
+const tableStyle: CSSProperties = { width: '100%', borderCollapse: 'collapse', minWidth: 1040 }
 const thStyle: CSSProperties = { padding: '13px 14px', color: '#475569', background: '#f8fafc', fontSize: 11, fontWeight: 900, textAlign: 'left', whiteSpace: 'nowrap' }
-const tdStyle: CSSProperties = { padding: '13px 14px', borderTop: '1px solid #edf2f7', color: '#0f172a', fontSize: 12, whiteSpace: 'nowrap' }
+const tdStyle: CSSProperties = { padding: '13px 14px', borderTop: '1px solid #edf2f7', color: '#0f172a', fontSize: 12, whiteSpace: 'nowrap', verticalAlign: 'top' }
 const viewAll: CSSProperties = { color: '#2563eb', fontSize: 12, fontWeight: 800, textDecoration: 'none', whiteSpace: 'nowrap' }
-const panelActions: CSSProperties = { display: 'inline-flex', alignItems: 'center', gap: 10, flexWrap: 'nowrap', justifyContent: 'flex-end' }
 const viewToggle: CSSProperties = { display: 'inline-grid', gridTemplateColumns: '1fr 1fr', border: '1px solid #dbe3ea', borderRadius: 8, overflow: 'hidden', background: '#fff' }
 const viewToggleButton = (active: boolean): CSSProperties => ({ width: 30, height: 30, border: 0, borderRight: active ? 0 : '1px solid #e2e8f0', background: active ? '#16a34a' : '#fff', color: active ? '#fff' : '#475569', display: 'grid', placeItems: 'center', cursor: 'pointer' })
 const miniSelect: CSSProperties = { height: 34, border: '1px solid #dbe3ea', borderRadius: 8, padding: '0 10px', background: '#fff', color: '#334155', fontSize: 12, fontWeight: 750 }
-const searchBox: CSSProperties = { height: 34, width: 'min(240px, 48vw)', display: 'flex', alignItems: 'center', gap: 8, padding: '0 10px', border: '1px solid #dbe3ea', borderRadius: 8, background: '#fff' }
+const searchBox: CSSProperties = { height: 34, width: 'min(260px, 48vw)', display: 'flex', alignItems: 'center', gap: 8, padding: '0 10px', border: '1px solid #dbe3ea', borderRadius: 8, background: '#fff' }
 const bareInput: CSSProperties = { border: 0, outline: 0, minWidth: 0, flex: 1, fontSize: 12, background: 'transparent', color: '#0f172a' }
 const smallButton: CSSProperties = { minHeight: 30, border: '1px solid #dbe3ea', background: '#fff', color: '#0f172a', borderRadius: 7, padding: '0 9px', display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 11, fontWeight: 850, cursor: 'pointer' }
 const iconButton: CSSProperties = { width: 34, height: 34, border: '1px solid #dbe3ea', borderRadius: 8, background: '#fff', color: '#334155', display: 'inline-grid', placeItems: 'center', cursor: 'pointer' }
@@ -937,20 +1027,11 @@ const chartArea: CSSProperties = { height: 230, display: 'grid', gridTemplateCol
 const chartColumn: CSSProperties = { height: '100%', display: 'grid', alignItems: 'end', justifyItems: 'center', position: 'relative' }
 const bar: CSSProperties = { width: 24, minHeight: 20, borderRadius: '7px 7px 0 0', background: 'linear-gradient(180deg, #22c55e, #15803d)' }
 const chartLabel: CSSProperties = { position: 'absolute', bottom: -24, color: '#64748b', fontSize: 11, fontWeight: 700 }
-const pipelineGrid: CSSProperties = { display: 'grid', gridTemplateColumns: 'minmax(90px, 130px) minmax(90px, 1fr) minmax(110px, 130px)', gap: 12, alignItems: 'center', padding: 18 }
+const pipelineGrid: CSSProperties = { display: 'grid', gridTemplateColumns: 'minmax(120px, 170px) minmax(90px, 1fr) minmax(110px, 130px)', gap: 12, alignItems: 'center', padding: 18 }
 const pipelineLabel: CSSProperties = { display: 'grid', gap: 4, color: '#475569', fontSize: 12, fontWeight: 750 }
-const funnelBar: CSSProperties = { height: 34, borderRadius: 7, clipPath: 'polygon(8% 0, 92% 0, 80% 100%, 20% 100%)', justifySelf: 'center' }
-const repsList: CSSProperties = { display: 'grid', gap: 14, padding: 18 }
-const repRow: CSSProperties = { display: 'flex', alignItems: 'center', gap: 12, minWidth: 0 }
-const repMeta: CSSProperties = { flex: 1, minWidth: 0, display: 'grid', gap: 2, gridTemplateColumns: 'minmax(0, 1fr)', color: '#0f172a' }
-const avatarStyle: CSSProperties = { width: 32, height: 32, borderRadius: 999, background: '#2563eb', color: '#fff', display: 'inline-grid', placeItems: 'center', fontSize: 12, fontWeight: 900, flex: '0 0 auto' }
-const dealPill: CSSProperties = { background: '#dcfce7', color: '#15803d', borderRadius: 999, padding: '4px 9px', fontSize: 11, fontWeight: 850, whiteSpace: 'nowrap' }
-const ordersCardGrid: CSSProperties = { display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 12, padding: 14 }
-const invoicesCardGrid: CSSProperties = { display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 12, padding: 14 }
-const orderCard: CSSProperties = { border: '1px solid #e2e8f0', borderRadius: 10, padding: 14, display: 'grid', gap: 12, background: '#fff', boxShadow: '0 8px 22px rgba(15,23,42,.04)', minWidth: 0 }
-const orderCardMeta: CSSProperties = { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }
-const categoryLayout: CSSProperties = { display: 'grid', gridTemplateColumns: '150px minmax(0, 1fr)', alignItems: 'center', gap: 22, padding: 18 }
-const donut: CSSProperties = { width: 140, height: 140, borderRadius: '50%', background: 'conic-gradient(#16a34a 0 40%, #2563eb 40% 70%, #8b5cf6 70% 90%, #f59e0b 90% 100%)', display: 'grid', placeItems: 'center', position: 'relative', color: '#0f172a', textAlign: 'center', fontSize: 12 }
+const funnelBar: CSSProperties = { height: 28, borderRadius: 7, clipPath: 'polygon(8% 0, 92% 0, 80% 100%, 20% 100%)', justifySelf: 'center' }
+const categoryLayout: CSSProperties = { display: 'grid', gridTemplateColumns: '135px minmax(0, 1fr)', alignItems: 'center', gap: 18, padding: 18 }
+const donut: CSSProperties = { width: 126, height: 126, borderRadius: '50%', background: 'conic-gradient(#16a34a 0 40%, #2563eb 40% 70%, #8b5cf6 70% 90%, #f59e0b 90% 100%)', display: 'grid', placeItems: 'center', position: 'relative', color: '#0f172a', textAlign: 'center', fontSize: 11 }
 const categoryRow: CSSProperties = { display: 'flex', justifyContent: 'space-between', gap: 12, fontSize: 13, minWidth: 0 }
 const analyticsGrid: CSSProperties = { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: 16, padding: 18 }
 const insightCard: CSSProperties = { border: '1px solid #e2e8f0', borderRadius: 10, padding: 16, display: 'grid', gap: 10, alignContent: 'start' }
@@ -960,7 +1041,7 @@ const integrationGrid: CSSProperties = { display: 'grid', gridTemplateColumns: '
 const integrationItem: CSSProperties = { display: 'flex', gap: 12, alignItems: 'flex-start', border: '1px solid #eef2f7', borderRadius: 9, padding: 12, color: '#475569', fontSize: 12 }
 const successBox: CSSProperties = { border: '1px solid #bbf7d0', background: '#f0fdf4', color: '#166534', borderRadius: 10, padding: '12px 14px', fontSize: 13, fontWeight: 800, display: 'flex', justifyContent: 'space-between', gap: 12 }
 const dismissButton: CSSProperties = { border: 0, background: 'transparent', color: '#166534', cursor: 'pointer', display: 'grid', placeItems: 'center' }
-const newMenu: CSSProperties = { position: 'absolute', right: 0, top: 44, zIndex: 10, width: 190, background: '#fff', border: '1px solid #e2e8f0', borderRadius: 8, boxShadow: '0 18px 40px rgba(15,23,42,.16)', padding: 6 }
+const newMenu: CSSProperties = { position: 'absolute', right: 0, top: 44, zIndex: 10, width: 210, background: '#fff', border: '1px solid #e2e8f0', borderRadius: 8, boxShadow: '0 18px 40px rgba(15,23,42,.16)', padding: 6 }
 const newMenuItem: CSSProperties = { width: '100%', border: 0, background: 'transparent', borderRadius: 6, padding: '10px 11px', display: 'flex', alignItems: 'center', gap: 9, color: '#0f172a', fontSize: 13, fontWeight: 750, cursor: 'pointer' }
 const overlay: CSSProperties = { position: 'fixed', inset: 0, zIndex: 120, background: 'rgba(15,23,42,.28)', display: 'flex', justifyContent: 'flex-end' }
 const drawer: CSSProperties = { width: 'min(520px, 100vw)', height: '100%', background: '#fff', boxShadow: '-24px 0 50px rgba(15,23,42,.2)', display: 'grid', gridTemplateRows: 'auto 1fr auto', overflowY: 'auto' }
@@ -971,7 +1052,12 @@ const labelStyle: CSSProperties = { color: '#334155', fontSize: 13, fontWeight: 
 const inputStyle: CSSProperties = { width: '100%', height: 42, border: '1px solid #dbe3ea', borderRadius: 8, padding: '0 12px', color: '#0f172a', fontSize: 13, fontWeight: 650, outline: 'none', background: '#fff', boxSizing: 'border-box' }
 const prefixStyle: CSSProperties = { position: 'absolute', left: 12, top: 12, color: '#64748b', fontSize: 13, fontWeight: 850 }
 const drawerFooter: CSSProperties = { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, padding: 28, borderTop: '1px solid #e2e8f0' }
-
+const kanbanGrid: CSSProperties = { display: 'grid', gridTemplateColumns: 'repeat(4, minmax(230px, 1fr))', gap: 12, padding: 14, overflowX: 'auto' }
+const kanbanColumn: CSSProperties = { minHeight: 260, border: '1px solid #e2e8f0', borderRadius: 10, background: '#f8fafc', padding: 10, display: 'grid', gap: 10, alignContent: 'start' }
+const kanbanHeader: CSSProperties = { display: 'flex', justifyContent: 'space-between', alignItems: 'center', color: '#0f172a', fontSize: 12, fontWeight: 900 }
+const kanbanCard: CSSProperties = { background: '#fff', border: '1px solid #e2e8f0', borderRadius: 8, padding: 12, display: 'grid', gap: 7, fontSize: 12, color: '#475569', boxShadow: '0 8px 20px rgba(15,23,42,.04)' }
+const kanbanEmpty: CSSProperties = { margin: 0, color: '#94a3b8', fontSize: 12 }
+const miniRow: CSSProperties = { display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) auto', gap: 12, alignItems: 'center', border: '1px solid #eef2f7', borderRadius: 9, padding: 12, color: '#475569', fontSize: 12 }
 const softIcon = (color: string, size = 54): CSSProperties => ({ width: size, height: size, borderRadius: 14, background: `${color}16`, color, display: 'grid', placeItems: 'center', flex: '0 0 auto' })
 const tabStyle = (active: boolean): CSSProperties => ({ border: 0, background: 'transparent', padding: '8px 13px', margin: 0, color: active ? '#111827' : '#334155', borderBottom: active ? '2px solid #111827' : '2px solid transparent', borderRadius: 0, fontSize: 13, fontWeight: active ? 900 : 750, cursor: 'pointer', whiteSpace: 'nowrap' })
 const legendDot = (color: string): CSSProperties => ({ width: 8, height: 8, borderRadius: 999, background: color, display: 'inline-block', marginRight: 8 })
