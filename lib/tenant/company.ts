@@ -98,7 +98,13 @@ export function loadCompanies(): CompanyRecord[] {
   if (typeof window === 'undefined') return []
   try {
     const parsed = JSON.parse(window.localStorage.getItem(companiesKey) || '[]') as unknown
-    return Array.isArray(parsed) ? parsed.filter(isCompanyRecord) : []
+    const records = Array.isArray(parsed) ? parsed.filter(isCompanyRecord) : []
+    const normalized = normalizeCompanyIds(records)
+    if (normalized.changed) {
+      window.localStorage.setItem(companiesKey, JSON.stringify(normalized.companies))
+      if (normalized.activeCompanyId) window.localStorage.setItem(activeCompanyKey, normalized.activeCompanyId)
+    }
+    return normalized.companies
   } catch {
     return []
   }
@@ -290,6 +296,52 @@ function uniqueCompanyId(name: string) {
 function slugifyCompanyId(name: string) {
   const slug = name.toLowerCase().trim().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '')
   return slug || `company-${Date.now()}`
+}
+
+function normalizeCompanyIds(companies: CompanyRecord[]) {
+  const activeId = getStoredActiveCompanyId()
+  const account = readJson<AccountSnapshot>(accountKey) || {}
+  const used = new Set<string>()
+  let changed = false
+  let activeCompanyId = activeId
+  const idCounts = companies.reduce((counts, company) => {
+    counts.set(company.id, (counts.get(company.id) || 0) + 1)
+    return counts
+  }, new Map<string, number>())
+  const activeDuplicateName = account.company?.trim().toLowerCase()
+
+  const normalized = companies.map((company, index) => {
+    const duplicated = (idCounts.get(company.id) || 0) > 1
+    const shouldKeepDuplicateId = duplicated
+      && company.id === activeId
+      && !used.has(company.id)
+      && (!activeDuplicateName || company.name.trim().toLowerCase() === activeDuplicateName)
+
+    if (!used.has(company.id) && (!duplicated || shouldKeepDuplicateId)) {
+      used.add(company.id)
+      return company
+    }
+
+    const base = slugifyCompanyId(company.name)
+    let nextId = base
+    let suffix = 2
+    while (used.has(nextId)) {
+      nextId = `${base}-${suffix}`
+      suffix += 1
+    }
+    used.add(nextId)
+    changed = true
+    const renamed = { ...company, id: nextId }
+    if (company.id === activeId && !activeDuplicateName && index === 0) activeCompanyId = nextId
+    return renamed
+  })
+
+  if (activeCompanyId && !normalized.some(company => company.id === activeCompanyId)) {
+    activeCompanyId = normalized[0]?.id || ''
+    changed = true
+  }
+
+  return { companies: normalized, changed, activeCompanyId }
 }
 
 function persistActiveCompany(company: CompanyRecord) {
