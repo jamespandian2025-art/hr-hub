@@ -138,8 +138,8 @@ export default function BankingPage() {
                     </td>
                     <td data-label="Account Number">.... {account.number}</td>
                     <td data-label="Bank">{account.bank}</td>
-                    <td data-label="Currency">{account.currency}</td>
-                    <td data-label="Balance">{money(account.balance, account.currency)}</td>
+                    <td data-label="Currency">{data.currency}</td>
+                    <td data-label="Balance">{money(account.balance, data.currency)}</td>
                     <td data-label="Status"><StatusPill value={account.status} /></td>
                     <td data-label="Actions"><button type="button" aria-label={`Actions for ${account.name}`} className="banking-icon-button"><MoreHorizontal size={15} /></button></td>
                   </tr>

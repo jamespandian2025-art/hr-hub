@@ -523,7 +523,7 @@ function formatDate(value: string) {
 }
 
 function formatCurrency(value: number) {
-  return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(value)
+  return new Intl.NumberFormat('en-PH', { style: 'currency', currency: 'PHP' }).format(value)
 }
 
 function percentage(value: number, total: number) {

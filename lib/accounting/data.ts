@@ -143,7 +143,7 @@ export function loadAccountingData(): AccountingData {
 
   return {
     companyName: activeCompany?.name || 'Current company',
-    currency: activeCompany?.settings?.currency || 'USD',
+    currency: 'PHP',
     invoices,
     bills,
     expenses,
@@ -159,7 +159,7 @@ export function loadAccountingData(): AccountingData {
 export function emptyAccountingData(): AccountingData {
   return {
     companyName: 'Current company',
-    currency: 'USD',
+    currency: 'PHP',
     invoices: [],
     bills: [],
     expenses: [],
@@ -172,7 +172,7 @@ export function emptyAccountingData(): AccountingData {
   }
 }
 
-export function money(value: number, currency = 'USD') {
+export function money(value: number, currency = 'PHP') {
   return new Intl.NumberFormat(currency === 'PHP' ? 'en-PH' : 'en-US', { style: 'currency', currency }).format(Number(value || 0))
 }
 
@@ -326,7 +326,7 @@ function toBankAccount(row: StoredRow, index: number): AccountingBankAccount {
     type: readString(row, ['type', 'accountType'], 'Account'),
     number: readString(row, ['number', 'accountNumber', 'last4'], ''),
     bank: readString(row, ['bank', 'institution'], 'Connected bank'),
-    currency: readString(row, ['currency'], 'USD'),
+    currency: readString(row, ['currency'], 'PHP'),
     balance: readNumber(row, ['balance', 'currentBalance', 'availableBalance'], 0),
     status: titleCase(readString(row, ['status'], 'Active')),
     color: readString(row, ['color'], colors[index % colors.length]),
