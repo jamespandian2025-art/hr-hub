@@ -21,7 +21,6 @@ import {
   ReceiptText,
   Search,
   ShieldCheck,
-  UserPlus,
   WalletCards,
   X,
 } from 'lucide-react'
@@ -335,8 +334,17 @@ export default function AccountingShell({ children }: { children: React.ReactNod
                 </button>
               </div>
             )}
-            <button type="button" onClick={() => router.push('/hr/employees/new')} style={employeeButtonStyle}>
-              <UserPlus size={16} /> Add employee
+            <button
+              type="button"
+              onClick={() => {
+                setNotificationsOpen(false)
+                setNewMenuOpen(open => !open)
+              }}
+              aria-expanded={newMenuOpen}
+              aria-haspopup="menu"
+              style={employeeButtonStyle}
+            >
+              <Plus size={16} /> New Record
             </button>
             <div style={{ position: 'relative' }}>
               <button
@@ -753,11 +761,13 @@ const accountingShellCss = `
   .accounting-shell {
     display: grid !important;
     grid-template-columns: 1fr !important;
-    height: auto !important;
+    height: 100vh !important;
+    height: 100dvh !important;
     min-height: 100vh !important;
     min-height: 100dvh !important;
-    max-height: none !important;
-    overflow: visible !important;
+    max-height: 100vh !important;
+    max-height: 100dvh !important;
+    overflow: hidden !important;
   }
 
   .accounting-mobile-backdrop {
@@ -845,19 +855,24 @@ const accountingShellCss = `
 
   .accounting-content-column {
     width: 100%;
-    height: auto !important;
-    min-height: 100vh;
-    min-height: 100dvh;
-    max-height: none !important;
-    display: block !important;
-    overflow: visible !important;
+    height: 100vh !important;
+    height: 100dvh !important;
+    min-height: 0 !important;
+    max-height: 100vh !important;
+    max-height: 100dvh !important;
+    display: grid !important;
+    grid-template-rows: auto minmax(0, 1fr) !important;
+    overflow: hidden !important;
   }
 
   .accounting-scroll-content {
     width: 100%;
-    overflow: visible !important;
+    height: 100%;
+    overflow-y: auto !important;
+    overflow-x: hidden !important;
     min-height: 0;
     -webkit-overflow-scrolling: touch;
+    overscroll-behavior: contain;
   }
 }
 

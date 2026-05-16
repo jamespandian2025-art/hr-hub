@@ -252,9 +252,15 @@ export default function PayrollFinancePage() {
   const netPay = currentPayrollRecords.reduce((sum, record) => sum + Number(record.net || 0), 0)
   const employerContributions = 0
   const totalPayrollCost = grossPay + employerContributions
-  const costPerEmployee = activeEmployees.length ? totalPayrollCost / activeEmployees.length : 0
-  const departments = new Set(activeEmployees.map(employee => employee.department).filter(Boolean))
-  const avgDepartmentCost = departments.size ? totalPayrollCost / departments.size : 0
+  const payrollEmployeeIds = new Set(currentPayrollRecords.map(record => record.employeeId).filter(Boolean))
+  const payrollEmployeeCount = payrollEmployeeIds.size || currentPayrollRecords.length
+  const currentPayrollDepartments = new Set(currentPayrollRecords.map(record => employees.find(employee => employeeMatchesId(employee, record.employeeId))?.department).filter(Boolean))
+  const costPerEmployee = payrollEmployeeCount ? totalPayrollCost / payrollEmployeeCount : 0
+  const avgDepartmentCost = currentPayrollDepartments.size ? totalPayrollCost / currentPayrollDepartments.size : 0
+  const grossCostPercent = totalPayrollCost ? (grossPay / totalPayrollCost) * 100 : 0
+  const employerCostPercent = totalPayrollCost ? (employerContributions / totalPayrollCost) * 100 : 0
+  const netPayPercent = grossPay ? (netPay / grossPay) * 100 : 0
+  const deductionPercent = grossPay ? (totalDeductions / grossPay) * 100 : 0
   const monthlyPayroll = useMemo(() => buildPayrollTrend(payrollRuns), [payrollRuns])
   const maxPayrollValue = Math.max(1, ...monthlyPayroll.flatMap(month => [month.gross, month.net]))
   const complianceItems = useMemo(() => buildComplianceRows(currentPayrollRecords), [currentPayrollRecords])
@@ -634,22 +640,25 @@ export default function PayrollFinancePage() {
           </div>
         </div>
 
-        <div className="payroll-card">
-          <h2>Payroll Cost Breakdown</h2>
+        <div className="payroll-card payroll-cost-card">
+          <h2>Payroll Cost & Pay Distribution</h2>
           {totalPayrollCost > 0 ? (
             <div className="payroll-breakdown">
-              <div className="payroll-donut" style={{ background: `conic-gradient(#16a34a 0 ${(grossPay / Math.max(totalPayrollCost, 1)) * 100}%, #2563eb ${(grossPay / Math.max(totalPayrollCost, 1)) * 100}% ${((grossPay + employerContributions) / Math.max(totalPayrollCost, 1)) * 100}%, #7c3aed ${((grossPay + employerContributions) / Math.max(totalPayrollCost, 1)) * 100}% 100%)` }}>
-                <span><strong>{money(totalPayrollCost).replace('.00', '')}</strong><small>Total Cost</small></span>
+              <div className="payroll-donut" style={{ background: `conic-gradient(#16a34a 0 ${grossCostPercent}%, #2563eb ${grossCostPercent}% 100%)` }}>
+                <span><strong>{money(totalPayrollCost).replace('.00', '')}</strong><small>Employer Cost</small></span>
               </div>
               <div className="payroll-breakdown-list">
-                <p><span style={{ background: '#16a34a' }} /> Gross Pay <strong>{money(grossPay)} ({((grossPay / Math.max(totalPayrollCost, 1)) * 100).toFixed(1)}%)</strong></p>
-                <p><span style={{ background: '#2563eb' }} /> Employer Contributions <strong>{money(employerContributions)} ({((employerContributions / Math.max(totalPayrollCost, 1)) * 100).toFixed(1)}%)</strong></p>
-                <p><span style={{ background: '#7c3aed' }} /> Deductions <strong>{money(totalDeductions)} ({((totalDeductions / Math.max(totalPayrollCost, 1)) * 100).toFixed(1)}%)</strong></p>
+                <p><span style={{ background: '#16a34a' }} /> Gross Pay <strong>{money(grossPay)} ({grossCostPercent.toFixed(1)}% of employer cost)</strong></p>
+                <p><span style={{ background: '#2563eb' }} /> Employer Contributions <strong>{money(employerContributions)} ({employerCostPercent.toFixed(1)}% of employer cost)</strong></p>
+                <p className="is-muted"><span style={{ background: '#7c3aed' }} /> Employee Deductions <strong>{money(totalDeductions)} ({deductionPercent.toFixed(1)}% of gross pay)</strong></p>
+                <p className="is-muted"><span style={{ background: '#0ea5e9' }} /> Net Pay <strong>{money(netPay)} ({netPayPercent.toFixed(1)}% of gross pay)</strong></p>
               </div>
             </div>
           ) : <div className="payroll-empty">No payroll cost data yet. HR payroll records will populate this breakdown.</div>}
           <div className="payroll-cost-row">
+            <span>Employees in Payroll <strong>{payrollEmployeeCount}</strong></span>
             <span>Cost per Employee <strong>{money(costPerEmployee)}</strong></span>
+            <span>Departments in Payroll <strong>{currentPayrollDepartments.size}</strong></span>
             <span>Cost per Department (Avg.) <strong>{money(avgDepartmentCost)}</strong></span>
           </div>
         </div>
@@ -915,9 +924,9 @@ function CompliancePanel({ complianceItems, latestPeriod }: { complianceItems: A
         {complianceItems.length ? complianceItems.map(item => (
           <div key={item.title}>
             <span className={`compliance-icon ${item.icon}`}><ShieldCheck size={17} /></span>
-            <span><strong>{item.title}</strong><small>{periodLabel(latestPeriod)}</small></span>
-            <span><strong>{money(item.amount)}</strong><small>From payroll deduction breakdown</small></span>
-            <StatusPill value="Pending" />
+            <span className="compliance-main"><strong>{item.title}</strong><small>{periodLabel(latestPeriod)}</small></span>
+            <span className="compliance-amount"><strong>{money(item.amount)}</strong><small>From payroll deduction breakdown</small></span>
+            <span className="compliance-status"><StatusPill value="Pending" /></span>
           </div>
         )) : <div className="payroll-empty">No statutory contribution data yet. Payroll deduction breakdowns will populate this section.</div>}
       </div>
@@ -998,16 +1007,18 @@ const payrollCss = `
 .bar.net { background: #2563eb; }
 .payroll-month i { position: absolute; width: 8px; height: 8px; border-radius: 999px; background: #f59e0b; }
 .payroll-month small { color: #334155; font-size: 11px; }
-.payroll-breakdown { display: grid; grid-template-columns: 180px minmax(0, 1fr); gap: 24px; align-items: center; }
+.payroll-cost-card { display: flex; flex-direction: column; }
+.payroll-breakdown { display: grid; grid-template-columns: 172px minmax(0, 1fr); gap: 22px; align-items: center; }
 .payroll-donut { width: 156px; height: 156px; border-radius: 50%; display: grid; place-items: center; }
 .payroll-donut span { width: 96px; height: 96px; border-radius: 50%; background: #fff; display: grid; place-items: center; text-align: center; }
 .payroll-donut strong { font-size: 20px; }
 .payroll-donut small { color: #64748b; font-size: 12px; font-weight: 850; }
-.payroll-breakdown-list { display: grid; gap: 18px; }
+.payroll-breakdown-list { display: grid; gap: 12px; }
 .payroll-breakdown-list p { margin: 0; display: grid; grid-template-columns: 12px minmax(0, 1fr); gap: 10px; font-size: 13px; }
 .payroll-breakdown-list p span { width: 12px; height: 12px; border-radius: 4px; margin-top: 3px; }
-.payroll-breakdown-list strong { display: block; margin-top: 3px; color: #334155; }
-.payroll-cost-row { display: grid; grid-template-columns: 1fr 1fr; margin-top: 18px; background: #f8fafc; border-radius: 8px; overflow: hidden; }
+.payroll-breakdown-list strong { display: block; margin-top: 3px; color: #334155; line-height: 1.35; }
+.payroll-breakdown-list .is-muted { color: #475569; }
+.payroll-cost-row { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); margin-top: auto; background: #f8fafc; border-radius: 8px; overflow: hidden; }
 .payroll-cost-row span { padding: 14px; color: #334155; font-size: 12.5px; }
 .payroll-cost-row strong { display: block; color: #0f172a; font-size: 16px; margin-top: 6px; }
 .payroll-task-list, .payroll-compliance-list { display: grid; gap: 14px; }
@@ -1030,11 +1041,15 @@ const payrollCss = `
 .payroll-pagination strong { font-size: 12.5px; }
 .payroll-pagination div { display: flex; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
 .payroll-pagination .is-active { background: #16a34a; color: #fff; border-color: #16a34a; }
-.payroll-compliance-list div { display: grid; grid-template-columns: 42px minmax(0, 1fr) auto auto; align-items: center; gap: 12px; border-bottom: 1px solid #eef2f7; padding-bottom: 13px; }
+.payroll-compliance-list div { display: grid; grid-template-columns: 42px minmax(0, 1fr) minmax(120px, auto); align-items: center; gap: 12px; border-bottom: 1px solid #eef2f7; padding-bottom: 13px; }
 .compliance-icon { width: 38px; height: 38px; border-radius: 9px; display: grid; place-items: center; background: #f3e8ff; color: #7c3aed; }
 .compliance-icon.sss { background: #eff6ff; color: #2563eb; }
 .compliance-icon.health { background: #fef2f2; color: #ef4444; }
 .compliance-icon.housing { background: #dbeafe; color: #2563eb; }
+.compliance-main, .compliance-amount { min-width: 0; }
+.compliance-main strong, .compliance-amount strong { display: block; overflow-wrap: anywhere; line-height: 1.25; }
+.compliance-amount { text-align: right; justify-self: end; }
+.compliance-status { grid-column: 3; justify-self: end; margin-top: -4px; }
 .payroll-compliance-list small { display: block; color: #64748b; margin-top: 4px; }
 .payroll-calendar-link { min-height: 44px; background: #f8fafc; border-radius: 8px; margin-top: 16px; display: flex; align-items: center; justify-content: center; gap: 10px; color: #2563eb; text-decoration: none; font-size: 13px; font-weight: 900; }
 @media (max-width: 1280px) {
@@ -1049,7 +1064,7 @@ const payrollCss = `
 @media (max-width: 900px) {
   .payroll-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .payroll-breakdown, .payroll-cost-row { grid-template-columns: 1fr; }
-  .payroll-compliance-list div { grid-template-columns: 42px minmax(0, 1fr); }
+  .payroll-compliance-list div { grid-template-columns: 42px minmax(0, 1fr) auto; }
   .payroll-pagination { flex-direction: column; align-items: flex-start; }
   .payroll-request-grid { grid-template-columns: 1fr; }
   .loan-term-review { grid-template-columns: minmax(180px, 1fr) minmax(110px, .55fr); }
@@ -1066,6 +1081,9 @@ const payrollCss = `
   .payroll-bars { overflow-x: auto; grid-template-columns: repeat(6, 48px); }
   .payroll-task-list div { grid-template-columns: 42px minmax(0, 1fr); }
   .payroll-task-list .payroll-pill { grid-column: 2; justify-self: start; }
+  .payroll-compliance-list div { grid-template-columns: 38px minmax(0, 1fr); align-items: start; }
+  .compliance-amount { grid-column: 2; justify-self: start; text-align: left; margin-top: 6px; }
+  .compliance-status { grid-column: 2; justify-self: start; margin-top: 8px; }
   .payroll-table-wrap { overflow: visible; }
   .payroll-table, .payroll-table thead, .payroll-table tbody, .payroll-table tr, .payroll-table td { display: block; width: 100%; min-width: 0; }
   .payroll-table thead { display: none; }
