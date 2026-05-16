@@ -163,11 +163,11 @@ export default function ProjectManagementModule() {
             <p>Plan, track and deliver projects successfully.</p>
           </div>
           <div className="pm-header-actions">
-            <button type="button" className="pm-control" onClick={() => setFiltersOpen(open => !open)}><CalendarDays size={15} /> {dateRangeLabel} <ChevronDown size={13} /></button>
-            <label className="pm-search"><Search size={16} /><input value={filters.query} onChange={event => setFilters(prev => ({ ...prev, query: event.target.value }))} placeholder="Search projects, tasks, documents..." /></label>
-            <button type="button" className="pm-control"><Bell size={15} /></button>
-            <button type="button" className="pm-control" onClick={() => setFiltersOpen(open => !open)}><Filter size={15} /> Filters</button>
-            <button type="button" className="pm-primary" onClick={() => setShowCreate(true)}><Plus size={16} /> New Project <ChevronDown size={13} /></button>
+            <button type="button" className="pm-control pm-date-control" onClick={() => setFiltersOpen(open => !open)}><CalendarDays size={15} /> {dateRangeLabel} <ChevronDown size={13} /></button>
+            <label className="pm-search pm-header-search"><Search size={16} /><input value={filters.query} onChange={event => setFilters(prev => ({ ...prev, query: event.target.value }))} placeholder="Search projects, tasks, documents..." /></label>
+            <button type="button" className="pm-control pm-bell-control"><Bell size={15} /></button>
+            <button type="button" className="pm-control pm-filter-control" onClick={() => setFiltersOpen(open => !open)}><Filter size={15} /> Filters</button>
+            <button type="button" className="pm-primary pm-new-project-button" onClick={() => setShowCreate(true)}><Plus size={16} /> New Project <ChevronDown size={13} /></button>
           </div>
         </header>
 
@@ -478,5 +478,97 @@ const projectManagementCss = `
 .pm-detail-head p { margin: 5px 0 0; color: #23335f; }
 .pm-detail-head > button:first-child { border: 1px solid #dbe3ef; border-radius: 8px; background: #fff; min-height: 38px; padding: 0 12px; font-weight: 900; cursor: pointer; }
 @media (max-width: 1280px) { .pm-overview-grid { grid-template-columns: 1fr; } .pm-recent { grid-column: auto; } .pm-resource-grid, .pm-doc-grid, .pm-budget-grid { grid-template-columns: 1fr 1fr; } .pm-header { grid-template-columns: 1fr; } .pm-header-actions { justify-content: flex-start; } }
-@media (max-width: 760px) { .pm-header { gap: 12px; } .pm-title-block h1 { font-size: clamp(24px, 8vw, 30px); } .pm-header-actions { display: grid; grid-template-columns: 1fr; } .pm-search, .pm-control, .pm-primary { width: 100%; justify-content: center; min-height: 44px; } .pm-search { justify-content: flex-start; } .pm-search input { min-width: 0; width: 100%; } .pm-kpis { display: flex; overflow-x: auto; scroll-snap-type: x mandatory; padding-bottom: 4px; margin-right: -16px; } .pm-kpi { min-width: 240px; scroll-snap-align: start; } .pm-resource-grid, .pm-doc-grid, .pm-budget-grid, .pm-form, .pm-modal-form, .pm-filter-panel { grid-template-columns: 1fr; } .pm-tabs { margin-left: -16px; margin-right: -16px; padding-left: 16px; padding-right: 16px; } .pm-donut-wrap, .pm-budget-summary, .pm-detail-head { grid-template-columns: 1fr; } .pm-donut { width: 180px; height: 180px; margin: auto; } .pm-list article { grid-template-columns: 34px 1fr; align-items: start; } .pm-list em, .pm-list .pm-pill { grid-column: 2; } .pm-wide { grid-column: auto; } .pm-table-wrap { display: none; } .pm-mobile-projects { display: grid; gap: 12px; } .pm-mobile-project-card { border: 1px solid #e6edf6; border-radius: 14px; padding: 14px; display: grid; gap: 10px; } .pm-mobile-project-card > div { display: flex; align-items: center; justify-content: space-between; gap: 10px; } .pm-mobile-project-card strong { overflow-wrap: anywhere; } .pm-mobile-project-card span:not(.pm-pill):not(.pm-progress) { color: #64748b; font-size: 12px; font-weight: 800; } .pm-kanban { grid-template-columns: repeat(4, minmax(78vw, 1fr)); margin-right: -16px; } .pm-task-card footer { grid-template-columns: auto 1fr; } .pm-task-card footer .pm-progress { grid-column: 1 / -1; width: 100%; } .pm-timeline div { min-width: 620px; } .pm-modal-backdrop { align-items: end; padding: 0; } .pm-modal { width: 100%; max-height: 92dvh; border-radius: 18px 18px 0 0; } }
+@media (max-width: 760px) {
+  .pm-shell { gap: 16px; padding-bottom: calc(84px + env(safe-area-inset-bottom)); }
+  .pm-workspace { gap: 16px; }
+  .pm-header { gap: 10px; }
+  .pm-title-block h1 { font-size: clamp(24px, 7vw, 28px); letter-spacing: 0; }
+  .pm-title-block p { margin-top: 6px; font-size: 13.5px; line-height: 1.45; }
+  .pm-header-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; align-items: stretch; }
+  .pm-control, .pm-primary, .pm-search { width: 100%; min-width: 0; min-height: 44px; justify-content: center; border-radius: 10px; padding: 0 12px; font-size: 12.5px; }
+  .pm-header-search { order: 1; grid-column: 1 / -1; justify-content: flex-start; background: #fff; }
+  .pm-header-search input { min-width: 0; width: 100%; }
+  .pm-date-control { order: 2; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+  .pm-filter-control { order: 3; }
+  .pm-bell-control { display: none; }
+  .pm-new-project-button {
+    position: fixed;
+    right: 16px;
+    bottom: calc(16px + env(safe-area-inset-bottom));
+    z-index: 85;
+    width: auto;
+    min-width: 156px;
+    min-height: 52px;
+    border-radius: 999px;
+    box-shadow: 0 18px 36px rgba(22, 163, 74, .32);
+  }
+  .pm-kpis {
+    display: flex;
+    gap: 12px;
+    overflow-x: auto;
+    scroll-snap-type: x mandatory;
+    margin-left: -16px;
+    margin-right: -16px;
+    padding: 0 16px 8px;
+    scroll-padding-left: 16px;
+    scrollbar-width: none;
+  }
+  .pm-kpis::-webkit-scrollbar, .pm-tabs::-webkit-scrollbar { display: none; }
+  .pm-kpi { min-width: min(280px, 82vw); min-height: 124px; scroll-snap-align: start; border-radius: 16px; }
+  .pm-card { border-radius: 16px; padding: 16px; box-shadow: 0 8px 22px rgba(9, 17, 51, .055); }
+  .pm-resource-grid, .pm-doc-grid, .pm-budget-grid, .pm-form, .pm-modal-form { grid-template-columns: 1fr; }
+  .pm-tabs {
+    gap: 22px;
+    margin-left: -16px;
+    margin-right: -16px;
+    padding-left: 16px;
+    padding-right: 16px;
+    scrollbar-width: none;
+  }
+  .pm-tabs button { min-height: 44px; font-size: 13px; }
+  .pm-filter-panel {
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 95;
+    grid-template-columns: 1fr;
+    max-height: 82dvh;
+    overflow: auto;
+    border-radius: 20px 20px 0 0;
+    padding: 18px;
+    box-shadow: 0 -18px 60px rgba(15, 23, 42, .24);
+  }
+  .pm-donut-wrap, .pm-budget-summary, .pm-detail-head { grid-template-columns: 1fr; }
+  .pm-donut { width: 180px; height: 180px; margin: auto; }
+  .pm-list article { grid-template-columns: 34px 1fr; align-items: start; }
+  .pm-list em, .pm-list .pm-pill { grid-column: 2; }
+  .pm-wide { grid-column: auto; }
+  .pm-table-wrap { display: none; }
+  .pm-mobile-projects { display: grid; gap: 12px; }
+  .pm-mobile-project-card {
+    border: 1px solid #e3ebf5;
+    border-radius: 16px;
+    padding: 16px;
+    display: grid;
+    gap: 10px;
+    background: #fff;
+    box-shadow: 0 10px 24px rgba(9, 17, 51, .07);
+  }
+  .pm-mobile-project-card > div { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+  .pm-mobile-project-card strong { overflow-wrap: anywhere; font-size: 15px; }
+  .pm-mobile-project-card small { font-size: 12.5px; }
+  .pm-mobile-project-card span:not(.pm-pill):not(.pm-progress) { color: #64748b; font-size: 12px; font-weight: 800; }
+  .pm-mobile-project-card .pm-progress { width: 100%; }
+  .pm-kanban { grid-template-columns: repeat(4, minmax(78vw, 1fr)); margin-right: -16px; }
+  .pm-task-card footer { grid-template-columns: auto 1fr; }
+  .pm-task-card footer .pm-progress { grid-column: 1 / -1; width: 100%; }
+  .pm-timeline div { min-width: 620px; }
+  .pm-modal-backdrop { align-items: end; padding: 0; }
+  .pm-modal { width: 100%; max-height: 92dvh; border-radius: 18px 18px 0 0; }
+}
+@media (max-width: 390px) {
+  .pm-new-project-button { left: 16px; right: 16px; width: auto; }
+  .pm-kpi { min-width: calc(100vw - 56px); }
+}
 `
