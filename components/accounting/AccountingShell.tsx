@@ -107,7 +107,6 @@ export default function AccountingShell({ children }: { children: React.ReactNod
   const [notificationsOpen, setNotificationsOpen] = useState(false)
   const [newMenuOpen, setNewMenuOpen] = useState(false)
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false)
-  const [isMobileLayout, setIsMobileLayout] = useState(false)
   const [loanRequests, setLoanRequests] = useState<LoanRequest[]>([])
   const [allowanceRequests, setAllowanceRequests] = useState<AllowanceRequest[]>([])
   const [outboundNotifications, setOutboundNotifications] = useState<FinanceOutboundNotification[]>([])
@@ -122,17 +121,6 @@ export default function AccountingShell({ children }: { children: React.ReactNod
     loadAccount()
     window.addEventListener('storage', loadAccount)
     return () => window.removeEventListener('storage', loadAccount)
-  }, [])
-
-  useEffect(() => {
-    const updateLayout = () => setIsMobileLayout(window.innerWidth <= 900)
-    updateLayout()
-    window.addEventListener('resize', updateLayout)
-    window.addEventListener('orientationchange', updateLayout)
-    return () => {
-      window.removeEventListener('resize', updateLayout)
-      window.removeEventListener('orientationchange', updateLayout)
-    }
   }, [])
 
   useEffect(() => {
@@ -238,18 +226,13 @@ export default function AccountingShell({ children }: { children: React.ReactNod
     overflow: 'hidden',
     background: '#f7f9fc',
     display: 'grid',
-    gridTemplateColumns: isMobileLayout ? 'minmax(0, 1fr)' : '250px minmax(0, 1fr)',
     fontFamily: font,
     color: '#111827',
   }
   const sidebarStyle: React.CSSProperties = {
     minHeight: '100vh',
     height: '100dvh',
-    position: isMobileLayout ? 'fixed' : 'sticky',
     top: 0,
-    left: isMobileLayout ? 0 : undefined,
-    width: isMobileLayout ? 'min(294px, 86vw)' : undefined,
-    maxWidth: isMobileLayout ? '86vw' : undefined,
     alignSelf: 'start',
     background: '#000',
     color: '#ededed',
@@ -257,14 +240,8 @@ export default function AccountingShell({ children }: { children: React.ReactNod
     display: 'flex',
     flexDirection: 'column',
     gap: 14,
-    zIndex: isMobileLayout ? 1000 : 70,
-    transform: isMobileLayout && !mobileSidebarOpen ? 'translateX(-104%)' : 'translateX(0)',
-    transition: isMobileLayout ? 'transform 180ms ease' : undefined,
-    boxShadow: isMobileLayout ? '28px 0 80px rgba(15, 23, 42, .34)' : undefined,
   }
   const headerStyle: React.CSSProperties = {
-    height: isMobileLayout ? 'auto' : 76,
-    minHeight: isMobileLayout ? 64 : undefined,
     position: 'sticky',
     top: 0,
     zIndex: 80,
@@ -272,22 +249,14 @@ export default function AccountingShell({ children }: { children: React.ReactNod
     backdropFilter: 'blur(16px)',
     borderBottom: '1px solid #e8edf4',
     display: 'grid',
-    gridTemplateColumns: isMobileLayout ? '1fr' : 'auto minmax(280px, 520px) auto',
-    alignItems: isMobileLayout ? 'stretch' : 'center',
-    gap: isMobileLayout ? 10 : 18,
-    padding: isMobileLayout ? '10px 12px' : '0 28px',
   }
   const headerActionsStyle: React.CSSProperties = {
-    display: isMobileLayout ? 'grid' : 'flex',
-    gridTemplateColumns: isMobileLayout ? '44px minmax(0, 1fr) 44px 44px' : undefined,
+    display: 'grid',
     alignItems: 'center',
-    justifyContent: isMobileLayout ? 'stretch' : 'flex-end',
-    gap: isMobileLayout ? 8 : 10,
-    width: isMobileLayout ? '100%' : undefined,
   }
 
   return (
-    <div className={`accounting-shell${isMobileLayout ? ' accounting-shell-mobile' : ''}`} style={shellStyle}>
+    <div className="accounting-shell" style={shellStyle}>
       <style>{accountingShellCss}</style>
       <button
         type="button"
@@ -709,6 +678,8 @@ const notificationFooterStyle: React.CSSProperties = {
 
 const accountingShellCss = `
 .accounting-shell {
+  display: grid !important;
+  grid-template-columns: minmax(0, 1fr) !important;
   height: 100vh;
   height: 100dvh;
   min-height: 100vh;
@@ -724,82 +695,42 @@ const accountingShellCss = `
   box-sizing: border-box;
 }
 .accounting-mobile-backdrop {
-  display: none;
+  display: block;
+  position: fixed;
+  inset: 0;
+  z-index: 990;
+  min-width: 0;
+  min-height: 0;
+  opacity: 0;
+  pointer-events: none;
+  background: rgba(15, 23, 42, .42);
+  transition: opacity 160ms ease;
   border: 0;
   padding: 0;
   margin: 0;
-  background: transparent;
 }
-.accounting-shell-mobile {
-  grid-template-columns: minmax(0, 1fr) !important;
-  height: 100vh !important;
-  height: 100dvh !important;
-  max-height: 100vh !important;
-  max-height: 100dvh !important;
-  overflow: hidden !important;
-}
-.accounting-shell-mobile .accounting-content-column {
-  width: 100%;
-  height: 100vh !important;
-  height: 100dvh !important;
-  min-height: 0 !important;
-  max-height: 100vh !important;
-  max-height: 100dvh !important;
-  display: grid !important;
-  grid-template-rows: auto minmax(0, 1fr) !important;
-  overflow: hidden !important;
-}
-.accounting-shell-mobile .accounting-scroll-content {
-  width: 100%;
-  height: 100%;
-  min-height: 0;
-  overflow-y: auto !important;
-  overflow-x: hidden !important;
-  -webkit-overflow-scrolling: touch;
-  overscroll-behavior: contain;
-}
-.accounting-shell-mobile .accounting-sticky-header {
-  height: auto !important;
-  min-height: 64px;
-  grid-template-columns: 1fr !important;
-  align-items: stretch !important;
-  gap: 10px !important;
-  padding: 10px 12px !important;
-}
-.accounting-shell-mobile .accounting-header-title,
-.accounting-shell-mobile .accounting-header-search {
-  width: 100%;
-  min-height: 44px;
-}
-.accounting-shell-mobile .accounting-header-actions {
-  width: 100%;
-  display: grid !important;
-  grid-template-columns: 44px minmax(0, 1fr) 44px 44px;
-  align-items: center !important;
-  justify-content: stretch !important;
-  gap: 8px !important;
-}
-.accounting-shell-mobile .accounting-header-actions > button,
-.accounting-shell-mobile .accounting-header-actions > div > button {
-  min-height: 44px !important;
-}
-.accounting-shell-mobile .accounting-header-actions > button:nth-child(2) {
-  width: 100% !important;
-  justify-content: center !important;
-  overflow: hidden;
-  white-space: nowrap;
-  text-overflow: ellipsis;
+.accounting-mobile-backdrop.is-open {
+  opacity: 1;
+  pointer-events: auto;
 }
 .accounting-sidebar {
-  position: sticky !important;
+  position: fixed !important;
+  inset: 0 auto 0 0;
   top: 0 !important;
+  width: min(294px, 86vw);
   height: 100vh;
   height: 100dvh;
   min-height: 100vh !important;
   max-height: 100vh;
   max-height: 100dvh;
   overflow: hidden;
-  z-index: 70;
+  z-index: 1000;
+  transform: translateX(-104%);
+  transition: transform 180ms ease;
+  box-shadow: 28px 0 80px rgba(15, 23, 42, .34);
+}
+.accounting-sidebar.is-open {
+  transform: translateX(0);
 }
 .accounting-sidebar-nav {
   min-height: 0;
@@ -807,27 +738,63 @@ const accountingShellCss = `
   scrollbar-width: thin;
 }
 .accounting-content-column {
+  width: 100%;
   min-width: 0;
-  min-height: 0;
+  min-height: 0 !important;
   height: 100vh;
   height: 100dvh;
-  display: grid;
-  grid-template-rows: 76px minmax(0, 1fr);
-  overflow: hidden;
+  max-height: 100vh;
+  max-height: 100dvh;
+  display: grid !important;
+  grid-template-rows: auto minmax(0, 1fr) !important;
+  overflow: hidden !important;
 }
 .accounting-sticky-header {
   position: sticky !important;
   top: 0 !important;
   z-index: 80 !important;
   width: 100%;
+  height: auto !important;
+  min-height: 64px;
+  grid-template-columns: 1fr !important;
+  align-items: stretch !important;
+  gap: 10px !important;
+  padding: 10px 12px !important;
   grid-row: 1;
+}
+.accounting-header-title,
+.accounting-header-search {
+  width: 100%;
+  min-height: 44px;
+}
+.accounting-header-actions {
+  width: 100%;
+  display: grid !important;
+  grid-template-columns: 44px minmax(0, 1fr) 44px 44px;
+  align-items: center !important;
+  justify-content: stretch !important;
+  gap: 8px !important;
+}
+.accounting-header-actions > button,
+.accounting-header-actions > div > button {
+  min-height: 44px !important;
+}
+.accounting-header-actions > button:nth-child(2) {
+  width: 100% !important;
+  justify-content: center !important;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
 }
 .accounting-scroll-content {
   min-height: 0;
+  width: 100%;
+  height: 100%;
   grid-row: 2;
-  overflow-y: auto;
-  overflow-x: hidden;
+  overflow-y: auto !important;
+  overflow-x: hidden !important;
   overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
   background: #ffffff;
 }
 .accounting-scroll-content :where(img, svg, canvas, video) {
@@ -882,10 +849,9 @@ const accountingShellCss = `
 .accounting-nav-row.active svg {
   color: #ededed;
 }
-@media (max-width: 900px) {
+@media (min-width: 901px) {
   .accounting-shell {
-    display: grid !important;
-    grid-template-columns: 1fr !important;
+    grid-template-columns: 250px minmax(0, 1fr) !important;
     height: 100vh !important;
     height: 100dvh !important;
     min-height: 100vh !important;
@@ -896,73 +862,57 @@ const accountingShellCss = `
   }
 
   .accounting-mobile-backdrop {
-    display: block;
-    position: fixed;
-    inset: 0;
-    z-index: 990;
-    min-width: 0;
-    min-height: 0;
+    display: none;
     opacity: 0;
     pointer-events: none;
-    background: rgba(15, 23, 42, .42);
-    transition: opacity 160ms ease;
-  }
-
-  .accounting-mobile-backdrop.is-open {
-    opacity: 1;
-    pointer-events: auto;
   }
 
   .accounting-sidebar {
-    position: fixed !important;
-    inset: 0 auto 0 0;
+    position: sticky !important;
+    inset: auto;
     top: 0 !important;
-    width: min(294px, 86vw);
+    width: auto;
     height: 100vh !important;
     height: 100dvh !important;
     min-height: 100vh !important;
     max-height: 100vh;
     max-height: 100dvh;
     overflow: hidden;
-    z-index: 1000;
-    transform: translateX(-104%);
-    transition: transform 180ms ease;
-    box-shadow: 28px 0 80px rgba(15, 23, 42, .34);
-  }
-
-  .accounting-sidebar.is-open {
+    z-index: 70;
     transform: translateX(0);
+    transition: none;
+    box-shadow: none;
   }
 
   .accounting-sticky-header {
     position: sticky !important;
     top: 0 !important;
     z-index: 80 !important;
-    height: auto !important;
-    min-height: 64px;
-    grid-template-columns: 1fr !important;
-    align-items: stretch !important;
-    gap: 10px !important;
-    padding: 10px 12px !important;
+    height: 76px !important;
+    min-height: 76px;
+    grid-template-columns: auto minmax(280px, 520px) auto !important;
+    align-items: center !important;
+    gap: 18px !important;
+    padding: 0 28px !important;
   }
 
   .accounting-header-title {
-    min-height: 44px;
-    width: 100%;
+    min-height: 0;
+    width: auto;
   }
 
   .accounting-header-search {
-    width: 100%;
-    min-height: 44px;
+    width: auto;
+    min-height: 40px;
   }
 
   .accounting-header-actions {
-    width: 100%;
-    display: grid !important;
-    grid-template-columns: 44px minmax(0, 1fr) 44px 44px;
+    width: auto;
+    display: flex !important;
+    grid-template-columns: none;
     align-items: center !important;
-    justify-content: stretch !important;
-    gap: 8px !important;
+    justify-content: flex-end !important;
+    gap: 10px !important;
   }
 
   .accounting-header-actions > button,
@@ -971,11 +921,11 @@ const accountingShellCss = `
   }
 
   .accounting-header-actions > button:nth-child(2) {
-    width: 100% !important;
-    justify-content: center !important;
-    overflow: hidden;
+    width: auto !important;
+    justify-content: center;
+    overflow: visible;
     white-space: nowrap;
-    text-overflow: ellipsis;
+    text-overflow: clip;
   }
 
   .accounting-content-column {
@@ -986,13 +936,13 @@ const accountingShellCss = `
     max-height: 100vh !important;
     max-height: 100dvh !important;
     display: grid !important;
-    grid-template-rows: auto minmax(0, 1fr) !important;
+    grid-template-rows: 76px minmax(0, 1fr) !important;
     overflow: hidden !important;
   }
 
   .accounting-scroll-content {
     width: 100%;
-    height: 100%;
+    height: auto;
     overflow-y: auto !important;
     overflow-x: hidden !important;
     min-height: 0;
