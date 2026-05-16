@@ -1,7 +1,6 @@
 'use client'
 
-import Link from 'next/link'
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import {
   ArrowUp,
   Banknote,
@@ -19,6 +18,7 @@ import {
   ShoppingCart,
   SlidersHorizontal,
   WalletCards,
+  X,
 } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import { emptyAccountingData, expenseBreakdown, loadAccountingData, money, monthlySeries, subscribeAccountingData } from '@/lib/accounting/data'
@@ -46,6 +46,10 @@ type ScheduledReport = {
   active: boolean
 }
 
+type ReportTab = 'Standard Reports' | 'Custom Reports' | 'Saved Reports' | 'Scheduled Reports'
+
+type QuickActionKey = 'custom' | 'designer' | 'import'
+
 const reportCategories: ReportCategory[] = [
   { name: 'Financial Statements', description: 'Balance Sheet, P&L, Cash Flow', icon: FileText, tone: '#16a34a' },
   { name: 'Management Reports', description: 'KPIs, Financial Summary, Trends', icon: FileBarChart, tone: '#0f172a' },
@@ -58,10 +62,12 @@ const reportCategories: ReportCategory[] = [
   { name: 'Custom Reports', description: 'Tailored reports and analytics', icon: Clock3, tone: '#7c3aed' },
 ]
 
-const quickActions = [
-  { title: 'Create Custom Report', body: 'Build a report from scratch', icon: FileBarChart },
-  { title: 'Report Designer', body: 'Design advanced custom reports', icon: Clock3 },
-  { title: 'Import Report Definition', body: 'Import from template or file', icon: Download },
+const reportTabs: ReportTab[] = ['Standard Reports', 'Custom Reports', 'Saved Reports', 'Scheduled Reports']
+
+const quickActions: Array<{ key: QuickActionKey; title: string; body: string; icon: LucideIcon }> = [
+  { key: 'custom', title: 'Create Custom Report', body: 'Build a report from scratch', icon: FileBarChart },
+  { key: 'designer', title: 'Report Designer', body: 'Design advanced custom reports', icon: Clock3 },
+  { key: 'import', title: 'Import Report Definition', body: 'Import from template or file', icon: Download },
 ]
 
 function FormatPill({ value }: { value: GeneratedReport['format'] }) {
@@ -74,6 +80,14 @@ function StatusPill() {
 
 export default function ReportsPage() {
   const [data, setData] = useState(emptyAccountingData)
+  const importInputRef = useRef<HTMLInputElement>(null)
+  const [activeTab, setActiveTab] = useState<ReportTab>('Standard Reports')
+  const [activeCategory, setActiveCategory] = useState(reportCategories[0].name)
+  const [reportSearch, setReportSearch] = useState('')
+  const [activeQuickAction, setActiveQuickAction] = useState<QuickActionKey | null>(null)
+  const [customReportName, setCustomReportName] = useState('')
+  const [designerMeasure, setDesignerMeasure] = useState('Net Profit')
+  const [importMessage, setImportMessage] = useState('')
 
   useEffect(() => {
     const load = () => setData(loadAccountingData())
@@ -90,14 +104,26 @@ export default function ReportsPage() {
   }
   const monthlyReports = useMemo(() => monthlySeries(data.transactions), [data.transactions])
   const expenseCategories = useMemo(() => expenseBreakdown(data.transactions), [data.transactions])
-  const generatedReports: GeneratedReport[] = data.transactions.length || data.invoices.length || data.bills.length || data.payrollRecords.length
-    ? [
-      { name: 'Profit & Loss Statement', category: 'Financial Statements', generatedBy: data.companyName, generatedOn: 'Available now', format: 'PDF' },
-      { name: 'Cash Flow Statement', category: 'Financial Statements', generatedBy: data.companyName, generatedOn: 'Available now', format: 'XLSX' },
-      { name: 'AR/AP Aging Summary', category: 'Management Reports', generatedBy: data.companyName, generatedOn: 'Available now', format: 'PDF' },
-    ]
+  const generatedReports: GeneratedReport[] = useMemo(() => {
+    const reports: GeneratedReport[] = []
+    if (data.transactions.length || data.invoices.length || data.bills.length || data.payrollRecords.length) {
+      reports.push(
+        { name: 'Profit & Loss Statement', category: 'Financial Statements', generatedBy: data.companyName, generatedOn: 'Available now', format: 'PDF' },
+        { name: 'Cash Flow Statement', category: 'Financial Statements', generatedBy: data.companyName, generatedOn: 'Available now', format: 'XLSX' },
+        { name: 'AR/AP Aging Summary', category: 'Management Reports', generatedBy: data.companyName, generatedOn: 'Available now', format: 'PDF' },
+      )
+    }
+    if (data.invoices.length) reports.push({ name: 'Sales by Customer', category: 'Sales Reports', generatedBy: data.companyName, generatedOn: 'Available now', format: 'XLSX' })
+    if (data.bills.length || data.expenses.length) reports.push({ name: 'Vendor Expense Summary', category: 'Purchasing Reports', generatedBy: data.companyName, generatedOn: 'Available now', format: 'PDF' })
+    if (data.bankAccounts.length || data.transactions.length) reports.push({ name: 'Cash Position Report', category: 'Banking Reports', generatedBy: data.companyName, generatedOn: 'Available now', format: 'XLSX' })
+    if (data.payrollRecords.length) reports.push({ name: 'Payroll Summary', category: 'Payroll Reports', generatedBy: data.companyName, generatedOn: 'Available now', format: 'PDF' })
+    if (data.taxObligations.length) reports.push({ name: 'Tax Liability Summary', category: 'Tax & Compliance Reports', generatedBy: data.companyName, generatedOn: 'Available now', format: 'PDF' })
+    if (customReportName.trim()) reports.unshift({ name: customReportName.trim(), category: 'Custom Reports', generatedBy: data.companyName, generatedOn: 'Draft', format: 'PDF' })
+    return reports
+  }, [customReportName, data])
+  const scheduledReports: ScheduledReport[] = generatedReports.length
+    ? [{ title: `${activeCategory} Digest`, cadence: 'Monthly on the 1st', active: true }]
     : []
-  const scheduledReports: ScheduledReport[] = []
   const netProfit = financialSummary.revenue - financialSummary.expenses
   const metrics = [
     { title: 'Total Revenue', value: money(financialSummary.revenue, data.currency), detail: `${data.invoices.length} invoice records`, icon: ArrowUp, tone: '#16a34a', up: financialSummary.revenue > 0 },
@@ -119,6 +145,39 @@ export default function ReportsPage() {
     }
   }, { cursor: 0, segments: [] }).segments.join(', ')
   const donutGradient = donut || '#e5e7eb 0% 100%'
+  const visibleCategories = reportCategories.filter(category => [category.name, category.description].some(value => value.toLowerCase().includes(reportSearch.trim().toLowerCase())))
+  const activeCategoryReports = generatedReports.filter(report => {
+    const categoryMatch = activeCategory === 'Custom Reports'
+      ? report.category === 'Custom Reports'
+      : report.category === activeCategory || activeCategory === 'Management Reports'
+    const tabMatch = activeTab === 'Standard Reports'
+      ? report.category !== 'Custom Reports'
+      : activeTab === 'Custom Reports'
+        ? report.category === 'Custom Reports'
+        : activeTab === 'Saved Reports'
+          ? report.generatedOn !== 'Draft'
+          : false
+    return categoryMatch && tabMatch
+  })
+  const selectedCategory = reportCategories.find(category => category.name === activeCategory) || reportCategories[0]
+  const SelectedCategoryIcon = selectedCategory.icon
+  const selectedCategoryDescription = activeCategoryReports.length
+    ? `${activeCategoryReports.length} report${activeCategoryReports.length === 1 ? '' : 's'} ready from live records.`
+    : `No ${selectedCategory.name.toLowerCase()} generated yet. Add matching records and they will appear here.`
+
+  function createCustomReport() {
+    const name = customReportName.trim() || `${selectedCategory.name} Custom Report`
+    setCustomReportName(name)
+    setActiveCategory('Custom Reports')
+    setActiveTab('Custom Reports')
+    setActiveQuickAction(null)
+  }
+
+  function handleImport(file?: File | null) {
+    if (!file) return
+    setImportMessage(`${file.name} is ready to map as a report definition.`)
+    setActiveQuickAction('import')
+  }
 
   return (
     <div className="reports-page" style={{ fontFamily: font }}>
@@ -152,32 +211,42 @@ export default function ReportsPage() {
       </section>
 
       <nav className="reports-tabs" aria-label="Report groups">
-        {['Standard Reports', 'Custom Reports', 'Saved Reports', 'Scheduled Reports'].map((tab, index) => <button type="button" key={tab} className={index === 0 ? 'is-active' : undefined}>{tab}</button>)}
+        {reportTabs.map(tab => <button type="button" key={tab} className={activeTab === tab ? 'is-active' : undefined} onClick={() => setActiveTab(tab)}>{tab}</button>)}
       </nav>
 
       <section className="reports-layout">
         <section className="reports-card reports-browser" aria-label="Browse reports">
           <h2>Browse Reports</h2>
-          <label><Search size={15} color="#64748b" /><input placeholder="Search reports..." /></label>
+          <label><Search size={15} color="#64748b" /><input value={reportSearch} onChange={event => setReportSearch(event.target.value)} placeholder="Search reports..." /></label>
           <div className="reports-category-list">
-            {reportCategories.map((category, index) => {
+            {visibleCategories.map(category => {
               const Icon = category.icon
               return (
-                <button type="button" key={category.name} className={index === 0 ? 'is-active' : undefined}>
+                <button type="button" key={category.name} className={activeCategory === category.name ? 'is-active' : undefined} onClick={() => setActiveCategory(category.name)}>
                   <span style={{ background: `${category.tone}12`, color: category.tone }}><Icon size={17} /></span>
                   <strong>{category.name}<small>{category.description}</small></strong>
                 </button>
               )
             })}
+            {!visibleCategories.length && <p className="reports-empty-small">No report categories match your search.</p>}
           </div>
           <div className="reports-custom-card">
             <strong>Can&apos;t find the report you need?</strong>
             <p>Create a custom report tailored to your business.</p>
-            <button type="button">Create Custom Report <Plus size={14} /></button>
+            <button type="button" onClick={() => setActiveQuickAction('custom')}>Create Custom Report <Plus size={14} /></button>
           </div>
         </section>
 
         <main className="reports-main">
+          <section className="reports-card reports-selected">
+            <span style={{ background: `${selectedCategory.tone}12`, color: selectedCategory.tone }}><SelectedCategoryIcon size={18} /></span>
+            <div>
+              <h2>{selectedCategory.name}</h2>
+              <p>{selectedCategoryDescription}</p>
+            </div>
+            <button type="button" onClick={() => setActiveQuickAction('custom')}><Plus size={14} /> New report</button>
+          </section>
+
           <section className="reports-top-panels">
             <div className="reports-card">
               <div className="reports-panel-header"><h2>Profit & Loss Summary</h2><button type="button">By Month <ChevronDown size={14} /></button></div>
@@ -200,7 +269,7 @@ export default function ReportsPage() {
                   <div className="reports-empty-chart">No revenue or expense records yet.</div>
                 )}
               </div>
-              <Link href="/accounting/reports" className="reports-full-link">View Full Report</Link>
+              <button type="button" className="reports-full-link" onClick={() => setActiveCategory('Financial Statements')}>View Full Report</button>
             </div>
 
             <div className="reports-card">
@@ -216,43 +285,44 @@ export default function ReportsPage() {
                   {!expenseCategories.length && <p>No expense records yet.</p>}
                 </div>
               </div>
-              <Link href="/accounting/reports" className="reports-full-link">View Full Report</Link>
+              <button type="button" className="reports-full-link" onClick={() => setActiveCategory('Purchasing Reports')}>View Full Report</button>
             </div>
           </section>
 
           <section className="reports-lower-panels">
             <div className="reports-card">
-              <div className="reports-panel-header"><h2>Recent Reports</h2><Link href="/accounting/reports">View Full Report</Link></div>
+              <div className="reports-panel-header"><h2>{activeTab === 'Scheduled Reports' ? 'Scheduled Reports' : 'Recent Reports'}</h2><button type="button" onClick={() => setActiveCategory('Management Reports')}>View Full Report</button></div>
               <div className="reports-table-wrap">
                 <table className="reports-table">
                   <thead><tr>{['Report Name', 'Category', 'Generated By', 'Generated On', 'Format', 'Actions'].map(col => <th key={col}>{col}</th>)}</tr></thead>
                   <tbody>
-                    {generatedReports.map(report => (
+                    {activeCategoryReports.map(report => (
                       <tr key={report.name}>
                         <td data-label="Report Name">{report.name}</td>
                         <td data-label="Category">{report.category}</td>
                         <td data-label="Generated By">{report.generatedBy}</td>
                         <td data-label="Generated On">{report.generatedOn}</td>
                         <td data-label="Format"><FormatPill value={report.format} /></td>
-                        <td data-label="Actions"><button type="button" className="reports-icon-button"><MoreHorizontal size={15} /></button></td>
+                        <td data-label="Actions"><button type="button" className="reports-icon-button" onClick={() => setActiveQuickAction('designer')}><MoreHorizontal size={15} /></button></td>
                       </tr>
                     ))}
                   </tbody>
                 </table>
+                {!activeCategoryReports.length && <p className="reports-empty-note">No reports match this category or tab yet.</p>}
               </div>
-              <div className="reports-pagination"><strong>Showing {generatedReports.length ? 1 : 0} to {generatedReports.length} of {generatedReports.length} reports</strong><div>{['‹', '1', '›'].map((p, i) => <button key={`${p}-${i}`} className={p === '1' ? 'is-active' : undefined}>{p}</button>)}<button>{Math.max(generatedReports.length, 1)} / page <ChevronDown size={14} /></button></div></div>
+              <div className="reports-pagination"><strong>Showing {activeCategoryReports.length ? 1 : 0} to {activeCategoryReports.length} of {activeCategoryReports.length} reports</strong><div>{['‹', '1', '›'].map((p, i) => <button type="button" key={`${p}-${i}`} className={p === '1' ? 'is-active' : undefined}>{p}</button>)}<button type="button">{Math.max(activeCategoryReports.length, 1)} / page <ChevronDown size={14} /></button></div></div>
             </div>
 
             <section className="reports-side-stack" aria-label="Report tools">
               <div className="reports-card">
-                <div className="reports-panel-header"><h2>Scheduled Reports</h2><Link href="/accounting/reports">View All</Link></div>
+                <div className="reports-panel-header"><h2>Scheduled Reports</h2><button type="button" onClick={() => setActiveTab('Scheduled Reports')}>View All</button></div>
                 <div className="reports-scheduled-list">
                   {scheduledReports.map(item => (
                     <div key={item.title}>
                       <CalendarDays size={18} />
                       <span><strong>{item.title}</strong><small>{item.cadence}</small></span>
                       <StatusPill />
-                      <MoreHorizontal size={15} />
+                      <button type="button" className="reports-inline-icon" onClick={() => setActiveQuickAction('designer')}><MoreHorizontal size={15} /></button>
                     </div>
                   ))}
                   {!scheduledReports.length && <p className="reports-empty-note">No scheduled reports yet.</p>}
@@ -261,11 +331,19 @@ export default function ReportsPage() {
 
               <div className="reports-card">
                 <h2>Quick Actions</h2>
+                <input ref={importInputRef} type="file" accept=".json,.csv,.xlsx,.xls" hidden onChange={event => handleImport(event.target.files?.[0])} />
                 <div className="reports-quick-list">
                   {quickActions.map(action => {
                     const Icon = action.icon
                     return (
-                      <button type="button" key={action.title}>
+                      <button type="button" key={action.title} className={activeQuickAction === action.key ? 'is-open' : undefined} onClick={() => {
+                        if (action.key === 'import') {
+                          setActiveQuickAction('import')
+                          importInputRef.current?.click()
+                          return
+                        }
+                        setActiveQuickAction(action.key)
+                      }}>
                         <span><Icon size={16} /></span>
                         <strong>{action.title}<small>{action.body}</small></strong>
                         <ChevronDown size={15} />
@@ -273,6 +351,33 @@ export default function ReportsPage() {
                     )
                   })}
                 </div>
+                {activeQuickAction && (
+                  <div className="reports-action-panel">
+                    <button type="button" className="reports-action-close" onClick={() => setActiveQuickAction(null)} aria-label="Close quick action"><X size={14} /></button>
+                    {activeQuickAction === 'custom' && (
+                      <form onSubmit={event => { event.preventDefault(); createCustomReport() }}>
+                        <strong>Create Custom Report</strong>
+                        <label>Report name<input value={customReportName} onChange={event => setCustomReportName(event.target.value)} placeholder={`${selectedCategory.name} report`} /></label>
+                        <label>Source category<select value={activeCategory} onChange={event => setActiveCategory(event.target.value)}>{reportCategories.map(category => <option key={category.name}>{category.name}</option>)}</select></label>
+                        <button type="submit">Create report</button>
+                      </form>
+                    )}
+                    {activeQuickAction === 'designer' && (
+                      <form onSubmit={event => event.preventDefault()}>
+                        <strong>Report Designer</strong>
+                        <label>Primary measure<select value={designerMeasure} onChange={event => setDesignerMeasure(event.target.value)}><option>Net Profit</option><option>Revenue</option><option>Expenses</option><option>Cash Balance</option><option>Open Payables</option></select></label>
+                        <p>{designerMeasure} is mapped to live accounting records and updates with the selected category.</p>
+                      </form>
+                    )}
+                    {activeQuickAction === 'import' && (
+                      <div>
+                        <strong>Import Report Definition</strong>
+                        <p>{importMessage || 'Choose a JSON, CSV, or spreadsheet file to import a report definition.'}</p>
+                        <button type="button" onClick={() => importInputRef.current?.click()}>Choose file</button>
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
             </section>
           </section>
@@ -314,16 +419,22 @@ const reportsCss = `
 .reports-category-list button.is-active { background: #ecfdf3 !important; }
 .reports-category-list button span { width: 34px; height: 34px; border-radius: 8px; display: grid; place-items: center; }
 .reports-category-list small { display: block; color: #64748b; margin-top: 3px; font-weight: 500; }
+.reports-empty-small { margin: 0; color: #64748b; font-size: 12.5px; font-weight: 800; padding: 10px; text-align: center; }
 .reports-custom-card { margin-top: auto; background: #f8fafc; border: 1px solid #eef2f7; border-radius: 8px; padding: 16px; }
 .reports-custom-card p { color: #64748b; font-size: 12.5px; }
 .reports-custom-card button { min-height: 36px; border: 1px solid #e8edf4; background: #fff; border-radius: 7px; padding: 0 12px; font-weight: 900; display: inline-flex; align-items: center; gap: 10px; }
 .reports-main { display: grid; gap: 16px; min-width: 0; }
+.reports-selected { display: grid; grid-template-columns: 42px minmax(0, 1fr) auto; gap: 12px; align-items: center; }
+.reports-selected > span { width: 42px; height: 42px; border-radius: 10px; display: grid; place-items: center; }
+.reports-selected h2 { margin: 0; font-size: 16px; font-weight: 950; }
+.reports-selected p { margin: 4px 0 0; color: #64748b; font-size: 12.5px; font-weight: 750; }
+.reports-selected button { min-height: 36px; border: 1px solid #bbf7d0; border-radius: 8px; background: #f0fdf4; color: #15803d; display: inline-flex; align-items: center; gap: 8px; padding: 0 12px; font-size: 12px; font-weight: 900; cursor: pointer; }
 .reports-top-panels { display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(360px, .9fr); gap: 16px; }
 .reports-lower-panels { display: grid; grid-template-columns: minmax(0, 1fr) 360px; gap: 16px; }
 .reports-side-stack { display: grid; gap: 16px; }
 .reports-panel-header { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-bottom: 16px; }
 .reports-panel-header a, .reports-full-link { color: #2563eb; font-size: 12px; font-weight: 900; text-decoration: none; }
-.reports-full-link { display: block; text-align: right; margin-top: 10px; }
+.reports-full-link { display: block; margin: 10px 0 0 auto; border: 0; background: transparent; padding: 0; cursor: pointer; text-align: right; }
 .reports-chart { min-height: 240px; display: grid; grid-template-rows: auto 1fr; gap: 12px; overflow: hidden; }
 .reports-chart-legend { display: flex; justify-content: center; gap: 24px; font-size: 12px; font-weight: 850; flex-wrap: wrap; }
 .reports-chart-legend span { width: 18px; height: 7px; border-radius: 999px; display: inline-block; margin-right: -16px; }
@@ -367,6 +478,16 @@ const reportsCss = `
 .reports-scheduled-list svg, .reports-quick-list span { color: #2563eb; }
 .reports-scheduled-list small, .reports-quick-list small { display: block; color: #64748b; margin-top: 4px; font-weight: 500; }
 .reports-quick-list span { width: 32px; height: 32px; border-radius: 8px; background: #eff6ff; display: grid; place-items: center; }
+.reports-quick-list button.is-open { background: #ecfdf3 !important; }
+.reports-inline-icon { border: 0; background: transparent; color: #64748b; display: grid; place-items: center; cursor: pointer; }
+.reports-action-panel { position: relative; margin-top: 14px; border: 1px solid #e8edf4; border-radius: 8px; background: #f8fafc; padding: 14px; color: #0f172a; }
+.reports-action-close { position: absolute; top: 8px; right: 8px; width: 26px; height: 26px; border: 1px solid #e8edf4; border-radius: 7px; background: #fff; display: grid; place-items: center; cursor: pointer; }
+.reports-action-panel form, .reports-action-panel div { display: grid; gap: 10px; }
+.reports-action-panel strong { font-size: 13px; font-weight: 950; padding-right: 28px; }
+.reports-action-panel p { margin: 0; color: #64748b; font-size: 12.5px; line-height: 1.45; }
+.reports-action-panel label { display: grid; gap: 6px; color: #334155; font-size: 11.5px; font-weight: 900; }
+.reports-action-panel input, .reports-action-panel select { width: 100%; min-height: 38px; border: 1px solid #dbe3ef; border-radius: 8px; background: #fff; color: #0f172a; padding: 0 10px; font: inherit; font-size: 12.5px; outline: 0; }
+.reports-action-panel button:not(.reports-action-close) { min-height: 38px; border: 1px solid #16a34a; border-radius: 8px; background: #16a34a; color: #fff; padding: 0 12px; font-size: 12.5px; font-weight: 900; cursor: pointer; }
 .reports-empty-note { margin: 0; min-height: 120px; border: 1px dashed #cbd5e1; border-radius: 8px; color: #64748b; display: grid; place-items: center; text-align: center; padding: 18px; font-size: 13px; font-weight: 850; }
 @media (max-width: 1280px) {
   .reports-page { padding: 22px; }
@@ -386,6 +507,8 @@ const reportsCss = `
   .reports-page { padding: 16px; }
   .reports-title { font-size: 24px; }
   .reports-actions, .reports-metrics, .reports-side-stack { display: grid; grid-template-columns: 1fr; }
+  .reports-selected { grid-template-columns: 38px minmax(0, 1fr); }
+  .reports-selected button { grid-column: 1 / -1; justify-content: center; }
   .reports-value { font-size: 20px; }
   .reports-tabs { margin-left: -16px; margin-right: -16px; padding-left: 16px; padding-right: 16px; }
   .reports-card { padding: 14px; }

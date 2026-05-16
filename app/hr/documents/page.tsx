@@ -161,7 +161,7 @@ export default function HrDocumentsPage() {
   const [typeFilter, setTypeFilter] = useState('All')
   const [categoryFilter, setCategoryFilter] = useState('All')
   const [uploaderFilter, setUploaderFilter] = useState('All')
-  const [viewMode, setViewMode] = useState<'list' | 'grid'>('list')
+  const [viewMode, setViewMode] = useState<'list' | 'grid'>('grid')
   const [folderModalOpen, setFolderModalOpen] = useState(false)
   const [folderName, setFolderName] = useState('')
   const [selectedFolderId, setSelectedFolderId] = useState('')
@@ -366,14 +366,26 @@ export default function HrDocumentsPage() {
     saveStored<HRDocument[]>(deletedDocumentsKey, [])
   }
 
+  const documentTabs: Array<{ key: DocumentTab; label: string; icon: typeof Folder; count: number }> = [
+    { key: 'folders', label: 'My Drive', icon: Folder, count: folders.length },
+    { key: 'all', label: 'All files', icon: FileText, count: documents.length },
+    { key: 'mine', label: 'Owned by me', icon: Upload, count: documents.filter(isMine).length },
+    { key: 'shared', label: 'Shared with me', icon: Users, count: sharedWithMeDocuments.length },
+    { key: 'recent', label: 'Recent', icon: CalendarDays, count: documents.filter(doc => Boolean(doc.lastOpenedAt)).length },
+    { key: 'trash', label: 'Trash', icon: Trash2, count: deletedDocuments.length },
+  ]
+
+  const activeTabLabel = documentTabs.find(tab => tab.key === activeTab)?.label || 'Documents'
+
   return (
     <section className="hr-module-page" style={{ fontFamily: font }}>
-      <div style={pageHeaderStyle}>
+      <style>{documentsCss}</style>
+      <div className="documents-header" style={pageHeaderStyle}>
         <div>
           <h1 style={pageTitleStyle}>Documents</h1>
           <p style={pageSubtitleStyle}>Manage and organize HR related documents.</p>
         </div>
-        <div style={toolbarStyle}>
+        <div className="documents-toolbar" style={toolbarStyle}>
           <SearchBox value={query} onChange={setQuery} placeholder="Search documents..." />
           <input ref={fileInputRef} type="file" multiple hidden onChange={event => uploadDocuments(event.target.files)} />
           <input ref={folderFileInputRef} type="file" multiple hidden onChange={event => uploadDocuments(event.target.files, selectedFolder)} />
@@ -384,7 +396,7 @@ export default function HrDocumentsPage() {
 
       {uploadError && <div style={errorStyle}>{uploadError}</div>}
 
-      <div style={metricGridStyle}>
+      <div className="documents-metrics" style={metricGridStyle}>
         <Metric icon={FileText} label="Total Documents" value={documents.length} sub="Uploaded files" color="#16a34a" bg="#dcfce7" />
         <Metric icon={Folder} label="Folders" value={folders.length} sub="Created folders" color="#2563eb" bg="#dbeafe" />
         <Metric icon={Users} label="Shared Documents" value={sharedWithMeDocuments.length} sub="Shared with you" color="#7c3aed" bg="#ede9fe" />
@@ -392,22 +404,43 @@ export default function HrDocumentsPage() {
         <Metric icon={Trash2} label="Trash" value={deletedDocuments.length} sub={deletedDocuments.length ? 'Empty trash' : 'Deleted documents'} color="#ca8a04" bg="#fef9c3" />
       </div>
 
-      <div style={tabsStyle}>
-        {[
-          ['folders', 'Folders'],
-          ['all', 'All Documents'],
-          ['mine', 'My Documents'],
-          ['shared', 'Shared With Me'],
-          ['recent', 'Recent'],
-          ['trash', 'Trash'],
-        ].map(([key, label]) => (
-          <button key={key} onClick={() => setActiveTab(key as DocumentTab)} style={tabStyle(activeTab === key)}>{label}</button>
-        ))}
-      </div>
+      <div className="documents-drive" style={driveWorkspaceStyle}>
+        <aside className="documents-drive-rail" style={driveRailStyle} aria-label="Document library sections">
+          <button style={driveNewButtonStyle} onClick={() => fileInputRef.current?.click()}><Plus size={18} /> New</button>
+          <nav style={driveNavStyle}>
+            {documentTabs.map(item => {
+              const Icon = item.icon
+              return (
+                <button key={item.key} onClick={() => setActiveTab(item.key)} style={driveNavItemStyle(activeTab === item.key)}>
+                  <Icon size={17} />
+                  <span>{item.label}</span>
+                  <strong>{item.count}</strong>
+                </button>
+              )
+            })}
+          </nav>
+          <div style={storagePanelStyle}>
+            <div style={storageBarTrackStyle}><span style={{ ...storageBarFillStyle, width: `${Math.min((storageUsed / (4 * 1024 * 1024)) * 100, 100)}%` }} /></div>
+            <strong>{formatFileSize(storageUsed)} used</strong>
+            <span>Local browser storage</span>
+          </div>
+        </aside>
 
-      <div style={cardStyle}>
-        {activeTab === 'folders' ? (
-          <div style={folderWorkspaceStyle}>
+        <div className="documents-drive-main" style={driveMainStyle}>
+          <div style={driveContentHeaderStyle}>
+            <div>
+              <h2 style={driveTitleStyle}>{activeTabLabel}</h2>
+              <p style={driveHintStyle}>{activeTab === 'folders' ? 'Create folders, select one, then upload files into it.' : 'Search, filter, preview, download, or move files to trash.'}</p>
+            </div>
+            <div style={driveHeaderActionsStyle}>
+              <button style={secondaryButtonStyle} onClick={() => fileInputRef.current?.click()}><Upload size={15} /> Upload</button>
+              <button style={primaryButtonStyle} onClick={() => setFolderModalOpen(true)}><Plus size={15} /> Folder</button>
+            </div>
+          </div>
+
+          <div style={cardStyle}>
+            {activeTab === 'folders' ? (
+          <div className="documents-folder-workspace" style={folderWorkspaceStyle}>
             <div style={folderPanelStyle}>
               <div style={folderPanelHeaderStyle}>
                 <div>
@@ -519,7 +552,7 @@ export default function HrDocumentsPage() {
           </div>
         ) : (
           <>
-        <div style={filterBarStyle}>
+        <div className="documents-filterbar" style={filterBarStyle}>
           <SearchBox value={query} onChange={setQuery} placeholder={activeTab === 'mine' ? 'Search my documents...' : activeTab === 'shared' ? 'Search shared documents...' : activeTab === 'recent' ? 'Search recent documents...' : activeTab === 'trash' ? 'Search trashed documents...' : 'Search documents by name, type, or tags...'} compact />
           <SelectFilter value={typeFilter} onChange={setTypeFilter} options={filterOptions.types} />
           <SelectFilter value={categoryFilter} onChange={setCategoryFilter} options={filterOptions.categories} />
@@ -614,7 +647,7 @@ export default function HrDocumentsPage() {
             </table>
           </div>
         ) : (
-          <div style={gridStyle}>
+          <div className="documents-file-grid" style={gridStyle}>
             {filteredDocuments.map(doc => (
               <article
                 key={doc.id}
@@ -653,6 +686,8 @@ export default function HrDocumentsPage() {
         )}
           </>
         )}
+          </div>
+      </div>
       </div>
 
       {folderModalOpen && (
@@ -685,7 +720,7 @@ function emptyStateCopy(tab: DocumentTab) {
 
 function SearchBox({ value, onChange, placeholder, compact }: { value: string; onChange: (value: string) => void; placeholder: string; compact?: boolean }) {
   return (
-    <label style={{ ...searchBoxStyle, minWidth: compact ? 320 : 360 }}>
+    <label style={{ ...searchBoxStyle, minWidth: compact ? 'min(320px, 100%)' : 'min(360px, 100%)', flex: compact ? '1 1 280px' : '1 1 360px' }}>
       <Search size={15} color="#94a3b8" />
       <input value={value} onChange={event => onChange(event.target.value)} placeholder={placeholder} style={plainInputStyle} />
     </label>
@@ -771,6 +806,49 @@ function Td({ children }: { children: React.ReactNode }) {
   return <td style={tdStyle}>{children}</td>
 }
 
+const documentsCss = `
+.hr-module-page { max-width: 100%; overflow-x: hidden; }
+.documents-drive-rail nav button strong { justify-self: end; min-width: 24px; text-align: right; font-size: 11px; color: #64748b; }
+.documents-drive-rail button, .documents-toolbar button, .documents-filterbar button, .documents-filterbar select { min-height: 44px; }
+.documents-drive-main table { background: #fff; }
+.documents-drive-main tbody tr:hover { background: #f8fafc; }
+.documents-file-grid article { transition: border-color .16s ease, box-shadow .16s ease, transform .16s ease; }
+.documents-file-grid article:hover { border-color: #bbf7d0; box-shadow: 0 14px 30px rgba(15, 23, 42, .08); transform: translateY(-1px); }
+@media (max-width: 1180px) {
+  .documents-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; }
+  .documents-drive { grid-template-columns: 1fr !important; }
+  .documents-drive-rail { position: static !important; }
+  .documents-drive-rail nav { grid-template-columns: repeat(3, minmax(0, 1fr)) !important; }
+}
+@media (max-width: 760px) {
+  .hr-module-page { padding: 16px !important; }
+  .documents-header { display: grid !important; }
+  .documents-toolbar { display: grid !important; grid-template-columns: 1fr 1fr; width: 100%; }
+  .documents-toolbar label { grid-column: 1 / -1; width: 100%; min-width: 0 !important; }
+  .documents-toolbar button { width: 100%; }
+  .documents-metrics { display: flex !important; overflow-x: auto; gap: 12px !important; border: 0 !important; background: transparent !important; box-shadow: none !important; scroll-snap-type: x mandatory; }
+  .documents-metrics article { min-width: 220px; border: 1px solid #e5e7eb !important; border-radius: 14px; background: #fff; scroll-snap-align: start; }
+  .documents-drive { gap: 12px !important; }
+  .documents-drive-rail { border-radius: 14px !important; padding: 12px !important; }
+  .documents-drive-rail nav { display: flex !important; overflow-x: auto; gap: 8px !important; padding-bottom: 2px; }
+  .documents-drive-rail nav button { min-width: 154px; }
+  .documents-drive-rail > button { width: 100%; }
+  .documents-drive-main > div:first-child { display: grid !important; border-radius: 14px !important; }
+  .documents-folder-workspace { grid-template-columns: 1fr !important; padding: 12px !important; }
+  .documents-filterbar { display: grid !important; grid-template-columns: 1fr 1fr; padding: 12px !important; gap: 10px !important; }
+  .documents-filterbar label { grid-column: 1 / -1; width: 100%; min-width: 0 !important; }
+  .documents-filterbar select, .documents-filterbar button { min-width: 0 !important; width: 100%; }
+  .documents-filterbar > div:last-child { grid-column: 1 / -1; width: 100%; }
+  .documents-filterbar > div:last-child button { width: 50%; }
+  .documents-file-grid { grid-template-columns: 1fr !important; padding: 12px !important; }
+  .documents-drive-main table { min-width: 860px !important; }
+}
+@media (max-width: 430px) {
+  .documents-toolbar, .documents-filterbar { grid-template-columns: 1fr !important; }
+  .documents-drive-rail nav button { min-width: 140px; }
+}
+`
+
 const pageHeaderStyle = { display: 'flex', justifyContent: 'space-between', gap: 16, alignItems: 'flex-start', flexWrap: 'wrap' as const, marginBottom: 18 }
 const pageTitleStyle = { margin: 0, color: '#0f172a', fontSize: 28, fontWeight: 900 }
 const pageSubtitleStyle = { margin: '6px 0 0', color: '#475569', fontSize: 14 }
@@ -778,9 +856,20 @@ const toolbarStyle = { display: 'flex', gap: 10, flexWrap: 'wrap' as const }
 const metricGridStyle = { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(210px, 1fr))', gap: 0, background: '#fff', border: '1px solid #e5e7eb', borderRadius: 12, boxShadow: '0 8px 24px rgba(15,23,42,0.04)', marginBottom: 20, overflow: 'hidden' }
 const metricCardStyle = { minHeight: 110, padding: 18, display: 'flex', alignItems: 'center', gap: 16, borderRight: '1px solid #f1f5f9' }
 const metricIconStyle = { width: 54, height: 54, borderRadius: 14, display: 'grid', placeItems: 'center' }
-const tabsStyle = { display: 'flex', gap: 28, borderBottom: '1px solid #e5e7eb', overflowX: 'auto' as const }
-const tabStyle = (active: boolean) => ({ border: 'none', background: 'transparent', padding: '14px 0', borderBottom: active ? '2px solid #22c55e' : '2px solid transparent', color: active ? '#16a34a' : '#334155', fontSize: 13, fontWeight: 800, cursor: 'pointer', fontFamily: font, whiteSpace: 'nowrap' as const })
-const cardStyle = { background: '#fff', border: '1px solid #e5e7eb', borderTop: 'none', boxShadow: '0 8px 24px rgba(15,23,42,0.04)' }
+const driveWorkspaceStyle = { display: 'grid', gridTemplateColumns: '248px minmax(0, 1fr)', gap: 18, alignItems: 'start' }
+const driveRailStyle = { position: 'sticky' as const, top: 86, background: '#fff', border: '1px solid #e5e7eb', borderRadius: 16, padding: 14, boxShadow: '0 10px 28px rgba(15,23,42,0.05)', display: 'grid', gap: 14 }
+const driveNewButtonStyle = { minHeight: 48, border: '1px solid #dcfce7', borderRadius: 999, background: '#16a34a', color: '#fff', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 10, padding: '0 18px', fontSize: 14, fontWeight: 950, cursor: 'pointer', fontFamily: font, boxShadow: '0 12px 26px rgba(22,163,74,.22)' }
+const driveNavStyle = { display: 'grid', gap: 4 }
+const driveNavItemStyle = (active: boolean) => ({ minHeight: 42, border: '0', borderRadius: 999, background: active ? '#e9f8ef' : 'transparent', color: active ? '#0f5132' : '#334155', display: 'grid', gridTemplateColumns: '22px minmax(0, 1fr) auto', gap: 10, alignItems: 'center', padding: '0 12px', textAlign: 'left' as const, cursor: 'pointer', fontFamily: font, fontSize: 13, fontWeight: active ? 900 : 750 })
+const storagePanelStyle = { borderTop: '1px solid #eef2f7', paddingTop: 14, display: 'grid', gap: 7, color: '#64748b', fontSize: 12 }
+const storageBarTrackStyle = { height: 7, borderRadius: 999, background: '#e2e8f0', overflow: 'hidden' }
+const storageBarFillStyle = { display: 'block', height: '100%', borderRadius: 999, background: '#16a34a' }
+const driveMainStyle = { minWidth: 0, display: 'grid', gap: 14 }
+const driveContentHeaderStyle = { background: '#fff', border: '1px solid #e5e7eb', borderRadius: 16, padding: '16px 18px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 16, flexWrap: 'wrap' as const, boxShadow: '0 10px 28px rgba(15,23,42,0.04)' }
+const driveTitleStyle = { margin: 0, color: '#0f172a', fontSize: 20, fontWeight: 950 }
+const driveHintStyle = { margin: '5px 0 0', color: '#64748b', fontSize: 13 }
+const driveHeaderActionsStyle = { display: 'flex', gap: 10, flexWrap: 'wrap' as const }
+const cardStyle = { background: '#fff', border: '1px solid #e5e7eb', borderRadius: 16, boxShadow: '0 8px 24px rgba(15,23,42,0.04)', overflow: 'hidden' }
 const folderWorkspaceStyle = { display: 'grid', gridTemplateColumns: 'minmax(280px, 360px) minmax(0, 1fr)', gap: 18, padding: 18 }
 const folderPanelStyle = { border: '1px solid #e5e7eb', borderRadius: 12, padding: 16, display: 'grid', gap: 14, alignContent: 'start' }
 const folderContentStyle = { border: '1px solid #e5e7eb', borderRadius: 12, padding: 16, minWidth: 0 }
