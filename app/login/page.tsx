@@ -251,7 +251,7 @@ export default function LoginPage() {
           </div>
         </label>
 
-        <button type="submit" style={primaryButtonStyle}>Log in</button>
+        <button type="submit" className="login-primary-button" style={primaryButtonStyle}>Log in</button>
       </form>
 
       <SocialButtons onSocial={socialLogin} label="Log in" />
@@ -271,6 +271,7 @@ export default function LoginPage() {
 function AuthShell({ title, subtitle, children }: { title: string; subtitle: string; children: React.ReactNode }) {
   return (
     <main style={{ minHeight: '100vh', background: '#eef2f7', display: 'grid', gridTemplateColumns: 'minmax(320px, 0.9fr) minmax(360px, 1fr)', fontFamily: "var(--font-body)" }}>
+      <style>{loginCss}</style>
       <section style={{ background: '#111827', color: '#fff', padding: '56px', display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
         <div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 80 }}>
@@ -325,3 +326,18 @@ const employeeLoginLinkStyle = { height: 38, borderRadius: 10, background: '#16a
 const socialButtonStyle = { height: 42, border: '1px solid #e5e7eb', borderRadius: 10, background: '#fff', color: '#111827', fontSize: 13, fontWeight: 600, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 8 }
 const ghostIconButtonStyle = { border: 'none', background: 'transparent', color: '#64748b', cursor: 'pointer', display: 'inline-flex', padding: 0 }
 const alertStyle = { padding: '10px 12px', borderRadius: 10, background: '#fef2f2', color: '#dc2626', fontSize: 13, fontWeight: 600 }
+
+const loginCss = `
+.login-primary-button {
+  background: #000000 !important;
+  border-color: #000000 !important;
+  color: #ffffff !important;
+}
+.login-primary-button:hover,
+.login-primary-button:focus,
+.login-primary-button:active {
+  background: #000000 !important;
+  border-color: #000000 !important;
+  color: #ffffff !important;
+}
+`
