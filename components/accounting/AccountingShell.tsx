@@ -190,7 +190,7 @@ export default function AccountingShell({ children }: { children: React.ReactNod
   return (
     <div className="accounting-shell" style={{ minHeight: '100vh', background: '#f7f9fc', display: 'grid', gridTemplateColumns: '250px minmax(0, 1fr)', fontFamily: font, color: '#111827' }}>
       <style>{accountingShellCss}</style>
-      <aside style={{ minHeight: '100vh', position: 'sticky', top: 0, alignSelf: 'start', background: '#000', color: '#ededed', padding: '18px 10px', display: 'flex', flexDirection: 'column', gap: 14 }}>
+      <aside className="accounting-sidebar" style={{ minHeight: '100vh', position: 'sticky', top: 0, alignSelf: 'start', background: '#000', color: '#ededed', padding: '18px 10px', display: 'flex', flexDirection: 'column', gap: 14 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '0 6px 4px' }}>
           <span style={{ width: 36, height: 36, borderRadius: 10, background: '#ededed', color: '#000', display: 'grid', placeItems: 'center', fontWeight: 700, fontSize: 16 }}>W</span>
           <span>
@@ -204,7 +204,7 @@ export default function AccountingShell({ children }: { children: React.ReactNod
           Back to WiseFlow
         </Link>
 
-        <nav style={{ display: 'grid', gap: 3, alignContent: 'start', flex: 1, overflowY: 'auto', paddingRight: 0 }} aria-label="Accounting workspace navigation">
+        <nav className="accounting-sidebar-nav" style={{ display: 'grid', gap: 3, alignContent: 'start', flex: 1, overflowY: 'auto', paddingRight: 0 }} aria-label="Accounting workspace navigation">
           <div style={{ fontSize: 11, color: '#737373', fontWeight: 500, padding: '0 10px 6px', textTransform: 'uppercase' }}>Workspace</div>
           {accountingNavItems.map(item => {
             const Icon = item.icon
@@ -221,8 +221,8 @@ export default function AccountingShell({ children }: { children: React.ReactNod
         </nav>
       </aside>
 
-      <div style={{ minWidth: 0 }}>
-        <header style={{ height: 76, position: 'sticky', top: 0, zIndex: 30, background: 'rgba(255,255,255,0.94)', backdropFilter: 'blur(16px)', borderBottom: '1px solid #e8edf4', display: 'grid', gridTemplateColumns: 'auto minmax(280px, 520px) auto', alignItems: 'center', gap: 18, padding: '0 28px' }}>
+      <div className="accounting-content-column" style={{ minWidth: 0 }}>
+        <header className="accounting-sticky-header" style={{ height: 76, position: 'sticky', top: 0, zIndex: 30, background: 'rgba(255,255,255,0.94)', backdropFilter: 'blur(16px)', borderBottom: '1px solid #e8edf4', display: 'grid', gridTemplateColumns: 'auto minmax(280px, 520px) auto', alignItems: 'center', gap: 18, padding: '0 28px' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 12, minWidth: 0 }}>
             <button type="button" aria-label="Menu" style={iconButtonStyle}><Menu size={19} /></button>
             <span style={{ width: 38, height: 38, borderRadius: 11, background: '#ecfdf3', color: '#16a34a', display: 'grid', placeItems: 'center', flexShrink: 0 }}><ActiveIcon size={19} /></span>
@@ -562,6 +562,35 @@ const notificationFooterStyle: React.CSSProperties = {
 }
 
 const accountingShellCss = `
+.accounting-shell {
+  min-height: 100vh;
+  align-items: start;
+}
+.accounting-sidebar {
+  position: sticky !important;
+  top: 0 !important;
+  height: 100vh;
+  height: 100dvh;
+  min-height: 100vh !important;
+  max-height: 100vh;
+  max-height: 100dvh;
+  overflow: hidden;
+  z-index: 70;
+}
+.accounting-sidebar-nav {
+  min-height: 0;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+}
+.accounting-content-column {
+  min-width: 0;
+}
+.accounting-sticky-header {
+  position: sticky !important;
+  top: 0 !important;
+  z-index: 80 !important;
+  width: 100%;
+}
 .accounting-nav-row {
   min-height: 36px;
   display: flex;
@@ -596,5 +625,22 @@ const accountingShellCss = `
 }
 .accounting-nav-row.active svg {
   color: #ededed;
+}
+@media (max-width: 900px) {
+  .accounting-sidebar {
+    position: sticky !important;
+    top: 0 !important;
+    height: auto;
+    min-height: auto !important;
+    max-height: none;
+    overflow: visible;
+    z-index: 70;
+  }
+
+  .accounting-sticky-header {
+    position: sticky !important;
+    top: 0 !important;
+    z-index: 80 !important;
+  }
 }
 `
