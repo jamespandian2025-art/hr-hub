@@ -38,15 +38,24 @@ export function progressSegments(state: ProjectManagementState) {
 }
 
 export function monthlyStatusTrend(state: ProjectManagementState) {
-  const months = Array.from(new Set(state.projects.map(project => new Date(`${project.startDate}T00:00:00`).toLocaleDateString('en-US', { month: 'short', year: '2-digit' })))).slice(-6)
-  const fallback = ['Dec 25', 'Jan 26', 'Feb 26', 'Mar 26', 'Apr 26', 'May 26']
-  return (months.length >= 3 ? months : fallback).map((label, index) => ({
+  const labels = Array.from(new Set(state.projects
+    .map(project => new Date(`${project.startDate}T00:00:00`))
+    .filter(date => !Number.isNaN(date.getTime()))
+    .sort((a, b) => a.getTime() - b.getTime())
+    .map(date => date.toLocaleDateString('en-US', { month: 'short', year: '2-digit' })))).slice(-6)
+
+  return labels.map(label => ({
     label,
-    completed: state.projects.filter(project => project.status === 'Completed').length + index,
-    inProgress: state.projects.filter(project => ['Active', 'In Progress'].includes(project.status)).length + index * 2,
-    onHold: state.projects.filter(project => project.status === 'On Hold').length,
-    planning: state.projects.filter(project => project.status === 'Planning').length + Math.max(0, index - 2),
+    completed: state.projects.filter(project => project.status === 'Completed' && projectMonth(project.startDate) === label).length,
+    inProgress: state.projects.filter(project => ['Active', 'In Progress'].includes(project.status) && projectMonth(project.startDate) === label).length,
+    onHold: state.projects.filter(project => project.status === 'On Hold' && projectMonth(project.startDate) === label).length,
+    planning: state.projects.filter(project => project.status === 'Planning' && projectMonth(project.startDate) === label).length,
   }))
+}
+
+function projectMonth(value: string) {
+  const date = new Date(`${value}T00:00:00`)
+  return Number.isNaN(date.getTime()) ? '' : date.toLocaleDateString('en-US', { month: 'short', year: '2-digit' })
 }
 
 export function budgetSummary(state: ProjectManagementState) {

@@ -16,6 +16,8 @@ import {
   Search,
   Send,
   Trash2,
+  Upload,
+  X,
 } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import { getActiveCompany } from '@/lib/tenant/company'
@@ -34,12 +36,30 @@ const invoiceStorageKeys = ['flowsys-invoices', 'flowsys-accounting-invoices', '
 const tabs = ['All', 'Draft', 'Sent', 'Paid', 'Overdue']
 
 type InvoiceForm = {
+  number: string
+  purchaseOrder: string
+  logoName: string
+  companyDetails: string
+  billTo: string
+  currency: string
   customer: string
   email: string
   issueDate: string
   dueDate: string
-  amount: string
   status: string
+  notes: string
+  bankDetails: string
+  taxRate: string
+  discount: string
+  shippingFee: string
+  lineItems: InvoiceLineItem[]
+}
+
+type InvoiceLineItem = {
+  id: string
+  description: string
+  unitCost: string
+  quantity: string
 }
 
 function todayInputValue() {
@@ -75,6 +95,19 @@ function invoiceToStored(invoice: AccountingInvoice) {
     paidAmount: invoice.paid,
     balanceDue: invoice.balanceDue,
     status: invoice.status,
+    purchaseOrder: invoice.purchaseOrder,
+    companyDetails: invoice.companyDetails,
+    billTo: invoice.billTo,
+    currency: invoice.currency,
+    notes: invoice.notes,
+    bankDetails: invoice.bankDetails,
+    logoName: invoice.logoName,
+    subtotal: invoice.subtotal,
+    taxRate: invoice.taxRate,
+    taxAmount: invoice.taxAmount,
+    discount: invoice.discount,
+    shippingFee: invoice.shippingFee,
+    lineItems: invoice.lineItems,
   }
 }
 
@@ -95,6 +128,46 @@ function nextInvoiceNumber(invoices: AccountingInvoice[]) {
   return `INV-${String(max + 1).padStart(5, '0')}`
 }
 
+function createEmptyLineItem(): InvoiceLineItem {
+  return {
+    id: `item-${Date.now()}-${Math.random().toString(16).slice(2)}`,
+    description: '',
+    unitCost: '',
+    quantity: '1',
+  }
+}
+
+function createInvoiceId() {
+  return `invoice-${Date.now()}`
+}
+
+function createInvoiceForm(nextNumber: string, currency = 'PHP'): InvoiceForm {
+  return {
+    number: nextNumber,
+    purchaseOrder: '',
+    logoName: '',
+    companyDetails: '',
+    billTo: '',
+    currency,
+    customer: '',
+    email: '',
+    issueDate: todayInputValue(),
+    dueDate: '',
+    status: 'Draft',
+    notes: 'Payment is due within 15 days.',
+    bankDetails: '',
+    taxRate: '',
+    discount: '',
+    shippingFee: '',
+    lineItems: [createEmptyLineItem()],
+  }
+}
+
+function numericInput(value: string) {
+  const parsed = Number(value)
+  return Number.isFinite(parsed) ? Math.max(parsed, 0) : 0
+}
+
 function StatusPill({ value }: { value: string }) {
   const tone = statusTone(value)
   return <span className="invoice-status-pill" style={{ background: tone.bg, color: tone.color }}>{value}</span>
@@ -111,14 +184,7 @@ export default function AccountingInvoicesPage() {
   const [filtersOpen, setFiltersOpen] = useState(false)
   const [showCreate, setShowCreate] = useState(false)
   const [selected, setSelected] = useState<string[]>([])
-  const [form, setForm] = useState<InvoiceForm>({
-    customer: '',
-    email: '',
-    issueDate: todayInputValue(),
-    dueDate: '',
-    amount: '',
-    status: 'Draft',
-  })
+  const [form, setForm] = useState<InvoiceForm>(() => createInvoiceForm(''))
 
   useEffect(() => {
     const load = () => setData(loadAccountingData())
@@ -128,6 +194,8 @@ export default function AccountingInvoicesPage() {
 
   const invoices = data.invoices
   const createPanelOpen = showCreate || createRequested
+  const suggestedInvoiceNumber = nextInvoiceNumber(invoices)
+
   const filtered = useMemo(() => invoices.filter(invoice => {
     const normalizedStatus = invoice.balanceDue > 0 && isOverdue(invoice.dueDate) && invoice.status.toLowerCase() !== 'paid' ? 'Overdue' : invoice.status
     const tabMatches = activeTab === 'All' || normalizedStatus.toLowerCase() === activeTab.toLowerCase()
@@ -155,10 +223,27 @@ export default function AccountingInvoicesPage() {
     { title: 'Overdue', value: money(overdueAmount, data.currency), detail: `${statusSummary.find(item => item.label === 'Overdue')?.count || 0} overdue`, icon: Clock3, tone: '#ef4444' },
     { title: 'Sent', value: String(statusSummary.find(item => item.label === 'Sent')?.count || 0), detail: 'Awaiting payment', icon: Send, tone: '#7c3aed' },
   ]
+  const invoiceLines = form.lineItems.map(item => {
+    const unitCost = numericInput(item.unitCost)
+    const quantity = numericInput(item.quantity || '1')
+    return { ...item, unitCost, quantity, amount: unitCost * quantity }
+  })
+  const invoiceSubtotal = invoiceLines.reduce((sum, item) => sum + item.amount, 0)
+  const invoiceTaxRate = numericInput(form.taxRate)
+  const invoiceTaxAmount = invoiceSubtotal * (invoiceTaxRate / 100)
+  const invoiceDiscount = numericInput(form.discount)
+  const invoiceShipping = numericInput(form.shippingFee)
+  const invoiceTotal = Math.max(invoiceSubtotal + invoiceTaxAmount + invoiceShipping - invoiceDiscount, 0)
+  const invoiceCurrency = form.currency || data.currency
 
   const closeCreate = () => {
     setShowCreate(false)
     if (createRequested) router.replace(pathname)
+  }
+
+  const openCreate = () => {
+    setForm(createInvoiceForm(suggestedInvoiceNumber, data.currency))
+    setShowCreate(true)
   }
 
   const updateInvoices = (nextInvoices: AccountingInvoice[]) => {
@@ -168,23 +253,45 @@ export default function AccountingInvoicesPage() {
 
   const createInvoice = (event: FormEvent) => {
     event.preventDefault()
-    const amount = Number(form.amount)
     const status = normalizeStatus(form.status)
-    const paid = status.toLowerCase() === 'paid' ? amount : 0
+    const paid = status.toLowerCase() === 'paid' ? invoiceTotal : 0
+    const invoiceNumber = form.number.trim() || suggestedInvoiceNumber
+    const lineItems = invoiceLines
+      .filter(item => item.description.trim() || item.amount > 0)
+      .map(item => ({
+        id: item.id,
+        description: item.description.trim() || 'Invoice item',
+        unitCost: item.unitCost,
+        quantity: item.quantity || 1,
+        amount: item.amount,
+      }))
     const invoice: AccountingInvoice = {
-      id: `invoice-${Date.now()}`,
-      number: nextInvoiceNumber(invoices),
+      id: createInvoiceId(),
+      number: invoiceNumber,
       customer: form.customer.trim() || 'No recipient',
       email: form.email.trim(),
       issueDate: form.issueDate || todayInputValue(),
       dueDate: form.dueDate,
-      amount: Number.isFinite(amount) ? amount : 0,
-      paid: Number.isFinite(paid) ? paid : 0,
-      balanceDue: Number.isFinite(amount) ? Math.max(amount - paid, 0) : 0,
+      amount: invoiceTotal,
+      paid,
+      balanceDue: Math.max(invoiceTotal - paid, 0),
       status,
+      purchaseOrder: form.purchaseOrder.trim(),
+      companyDetails: form.companyDetails.trim(),
+      billTo: form.billTo.trim(),
+      currency: invoiceCurrency,
+      notes: form.notes.trim(),
+      bankDetails: form.bankDetails.trim(),
+      logoName: form.logoName,
+      subtotal: invoiceSubtotal,
+      taxRate: invoiceTaxRate,
+      taxAmount: invoiceTaxAmount,
+      discount: invoiceDiscount,
+      shippingFee: invoiceShipping,
+      lineItems,
     }
     updateInvoices([...invoices, invoice])
-    setForm({ customer: '', email: '', issueDate: todayInputValue(), dueDate: '', amount: '', status: 'Draft' })
+    setForm(createInvoiceForm(nextInvoiceNumber([...invoices, invoice]), data.currency))
     closeCreate()
   }
 
@@ -209,6 +316,13 @@ export default function AccountingInvoicesPage() {
   }
 
   const toggleSelected = (id: string) => setSelected(prev => prev.includes(id) ? prev.filter(item => item !== id) : [...prev, id])
+  const updateLineItem = (id: string, field: keyof InvoiceLineItem, value: string) => {
+    setForm(prev => ({ ...prev, lineItems: prev.lineItems.map(item => item.id === id ? { ...item, [field]: value } : item) }))
+  }
+  const addLineItem = () => setForm(prev => ({ ...prev, lineItems: [...prev.lineItems, createEmptyLineItem()] }))
+  const removeLineItem = (id: string) => {
+    setForm(prev => ({ ...prev, lineItems: prev.lineItems.length === 1 ? prev.lineItems : prev.lineItems.filter(item => item.id !== id) }))
+  }
 
   return (
     <div className="invoices-page" style={{ fontFamily: font }}>
@@ -224,7 +338,7 @@ export default function AccountingInvoicesPage() {
             <input value={search} onChange={event => setSearch(event.target.value)} placeholder="Search invoices, clients..." />
           </label>
           <button type="button" className={filtersOpen ? 'invoices-toolbar-button is-active' : 'invoices-toolbar-button'} onClick={() => setFiltersOpen(open => !open)}><Filter size={15} /> Filters</button>
-          <button type="button" className="invoices-primary-button" onClick={() => setShowCreate(true)}><Plus size={15} /> New Invoice <ChevronDown size={13} /></button>
+          <button type="button" className="invoices-primary-button" onClick={openCreate}><Plus size={15} /> New Invoice <ChevronDown size={13} /></button>
         </div>
       </div>
 
@@ -266,40 +380,146 @@ export default function AccountingInvoicesPage() {
       {createPanelOpen && (
         <section className="invoices-card invoices-create-panel">
           <div className="invoices-panel-header">
-            <h2>Create Invoice</h2>
+            <div>
+              <h2>Create Invoice</h2>
+              <p className="invoices-panel-subtitle">Build a detailed invoice with items, taxes, payment terms, and bank details.</p>
+            </div>
             <button type="button" className="invoices-link-button" onClick={closeCreate}>Cancel</button>
           </div>
-          <form className="invoices-form" onSubmit={createInvoice}>
-            <label>
-              <span>Customer</span>
-              <input value={form.customer} onChange={event => setForm(prev => ({ ...prev, customer: event.target.value }))} placeholder="Client or company name" required />
-            </label>
-            <label>
-              <span>Email</span>
-              <input value={form.email} onChange={event => setForm(prev => ({ ...prev, email: event.target.value }))} type="email" placeholder="billing@client.com" />
-            </label>
-            <label>
-              <span>Issue Date</span>
-              <input value={form.issueDate} onChange={event => setForm(prev => ({ ...prev, issueDate: event.target.value }))} type="date" required />
-            </label>
-            <label>
-              <span>Due Date</span>
-              <input value={form.dueDate} onChange={event => setForm(prev => ({ ...prev, dueDate: event.target.value }))} type="date" />
-            </label>
-            <label>
-              <span>Amount</span>
-              <input value={form.amount} onChange={event => setForm(prev => ({ ...prev, amount: event.target.value }))} type="number" min="0" step="0.01" placeholder="0.00" required />
-            </label>
-            <label>
-              <span>Status</span>
-              <select value={form.status} onChange={event => setForm(prev => ({ ...prev, status: event.target.value }))}>
-                <option>Draft</option>
-                <option>Sent</option>
-                <option>Paid</option>
-              </select>
-            </label>
+          <form className="invoices-maker-form" onSubmit={createInvoice}>
+            <div className="invoices-maker-top">
+              <label>
+                <span>Invoice number</span>
+                <input value={form.number} onChange={event => setForm(prev => ({ ...prev, number: event.target.value }))} placeholder={suggestedInvoiceNumber} />
+              </label>
+              <label>
+                <span>Purchase order</span>
+                <input value={form.purchaseOrder} onChange={event => setForm(prev => ({ ...prev, purchaseOrder: event.target.value }))} placeholder="PO or contract reference" />
+              </label>
+              <label className="invoices-logo-upload">
+                <span>Logo</span>
+                <input
+                  type="file"
+                  accept="image/png,image/jpeg,image/jpg"
+                  onChange={event => setForm(prev => ({ ...prev, logoName: event.target.files?.[0]?.name || '' }))}
+                />
+                <strong><Upload size={15} /> Upload file</strong>
+                <small>{form.logoName || 'JPG, JPEG, PNG, less than 5MB'}</small>
+              </label>
+            </div>
+
+            <div className="invoices-maker-addresses">
+              <label>
+                <span>Your company details</span>
+                <textarea value={form.companyDetails} onChange={event => setForm(prev => ({ ...prev, companyDetails: event.target.value }))} placeholder={`${data.companyName}\nCompany address\nTax ID / contact details`} />
+              </label>
+              <label>
+                <span>Bill to</span>
+                <textarea value={form.billTo} onChange={event => setForm(prev => ({ ...prev, billTo: event.target.value }))} placeholder="Client company, billing address, contact person" />
+              </label>
+            </div>
+
+            <div className="invoices-maker-meta">
+              <label>
+                <span>Customer</span>
+                <input value={form.customer} onChange={event => setForm(prev => ({ ...prev, customer: event.target.value }))} placeholder="Client or company name" required />
+              </label>
+              <label>
+                <span>Email</span>
+                <input value={form.email} onChange={event => setForm(prev => ({ ...prev, email: event.target.value }))} type="email" placeholder="billing@client.com" />
+              </label>
+              <label>
+                <span>Currency</span>
+                <select value={form.currency} onChange={event => setForm(prev => ({ ...prev, currency: event.target.value }))}>
+                  <option value="PHP">PHP - Philippine peso</option>
+                  <option value="USD">USD - US dollar</option>
+                </select>
+              </label>
+              <label>
+                <span>Invoice date</span>
+                <input value={form.issueDate} onChange={event => setForm(prev => ({ ...prev, issueDate: event.target.value }))} type="date" required />
+              </label>
+              <label>
+                <span>Due date</span>
+                <input value={form.dueDate} onChange={event => setForm(prev => ({ ...prev, dueDate: event.target.value }))} type="date" />
+              </label>
+              <label>
+                <span>Status</span>
+                <select value={form.status} onChange={event => setForm(prev => ({ ...prev, status: event.target.value }))}>
+                  <option>Draft</option>
+                  <option>Sent</option>
+                  <option>Paid</option>
+                </select>
+              </label>
+            </div>
+
+            <section className="invoices-line-items" aria-label="Invoice line items">
+              <div className="invoices-line-heading">
+                <span>Item description</span>
+                <span>Unit cost</span>
+                <span>Quantity</span>
+                <span>Amount</span>
+                <span />
+              </div>
+              {form.lineItems.map(item => {
+                const unitCost = numericInput(item.unitCost)
+                const quantity = numericInput(item.quantity || '1')
+                return (
+                  <div key={item.id} className="invoices-line-row">
+                    <label>
+                      <span>Item description</span>
+                      <input value={item.description} onChange={event => updateLineItem(item.id, 'description', event.target.value)} placeholder="Design, materials, labor..." />
+                    </label>
+                    <label>
+                      <span>Unit cost</span>
+                      <input value={item.unitCost} onChange={event => updateLineItem(item.id, 'unitCost', event.target.value)} type="number" min="0" step="0.01" placeholder="0.00" />
+                    </label>
+                    <label>
+                      <span>Quantity</span>
+                      <input value={item.quantity} onChange={event => updateLineItem(item.id, 'quantity', event.target.value)} type="number" min="0" step="0.01" placeholder="1" />
+                    </label>
+                    <div className="invoices-line-amount">
+                      <span>Amount</span>
+                      <strong>{money(unitCost * quantity, invoiceCurrency)}</strong>
+                    </div>
+                    <button type="button" className="invoices-icon-button" onClick={() => removeLineItem(item.id)} aria-label="Remove item"><X size={17} /></button>
+                  </div>
+                )
+              })}
+              <button type="button" className="invoices-add-item" onClick={addLineItem}><Plus size={18} /> Add item</button>
+            </section>
+
+            <div className="invoices-maker-bottom">
+              <div className="invoices-notes-stack">
+                <label>
+                  <span>Notes / payment terms</span>
+                  <textarea value={form.notes} onChange={event => setForm(prev => ({ ...prev, notes: event.target.value }))} placeholder="Payment terms, special instructions, or invoice notes" />
+                </label>
+                <label>
+                  <span>Bank account details</span>
+                  <textarea value={form.bankDetails} onChange={event => setForm(prev => ({ ...prev, bankDetails: event.target.value }))} placeholder="Bank name, account name, account number, transfer notes" />
+                </label>
+              </div>
+              <div className="invoices-total-box">
+                <div><span>Subtotal</span><strong>{money(invoiceSubtotal, invoiceCurrency)}</strong></div>
+                <label>
+                  <span>Tax %</span>
+                  <input value={form.taxRate} onChange={event => setForm(prev => ({ ...prev, taxRate: event.target.value }))} type="number" min="0" step="0.01" placeholder="0" />
+                </label>
+                <div><span>Tax amount</span><strong>{money(invoiceTaxAmount, invoiceCurrency)}</strong></div>
+                <label>
+                  <span>Discount</span>
+                  <input value={form.discount} onChange={event => setForm(prev => ({ ...prev, discount: event.target.value }))} type="number" min="0" step="0.01" placeholder="0.00" />
+                </label>
+                <label>
+                  <span>Shipping fee</span>
+                  <input value={form.shippingFee} onChange={event => setForm(prev => ({ ...prev, shippingFee: event.target.value }))} type="number" min="0" step="0.01" placeholder="0.00" />
+                </label>
+                <div className="invoices-total-row"><span>Total</span><strong>{money(invoiceTotal, invoiceCurrency)}</strong></div>
+              </div>
+            </div>
             <div className="invoices-form-actions">
-              <strong>Next number: {nextInvoiceNumber(invoices)}</strong>
+              <strong>Next number: {suggestedInvoiceNumber}</strong>
               <button type="submit" className="invoices-primary-button"><Plus size={15} /> Create Invoice</button>
             </div>
           </form>
@@ -330,9 +550,9 @@ export default function AccountingInvoicesPage() {
                       <td data-label="Customer">{invoice.customer}</td>
                       <td data-label="Issue Date">{formatDate(invoice.issueDate)}</td>
                       <td data-label="Due Date">{formatDate(invoice.dueDate)}</td>
-                      <td data-label="Amount">{money(invoice.amount, data.currency)}</td>
-                      <td data-label="Paid">{money(invoice.paid, data.currency)}</td>
-                      <td data-label="Balance">{money(invoice.balanceDue, data.currency)}</td>
+                      <td data-label="Amount">{money(invoice.amount, invoice.currency || data.currency)}</td>
+                      <td data-label="Paid">{money(invoice.paid, invoice.currency || data.currency)}</td>
+                      <td data-label="Balance">{money(invoice.balanceDue, invoice.currency || data.currency)}</td>
                       <td data-label="Status"><StatusPill value={derivedStatus} /></td>
                       <td data-label="Actions">
                         <div className="invoices-row-actions">
@@ -373,7 +593,7 @@ export default function AccountingInvoicesPage() {
           <div className="invoices-card">
             <h2 className="invoices-card-heading">Quick Actions</h2>
             <div className="invoices-actions">
-              <button type="button" onClick={() => setShowCreate(true)}><span><Plus size={15} /></span>New Invoice<ChevronDown size={15} /></button>
+              <button type="button" onClick={openCreate}><span><Plus size={15} /></span>New Invoice<ChevronDown size={15} /></button>
               <button type="button" onClick={() => setActiveTab('Overdue')}><span><Clock3 size={15} /></span>Review Overdue<ChevronDown size={15} /></button>
               <button type="button" onClick={markSelectedPaid}><span><CheckCircle2 size={15} /></span>Mark Paid<ChevronDown size={15} /></button>
               <button type="button" onClick={() => setActiveTab('Sent')}><span><ArrowDownLeft size={15} /></span>Collections<ChevronDown size={15} /></button>
@@ -416,6 +636,7 @@ const invoicesCss = `
 .invoices-side-stack { display: grid; align-content: start; gap: 16px; }
 .invoices-panel-header { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 16px; }
 .invoices-panel-header h2, .invoices-card-heading { margin: 0; color: #0f172a; font-size: 16px; font-weight: 950; }
+.invoices-panel-subtitle { margin: 6px 0 0; color: #64748b; font-size: 12.5px; font-weight: 650; }
 .invoices-panel-actions { display: flex; align-items: center; flex-wrap: wrap; justify-content: flex-end; gap: 10px; }
 .invoices-panel-actions strong { color: #475569; font-size: 12px; }
 .invoices-panel-actions button, .invoices-link-button { min-height: 32px; border: 1px solid #e8edf4; border-radius: 7px; background: #fff; color: #0f172a; padding: 0 10px; font-size: 12px; font-weight: 900; cursor: pointer; }
@@ -430,6 +651,40 @@ const invoicesCss = `
 .invoices-row-actions button { width: 32px; height: 32px; border: 1px solid #e8edf4; border-radius: 7px; background: #fff; color: #0f172a; display: grid; place-items: center; cursor: pointer; }
 .invoices-empty { text-align: center; color: #64748b !important; padding: 34px !important; font-weight: 800; }
 .invoices-create-panel { margin-top: 18px; }
+.invoices-maker-form { display: grid; gap: 18px; }
+.invoices-maker-form label { display: grid; gap: 7px; min-width: 0; }
+.invoices-maker-form span, .invoices-line-amount span, .invoices-total-box span { color: #475569; font-size: 12px; font-weight: 900; }
+.invoices-maker-form input,
+.invoices-maker-form select,
+.invoices-maker-form textarea { width: 100%; min-height: 40px; border: 1px solid #d7dde7; border-radius: 8px; padding: 0 12px; color: #0f172a; background: #fff; outline: 0; font-size: 13px; font-family: inherit; }
+.invoices-maker-form textarea { min-height: 92px; padding-top: 11px; resize: vertical; line-height: 1.45; }
+.invoices-maker-form input:focus,
+.invoices-maker-form select:focus,
+.invoices-maker-form textarea:focus { border-color: #0f172a; box-shadow: 0 0 0 3px rgba(15, 23, 42, .08); }
+.invoices-maker-top, .invoices-maker-meta { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; }
+.invoices-maker-addresses, .invoices-maker-bottom { display: grid; grid-template-columns: minmax(0, 1fr) minmax(280px, .55fr); gap: 14px; }
+.invoices-logo-upload { position: relative; min-height: 72px; border: 1px solid #d7dde7; border-radius: 8px; padding: 12px 14px; align-content: center; cursor: pointer; }
+.invoices-logo-upload > span { position: static; }
+.invoices-logo-upload input { position: absolute; inset: 0; opacity: 0; cursor: pointer; }
+.invoices-logo-upload strong { display: flex; align-items: center; gap: 8px; color: #0f172a; font-size: 12.5px; font-weight: 950; }
+.invoices-logo-upload small { color: #64748b; font-size: 11px; font-weight: 750; }
+.invoices-line-items { background: #f2f7ef; border: 1px solid #e2ecd9; border-radius: 10px; padding: 16px; display: grid; gap: 12px; }
+.invoices-line-heading, .invoices-line-row { display: grid; grid-template-columns: minmax(220px, 1fr) 130px 110px 150px 36px; gap: 10px; align-items: end; }
+.invoices-line-heading { align-items: center; color: #475569; font-size: 11px; font-weight: 950; padding: 0 0 2px; }
+.invoices-line-row label span { display: none; }
+.invoices-line-amount { display: grid; gap: 7px; }
+.invoices-line-amount strong { min-height: 40px; border: 1px solid #d7dde7; border-radius: 8px; background: #fff; display: flex; align-items: center; padding: 0 12px; color: #0f172a; font-size: 13px; }
+.invoices-icon-button { width: 36px; height: 40px; border: 0; background: transparent; color: #15803d; display: grid; place-items: center; cursor: pointer; }
+.invoices-add-item { justify-self: center; width: 86px; min-height: 64px; border: 0; background: transparent; color: #0f172a; display: grid; place-items: center; gap: 6px; font-size: 11px; font-weight: 900; cursor: pointer; }
+.invoices-add-item svg { width: 34px; height: 34px; padding: 8px; border-radius: 999px; background: #9bea6b; color: #0f172a; }
+.invoices-notes-stack { display: grid; gap: 14px; }
+.invoices-total-box { display: grid; align-content: start; gap: 12px; }
+.invoices-total-box > div,
+.invoices-total-box label { display: grid; grid-template-columns: minmax(120px, 1fr) minmax(140px, 1fr); align-items: center; gap: 12px; }
+.invoices-total-box input { min-height: 38px; text-align: right; }
+.invoices-total-box strong { color: #0f172a; font-size: 13px; text-align: right; }
+.invoices-total-row { border-top: 1px solid #e8edf4; padding-top: 10px; }
+.invoices-total-row strong { font-size: 18px; font-weight: 950; }
 .invoices-form { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; }
 .invoices-form label { display: grid; gap: 7px; }
 .invoices-form span { color: #475569; font-size: 12px; font-weight: 900; }
@@ -449,15 +704,26 @@ const invoicesCss = `
   .invoices-metrics { grid-template-columns: repeat(3, minmax(180px, 1fr)); }
   .invoices-grid { grid-template-columns: 1fr; }
   .invoices-side-stack { grid-template-columns: 1fr 1fr; }
+  .invoices-line-heading, .invoices-line-row { grid-template-columns: minmax(180px, 1fr) 120px 100px 140px 36px; }
 }
 @media (max-width: 820px) {
   .invoices-metrics, .invoices-side-stack, .invoices-form { grid-template-columns: 1fr 1fr; }
+  .invoices-maker-top, .invoices-maker-meta, .invoices-maker-addresses, .invoices-maker-bottom { grid-template-columns: 1fr 1fr; }
+  .invoices-line-heading { display: none; }
+  .invoices-line-row { grid-template-columns: 1fr 1fr; align-items: start; background: rgba(255,255,255,.72); border: 1px solid #e2ecd9; border-radius: 9px; padding: 12px; }
+  .invoices-line-row label span { display: block; }
+  .invoices-line-amount { grid-column: span 1; }
+  .invoices-icon-button { justify-self: start; align-self: end; }
   .invoices-panel-header { align-items: flex-start; flex-direction: column; }
 }
 @media (max-width: 640px) {
   .invoices-page { padding: 16px; }
   .invoices-title { font-size: 24px; }
   .invoices-header-actions, .invoices-metrics, .invoices-side-stack, .invoices-form { display: grid; grid-template-columns: 1fr; }
+  .invoices-maker-top, .invoices-maker-meta, .invoices-maker-addresses, .invoices-maker-bottom, .invoices-line-row { grid-template-columns: 1fr; }
+  .invoices-line-items { margin-left: -6px; margin-right: -6px; padding: 12px; }
+  .invoices-total-box > div, .invoices-total-box label { grid-template-columns: 1fr; gap: 7px; }
+  .invoices-total-box input, .invoices-total-box strong { text-align: left; }
   .invoices-filter-panel { grid-template-columns: 1fr; }
   .invoices-card-value { font-size: 21px; }
   .invoices-tabs { margin-left: -16px; margin-right: -16px; padding-left: 16px; padding-right: 16px; }

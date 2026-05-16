@@ -45,6 +45,25 @@ export type AccountingInvoice = {
   paid: number
   balanceDue: number
   status: string
+  purchaseOrder?: string
+  companyDetails?: string
+  billTo?: string
+  currency?: string
+  notes?: string
+  bankDetails?: string
+  logoName?: string
+  subtotal?: number
+  taxRate?: number
+  taxAmount?: number
+  discount?: number
+  shippingFee?: number
+  lineItems?: Array<{
+    id: string
+    description: string
+    unitCost: number
+    quantity: number
+    amount: number
+  }>
 }
 
 export type AccountingBill = {
@@ -387,6 +406,7 @@ function toInvoice(row: StoredRow, index: number): AccountingInvoice {
   const status = titleCase(readString(row, ['status'], 'Draft'))
   const amount = readNumber(row, ['total', 'amount', 'balance'], 0)
   const paid = readNumber(row, ['paid', 'paidAmount'], isPaidStatus(status) ? amount : 0)
+  const rawLineItems = Array.isArray(row.lineItems) ? row.lineItems : []
   return {
     id: readString(row, ['id', 'invoiceNo', 'invoiceNumber', 'number'], String(index)),
     number: readString(row, ['invoiceNo', 'invoiceNumber', 'number'], `INV-${index + 1}`),
@@ -398,6 +418,30 @@ function toInvoice(row: StoredRow, index: number): AccountingInvoice {
     paid,
     balanceDue: Math.max(amount - paid, 0),
     status,
+    purchaseOrder: readString(row, ['purchaseOrder', 'poNumber'], ''),
+    companyDetails: readString(row, ['companyDetails', 'sellerDetails'], ''),
+    billTo: readString(row, ['billTo', 'billingDetails'], ''),
+    currency: readString(row, ['currency'], ''),
+    notes: readString(row, ['notes', 'paymentTerms'], ''),
+    bankDetails: readString(row, ['bankDetails', 'paymentDetails'], ''),
+    logoName: readString(row, ['logoName', 'logoFileName'], ''),
+    subtotal: readNumber(row, ['subtotal'], 0),
+    taxRate: readNumber(row, ['taxRate'], 0),
+    taxAmount: readNumber(row, ['taxAmount'], 0),
+    discount: readNumber(row, ['discount'], 0),
+    shippingFee: readNumber(row, ['shippingFee'], 0),
+    lineItems: rawLineItems.map((item, itemIndex) => {
+      const row = item && typeof item === 'object' ? item as StoredRow : {}
+      const unitCost = readNumber(row, ['unitCost', 'rate', 'price'], 0)
+      const quantity = readNumber(row, ['quantity', 'qty'], 1)
+      return {
+        id: readString(row, ['id'], `item-${itemIndex}`),
+        description: readString(row, ['description', 'item'], ''),
+        unitCost,
+        quantity,
+        amount: readNumber(row, ['amount', 'total'], unitCost * quantity),
+      }
+    }),
   }
 }
 
