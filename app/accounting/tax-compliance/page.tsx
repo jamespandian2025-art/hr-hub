@@ -39,6 +39,12 @@ function StatusPill({ value }: { value: TaxStatus }) {
   return <span className={`tax-pill ${value.toLowerCase().replaceAll(' ', '-').replaceAll('&', 'and')}`}>{value}</span>
 }
 
+type TaxMenuState = {
+  obligationId: string
+  top: number
+  left: number
+}
+
 export default function TaxCompliancePage() {
   const [data, setData] = useState(emptyAccountingData)
   const [todayMs] = useState(() => Date.now())
@@ -46,6 +52,7 @@ export default function TaxCompliancePage() {
   const [searchTerm, setSearchTerm] = useState('')
   const [typeFilter, setTypeFilter] = useState('All')
   const [statusFilter, setStatusFilter] = useState('All')
+  const [taxNotice, setTaxNotice] = useState('')
 
   useEffect(() => {
     const load = () => setData(loadAccountingData())
@@ -127,6 +134,34 @@ export default function TaxCompliancePage() {
     { title: 'Compliance Score', value: `${complianceScore}%`, detail: 'Paid or filed obligations', icon: ShieldCheck, tone: '#7c3aed', good: true },
   ]
 
+  const viewTaxObligation = (item: AccountingTaxObligation) => {
+    setSearchTerm(item.type)
+    setActiveTab('obligations')
+    setTaxNotice(`${item.type} is selected in Tax Obligations.`)
+  }
+
+  const exportSingleTaxObligation = (item: AccountingTaxObligation) => {
+    const safeName = String(item.id || item.type).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'obligation'
+    downloadCsv(`tax-${safeName}.csv`, [{
+      Type: item.type,
+      Period: item.period || 'Current records',
+      DueDate: item.dueDate ? formatDate(item.dueDate) : 'No due date set',
+      TaxableAmount: money(item.taxableAmount, data.currency),
+      TaxPayable: money(item.payable, data.currency),
+      PaidAmount: money(item.paid, data.currency),
+      Status: item.status,
+    }])
+    setTaxNotice(`${item.type} exported.`)
+  }
+
+  const resetTaxRecords = () => {
+    setSearchTerm('')
+    setTypeFilter('All')
+    setStatusFilter('All')
+    setActiveTab('overview')
+    setTaxNotice('Showing current tax records.')
+  }
+
   return (
     <div className="tax-page" style={{ fontFamily: font }}>
       <style>{taxCss}</style>
@@ -136,11 +171,12 @@ export default function TaxCompliancePage() {
           <p className="tax-subtitle">Manage tax obligations, filings, and compliance requirements.</p>
         </div>
         <div className="tax-actions">
-          <button type="button"><CalendarDays size={15} /> Current records</button>
+          <button type="button" onClick={resetTaxRecords}><CalendarDays size={15} /> Current records</button>
           <button type="button" onClick={() => setActiveTab('obligations')}><Filter size={15} /> Filters</button>
-          <button type="button" onClick={() => exportTaxRows(activeTab, filteredObligations, payments, filings, certificates, reports, data.currency)}>Export <Download size={14} /></button>
+          <button type="button" onClick={() => { exportTaxRows(activeTab, filteredObligations, payments, filings, certificates, reports, data.currency); setTaxNotice(`Tax ${activeTab} exported.`) }}>Export <Download size={14} /></button>
         </div>
       </div>
+      {taxNotice && <div className="tax-notice" role="status">{taxNotice}<button type="button" onClick={() => setTaxNotice('')}>Dismiss</button></div>}
 
       <section className="tax-metrics">
         {metrics.map(metric => {
@@ -244,30 +280,12 @@ export default function TaxCompliancePage() {
             <select value={statusFilter} onChange={event => setStatusFilter(event.target.value)} aria-label="Filter tax status">
               {taxStatuses.map(status => <option key={status} value={status}>{status === 'All' ? 'All Status' : status}</option>)}
             </select>
-            <button type="button"><CalendarDays size={15} /> Current records</button>
+            <button type="button" onClick={resetTaxRecords}><CalendarDays size={15} /> Current records</button>
             <button type="button" onClick={() => { setSearchTerm(''); setTypeFilter('All'); setStatusFilter('All') }}><SlidersHorizontal size={15} /> Reset Filters</button>
           </div>
-          <div className="tax-table-wrap">
-            <table className="tax-table">
-              <thead><tr>{['Tax Type', 'Period', 'Due Date', 'Taxable Amount', 'Tax Payable', 'Paid Amount', 'Status', 'Actions'].map(col => <th key={col}>{col}</th>)}</tr></thead>
-              <tbody>
-                {filteredObligations.map(item => (
-                  <tr key={item.type}>
-                    <td data-label="Tax Type">{item.type}</td>
-                    <td data-label="Period">{item.period}</td>
-                    <td data-label="Due Date">{item.dueDate}</td>
-                    <td data-label="Taxable Amount">{money(item.taxableAmount, data.currency)}</td>
-                    <td data-label="Tax Payable">{money(item.payable, data.currency)}</td>
-                    <td data-label="Paid Amount">{money(item.paid, data.currency)}</td>
-                    <td data-label="Status"><StatusPill value={item.status} /></td>
-                    <td data-label="Actions"><button type="button" className="tax-icon-button"><MoreHorizontal size={15} /></button></td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+          <TaxObligationsTable obligations={filteredObligations} currency={data.currency} onView={viewTaxObligation} onExport={exportSingleTaxObligation} />
           {filteredObligations.length === 0 && <EmptyState message="No tax obligations match the current filters." />}
-          <div className="tax-pagination"><strong>Showing {filteredObligations.length ? 1 : 0} to {filteredObligations.length} of {derivedObligations.length} obligations</strong><div><button type="button" disabled>‹</button><button type="button" className="is-active">1</button><button type="button" disabled>›</button><button type="button">{Math.max(filteredObligations.length, 10)} / page <ChevronDown size={14} /></button></div></div>
+          <div className="tax-pagination"><strong>Showing {filteredObligations.length ? 1 : 0} to {filteredObligations.length} of {derivedObligations.length} obligations</strong><div><button type="button" disabled>{'<'}</button><button type="button" className="is-active">1</button><button type="button" disabled>{'>'}</button><span className="tax-page-size">{Math.max(filteredObligations.length, 10)} / page <ChevronDown size={14} /></span></div></div>
         </div>
 
         <div className="tax-side-stack">
@@ -296,6 +314,9 @@ export default function TaxCompliancePage() {
             onStatusFilterChange={setStatusFilter}
             taxTypes={taxTypes}
             taxStatuses={taxStatuses}
+            onReset={resetTaxRecords}
+            onView={viewTaxObligation}
+            onExport={exportSingleTaxObligation}
           />
         )}
         {activeTab === 'filings' && <SideList title="Tax Filings" items={filings} />}
@@ -320,6 +341,9 @@ function TaxObligationsPanel({
   onStatusFilterChange,
   taxTypes,
   taxStatuses,
+  onReset,
+  onView,
+  onExport,
 }: {
   obligations: AccountingTaxObligation[]
   totalCount: number
@@ -332,6 +356,9 @@ function TaxObligationsPanel({
   onStatusFilterChange: (value: string) => void
   taxTypes: string[]
   taxStatuses: string[]
+  onReset: () => void
+  onView: (item: AccountingTaxObligation) => void
+  onExport: (item: AccountingTaxObligation) => void
 }) {
   return (
     <div className="tax-card">
@@ -344,17 +371,39 @@ function TaxObligationsPanel({
         <select value={statusFilter} onChange={event => onStatusFilterChange(event.target.value)} aria-label="Filter tax status">
           {taxStatuses.map(status => <option key={status} value={status}>{status === 'All' ? 'All Status' : status}</option>)}
         </select>
-        <button type="button"><CalendarDays size={15} /> Current records</button>
+        <button type="button" onClick={onReset}><CalendarDays size={15} /> Current records</button>
         <button type="button" onClick={() => { onSearchTermChange(''); onTypeFilterChange('All'); onStatusFilterChange('All') }}><SlidersHorizontal size={15} /> Reset Filters</button>
       </div>
-      <TaxObligationsTable obligations={obligations} currency={currency} />
+      <TaxObligationsTable obligations={obligations} currency={currency} onView={onView} onExport={onExport} />
       {obligations.length === 0 && <EmptyState message="No tax obligations match the current filters." />}
-      <div className="tax-pagination"><strong>Showing {obligations.length ? 1 : 0} to {obligations.length} of {totalCount} obligations</strong><div><button type="button" disabled>‹</button><button type="button" className="is-active">1</button><button type="button" disabled>›</button><button type="button">{Math.max(obligations.length, 10)} / page <ChevronDown size={14} /></button></div></div>
+      <div className="tax-pagination"><strong>Showing {obligations.length ? 1 : 0} to {obligations.length} of {totalCount} obligations</strong><div><button type="button" disabled>{'<'}</button><button type="button" className="is-active">1</button><button type="button" disabled>{'>'}</button><span className="tax-page-size">{Math.max(obligations.length, 10)} / page <ChevronDown size={14} /></span></div></div>
     </div>
   )
 }
 
-function TaxObligationsTable({ obligations, currency }: { obligations: AccountingTaxObligation[]; currency: string }) {
+function TaxObligationsTable({
+  obligations,
+  currency,
+  onView,
+  onExport,
+}: {
+  obligations: AccountingTaxObligation[]
+  currency: string
+  onView: (item: AccountingTaxObligation) => void
+  onExport: (item: AccountingTaxObligation) => void
+}) {
+  const [activeMenu, setActiveMenu] = useState<TaxMenuState | null>(null)
+  const toggleMenu = (obligationId: string, element: HTMLButtonElement) => {
+    const rect = element.getBoundingClientRect()
+    setActiveMenu(current => current?.obligationId === obligationId
+      ? null
+      : {
+        obligationId,
+        top: rect.bottom + 6,
+        left: Math.max(12, Math.min(window.innerWidth - 188, rect.right - 172)),
+      })
+  }
+
   return (
     <div className="tax-table-wrap">
       <table className="tax-table">
@@ -369,7 +418,17 @@ function TaxObligationsTable({ obligations, currency }: { obligations: Accountin
               <td data-label="Tax Payable">{money(item.payable, currency)}</td>
               <td data-label="Paid Amount">{money(item.paid, currency)}</td>
               <td data-label="Status"><StatusPill value={item.status} /></td>
-              <td data-label="Actions"><button type="button" className="tax-icon-button" aria-label={`Open actions for ${item.type}`}><MoreHorizontal size={15} /></button></td>
+              <td data-label="Actions">
+                <div className="tax-row-actions">
+                  <button type="button" className="tax-icon-button" aria-expanded={activeMenu?.obligationId === (item.id || item.type)} aria-label={`Open actions for ${item.type}`} onClick={event => toggleMenu(item.id || item.type, event.currentTarget)}><MoreHorizontal size={15} /></button>
+                  {activeMenu?.obligationId === (item.id || item.type) && (
+                    <div className="tax-row-menu" role="menu" style={{ top: activeMenu.top, left: activeMenu.left }}>
+                      <button type="button" role="menuitem" onClick={() => { onView(item); setActiveMenu(null) }}>View details</button>
+                      <button type="button" role="menuitem" onClick={() => { onExport(item); setActiveMenu(null) }}>Export row</button>
+                    </div>
+                  )}
+                </div>
+              </td>
             </tr>
           ))}
         </tbody>
@@ -507,8 +566,11 @@ const taxCss = `
 .tax-title { margin: 0; font-size: 28px; line-height: 1.1; font-weight: 950; }
 .tax-subtitle { margin: 8px 0 0; color: #334155; font-size: 13.5px; }
 .tax-actions { display: flex; gap: 12px; flex-wrap: wrap; justify-content: flex-end; }
-.tax-actions button, .tax-filterbar button, .tax-filterbar select, .tax-pagination button { min-height: 38px; border-radius: 8px; border: 1px solid #e8edf4; background: #fff; color: #0f172a; display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 0 12px; font-size: 12.5px; font-weight: 850; cursor: pointer; }
+.tax-actions button, .tax-filterbar button, .tax-filterbar select, .tax-pagination button, .tax-page-size { min-height: 38px; border-radius: 8px; border: 1px solid #e8edf4; background: #fff; color: #0f172a; display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 0 12px; font-size: 12.5px; font-weight: 850; cursor: pointer; }
+.tax-page-size { cursor: default; }
 .tax-pagination button:disabled { color: #94a3b8; cursor: not-allowed; }
+.tax-notice { margin: -8px 0 16px; border: 1px solid #bbf7d0; border-radius: 8px; background: #f0fdf4; color: #15803d; padding: 10px 12px; font-size: 12.5px; font-weight: 900; display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.tax-notice button { border: 0; background: transparent; color: #15803d; font: inherit; cursor: pointer; }
 .tax-metrics { display: grid; grid-template-columns: repeat(5, minmax(170px, 1fr)); gap: 18px; margin-bottom: 18px; }
 .tax-card { background: #fff; border: 1px solid #e8edf4; border-radius: 8px; padding: 18px; box-shadow: 0 1px 2px rgba(15, 23, 42, .03); }
 .tax-metric-card { min-height: 100px; display: flex; align-items: center; }
@@ -559,7 +621,11 @@ const taxCss = `
 .tax-table { width: 100%; min-width: 860px; border-collapse: collapse; }
 .tax-table th { text-align: left; padding: 12px 10px; color: #64748b; font-size: 11px; font-weight: 900; }
 .tax-table td { padding: 12px 10px; border-top: 1px solid #eef2f7; color: #0f172a; font-size: 12.5px; }
-.tax-icon-button { width: 32px; height: 32px; border: 1px solid #e8edf4; border-radius: 7px; background: #fff; display: grid; place-items: center; }
+.tax-icon-button { width: 32px; height: 32px; border: 1px solid #e8edf4; border-radius: 7px; background: #fff; display: grid; place-items: center; cursor: pointer; }
+.tax-row-actions { position: relative; display: inline-grid; place-items: center; }
+.tax-row-menu { position: fixed; z-index: 1400; width: 172px; border: 1px solid #e8edf4; border-radius: 8px; background: #fff; box-shadow: 0 18px 44px rgba(15,23,42,.16); padding: 6px; display: grid; gap: 2px; }
+.tax-row-menu button { min-height: 34px; border: 0; border-radius: 6px; background: transparent; color: #0f172a; padding: 0 10px; text-align: left; font-size: 12.5px; font-weight: 850; cursor: pointer; }
+.tax-row-menu button:hover { background: #f1f5f9; }
 .tax-pill { display: inline-flex; min-height: 24px; border-radius: 6px; align-items: center; padding: 0 9px; font-size: 11.5px; font-weight: 900; }
 .tax-pill.paid, .tax-pill.compliant, .tax-pill.filed, .tax-pill.valid { background: #dcfce7; color: #15803d; }
 .tax-pill.partially-paid { background: #dbeafe; color: #2563eb; }

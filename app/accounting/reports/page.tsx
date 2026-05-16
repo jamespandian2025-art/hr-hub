@@ -101,6 +101,7 @@ export default function ReportsPage() {
   const [filtersOpen, setFiltersOpen] = useState(false)
   const [openedReportName, setOpenedReportName] = useState('')
   const [actionNotice, setActionNotice] = useState('')
+  const [chartGrouping, setChartGrouping] = useState<'By Month' | 'By Quarter'>('By Month')
 
   useEffect(() => {
     const load = () => setData(loadAccountingData())
@@ -213,6 +214,11 @@ export default function ReportsPage() {
     setOpenedReportName('')
     setActionNotice('')
     setFiltersOpen(false)
+  }
+
+  function toggleChartGrouping() {
+    setChartGrouping(current => current === 'By Month' ? 'By Quarter' : 'By Month')
+    setActionNotice('Profit and loss chart grouping updated.')
   }
 
   function exportVisibleReports() {
@@ -358,7 +364,7 @@ export default function ReportsPage() {
 
           <section className="reports-top-panels">
             <div className="reports-card">
-              <div className="reports-panel-header"><h2>Profit & Loss Summary</h2><button type="button">By Month <ChevronDown size={14} /></button></div>
+              <div className="reports-panel-header"><h2>Profit & Loss Summary</h2><button type="button" onClick={toggleChartGrouping}>{chartGrouping} <ChevronDown size={14} /></button></div>
               <div className="reports-chart">
                 <div className="reports-chart-legend"><span className="revenue" /> Revenue <span className="expenses" /> Expenses <span className="profit" /> Net Profit</div>
                 {monthlyReports.length ? (
@@ -407,7 +413,7 @@ export default function ReportsPage() {
                   <div>
                     <span>Open report</span>
                     <h3>{openedReport.name}</h3>
-                    <p>{openedReport.category} · {openedReport.generatedOn} · {openedReport.format}</p>
+                    <p>{openedReport.category} - {openedReport.generatedOn} - {openedReport.format}</p>
                   </div>
                   <div>
                     <button type="button" onClick={() => downloadReport(openedReport)}>Download {openedReport.format}</button>
@@ -476,7 +482,7 @@ export default function ReportsPage() {
                   </>
                 )}
               </div>
-              <div className="reports-pagination"><strong>Showing {(activeTab === 'Scheduled Reports' ? scheduledReports : activeCategoryReports).length ? 1 : 0} to {(activeTab === 'Scheduled Reports' ? scheduledReports : activeCategoryReports).length} of {(activeTab === 'Scheduled Reports' ? scheduledReports : activeCategoryReports).length} reports</strong><div>{['‹', '1', '›'].map((p, i) => <button type="button" key={`${p}-${i}`} className={p === '1' ? 'is-active' : undefined}>{p}</button>)}<button type="button">{Math.max((activeTab === 'Scheduled Reports' ? scheduledReports : activeCategoryReports).length, 1)} / page <ChevronDown size={14} /></button></div></div>
+              <div className="reports-pagination"><strong>Showing {(activeTab === 'Scheduled Reports' ? scheduledReports : activeCategoryReports).length ? 1 : 0} to {(activeTab === 'Scheduled Reports' ? scheduledReports : activeCategoryReports).length} of {(activeTab === 'Scheduled Reports' ? scheduledReports : activeCategoryReports).length} reports</strong><div><button type="button" disabled>{'<'}</button><button type="button" className="is-active">1</button><button type="button" disabled>{'>'}</button><span className="reports-page-size">{Math.max((activeTab === 'Scheduled Reports' ? scheduledReports : activeCategoryReports).length, 1)} / page <ChevronDown size={14} /></span></div></div>
             </div>
 
             <section className="reports-side-stack" aria-label="Report tools">
@@ -559,7 +565,9 @@ const reportsCss = `
 .reports-title { margin: 0; font-size: 28px; line-height: 1.1; font-weight: 950; }
 .reports-subtitle { margin: 8px 0 0; color: #334155; font-size: 13.5px; }
 .reports-actions { display: flex; gap: 12px; flex-wrap: wrap; justify-content: flex-end; }
-.reports-actions button, .reports-panel-header button, .reports-pagination button { min-height: 38px; border-radius: 8px; border: 1px solid #e8edf4; background: #fff; color: #0f172a; display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 0 12px; font-size: 12.5px; font-weight: 850; cursor: pointer; }
+.reports-actions button, .reports-panel-header button, .reports-pagination button, .reports-page-size { min-height: 38px; border-radius: 8px; border: 1px solid #e8edf4; background: #fff; color: #0f172a; display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 0 12px; font-size: 12.5px; font-weight: 850; cursor: pointer; }
+.reports-page-size { cursor: default; }
+.reports-pagination button:disabled { color: #94a3b8; cursor: not-allowed; }
 .reports-actions button.is-active { background: #ecfdf3; border-color: #bbf7d0; color: #15803d; }
 .reports-filter-panel { margin: 14px 0 0; border: 1px solid #e8edf4; border-radius: 8px; background: #fff; padding: 14px; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; align-items: end; }
 .reports-filter-panel label { display: grid; gap: 6px; color: #334155; font-size: 11.5px; font-weight: 900; }

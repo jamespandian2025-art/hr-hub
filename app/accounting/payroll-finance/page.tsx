@@ -336,6 +336,20 @@ export default function PayrollFinancePage() {
     { title: 'Net Pay', value: money(netPay), detail: grossPay ? `${((netPay / grossPay) * 100).toFixed(1)}% of gross pay` : 'No final payroll yet', icon: FileText, tone: '#ef4444' },
   ]
 
+  const showPeriodSummary = () => {
+    setNotice(latestPeriod ? `Showing payroll finance records for ${periodLabel(latestPeriod)}.` : 'No payroll period has been created yet.')
+  }
+
+  const showFinanceFilters = () => {
+    setActiveTab('Payments')
+    setNotice('Use the Payments tab to approve or release payroll records by status.')
+  }
+
+  const inspectPayrollRun = (period: string) => {
+    setActiveTab('Payments')
+    setNotice(`Opened payroll payment records for ${period}.`)
+  }
+
   async function saveLoanDecision(request: LoanRequest, decision: 'Approved' | 'Rejected', financeTerms?: FinanceLoanTerms) {
     const employee = resolveLoanEmployee(request, employees)
     const reviewedRequest = decision === 'Approved' && financeTerms ? applyFinanceLoanTerms(request, financeTerms) : request
@@ -537,7 +551,7 @@ export default function PayrollFinancePage() {
     if (activeTab === 'Payroll History') {
       return (
         <section className="payroll-grid payroll-lower-grid">
-          <RecentPayrollRuns payrollRuns={payrollRuns} />
+          <RecentPayrollRuns payrollRuns={payrollRuns} onInspect={inspectPayrollRun} />
           <CompliancePanel complianceItems={complianceItems} latestPeriod={latestPeriod} />
         </section>
       )
@@ -555,9 +569,9 @@ export default function PayrollFinancePage() {
           <p className="payroll-subtitle">Manage payroll processing, salary expenses, deductions, and compliance.</p>
         </div>
         <div className="payroll-actions">
-          <button type="button"><CalendarDays size={15} /> Period</button>
-          <button type="button"><CalendarDays size={15} /> {periodLabel(latestPeriod)} <ChevronDown size={14} /></button>
-          <button type="button"><Filter size={15} /> Filters</button>
+          <button type="button" onClick={showPeriodSummary}><CalendarDays size={15} /> Period</button>
+          <button type="button" onClick={showPeriodSummary}><CalendarDays size={15} /> {periodLabel(latestPeriod)} <ChevronDown size={14} /></button>
+          <button type="button" onClick={showFinanceFilters}><Filter size={15} /> Filters</button>
           <Link href="/hr/payroll" className="is-primary"><Play size={15} /> Open HR Payroll <ChevronDown size={13} /></Link>
         </div>
       </div>
@@ -619,7 +633,7 @@ export default function PayrollFinancePage() {
         <div className="payroll-card">
           <div className="payroll-panel-header">
             <h2>Payroll Summary</h2>
-            <button type="button">By Month <ChevronDown size={14} /></button>
+            <button type="button" onClick={showPeriodSummary}>By Month <ChevronDown size={14} /></button>
           </div>
           <div className="payroll-chart">
             <div className="payroll-chart-legend"><span className="gross" /> Gross Pay <span className="net" /> Net Pay <span className="total" /> Total Payroll Cost</div>
@@ -711,7 +725,7 @@ export default function PayrollFinancePage() {
       </section>
 
       <section className="payroll-grid payroll-lower-grid">
-        <RecentPayrollRuns payrollRuns={payrollRuns} />
+        <RecentPayrollRuns payrollRuns={payrollRuns} onInspect={inspectPayrollRun} />
         <CompliancePanel complianceItems={complianceItems} latestPeriod={latestPeriod} />
       </section>
         </>
@@ -884,7 +898,7 @@ function PayrollQueue({ records, employees, onApprove, onRelease }: { records: P
   )
 }
 
-function RecentPayrollRuns({ payrollRuns }: { payrollRuns: ReturnType<typeof groupPayrollRuns> }) {
+function RecentPayrollRuns({ payrollRuns, onInspect }: { payrollRuns: ReturnType<typeof groupPayrollRuns>; onInspect: (period: string) => void }) {
   return (
     <div className="payroll-card">
       <h2>Recent Payroll Runs</h2>
@@ -902,7 +916,7 @@ function RecentPayrollRuns({ payrollRuns }: { payrollRuns: ReturnType<typeof gro
                 <td data-label="Net Pay">{money(run.netPay)}</td>
                 <td data-label="Total Cost">{money(run.grossPay)}</td>
                 <td data-label="Status"><StatusPill value={run.status} /></td>
-                <td data-label="Actions"><button type="button" className="payroll-icon-button"><MoreHorizontal size={15} /></button></td>
+                <td data-label="Actions"><button type="button" className="payroll-icon-button" aria-label={`Inspect payroll run ${run.period}`} onClick={() => onInspect(run.period)}><MoreHorizontal size={15} /></button></td>
               </tr>
             )) : <tr><td colSpan={9}><div className="payroll-empty">No payroll runs yet. When HR sends final payroll, it will appear here for Finance approval and pay release.</div></td></tr>}
           </tbody>
@@ -1035,7 +1049,7 @@ const payrollCss = `
 .payroll-table { width: 100%; min-width: 880px; border-collapse: collapse; }
 .payroll-table th { text-align: left; padding: 12px 10px; color: #64748b; font-size: 11px; font-weight: 900; }
 .payroll-table td { padding: 12px 10px; border-top: 1px solid #eef2f7; color: #0f172a; font-size: 12.5px; }
-.payroll-icon-button { width: 32px; height: 32px; border: 1px solid #e8edf4; border-radius: 7px; background: #fff; display: grid; place-items: center; }
+.payroll-icon-button { width: 32px; height: 32px; border: 1px solid #e8edf4; border-radius: 7px; background: #fff; display: grid; place-items: center; cursor: pointer; }
 .payroll-inline-action { min-height: 30px; border: 1px solid #16a34a; border-radius: 7px; background: #16a34a; color: #fff; padding: 0 10px; font-size: 11.5px; font-weight: 900; cursor: pointer; }
 .payroll-pagination { display: flex; justify-content: space-between; align-items: center; gap: 16px; padding-top: 16px; }
 .payroll-pagination strong { font-size: 12.5px; }

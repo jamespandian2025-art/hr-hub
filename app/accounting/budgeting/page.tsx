@@ -117,6 +117,7 @@ export default function AccountingBudgetingPage() {
   const [data, setData] = useState(emptyAccountingData)
   const [activeTab, setActiveTab] = useState('All')
   const [search, setSearch] = useState('')
+  const [filtersOpen, setFiltersOpen] = useState(false)
   const [showCreate, setShowCreate] = useState(false)
   const [selected, setSelected] = useState<string[]>([])
   const [form, setForm] = useState<BudgetForm>({
@@ -232,7 +233,7 @@ export default function AccountingBudgetingPage() {
             <Search size={16} color="#64748b" />
             <input value={search} onChange={event => setSearch(event.target.value)} placeholder="Search budgets, projects..." />
           </label>
-          <button type="button" className="budget-toolbar-button"><Filter size={15} /> Filters</button>
+          <button type="button" className={filtersOpen ? 'budget-toolbar-button is-active' : 'budget-toolbar-button'} onClick={() => setFiltersOpen(open => !open)}><Filter size={15} /> Filters</button>
           <button type="button" className="budget-primary-button" onClick={() => setShowCreate(true)}><Plus size={15} /> New Budget <ChevronDown size={13} /></button>
         </div>
       </div>
@@ -260,6 +261,17 @@ export default function AccountingBudgetingPage() {
           </button>
         ))}
       </nav>
+
+      {filtersOpen && (
+        <section className="budget-filter-panel">
+          <label>Status
+            <select value={activeTab} onChange={event => setActiveTab(event.target.value)}>
+              {tabs.map(tab => <option key={tab}>{tab}</option>)}
+            </select>
+          </label>
+          <button type="button" onClick={() => { setSearch(''); setActiveTab('All') }}>Reset Filters</button>
+        </section>
+      )}
 
       {createPanelOpen && (
         <section className="budget-card budget-create-panel">
@@ -425,6 +437,7 @@ const budgetCss = `
 .budget-search { width: min(340px, 40vw); min-height: 40px; border-radius: 8px; background: #fff; display: flex; align-items: center; gap: 10px; padding: 0 13px; border: 1px solid #e8edf4; }
 .budget-search input { flex: 1; min-width: 0; border: 0; outline: 0; background: transparent; font-size: 12.5px; color: #0f172a; }
 .budget-toolbar-button, .budget-primary-button { min-height: 38px; border-radius: 8px; border: 1px solid #e8edf4; background: #fff; color: #0f172a; display: flex; align-items: center; gap: 8px; padding: 0 12px; font-size: 12.5px; font-weight: 850; cursor: pointer; }
+.budget-toolbar-button.is-active { border-color: #bbf7d0; background: #ecfdf3; color: #047857; }
 .budget-primary-button { border-color: #16a34a; background: #16a34a; color: #fff; font-weight: 950; }
 .budget-metrics { display: grid; grid-template-columns: repeat(5, minmax(170px, 1fr)); gap: 18px; margin-bottom: 18px; }
 .budget-card { background: #fff; border: 1px solid #e8edf4; border-radius: 8px; padding: 18px; box-shadow: 0 1px 2px rgba(15, 23, 42, .03); }
@@ -438,6 +451,10 @@ const budgetCss = `
 .budget-tabs button.is-active { color: #16a34a; border-bottom-color: #16a34a; }
 .budget-tabs span { min-width: 22px; min-height: 22px; border-radius: 999px; background: #f1f5f9; color: #475569; display: grid; place-items: center; font-size: 11px; }
 .budget-tabs button.is-active span { background: #dcfce7; color: #15803d; }
+.budget-filter-panel { margin: 16px 0 0; border: 1px solid #e8edf4; border-radius: 8px; background: #fff; padding: 14px; display: grid; grid-template-columns: minmax(180px, 240px) auto; gap: 12px; align-items: end; }
+.budget-filter-panel label { display: grid; gap: 7px; color: #475569; font-size: 12px; font-weight: 900; }
+.budget-filter-panel select, .budget-filter-panel button { min-height: 38px; border: 1px solid #e8edf4; border-radius: 8px; background: #fff; color: #0f172a; padding: 0 12px; font-size: 12.5px; font-weight: 850; }
+.budget-filter-panel button { cursor: pointer; justify-self: start; }
 .budget-grid { display: grid; grid-template-columns: minmax(0, 1fr) 360px; gap: 16px; margin-top: 18px; }
 .budget-side-stack { display: grid; align-content: start; gap: 16px; }
 .budget-panel-header { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 16px; }
@@ -494,6 +511,7 @@ const budgetCss = `
   .budget-page { padding: 16px; }
   .budget-title { font-size: 24px; }
   .budget-header-actions, .budget-metrics, .budget-side-stack, .budget-form { display: grid; grid-template-columns: 1fr; }
+  .budget-filter-panel { grid-template-columns: 1fr; }
   .budget-card-value { font-size: 21px; }
   .budget-tabs { margin-left: -16px; margin-right: -16px; padding-left: 16px; padding-right: 16px; }
   .budget-form-wide { grid-column: auto; }

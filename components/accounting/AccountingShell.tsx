@@ -106,6 +106,7 @@ export default function AccountingShell({ children }: { children: React.ReactNod
   const ActiveIcon = activeMeta.icon
   const [notificationsOpen, setNotificationsOpen] = useState(false)
   const [newMenuOpen, setNewMenuOpen] = useState(false)
+  const [accountMenuOpen, setAccountMenuOpen] = useState(false)
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false)
   const [loanRequests, setLoanRequests] = useState<LoanRequest[]>([])
   const [allowanceRequests, setAllowanceRequests] = useState<AllowanceRequest[]>([])
@@ -129,6 +130,7 @@ export default function AccountingShell({ children }: { children: React.ReactNod
       setMobileSidebarOpen(false)
       setNotificationsOpen(false)
       setNewMenuOpen(false)
+      setAccountMenuOpen(false)
     }
     window.addEventListener('keydown', closeMenus)
     return () => window.removeEventListener('keydown', closeMenus)
@@ -300,11 +302,13 @@ export default function AccountingShell({ children }: { children: React.ReactNod
           <div className="accounting-header-title" style={{ display: 'flex', alignItems: 'center', gap: 12, minWidth: 0 }}>
             <button
               type="button"
+              className="accounting-sidebar-toggle"
               aria-label="Open accounting navigation"
               aria-expanded={mobileSidebarOpen}
               onClick={() => {
                 setNotificationsOpen(false)
                 setNewMenuOpen(false)
+                setAccountMenuOpen(false)
                 setMobileSidebarOpen(open => !open)
               }}
               style={iconButtonStyle}
@@ -322,7 +326,7 @@ export default function AccountingShell({ children }: { children: React.ReactNod
             <input placeholder="Search Finance" aria-label="Search Finance" style={{ flex: 1, border: 0, outline: 0, background: 'transparent', fontSize: 13, color: '#0f172a' }} />
           </label>
           <div className="accounting-header-actions" style={headerActionsStyle}>
-            <button type="button" aria-label="Notifications" onClick={() => setNotificationsOpen(open => !open)} style={{ ...roundButtonStyle, position: 'relative' }}>
+            <button type="button" aria-label="Notifications" onClick={() => { setNewMenuOpen(false); setAccountMenuOpen(false); setNotificationsOpen(open => !open) }} style={{ ...roundButtonStyle, position: 'relative' }}>
               <Bell size={18} />
               {notificationBadgeCount > 0 && (
                 <span style={{ position: 'absolute', top: 6, right: 6, minWidth: 16, height: 16, borderRadius: 999, background: '#ef4444', color: '#fff', fontSize: 10, fontWeight: 900, display: 'grid', placeItems: 'center', border: '2px solid #fff' }}>{notificationBadgeCount}</span>
@@ -372,6 +376,7 @@ export default function AccountingShell({ children }: { children: React.ReactNod
               type="button"
               onClick={() => {
                 setNotificationsOpen(false)
+                setAccountMenuOpen(false)
                 setNewMenuOpen(open => !open)
               }}
               aria-expanded={newMenuOpen}
@@ -385,6 +390,7 @@ export default function AccountingShell({ children }: { children: React.ReactNod
                 type="button"
                 onClick={() => {
                   setNotificationsOpen(false)
+                  setAccountMenuOpen(false)
                   setNewMenuOpen(open => !open)
                 }}
                 aria-expanded={newMenuOpen}
@@ -419,12 +425,36 @@ export default function AccountingShell({ children }: { children: React.ReactNod
                 </div>
               )}
             </div>
-            <button type="button" aria-label="Account profile" onClick={() => router.push('/settings/company')} style={avatarButtonStyle}>
-              {account.profilePhoto || account.photo ? (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img src={account.profilePhoto || account.photo} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: 'inherit' }} />
-              ) : avatarText}
-            </button>
+            <div style={{ position: 'relative' }}>
+              <button
+                type="button"
+                aria-label="Account profile menu"
+                aria-expanded={accountMenuOpen}
+                aria-haspopup="menu"
+                onClick={() => {
+                  setNotificationsOpen(false)
+                  setNewMenuOpen(false)
+                  setAccountMenuOpen(open => !open)
+                }}
+                style={avatarButtonStyle}
+              >
+                {account.profilePhoto || account.photo ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={account.profilePhoto || account.photo} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: 'inherit' }} />
+                ) : avatarText}
+              </button>
+              {accountMenuOpen && (
+                <div role="menu" style={accountMenuStyle}>
+                  <div style={accountMenuHeaderStyle}>
+                    <strong>{displayName}</strong>
+                    <small>{account.role || account.company || 'Finance workspace'}</small>
+                  </div>
+                  <button type="button" role="menuitem" style={accountMenuItemStyle} onClick={() => { setAccountMenuOpen(false); router.push('/settings/company') }}>Company settings</button>
+                  <button type="button" role="menuitem" style={accountMenuItemStyle} onClick={() => { setAccountMenuOpen(false); router.push('/accounting/payroll-finance') }}>Payroll Finance</button>
+                  <button type="button" role="menuitem" style={accountMenuItemStyle} onClick={() => { setAccountMenuOpen(false); router.push('/dashboard') }}>Back to WiseFlow</button>
+                </div>
+              )}
+            </div>
           </div>
         </header>
         <main className="accounting-scroll-content">{children}</main>
@@ -519,6 +549,44 @@ const avatarButtonStyle: React.CSSProperties = {
   fontWeight: 950,
   cursor: 'pointer',
   overflow: 'hidden',
+}
+
+const accountMenuStyle: React.CSSProperties = {
+  position: 'absolute',
+  right: 0,
+  top: 48,
+  width: 240,
+  background: '#fff',
+  border: '1px solid #e8edf4',
+  borderRadius: 8,
+  boxShadow: '0 18px 45px rgba(15,23,42,0.14)',
+  padding: 8,
+  zIndex: 90,
+  display: 'grid',
+  gap: 4,
+}
+
+const accountMenuHeaderStyle: React.CSSProperties = {
+  padding: '10px 10px 12px',
+  borderBottom: '1px solid #eef2f7',
+  marginBottom: 4,
+  display: 'grid',
+  gap: 4,
+  color: '#0f172a',
+}
+
+const accountMenuItemStyle: React.CSSProperties = {
+  width: '100%',
+  minHeight: 38,
+  border: 0,
+  background: 'transparent',
+  color: '#0f172a',
+  borderRadius: 7,
+  padding: '0 10px',
+  textAlign: 'left',
+  fontSize: 13,
+  fontWeight: 850,
+  cursor: 'pointer',
 }
 
 const newMenuStyle: React.CSSProperties = {
@@ -906,6 +974,10 @@ const accountingShellCss = `
   .accounting-header-title {
     min-height: 0;
     width: auto;
+  }
+
+  .accounting-sidebar-toggle {
+    display: none !important;
   }
 
   .accounting-header-search {

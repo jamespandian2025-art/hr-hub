@@ -229,7 +229,7 @@ export default function AccountingOverviewPage() {
                       <td data-label="Type" className={`type-${row.type.toLowerCase()}`}>{row.type}</td>
                       <td data-label="Amount" className={row.type === 'Expense' ? 'amount-negative' : ''}>{formatCurrency(row.amount)}</td>
                       <td data-label="Status"><span className={`accounting-pill status-${statusSlug(row.status)}`}>{row.status}</span></td>
-                      <td data-label="Actions"><button type="button" aria-label={`Actions for ${row.description}`} className="accounting-more-button"><MoreHorizontal size={16} /></button></td>
+                      <td data-label="Actions"><Link href="/accounting/transactions" aria-label={`Open transactions for ${row.description}`} className="accounting-more-button"><MoreHorizontal size={16} /></Link></td>
                     </tr>
                   ))}
                 </tbody>

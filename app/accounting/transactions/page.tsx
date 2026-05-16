@@ -22,6 +22,26 @@ type TransactionType = 'Deposit' | 'Withdrawal' | 'Transfer'
 type TransactionStatus = 'Reconciled' | 'Unreconciled'
 type TransactionTab = 'All Transactions' | 'Unreconciled' | 'Deposits' | 'Withdrawals' | 'Transfers'
 type PaginationItem = number | 'ellipsis'
+type TransactionRowView = {
+  id: string
+  date: string
+  description: string
+  detail: string
+  account: string
+  accountDetail: string
+  type: TransactionType
+  reference: string
+  inflow: number
+  outflow: number
+  balance: number
+  status: TransactionStatus
+  category: string
+}
+type TransactionMenuState = {
+  transactionId: string
+  top: number
+  left: number
+}
 
 const PAGE_SIZE_OPTIONS = [5, 10, 25, 50, 100]
 
@@ -62,6 +82,8 @@ export default function TransactionsPage() {
   const [statusFilter, setStatusFilter] = useState('All Status')
   const [moreFiltersOpen, setMoreFiltersOpen] = useState(false)
   const [selectedRows, setSelectedRows] = useState<string[]>([])
+  const [activeMenu, setActiveMenu] = useState<TransactionMenuState | null>(null)
+  const [notice, setNotice] = useState('')
   const [currentPage, setCurrentPage] = useState(1)
   const [pageSize, setPageSize] = useState(10)
 
@@ -71,7 +93,7 @@ export default function TransactionsPage() {
     return subscribeAccountingData(load)
   }, [])
 
-  const transactions = useMemo(() => data.transactions.map(transaction => ({
+  const transactions = useMemo<TransactionRowView[]>(() => data.transactions.map(transaction => ({
     id: transaction.id,
     date: formatDate(transaction.date),
     description: transaction.description,
@@ -146,6 +168,8 @@ export default function TransactionsPage() {
     setTypeFilter('All Types')
     setStatusFilter('All Status')
     setSelectedRows([])
+    setActiveMenu(null)
+    setNotice('')
     setCurrentPage(1)
   }
   const toggleSelectAll = (event: ChangeEvent<HTMLInputElement>) => {
@@ -180,6 +204,43 @@ export default function TransactionsPage() {
     link.download = `accounting-transactions-${new Date().toISOString().slice(0, 10)}.csv`
     link.click()
     window.URL.revokeObjectURL(url)
+    setNotice(`${visibleTransactions.length} transaction${visibleTransactions.length === 1 ? '' : 's'} exported.`)
+  }
+  const exportTransaction = (transaction: TransactionRowView) => {
+    if (typeof window === 'undefined') return
+    const headers = ['Date', 'Description', 'Account', 'Type', 'Reference', 'Inflow', 'Outflow', 'Balance', 'Status', 'Category']
+    const row = [transaction.date, transaction.description, transaction.account, transaction.type, transaction.reference, transaction.inflow, transaction.outflow, transaction.balance, transaction.status, transaction.category]
+    const csv = [headers, row].map(values => values.map(value => `"${String(value).replaceAll('"', '""')}"`).join(',')).join('\n')
+    const url = window.URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }))
+    const link = document.createElement('a')
+    link.href = url
+    link.download = `${transaction.reference || transaction.id}.csv`
+    link.click()
+    window.URL.revokeObjectURL(url)
+    setNotice(`${transaction.description} exported.`)
+    setActiveMenu(null)
+  }
+  const focusTransaction = (transaction: TransactionRowView) => {
+    setTableSearch(transaction.reference || transaction.description)
+    setCurrentPage(1)
+    setNotice(`${transaction.description} is selected in the register.`)
+    setActiveMenu(null)
+  }
+  const filterAccount = (transaction: TransactionRowView) => {
+    setAccountFilter(transaction.account)
+    setCurrentPage(1)
+    setNotice(`Showing ${transaction.account} transactions.`)
+    setActiveMenu(null)
+  }
+  const toggleMenu = (transactionId: string, element: HTMLButtonElement) => {
+    const rect = element.getBoundingClientRect()
+    setActiveMenu(current => current?.transactionId === transactionId
+      ? null
+      : {
+        transactionId,
+        top: rect.bottom + 6,
+        left: Math.max(12, Math.min(window.innerWidth - 188, rect.right - 172)),
+      })
   }
 
   return (
@@ -254,6 +315,7 @@ export default function TransactionsPage() {
             </div>
           </div>
         )}
+        {notice && <div className="tx-notice" role="status">{notice}</div>}
 
         <div className="tx-table-wrap">
           <table className="tx-table">
@@ -277,7 +339,18 @@ export default function TransactionsPage() {
                   <td data-label="Balance">{money(transaction.balance, data.currency)}</td>
                   <td data-label="Status"><StatusPill value={transaction.status} /></td>
                   <td data-label="Category"><CategoryPill value={transaction.category} /></td>
-                  <td data-label="Actions"><button type="button" aria-label={`Actions for ${transaction.description}`} className="tx-icon-button"><MoreHorizontal size={15} /></button></td>
+                  <td data-label="Actions">
+                    <div className="tx-row-actions">
+                      <button type="button" aria-expanded={activeMenu?.transactionId === transaction.id} aria-label={`Actions for ${transaction.description}`} className="tx-icon-button" onClick={event => toggleMenu(transaction.id, event.currentTarget)}><MoreHorizontal size={15} /></button>
+                      {activeMenu?.transactionId === transaction.id && (
+                        <div className="tx-row-menu" role="menu" style={{ top: activeMenu.top, left: activeMenu.left }}>
+                          <button type="button" role="menuitem" onClick={() => focusTransaction(transaction)}>View details</button>
+                          <button type="button" role="menuitem" onClick={() => filterAccount(transaction)}>Filter account</button>
+                          <button type="button" role="menuitem" onClick={() => exportTransaction(transaction)}>Export row</button>
+                        </div>
+                      )}
+                    </div>
+                  </td>
                 </tr>
               ))}
               {!filteredTotal && (
@@ -387,6 +460,7 @@ const transactionsCss = `
 .tx-more-filters strong { font-size: 12px; color: #475569; }
 .tx-more-filters div { display: flex; gap: 8px; flex-wrap: wrap; }
 .tx-more-filters button { border: 1px solid #e8edf4; border-radius: 999px; min-height: 30px; background: #fff; color: #0f172a; padding: 0 10px; font-size: 12px; font-weight: 850; cursor: pointer; }
+.tx-notice { margin: -4px 0 14px; border: 1px solid #bbf7d0; border-radius: 8px; background: #f0fdf4; color: #15803d; padding: 10px 12px; font-size: 12.5px; font-weight: 900; }
 .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
 .tx-table-wrap { overflow-x: auto; border: 1px solid #eef2f7; border-radius: 8px; }
 .tx-table { width: 100%; min-width: 1220px; border-collapse: collapse; }
@@ -400,6 +474,10 @@ const transactionsCss = `
 .tx-status.is-good { background: #dcfce7; color: #15803d; }
 .tx-status.is-warn { background: #fff7ed; color: #d97706; }
 .tx-icon-button { width: 32px; height: 32px; border-radius: 7px; border: 1px solid #e8edf4; background: #fff; color: #0f172a; display: grid; place-items: center; cursor: pointer; }
+.tx-row-actions { position: relative; display: inline-grid; place-items: center; }
+.tx-row-menu { position: fixed; z-index: 1400; width: 172px; border: 1px solid #e8edf4; border-radius: 8px; background: #fff; box-shadow: 0 18px 44px rgba(15,23,42,.16); padding: 6px; display: grid; gap: 2px; }
+.tx-row-menu button { min-height: 34px; border: 0; border-radius: 6px; background: transparent; color: #0f172a; padding: 0 10px; text-align: left; font-size: 12.5px; font-weight: 850; cursor: pointer; }
+.tx-row-menu button:hover { background: #f1f5f9; }
 .tx-pagination { display: flex; justify-content: space-between; align-items: center; gap: 16px; padding-top: 16px; }
 .tx-pagination strong { font-size: 12.5px; }
 .tx-pagination > div { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
