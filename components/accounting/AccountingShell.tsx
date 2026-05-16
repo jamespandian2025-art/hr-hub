@@ -107,6 +107,7 @@ export default function AccountingShell({ children }: { children: React.ReactNod
   const ActiveIcon = activeMeta.icon
   const [notificationsOpen, setNotificationsOpen] = useState(false)
   const [newMenuOpen, setNewMenuOpen] = useState(false)
+  const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false)
   const [loanRequests, setLoanRequests] = useState<LoanRequest[]>([])
   const [allowanceRequests, setAllowanceRequests] = useState<AllowanceRequest[]>([])
   const [outboundNotifications, setOutboundNotifications] = useState<FinanceOutboundNotification[]>([])
@@ -121,6 +122,17 @@ export default function AccountingShell({ children }: { children: React.ReactNod
     loadAccount()
     window.addEventListener('storage', loadAccount)
     return () => window.removeEventListener('storage', loadAccount)
+  }, [])
+
+  useEffect(() => {
+    const closeMenus = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape') return
+      setMobileSidebarOpen(false)
+      setNotificationsOpen(false)
+      setNewMenuOpen(false)
+    }
+    window.addEventListener('keydown', closeMenus)
+    return () => window.removeEventListener('keydown', closeMenus)
   }, [])
 
   useEffect(() => {
@@ -213,7 +225,13 @@ export default function AccountingShell({ children }: { children: React.ReactNod
   return (
     <div className="accounting-shell" style={{ minHeight: '100vh', height: '100vh', overflow: 'hidden', background: '#f7f9fc', display: 'grid', gridTemplateColumns: '250px minmax(0, 1fr)', fontFamily: font, color: '#111827' }}>
       <style>{accountingShellCss}</style>
-      <aside className="accounting-sidebar" style={{ minHeight: '100vh', height: '100vh', position: 'sticky', top: 0, alignSelf: 'start', background: '#000', color: '#ededed', padding: '18px 10px', display: 'flex', flexDirection: 'column', gap: 14 }}>
+      <button
+        type="button"
+        className={`accounting-mobile-backdrop${mobileSidebarOpen ? ' is-open' : ''}`}
+        aria-label="Close accounting navigation"
+        onClick={() => setMobileSidebarOpen(false)}
+      />
+      <aside className={`accounting-sidebar${mobileSidebarOpen ? ' is-open' : ''}`} style={{ minHeight: '100vh', height: '100vh', position: 'sticky', top: 0, alignSelf: 'start', background: '#000', color: '#ededed', padding: '18px 10px', display: 'flex', flexDirection: 'column', gap: 14 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '0 6px 4px' }}>
           <span style={{ width: 36, height: 36, borderRadius: 10, background: '#ededed', color: '#000', display: 'grid', placeItems: 'center', fontWeight: 700, fontSize: 16 }}>W</span>
           <span>
@@ -222,7 +240,7 @@ export default function AccountingShell({ children }: { children: React.ReactNod
           </span>
         </div>
 
-        <Link href="/dashboard" style={backLinkStyle}>
+        <Link href="/dashboard" style={backLinkStyle} onClick={() => setMobileSidebarOpen(false)}>
           <ArrowLeft size={15} />
           Back to WiseFlow
         </Link>
@@ -233,7 +251,7 @@ export default function AccountingShell({ children }: { children: React.ReactNod
             const Icon = item.icon
             const active = pathname === item.href || pathname.startsWith(item.href + '/')
             return (
-              <Link key={item.href} href={item.href} style={{ textDecoration: 'none' }}>
+              <Link key={item.href} href={item.href} style={{ textDecoration: 'none' }} onClick={() => setMobileSidebarOpen(false)}>
                 <div className={`accounting-nav-row${active ? ' active' : ''}`}>
                   <Icon size={16} />
                   <span style={{ flex: 1 }}>{item.label}</span>
@@ -246,19 +264,31 @@ export default function AccountingShell({ children }: { children: React.ReactNod
 
       <div className="accounting-content-column" style={{ minWidth: 0 }}>
         <header className="accounting-sticky-header" style={{ height: 76, position: 'sticky', top: 0, zIndex: 30, background: 'rgba(255,255,255,0.94)', backdropFilter: 'blur(16px)', borderBottom: '1px solid #e8edf4', display: 'grid', gridTemplateColumns: 'auto minmax(280px, 520px) auto', alignItems: 'center', gap: 18, padding: '0 28px' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 12, minWidth: 0 }}>
-            <button type="button" aria-label="Menu" style={iconButtonStyle}><Menu size={19} /></button>
+          <div className="accounting-header-title" style={{ display: 'flex', alignItems: 'center', gap: 12, minWidth: 0 }}>
+            <button
+              type="button"
+              aria-label="Open accounting navigation"
+              aria-expanded={mobileSidebarOpen}
+              onClick={() => {
+                setNotificationsOpen(false)
+                setNewMenuOpen(false)
+                setMobileSidebarOpen(open => !open)
+              }}
+              style={iconButtonStyle}
+            >
+              <Menu size={19} />
+            </button>
             <span style={{ width: 38, height: 38, borderRadius: 11, background: '#ecfdf3', color: '#16a34a', display: 'grid', placeItems: 'center', flexShrink: 0 }}><ActiveIcon size={19} /></span>
             <span style={{ minWidth: 0 }}>
               <span style={{ display: 'block', fontSize: 15, fontWeight: 900, color: '#0f172a', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{activeMeta.label}</span>
               <span style={{ display: 'block', fontSize: 12, color: '#64748b', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{activeMeta.description}</span>
             </span>
           </div>
-          <label style={{ height: 40, borderRadius: 8, background: '#fff', display: 'flex', alignItems: 'center', gap: 10, padding: '0 14px', border: '1px solid #e8edf4', boxShadow: '0 1px 2px rgba(15,23,42,0.03)' }}>
+          <label className="accounting-header-search" style={{ height: 40, borderRadius: 8, background: '#fff', display: 'flex', alignItems: 'center', gap: 10, padding: '0 14px', border: '1px solid #e8edf4', boxShadow: '0 1px 2px rgba(15,23,42,0.03)' }}>
             <Search size={16} color="#64748b" />
             <input placeholder="Search Finance" aria-label="Search Finance" style={{ flex: 1, border: 0, outline: 0, background: 'transparent', fontSize: 13, color: '#0f172a' }} />
           </label>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 10 }}>
+          <div className="accounting-header-actions" style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 10 }}>
             <button type="button" aria-label="Notifications" onClick={() => setNotificationsOpen(open => !open)} style={{ ...roundButtonStyle, position: 'relative' }}>
               <Bell size={18} />
               {notificationBadgeCount > 0 && (
@@ -614,6 +644,19 @@ const accountingShellCss = `
   align-items: stretch;
   overflow: hidden;
 }
+.accounting-shell,
+.accounting-shell *,
+.accounting-shell *::before,
+.accounting-shell *::after {
+  box-sizing: border-box;
+}
+.accounting-mobile-backdrop {
+  display: none;
+  border: 0;
+  padding: 0;
+  margin: 0;
+  background: transparent;
+}
 .accounting-sidebar {
   position: sticky !important;
   top: 0 !important;
@@ -654,6 +697,23 @@ const accountingShellCss = `
   overscroll-behavior: contain;
   background: #ffffff;
 }
+.accounting-scroll-content :where(img, svg, canvas, video) {
+  max-width: 100%;
+}
+.accounting-scroll-content :where(table) {
+  max-width: 100%;
+}
+.accounting-scroll-content :where(input, select, textarea, button) {
+  font: inherit;
+}
+.accounting-scroll-content :where(.accounting-card, .live-card, .invoices-card, .banking-card, .tx-card, .tx-table-card, .budget-card, .payroll-card, .tax-card, .reports-card, .audit-card) {
+  max-width: 100%;
+  min-width: 0;
+}
+.accounting-scroll-content :where(.accounting-table-wrap, .live-table-wrap, .invoices-table-wrap, .banking-table-wrap, .tx-table-wrap, .budget-table-wrap, .payroll-table-wrap, .tax-table-wrap, .reports-table-wrap, .audit-table-wrap) {
+  max-width: 100%;
+  min-width: 0;
+}
 .accounting-nav-row {
   min-height: 36px;
   display: flex;
@@ -693,36 +753,133 @@ const accountingShellCss = `
   .accounting-shell {
     display: grid !important;
     grid-template-columns: 1fr !important;
-    height: auto;
-    max-height: none;
-    overflow: visible;
+    height: 100vh;
+    height: 100dvh;
+    max-height: 100vh;
+    max-height: 100dvh;
+    overflow: hidden;
+  }
+
+  .accounting-mobile-backdrop {
+    display: block;
+    position: fixed;
+    inset: 0;
+    z-index: 990;
+    min-width: 0;
+    min-height: 0;
+    opacity: 0;
+    pointer-events: none;
+    background: rgba(15, 23, 42, .42);
+    transition: opacity 160ms ease;
+  }
+
+  .accounting-mobile-backdrop.is-open {
+    opacity: 1;
+    pointer-events: auto;
   }
 
   .accounting-sidebar {
-    position: relative !important;
-    top: auto !important;
-    height: auto;
-    min-height: auto !important;
-    max-height: none;
-    overflow: visible;
-    z-index: 70;
+    position: fixed !important;
+    inset: 0 auto 0 0;
+    top: 0 !important;
+    width: min(294px, 86vw);
+    height: 100vh !important;
+    height: 100dvh !important;
+    min-height: 100vh !important;
+    max-height: 100vh;
+    max-height: 100dvh;
+    overflow: hidden;
+    z-index: 1000;
+    transform: translateX(-104%);
+    transition: transform 180ms ease;
+    box-shadow: 28px 0 80px rgba(15, 23, 42, .34);
+  }
+
+  .accounting-sidebar.is-open {
+    transform: translateX(0);
   }
 
   .accounting-sticky-header {
     position: sticky !important;
     top: 0 !important;
     z-index: 80 !important;
+    height: auto !important;
+    min-height: 64px;
+    grid-template-columns: 1fr !important;
+    align-items: stretch !important;
+    gap: 10px !important;
+    padding: 10px 12px !important;
+  }
+
+  .accounting-header-title {
+    min-height: 44px;
+    width: 100%;
+  }
+
+  .accounting-header-search {
+    width: 100%;
+    min-height: 44px;
+  }
+
+  .accounting-header-actions {
+    width: 100%;
+    display: grid !important;
+    grid-template-columns: 44px minmax(0, 1fr) 44px 44px;
+    align-items: center !important;
+    justify-content: stretch !important;
+    gap: 8px !important;
+  }
+
+  .accounting-header-actions > button,
+  .accounting-header-actions > div > button {
+    min-height: 44px !important;
+  }
+
+  .accounting-header-actions > button:nth-child(2) {
+    width: 100% !important;
+    justify-content: center !important;
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
   }
 
   .accounting-content-column {
-    height: auto;
-    min-height: 100vh;
-    display: block;
-    overflow: visible;
+    height: 100vh;
+    height: 100dvh;
+    min-height: 0;
+    display: grid;
+    grid-template-rows: auto minmax(0, 1fr);
+    overflow: hidden;
   }
 
   .accounting-scroll-content {
-    overflow: visible;
+    overflow-y: auto;
+    overflow-x: hidden;
+    min-height: 0;
+    -webkit-overflow-scrolling: touch;
+  }
+}
+
+@media (max-width: 640px) {
+  .accounting-sticky-header {
+    padding: 8px 10px !important;
+  }
+
+  .accounting-header-title > span:nth-of-type(1) {
+    width: 34px !important;
+    height: 34px !important;
+  }
+
+  .accounting-header-title > span:nth-of-type(2) > span:first-child {
+    font-size: 14px !important;
+  }
+
+  .accounting-header-title > span:nth-of-type(2) > span:last-child {
+    font-size: 11px !important;
+  }
+
+  .accounting-header-actions {
+    grid-template-columns: 44px minmax(0, 1fr) 44px 42px;
   }
 }
 `
