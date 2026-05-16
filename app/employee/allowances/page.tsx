@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useMemo, useState } from 'react'
-import { Car, Plus, ReceiptText, Utensils } from 'lucide-react'
+import { Car, Plus, ReceiptText, Upload, Utensils } from 'lucide-react'
 import EmployeeEmptyPage from '@/components/employee/EmployeeEmptyPage'
 import { allowanceRequestKey, AllowanceRequest, appendAuditLog, isFuelEligible, loadStored, saveStored } from '@/app/hr/enterpriseData'
 import { matchesEmployeeId, useEmployeePortalData } from '../employeeData'
@@ -19,11 +19,26 @@ export default function EmployeeAllowancesPage() {
   const [purpose, setPurpose] = useState('')
   const [remarks, setRemarks] = useState('')
   const [attachmentName, setAttachmentName] = useState('')
+  const [attachmentDataUrl, setAttachmentDataUrl] = useState('')
+  const [attachmentType, setAttachmentType] = useState('')
   const [notice, setNotice] = useState('')
   const myRequests = useMemo(() => requests.filter(item => matchesEmployeeId(item.employeeId, employee) || matchesEmployeeId(item.employeeCode, employee)), [employee, requests])
   const fuelAllowed = isFuelEligible(employee.jobTitle)
   const isManual = type === 'Manual'
   const displayType = isManual ? manualType.trim() || 'Custom Allowance' : type
+
+  const uploadReceipt = (file?: File) => {
+    if (!file) return
+    setAttachmentName(file.name)
+    setAttachmentType(file.type || 'application/octet-stream')
+    const reader = new FileReader()
+    reader.onload = () => setAttachmentDataUrl(typeof reader.result === 'string' ? reader.result : '')
+    reader.onerror = () => {
+      setAttachmentDataUrl('')
+      setNotice('Could not read the receipt file. Please try another file.')
+    }
+    reader.readAsDataURL(file)
+  }
 
   useEffect(() => {
     let cancelled = false
@@ -84,6 +99,8 @@ export default function EmployeeAllowancesPage() {
       reason: type === 'Meal' ? purpose.trim() : undefined,
       remarks: remarks.trim(),
       attachmentName: attachmentName.trim() || undefined,
+      attachmentDataUrl: attachmentDataUrl || undefined,
+      attachmentType: attachmentType || undefined,
       status: 'Pending',
       managerDecision: 'Pending',
       financeDecision: 'Pending',
@@ -106,6 +123,8 @@ export default function EmployeeAllowancesPage() {
     setPurpose('')
     setRemarks('')
     setAttachmentName('')
+    setAttachmentDataUrl('')
+    setAttachmentType('')
     if (isManual) setManualType('')
     setNotice(`${displayType} allowance request submitted for finance approval.`)
   }
@@ -120,7 +139,19 @@ export default function EmployeeAllowancesPage() {
           <label style={fieldStyle}>Date<input type="date" value={date} onChange={event => setDate(event.target.value)} style={inputStyle} /></label>
           <label style={fieldStyle}>Amount<input type="number" min="1" value={amount} onChange={event => setAmount(event.target.value)} style={inputStyle} /></label>
           <label style={fieldStyle}>{type === 'Fuel' ? 'Purpose' : 'Reason'}<input value={purpose} onChange={event => setPurpose(event.target.value)} style={inputStyle} /></label>
-          <label style={fieldStyle}>Attachment / Receipt<input value={attachmentName} onChange={event => setAttachmentName(event.target.value)} placeholder="Receipt filename or reference" style={inputStyle} /></label>
+          <label style={fieldStyle}>Upload Receipt
+            <span style={uploadControlStyle}>
+              <Upload size={15} />
+              <span style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{attachmentName || 'Choose receipt file'}</span>
+              <input
+                type="file"
+                accept="image/*,.pdf,.doc,.docx"
+                onChange={event => uploadReceipt(event.target.files?.[0])}
+                style={fileInputStyle}
+                aria-label="Upload receipt"
+              />
+            </span>
+          </label>
           <label style={fieldStyle}>Remarks<input value={remarks} onChange={event => setRemarks(event.target.value)} style={inputStyle} /></label>
           <button type="button" onClick={submit} className="employee-primary-button"><Plus size={16} /> Submit</button>
         </div>
@@ -132,7 +163,7 @@ export default function EmployeeAllowancesPage() {
         <div style={{ overflowX: 'auto' }}>
           <table style={{ width: '100%', minWidth: 820, borderCollapse: 'collapse' }}>
             <thead style={{ background: '#f8fafc', color: '#475569', fontSize: 12, textAlign: 'left' }}><tr>{['Type', 'Date', 'Amount', 'Purpose / Reason', 'Receipt', 'Status'].map(item => <th key={item} style={cell}>{item}</th>)}</tr></thead>
-            <tbody>{myRequests.length ? myRequests.map(item => <tr key={item.id} style={{ borderTop: '1px solid #eef2f7' }}><td style={cell}>{item.type === 'Fuel' ? <Car size={14} /> : <Utensils size={14} />} {item.customType || item.type}</td><td style={cell}>{item.date}</td><td style={cell}>PHP {item.amount.toLocaleString('en-PH', { minimumFractionDigits: 2 })}</td><td style={cell}>{item.purpose || item.reason || '-'}</td><td style={cell}>{item.attachmentName ? <><ReceiptText size={14} /> {item.attachmentName}</> : '-'}</td><td style={cell}>{item.status}</td></tr>) : <tr><td colSpan={6} style={{ ...cell, textAlign: 'center', color: '#64748b', padding: 42 }}>No allowance requests yet.</td></tr>}</tbody>
+            <tbody>{myRequests.length ? myRequests.map(item => <tr key={item.id} style={{ borderTop: '1px solid #eef2f7' }}><td style={cell}>{item.type === 'Fuel' ? <Car size={14} /> : <Utensils size={14} />} {item.customType || item.type}</td><td style={cell}>{item.date}</td><td style={cell}>PHP {item.amount.toLocaleString('en-PH', { minimumFractionDigits: 2 })}</td><td style={cell}>{item.purpose || item.reason || '-'}</td><td style={cell}>{item.attachmentName ? item.attachmentDataUrl ? <a href={item.attachmentDataUrl} download={item.attachmentName} style={receiptLinkStyle}><ReceiptText size={14} /> {item.attachmentName}</a> : <span style={receiptTextStyle}><ReceiptText size={14} /> {item.attachmentName}</span> : '-'}</td><td style={cell}>{item.status}</td></tr>) : <tr><td colSpan={6} style={{ ...cell, textAlign: 'center', color: '#64748b', padding: 42 }}>No allowance requests yet.</td></tr>}</tbody>
           </table>
         </div>
       </section>
@@ -143,6 +174,10 @@ export default function EmployeeAllowancesPage() {
 const formGrid = { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 14, alignItems: 'end' } as const
 const fieldStyle = { display: 'grid', gap: 7, color: '#334155', fontSize: 12, fontWeight: 900 } as const
 const inputStyle = { minHeight: 40, border: '1px solid #e2e8f0', borderRadius: 8, padding: '0 12px', font: 'inherit', background: '#fff', color: '#0f172a' } as const
+const uploadControlStyle = { minHeight: 40, border: '1px solid #e2e8f0', borderRadius: 8, padding: '0 12px', font: 'inherit', background: '#fff', color: '#0f172a', display: 'flex', alignItems: 'center', gap: 9, position: 'relative', cursor: 'pointer' } as const
+const fileInputStyle = { position: 'absolute', inset: 0, opacity: 0, cursor: 'pointer' } as const
+const receiptTextStyle = { display: 'inline-flex', alignItems: 'center', gap: 6, maxWidth: 220, color: '#0f172a' } as const
+const receiptLinkStyle = { ...receiptTextStyle, color: '#047857', textDecoration: 'none', fontWeight: 800 } as const
 const noticeStyle = { padding: 12, borderRadius: 10, background: '#ecfdf5', color: '#047857', fontWeight: 900, fontSize: 13, marginBottom: 16 } as const
 const hintStyle = { marginTop: 12, padding: 10, borderRadius: 8, background: '#fffbeb', color: '#92400e', fontWeight: 800, fontSize: 12 } as const
 const panelHeader = { padding: 18, borderBottom: '1px solid #e2e8f0' } as const

@@ -443,10 +443,10 @@ export default function Dashboard() {
       {/* Page title + greeting row */}
       <div className="dash-header-row" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10, gap: 12, flexWrap: 'wrap' }}>
         <div>
-          <h1 style={{ margin: 0, fontSize: 22, fontWeight: 700, color: '#111827', fontFamily: display, letterSpacing: '-0.3px' }}>
+          <h1 style={{ margin: 0, fontSize: 30, fontWeight: 700, color: '#111827', fontFamily: display, letterSpacing: '-0.3px' }}>
             Dashboard
           </h1>
-          <p style={{ margin: '3px 0 0', fontSize: 13, color: '#6b7280' }}>
+          <p style={{ margin: '3px 0 0', fontSize: 14, color: '#6b7280' }}>
             {greeting()}, {firstName}! ?? Here&apos;s what&apos;s happening across your business today.
           </p>
         </div>
@@ -1132,7 +1132,7 @@ function KpiCard({ label, value, t, neg = false, icon: Icon, iconColor, sparkDat
           <Icon size={15} color={iconColor} />
         </div>
         <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ fontSize: 11, color: '#9ca3af', fontWeight: 500, marginBottom: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{label}</div>
+          <div style={{ fontSize: 13, color: '#9ca3af', fontWeight: 500, marginBottom: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{label}</div>
           <div style={{ fontSize: 18, fontWeight: 700, color: '#111827', fontFamily: display, letterSpacing: '-0.3px', marginBottom: 3 }}>{value}</div>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 4 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 3, fontSize: 10, color: t.zero ? '#9ca3af' : positive ? '#22c55e' : '#ef4444', fontWeight: 500, minWidth: 0 }}>
@@ -1190,7 +1190,7 @@ function FinBlock({ icon: Icon, iconColor, label, value, t }: {
         <Icon size={16} color={iconColor} />
       </div>
       <div style={{ minWidth: 0 }}>
-        <div style={{ fontSize: 11, color: '#9ca3af', fontWeight: 500, marginBottom: 3 }}>{label}</div>
+        <div style={{ fontSize: 13, color: '#9ca3af', fontWeight: 500, marginBottom: 3 }}>{label}</div>
         <div style={{ fontSize: 15, fontWeight: 700, color: '#111827', fontFamily: display, letterSpacing: '-0.2px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{value}</div>
         <div style={{ fontSize: 10, color: t.zero ? '#9ca3af' : t.up ? iconColor : '#ef4444', marginTop: 2 }}>{t.text}</div>
       </div>

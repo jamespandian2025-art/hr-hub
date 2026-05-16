@@ -62,6 +62,28 @@ export type AccountingBill = {
   notes: string
 }
 
+export type AccountingBillInput = {
+  name: string
+  vendor: string
+  amount: number
+  date: string
+  category: string
+  status: string
+  type?: string
+  associated?: string
+  notes?: string
+}
+
+export type AccountingExpenseInput = {
+  description: string
+  merchant: string
+  amount: number
+  date: string
+  category: string
+  status: string
+  notes?: string
+}
+
 export type AccountingBudget = {
   id: string
   name: string
@@ -230,6 +252,76 @@ export function subscribeAccountingData(callback: () => void) {
   return () => events.forEach(event => window.removeEventListener(event, callback))
 }
 
+export function createAccountingBill(input: AccountingBillInput): AccountingBill {
+  const amount = Math.max(Number(input.amount || 0), 0)
+  const status = titleCase(input.status || 'Unpaid')
+  const paid = isPaidStatus(status) ? amount : 0
+  const id = `BILL-${Date.now()}`
+  const row: StoredRow = {
+    id,
+    billNo: id,
+    name: input.name.trim() || id,
+    type: input.type || 'Bill',
+    associated: input.associated?.trim() || '-',
+    category: input.category || 'General expense',
+    vendor: input.vendor.trim() || '-',
+    amount,
+    paid,
+    paidAmount: paid,
+    status,
+    date: input.date || new Date().toISOString().slice(0, 10),
+    notes: input.notes?.trim() || '',
+    createdAt: new Date().toISOString(),
+  }
+
+  if (typeof window !== 'undefined') {
+    const activeCompany = getActiveCompany()
+    const keys = new Set([billKeys[0], activeCompany?.id ? `${billKeys[0]}:${activeCompany.id}` : billKeys[0]])
+    keys.forEach(key => {
+      const rows = readStoredRows(key).filter(existing => readString(existing, ['id', 'billNo', 'billNumber'], '') !== id)
+      window.localStorage.setItem(key, JSON.stringify([row, ...rows]))
+    })
+    window.dispatchEvent(new Event('storage'))
+    window.dispatchEvent(new Event('wiseflow-accounting-refresh'))
+  }
+
+  return toBill(row, 0)
+}
+
+export function createAccountingExpense(input: AccountingExpenseInput): StoredRow {
+  const amount = Math.max(Number(input.amount || 0), 0)
+  const id = `EXP-${Date.now()}`
+  const row: StoredRow = {
+    id,
+    reference: id,
+    description: input.description.trim() || id,
+    name: input.description.trim() || id,
+    merchant: input.merchant.trim() || '-',
+    vendor: input.merchant.trim() || '-',
+    amount,
+    total: amount,
+    date: input.date || new Date().toISOString().slice(0, 10),
+    category: input.category || 'Expenses',
+    type: 'Expense',
+    status: titleCase(input.status || 'Recorded'),
+    notes: input.notes?.trim() || '',
+    createdAt: new Date().toISOString(),
+  }
+
+  if (typeof window !== 'undefined') {
+    const activeCompany = getActiveCompany()
+    const keys = new Set([expenseKeys[0], activeCompany?.id ? `${expenseKeys[0]}:${activeCompany.id}` : expenseKeys[0]])
+    keys.forEach(key => {
+      const rows = readStoredRows(key).filter(existing => readString(existing, ['id', 'reference'], '') !== id)
+      window.localStorage.setItem(key, JSON.stringify([row, ...rows]))
+    })
+    window.dispatchEvent(new Event('storage'))
+    window.dispatchEvent(new Event('wiseflow-accounting-refresh'))
+  }
+
+  return row
+}
+
 export function monthlySeries(transactions: AccountingTransaction[]) {
   const byMonth = new Map<string, { label: string; revenue: number; expenses: number; profit: number }>()
   transactions.forEach(transaction => {
@@ -250,6 +342,16 @@ export function expenseBreakdown(transactions: AccountingTransaction[]) {
     groups.set(row.category, (groups.get(row.category) || 0) + row.amount)
   })
   return Array.from(groups.entries()).sort((a, b) => b[1] - a[1]).map(([name, value], index) => ({ name, value, color: colors[index % colors.length] }))
+}
+
+function readStoredRows(key: string): StoredRow[] {
+  if (typeof window === 'undefined') return []
+  try {
+    const parsed = JSON.parse(window.localStorage.getItem(key) || '[]') as unknown
+    return Array.isArray(parsed) ? parsed.filter(item => item && typeof item === 'object') as StoredRow[] : []
+  } catch {
+    return []
+  }
 }
 
 function loadRows(keys: string[], companyId?: string): StoredRow[] {

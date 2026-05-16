@@ -753,11 +753,11 @@ const accountingShellCss = `
   .accounting-shell {
     display: grid !important;
     grid-template-columns: 1fr !important;
-    height: 100vh;
-    height: 100dvh;
-    max-height: 100vh;
-    max-height: 100dvh;
-    overflow: hidden;
+    height: auto !important;
+    min-height: 100vh !important;
+    min-height: 100dvh !important;
+    max-height: none !important;
+    overflow: visible !important;
   }
 
   .accounting-mobile-backdrop {
@@ -844,17 +844,18 @@ const accountingShellCss = `
   }
 
   .accounting-content-column {
-    height: 100vh;
-    height: 100dvh;
-    min-height: 0;
-    display: grid;
-    grid-template-rows: auto minmax(0, 1fr);
-    overflow: hidden;
+    width: 100%;
+    height: auto !important;
+    min-height: 100vh;
+    min-height: 100dvh;
+    max-height: none !important;
+    display: block !important;
+    overflow: visible !important;
   }
 
   .accounting-scroll-content {
-    overflow-y: auto;
-    overflow-x: hidden;
+    width: 100%;
+    overflow: visible !important;
     min-height: 0;
     -webkit-overflow-scrolling: touch;
   }

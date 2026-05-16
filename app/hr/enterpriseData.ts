@@ -40,6 +40,8 @@ export type AllowanceRequest = {
   amount: number
   remarks?: string
   attachmentName?: string
+  attachmentDataUrl?: string
+  attachmentType?: string
   status: AllowanceStatus
   managerDecision?: 'Pending' | 'Approved' | 'Rejected'
   financeDecision?: 'Pending' | 'Approved' | 'Rejected'

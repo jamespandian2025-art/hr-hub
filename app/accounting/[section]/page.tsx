@@ -1,12 +1,12 @@
 'use client'
 
 import { use, useEffect, useMemo, useState } from 'react'
-import type { ReactNode } from 'react'
+import type { FormEvent, ReactNode } from 'react'
 import Link from 'next/link'
-import { notFound } from 'next/navigation'
-import { ArrowDownLeft, ArrowUpRight, BookOpenCheck, Download, Filter, Plus, Search } from 'lucide-react'
+import { notFound, usePathname, useRouter, useSearchParams } from 'next/navigation'
+import { ArrowDownLeft, ArrowUpRight, BookOpenCheck, Download, Filter, Plus, Search, X } from 'lucide-react'
 import { accountingNavItems } from '@/components/accounting/AccountingShell'
-import { emptyAccountingData, formatDate, loadAccountingData, money, subscribeAccountingData } from '@/lib/accounting/data'
+import { createAccountingBill, createAccountingExpense, emptyAccountingData, formatDate, loadAccountingData, money, subscribeAccountingData } from '@/lib/accounting/data'
 
 const font = 'var(--font-body)'
 
@@ -14,8 +14,32 @@ const supportedSections = new Set(['accounting', 'bills', 'expenses'])
 
 export default function AccountingSectionPage({ params }: { params: Promise<{ section: string }> }) {
   const { section } = use(params)
+  const router = useRouter()
+  const pathname = usePathname()
+  const searchParams = useSearchParams()
   const [data, setData] = useState(emptyAccountingData)
   const [query, setQuery] = useState('')
+  const [showBillForm, setShowBillForm] = useState(false)
+  const [showExpenseForm, setShowExpenseForm] = useState(false)
+  const [billForm, setBillForm] = useState({
+    name: '',
+    vendor: '',
+    amount: '',
+    date: new Date().toISOString().slice(0, 10),
+    category: 'General expense',
+    status: 'Unpaid',
+    notes: '',
+  })
+  const [expenseForm, setExpenseForm] = useState({
+    description: '',
+    merchant: '',
+    amount: '',
+    date: new Date().toISOString().slice(0, 10),
+    category: 'Expenses',
+    status: 'Recorded',
+    notes: '',
+  })
+  const createRequested = searchParams.get('new') === '1'
 
   useEffect(() => {
     const load = () => setData(loadAccountingData())
@@ -70,7 +94,65 @@ export default function AccountingSectionPage({ params }: { params: Promise<{ se
   const totalDebit = rows.reduce((sum, row) => sum + row.debit, 0)
   const totalCredit = rows.reduce((sum, row) => sum + row.credit, 0)
   const Icon = navMeta.icon || BookOpenCheck
-  const createHref = section === 'bills' || section === 'expenses' ? '/accounting/bills?new=1' : '/accounting/transactions'
+  const createHref = section === 'accounting' ? '/accounting/transactions' : `/accounting/${section}?new=1`
+  const isBillFormOpen = section === 'bills' && (showBillForm || createRequested)
+  const isExpenseFormOpen = section === 'expenses' && (showExpenseForm || createRequested)
+  const closeBillForm = () => {
+    setShowBillForm(false)
+    if (createRequested) router.replace(pathname, { scroll: false })
+  }
+  const closeExpenseForm = () => {
+    setShowExpenseForm(false)
+    if (createRequested) router.replace(pathname, { scroll: false })
+  }
+  const updateBillField = (field: keyof typeof billForm, value: string) => setBillForm(prev => ({ ...prev, [field]: value }))
+  const updateExpenseField = (field: keyof typeof expenseForm, value: string) => setExpenseForm(prev => ({ ...prev, [field]: value }))
+  const submitBill = (event: FormEvent) => {
+    event.preventDefault()
+    createAccountingBill({
+      name: billForm.name,
+      vendor: billForm.vendor,
+      amount: Number(billForm.amount || 0),
+      date: billForm.date,
+      category: billForm.category,
+      status: billForm.status,
+      notes: billForm.notes,
+    })
+    setData(loadAccountingData())
+    setBillForm({
+      name: '',
+      vendor: '',
+      amount: '',
+      date: new Date().toISOString().slice(0, 10),
+      category: 'General expense',
+      status: 'Unpaid',
+      notes: '',
+    })
+    closeBillForm()
+  }
+  const submitExpense = (event: FormEvent) => {
+    event.preventDefault()
+    createAccountingExpense({
+      description: expenseForm.description,
+      merchant: expenseForm.merchant,
+      amount: Number(expenseForm.amount || 0),
+      date: expenseForm.date,
+      category: expenseForm.category,
+      status: expenseForm.status,
+      notes: expenseForm.notes,
+    })
+    setData(loadAccountingData())
+    setExpenseForm({
+      description: '',
+      merchant: '',
+      amount: '',
+      date: new Date().toISOString().slice(0, 10),
+      category: 'Expenses',
+      status: 'Recorded',
+      notes: '',
+    })
+    closeExpenseForm()
+  }
   const filteredRows = rows.filter(row => {
     const term = query.trim().toLowerCase()
     if (!term) return true
@@ -114,7 +196,13 @@ export default function AccountingSectionPage({ params }: { params: Promise<{ se
         <div className="live-actions">
           <button type="button" onClick={exportRows}><Download size={15} /> Export</button>
           <button type="button" onClick={() => setQuery('')}><Filter size={15} /> Clear Search</button>
-          <Link href={createHref} className="primary"><Plus size={15} /> New Record</Link>
+          {section === 'bills' ? (
+            <button type="button" className="primary" onClick={() => setShowBillForm(true)}><Plus size={15} /> New Record</button>
+          ) : section === 'expenses' ? (
+            <button type="button" className="primary" onClick={() => setShowExpenseForm(true)}><Plus size={15} /> New Record</button>
+          ) : (
+            <Link href={createHref} className="primary"><Plus size={15} /> New Record</Link>
+          )}
         </div>
       </header>
 
@@ -158,6 +246,132 @@ export default function AccountingSectionPage({ params }: { params: Promise<{ se
           </table>
         </div>
       </section>
+
+      {isBillFormOpen && (
+        <div className="live-modal-backdrop" role="presentation" onMouseDown={event => {
+          if (event.target === event.currentTarget) closeBillForm()
+        }}>
+          <form className="live-bill-sheet" onSubmit={submitBill} aria-label="Create bill record">
+            <div className="live-sheet-head">
+              <div>
+                <h2>Create Bill</h2>
+                <p>Add a vendor payable to the accounting register.</p>
+              </div>
+              <button type="button" aria-label="Close create bill form" onClick={closeBillForm}><X size={18} /></button>
+            </div>
+
+            <div className="live-form-grid">
+              <label>
+                <span>Bill name *</span>
+                <input value={billForm.name} onChange={event => updateBillField('name', event.target.value)} placeholder="Vendor invoice, material bill..." required />
+              </label>
+              <label>
+                <span>Vendor *</span>
+                <input value={billForm.vendor} onChange={event => updateBillField('vendor', event.target.value)} placeholder="Supplier or vendor name" required />
+              </label>
+              <label>
+                <span>Amount *</span>
+                <input value={billForm.amount} onChange={event => updateBillField('amount', event.target.value)} inputMode="decimal" type="number" min="0" step="0.01" placeholder="0.00" required />
+              </label>
+              <label>
+                <span>Bill date</span>
+                <input value={billForm.date} onChange={event => updateBillField('date', event.target.value)} type="date" />
+              </label>
+              <label>
+                <span>Category</span>
+                <select value={billForm.category} onChange={event => updateBillField('category', event.target.value)}>
+                  <option>General expense</option>
+                  <option>Material cost</option>
+                  <option>Labor cost</option>
+                  <option>Equipment</option>
+                  <option>Utilities</option>
+                  <option>Professional services</option>
+                </select>
+              </label>
+              <label>
+                <span>Status</span>
+                <select value={billForm.status} onChange={event => updateBillField('status', event.target.value)}>
+                  <option>Unpaid</option>
+                  <option>Paid</option>
+                </select>
+              </label>
+              <label className="wide">
+                <span>Notes</span>
+                <textarea value={billForm.notes} onChange={event => updateBillField('notes', event.target.value)} placeholder="Optional bill notes" />
+              </label>
+            </div>
+
+            <div className="live-sheet-actions">
+              <button type="button" onClick={closeBillForm}>Cancel</button>
+              <button type="submit" className="primary">Save Bill</button>
+            </div>
+          </form>
+        </div>
+      )}
+
+      {isExpenseFormOpen && (
+        <div className="live-modal-backdrop" role="presentation" onMouseDown={event => {
+          if (event.target === event.currentTarget) closeExpenseForm()
+        }}>
+          <form className="live-bill-sheet" onSubmit={submitExpense} aria-label="Create expense record">
+            <div className="live-sheet-head">
+              <div>
+                <h2>Create Expense</h2>
+                <p>Record an expense directly into the accounting register.</p>
+              </div>
+              <button type="button" aria-label="Close create expense form" onClick={closeExpenseForm}><X size={18} /></button>
+            </div>
+
+            <div className="live-form-grid">
+              <label>
+                <span>Description *</span>
+                <input value={expenseForm.description} onChange={event => updateExpenseField('description', event.target.value)} placeholder="Fuel, supplies, payroll adjustment..." required />
+              </label>
+              <label>
+                <span>Merchant / Payee *</span>
+                <input value={expenseForm.merchant} onChange={event => updateExpenseField('merchant', event.target.value)} placeholder="Vendor, employee, or merchant" required />
+              </label>
+              <label>
+                <span>Amount *</span>
+                <input value={expenseForm.amount} onChange={event => updateExpenseField('amount', event.target.value)} inputMode="decimal" type="number" min="0" step="0.01" placeholder="0.00" required />
+              </label>
+              <label>
+                <span>Expense date</span>
+                <input value={expenseForm.date} onChange={event => updateExpenseField('date', event.target.value)} type="date" />
+              </label>
+              <label>
+                <span>Category</span>
+                <select value={expenseForm.category} onChange={event => updateExpenseField('category', event.target.value)}>
+                  <option>Expenses</option>
+                  <option>Payroll</option>
+                  <option>Materials</option>
+                  <option>Travel</option>
+                  <option>Utilities</option>
+                  <option>Office supplies</option>
+                  <option>Professional services</option>
+                </select>
+              </label>
+              <label>
+                <span>Status</span>
+                <select value={expenseForm.status} onChange={event => updateExpenseField('status', event.target.value)}>
+                  <option>Recorded</option>
+                  <option>Paid</option>
+                  <option>Pending</option>
+                </select>
+              </label>
+              <label className="wide">
+                <span>Notes</span>
+                <textarea value={expenseForm.notes} onChange={event => updateExpenseField('notes', event.target.value)} placeholder="Optional expense notes" />
+              </label>
+            </div>
+
+            <div className="live-sheet-actions">
+              <button type="button" onClick={closeExpenseForm}>Cancel</button>
+              <button type="submit" className="primary">Save Expense</button>
+            </div>
+          </form>
+        </div>
+      )}
     </div>
   )
 }
@@ -182,5 +396,11 @@ button,.live-actions a{border:1px solid #e8edf4;background:#fff;color:#0f172a;bo
 .live-metric{display:flex;gap:12px;align-items:center}.live-metric>span{width:38px;height:38px;border-radius:9px;background:#ecfdf3;color:#16a34a;display:grid;place-items:center}.live-metric small{display:block;color:#64748b;font-size:12px;font-weight:850}.live-metric strong{display:block;margin-top:5px;font-size:22px}.live-metric em{display:block;margin-top:5px;color:#16a34a;font-size:12px;font-style:normal;font-weight:850}
 .live-card-head{display:flex;justify-content:space-between;gap:16px;margin-bottom:14px}.live-card-head h2{margin:0;font-size:16px}.live-card-head label{width:320px;height:38px;border:1px solid #e8edf4;border-radius:8px;background:#f8fafc;display:flex;align-items:center;gap:10px;padding:0 12px}.live-card-head input{border:0;outline:0;background:transparent;flex:1;font-size:12.5px}
 .live-table-wrap{overflow:auto}table{width:100%;border-collapse:collapse;min-width:820px}th{text-align:left;padding:12px 14px;color:#64748b;font-size:11px;text-transform:uppercase}td{border-top:1px solid #eef2f7;padding:14px;color:#334155;font-size:13px}td strong{color:#0f172a}td span{display:inline-flex;border-radius:999px;background:#f1f5f9;color:#475569;padding:5px 9px;font-size:11px;font-weight:900}.empty{text-align:center;color:#64748b;font-weight:800;padding:28px}
-@media(max-width:760px){.live-accounting-page{padding:18px}.live-header,.live-card-head{display:grid}.live-actions,.live-metrics{grid-template-columns:1fr}.live-actions{display:grid}.live-actions button,.live-actions a{min-height:44px;justify-content:center}.live-card-head label{width:auto;min-height:44px}.live-metrics{display:grid}.live-table-wrap{overflow:visible}table,thead,tbody,tr,td{display:block;width:100%;min-width:0}thead{display:none}tr{border:1px solid #eef2f7;border-radius:8px;margin-bottom:12px;background:#fff;overflow:hidden}td{border-top:0;display:grid;grid-template-columns:105px minmax(0,1fr);gap:10px;padding:10px 12px;align-items:center}td::before{content:attr(data-label);color:#64748b;font-size:11px;font-weight:900;text-transform:uppercase}.empty{display:block!important}}
+.live-modal-backdrop{position:fixed;inset:0;z-index:1200;background:rgba(15,23,42,.36);display:flex;justify-content:flex-end}
+.live-bill-sheet{width:min(520px,100%);height:100%;background:#fff;box-shadow:-24px 0 80px rgba(15,23,42,.22);display:flex;flex-direction:column;color:#0f172a}
+.live-sheet-head{padding:22px 24px;border-bottom:1px solid #e8edf4;display:flex;align-items:flex-start;justify-content:space-between;gap:16px}.live-sheet-head h2{margin:0;font-size:22px}.live-sheet-head p{margin-top:6px}.live-sheet-head button{width:36px;height:36px;padding:0;display:grid;place-items:center;flex:0 0 auto}
+.live-form-grid{padding:22px 24px;display:grid;grid-template-columns:1fr 1fr;gap:14px;overflow:auto;flex:1}.live-form-grid label{display:grid;gap:7px;min-width:0}.live-form-grid label.wide{grid-column:1/-1}.live-form-grid span{font-size:12px;font-weight:900;color:#334155}.live-form-grid input,.live-form-grid select,.live-form-grid textarea{width:100%;min-height:42px;border:1px solid #dbe3ef;border-radius:8px;background:#fff;color:#0f172a;padding:0 12px;font:inherit;font-size:13px;outline:0}.live-form-grid textarea{min-height:96px;padding:11px 12px;resize:vertical}
+.live-form-grid input:focus,.live-form-grid select:focus,.live-form-grid textarea:focus{border-color:#16a34a;box-shadow:0 0 0 3px rgba(22,163,74,.12)}
+.live-sheet-actions{padding:14px 24px;border-top:1px solid #e8edf4;display:grid;grid-template-columns:1fr 1fr;gap:12px}.live-sheet-actions button{justify-content:center;min-height:44px}
+@media(max-width:760px){.live-accounting-page{padding:18px}.live-header,.live-card-head{display:grid}.live-actions,.live-metrics{grid-template-columns:1fr}.live-actions{display:grid}.live-actions button,.live-actions a{min-height:44px;justify-content:center}.live-card-head label{width:auto;min-height:44px}.live-metrics{display:grid}.live-table-wrap{overflow:visible}table,thead,tbody,tr,td{display:block;width:100%;min-width:0}thead{display:none}tr{border:1px solid #eef2f7;border-radius:8px;margin-bottom:12px;background:#fff;overflow:hidden}td{border-top:0;display:grid;grid-template-columns:105px minmax(0,1fr);gap:10px;padding:10px 12px;align-items:center}td::before{content:attr(data-label);color:#64748b;font-size:11px;font-weight:900;text-transform:uppercase}.empty{display:block!important}.live-modal-backdrop{align-items:flex-end}.live-bill-sheet{height:min(92dvh,720px);border-radius:18px 18px 0 0}.live-form-grid{grid-template-columns:1fr;padding:18px}.live-sheet-head{padding:18px}.live-sheet-actions{padding:12px 18px}}
 `

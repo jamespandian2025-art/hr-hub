@@ -289,9 +289,8 @@ export default function PayrollFinancePage() {
     }
   }), [employees, payrollRows])
   const deductionRows = useMemo(() => payrollRows.map(record => {
-    const statutory = Object.entries(record.deductionBreakdown || {})
-      .filter(([key]) => key !== 'loanOrCashAdvance')
-      .reduce((sum, [, value]) => sum + Number(value || 0), 0)
+    const statutory = ['sss', 'philHealth', 'pagIbig', 'tax']
+      .reduce((sum, key) => sum + Number(record.deductionBreakdown?.[key as keyof NonNullable<PayrollRecord['deductionBreakdown']>] || 0), 0)
     const loanTotal = Number(record.deductionBreakdown?.loanOrCashAdvance || 0) || (record.loanDeductions || []).reduce((sum, line) => sum + Number(line.amount || 0), 0)
     return {
       id: record.id,
