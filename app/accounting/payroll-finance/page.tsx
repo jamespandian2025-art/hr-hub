@@ -252,11 +252,6 @@ export default function PayrollFinancePage() {
   const netPay = currentPayrollRecords.reduce((sum, record) => sum + Number(record.net || 0), 0)
   const employerContributions = 0
   const totalPayrollCost = grossPay + employerContributions
-  const payrollEmployeeIds = new Set(currentPayrollRecords.map(record => record.employeeId).filter(Boolean))
-  const payrollEmployeeCount = payrollEmployeeIds.size || currentPayrollRecords.length
-  const currentPayrollDepartments = new Set(currentPayrollRecords.map(record => employees.find(employee => employeeMatchesId(employee, record.employeeId))?.department).filter(Boolean))
-  const costPerEmployee = payrollEmployeeCount ? totalPayrollCost / payrollEmployeeCount : 0
-  const avgDepartmentCost = currentPayrollDepartments.size ? totalPayrollCost / currentPayrollDepartments.size : 0
   const grossCostPercent = totalPayrollCost ? (grossPay / totalPayrollCost) * 100 : 0
   const employerCostPercent = totalPayrollCost ? (employerContributions / totalPayrollCost) * 100 : 0
   const netPayPercent = grossPay ? (netPay / grossPay) * 100 : 0
@@ -669,12 +664,6 @@ export default function PayrollFinancePage() {
               </div>
             </div>
           ) : <div className="payroll-empty">No payroll cost data yet. HR payroll records will populate this breakdown.</div>}
-          <div className="payroll-cost-row">
-            <span>Employees in Payroll <strong>{payrollEmployeeCount}</strong></span>
-            <span>Cost per Employee <strong>{money(costPerEmployee)}</strong></span>
-            <span>Departments in Payroll <strong>{currentPayrollDepartments.size}</strong></span>
-            <span>Cost per Department (Avg.) <strong>{money(avgDepartmentCost)}</strong></span>
-          </div>
         </div>
 
         <div className="payroll-card">
@@ -1034,9 +1023,6 @@ const payrollCss = `
 .payroll-breakdown-list strong { color: #0f172a; line-height: 1.2; text-align: right; white-space: nowrap; font-size: 12.5px; }
 .payroll-breakdown-list small { grid-column: 2 / -1; color: #64748b; font-size: 11px; font-weight: 800; line-height: 1.25; }
 .payroll-breakdown-list .is-muted b { color: #475569; }
-.payroll-cost-row { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); margin-top: auto; background: #f8fafc; border-radius: 8px; overflow: hidden; }
-.payroll-cost-row span { padding: 14px; color: #334155; font-size: 12.5px; }
-.payroll-cost-row strong { display: block; color: #0f172a; font-size: 16px; margin-top: 6px; }
 .payroll-task-list, .payroll-compliance-list { display: grid; gap: 14px; }
 .payroll-task-list div { display: grid; grid-template-columns: 48px minmax(0, 1fr) auto; gap: 12px; align-items: center; border-bottom: 1px solid #eef2f7; padding-bottom: 13px; }
 .payroll-task-list time small { display: block; color: #16a34a; font-size: 10px; font-weight: 950; }
@@ -1080,7 +1066,6 @@ const payrollCss = `
 @media (max-width: 900px) {
   .payroll-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .payroll-breakdown { grid-template-columns: minmax(130px, .7fr) minmax(180px, 1fr); }
-  .payroll-cost-row { grid-template-columns: 1fr; }
   .payroll-compliance-list div { grid-template-columns: 42px minmax(0, 1fr) auto; }
   .payroll-pagination { flex-direction: column; align-items: flex-start; }
   .payroll-request-grid { grid-template-columns: 1fr; }
