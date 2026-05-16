@@ -108,7 +108,8 @@ export default function ReportsPage() {
     { title: 'Current AP', value: money(financialSummary.currentAp, data.currency), detail: 'Open payables', icon: FileText, tone: '#0f766e', up: false },
   ]
   const totalExpense = expenseCategories.reduce((sum, item) => sum + item.value, 0)
-  const maxMonthlyValue = Math.max(1, ...monthlyReports.flatMap(month => [month.revenue, month.expenses]))
+  const maxMonthlyValue = Math.max(1, ...monthlyReports.flatMap(month => [month.revenue, month.expenses, Math.max(month.profit, 0)]))
+  const chartPercent = (value: number) => `${Math.max(0, Math.min(100, (Number.isFinite(value) ? value : 0) / maxMonthlyValue * 100))}%`
   const donut = expenseCategories.reduce<{ cursor: number; segments: string[] }>((acc, item) => {
     const start = acc.cursor
     const end = start + (item.value / Math.max(totalExpense, 1)) * 100
@@ -117,6 +118,7 @@ export default function ReportsPage() {
       segments: [...acc.segments, `${item.color} ${start}% ${end}%`],
     }
   }, { cursor: 0, segments: [] }).segments.join(', ')
+  const donutGradient = donut || '#e5e7eb 0% 100%'
 
   return (
     <div className="reports-page" style={{ fontFamily: font }}>
@@ -150,7 +152,7 @@ export default function ReportsPage() {
       </section>
 
       <nav className="reports-tabs" aria-label="Report groups">
-        {['Standard Reports', 'Custom Reports', 'Saved Reports', 'Scheduled Reports'].map((tab, index) => <button key={tab} className={index === 0 ? 'is-active' : undefined}>{tab}</button>)}
+        {['Standard Reports', 'Custom Reports', 'Saved Reports', 'Scheduled Reports'].map((tab, index) => <button type="button" key={tab} className={index === 0 ? 'is-active' : undefined}>{tab}</button>)}
       </nav>
 
       <section className="reports-layout">
@@ -161,7 +163,7 @@ export default function ReportsPage() {
             {reportCategories.map((category, index) => {
               const Icon = category.icon
               return (
-                <button key={category.name} className={index === 0 ? 'is-active' : undefined}>
+                <button type="button" key={category.name} className={index === 0 ? 'is-active' : undefined}>
                   <span style={{ background: `${category.tone}12`, color: category.tone }}><Icon size={17} /></span>
                   <strong>{category.name}<small>{category.description}</small></strong>
                 </button>
@@ -181,18 +183,22 @@ export default function ReportsPage() {
               <div className="reports-panel-header"><h2>Profit & Loss Summary</h2><button type="button">By Month <ChevronDown size={14} /></button></div>
               <div className="reports-chart">
                 <div className="reports-chart-legend"><span className="revenue" /> Revenue <span className="expenses" /> Expenses <span className="profit" /> Net Profit</div>
-                <div className="reports-bars">
-                  {monthlyReports.map(month => (
-                    <div key={month.label} className="reports-month">
-                      <div>
-                        <i className="profit-line" style={{ bottom: `${(month.revenue / maxMonthlyValue) * 100}%` }} />
-                        <i className="expense-line" style={{ bottom: `${(month.expenses / maxMonthlyValue) * 100}%` }} />
-                        <span style={{ height: `${(month.profit / 260000) * 100}%` }} />
+                {monthlyReports.length ? (
+                  <div className="reports-bars" style={{ gridTemplateColumns: `repeat(${Math.min(Math.max(monthlyReports.length, 1), 6)}, minmax(56px, 1fr))` }}>
+                    {monthlyReports.map(month => (
+                      <div key={month.label} className="reports-month">
+                        <div>
+                          <i className="profit-line" style={{ bottom: chartPercent(month.revenue) }} />
+                          <i className="expense-line" style={{ bottom: chartPercent(month.expenses) }} />
+                          <span style={{ height: chartPercent(Math.max(month.profit, 0)) }} />
+                        </div>
+                        <small>{month.label}</small>
                       </div>
-                      <small>{month.label}</small>
-                    </div>
-                  ))}
-                </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="reports-empty-chart">No revenue or expense records yet.</div>
+                )}
               </div>
               <Link href="/accounting/reports" className="reports-full-link">View Full Report</Link>
             </div>
@@ -200,7 +206,7 @@ export default function ReportsPage() {
             <div className="reports-card">
               <h2>Expense by Category</h2>
               <div className="reports-expense-breakdown">
-                <div className="reports-donut" style={{ background: `conic-gradient(${donut})` }}>
+                <div className="reports-donut" style={{ background: `conic-gradient(${donutGradient})` }}>
                   <span><strong>{money(totalExpense, data.currency)}</strong><small>Total Expenses</small></span>
                 </div>
                 <div className="reports-expense-list">
@@ -249,6 +255,7 @@ export default function ReportsPage() {
                       <MoreHorizontal size={15} />
                     </div>
                   ))}
+                  {!scheduledReports.length && <p className="reports-empty-note">No scheduled reports yet.</p>}
                 </div>
               </div>
 
@@ -258,7 +265,7 @@ export default function ReportsPage() {
                   {quickActions.map(action => {
                     const Icon = action.icon
                     return (
-                      <button key={action.title}>
+                      <button type="button" key={action.title}>
                         <span><Icon size={16} /></span>
                         <strong>{action.title}<small>{action.body}</small></strong>
                         <ChevronDown size={15} />
@@ -276,23 +283,24 @@ export default function ReportsPage() {
 }
 
 const reportsCss = `
-.reports-page { padding: 26px 28px 40px; color: #0f172a; }
+.reports-page { padding: 26px 28px 40px; color: #0f172a; width: 100%; max-width: 100%; overflow-x: hidden; }
 .reports-header { display: flex; justify-content: space-between; align-items: flex-start; gap: 18px; margin-bottom: 24px; }
 .reports-title { margin: 0; font-size: 28px; line-height: 1.1; font-weight: 950; }
 .reports-subtitle { margin: 8px 0 0; color: #334155; font-size: 13.5px; }
 .reports-actions { display: flex; gap: 12px; flex-wrap: wrap; justify-content: flex-end; }
 .reports-actions button, .reports-panel-header button, .reports-pagination button { min-height: 38px; border-radius: 8px; border: 1px solid #e8edf4; background: #fff; color: #0f172a; display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 0 12px; font-size: 12.5px; font-weight: 850; cursor: pointer; }
 .reports-metrics { display: grid; grid-template-columns: repeat(6, minmax(155px, 1fr)); gap: 18px; margin-bottom: 18px; }
-.reports-card { background: #fff; border: 1px solid #e8edf4; border-radius: 8px; padding: 18px; box-shadow: 0 1px 2px rgba(15, 23, 42, .03); }
+.reports-card { background: #fff; border: 1px solid #e8edf4; border-radius: 8px; padding: 18px; box-shadow: 0 1px 2px rgba(15, 23, 42, .03); min-width: 0; }
 .reports-metric-card { min-height: 96px; display: flex; align-items: center; }
 .reports-metric-icon { width: 48px; height: 48px; border-radius: 9px; display: grid; place-items: center; margin-right: 14px; flex: 0 0 auto; }
+.reports-metric-card > span:last-child { min-width: 0; }
 .reports-label { display: block; color: #475569; font-size: 12px; font-weight: 850; }
-.reports-value { display: block; color: #0f172a; font-size: 21px; margin-top: 8px; white-space: nowrap; }
+.reports-value { display: block; color: #0f172a; font-size: 21px; margin-top: 8px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .reports-detail { display: block; font-size: 11px; font-weight: 900; margin-top: 8px; }
 .reports-tabs { display: flex; gap: 32px; border-bottom: 1px solid #e8edf4; padding-left: 14px; overflow-x: auto; }
 .reports-tabs button { border: 0; border-bottom: 2px solid transparent; background: transparent; color: #0f172a; min-height: 48px; padding: 0; font-size: 12.5px; font-weight: 900; cursor: pointer; white-space: nowrap; }
 .reports-tabs .is-active { color: #16a34a; border-bottom-color: #16a34a; }
-.reports-layout { display: grid; grid-template-columns: 330px minmax(0, 1fr); gap: 16px; margin-top: 16px; }
+.reports-layout { display: grid; grid-template-columns: 330px minmax(0, 1fr); gap: 16px; margin-top: 16px; align-items: start; }
 .reports-browser { display: flex; flex-direction: column; gap: 14px; }
 .reports-card h2, .reports-panel-header h2 { margin: 0; font-size: 16px; font-weight: 950; }
 .reports-browser label { min-height: 38px; border: 1px solid #e8edf4; border-radius: 8px; display: flex; align-items: center; gap: 10px; padding: 0 12px; }
@@ -305,27 +313,28 @@ const reportsCss = `
 .reports-custom-card { margin-top: auto; background: #f8fafc; border: 1px solid #eef2f7; border-radius: 8px; padding: 16px; }
 .reports-custom-card p { color: #64748b; font-size: 12.5px; }
 .reports-custom-card button { min-height: 36px; border: 1px solid #e8edf4; background: #fff; border-radius: 7px; padding: 0 12px; font-weight: 900; display: inline-flex; align-items: center; gap: 10px; }
-.reports-main { display: grid; gap: 16px; }
+.reports-main { display: grid; gap: 16px; min-width: 0; }
 .reports-top-panels { display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(360px, .9fr); gap: 16px; }
 .reports-lower-panels { display: grid; grid-template-columns: minmax(0, 1fr) 360px; gap: 16px; }
 .reports-side-stack { display: grid; gap: 16px; }
 .reports-panel-header { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-bottom: 16px; }
 .reports-panel-header a, .reports-full-link { color: #2563eb; font-size: 12px; font-weight: 900; text-decoration: none; }
 .reports-full-link { display: block; text-align: right; margin-top: 10px; }
-.reports-chart { min-height: 240px; display: grid; grid-template-rows: auto 1fr; gap: 12px; }
-.reports-chart-legend { display: flex; justify-content: center; gap: 24px; font-size: 12px; font-weight: 850; }
+.reports-chart { min-height: 240px; display: grid; grid-template-rows: auto 1fr; gap: 12px; overflow: hidden; }
+.reports-chart-legend { display: flex; justify-content: center; gap: 24px; font-size: 12px; font-weight: 850; flex-wrap: wrap; }
 .reports-chart-legend span { width: 18px; height: 7px; border-radius: 999px; display: inline-block; margin-right: -16px; }
 .reports-chart-legend .revenue { background: #16a34a; }
 .reports-chart-legend .expenses { background: #ef4444; }
 .reports-chart-legend .profit { background: #2563eb; }
-.reports-bars { min-height: 196px; display: grid; grid-template-columns: repeat(6, 1fr); gap: 18px; align-items: end; border-left: 1px solid #eef2f7; border-bottom: 1px solid #eef2f7; padding: 18px 8px 0; }
+.reports-bars { min-height: 196px; display: grid; gap: 18px; align-items: end; border-left: 1px solid #eef2f7; border-bottom: 1px solid #eef2f7; padding: 18px 8px 0; overflow: hidden; }
 .reports-month { height: 100%; display: grid; grid-template-rows: 1fr 24px; align-items: end; text-align: center; }
-.reports-month div { position: relative; height: 100%; display: flex; align-items: end; justify-content: center; }
-.reports-month span { width: 22px; border-radius: 3px 3px 0 0; background: #2563eb; }
+.reports-month div { position: relative; height: 100%; display: flex; align-items: end; justify-content: center; overflow: hidden; }
+.reports-month span { width: 22px; max-height: 100%; min-height: 3px; border-radius: 3px 3px 0 0; background: #2563eb; }
 .reports-month i { position: absolute; width: 8px; height: 8px; border-radius: 999px; }
 .reports-month .profit-line { background: #16a34a; }
 .reports-month .expense-line { background: #ef4444; transform: translateX(12px); }
 .reports-month small { color: #334155; font-size: 11px; }
+.reports-empty-chart { min-height: 196px; border: 1px dashed #cbd5e1; border-radius: 8px; display: grid; place-items: center; color: #64748b; font-size: 13px; font-weight: 850; text-align: center; padding: 20px; }
 .reports-expense-breakdown { display: grid; grid-template-columns: 210px minmax(0, 1fr); gap: 26px; align-items: center; min-height: 240px; }
 .reports-donut { width: 180px; height: 180px; border-radius: 50%; display: grid; place-items: center; }
 .reports-donut span { width: 112px; height: 112px; border-radius: 50%; background: #fff; display: grid; place-items: center; text-align: center; }
@@ -354,6 +363,7 @@ const reportsCss = `
 .reports-scheduled-list svg, .reports-quick-list span { color: #2563eb; }
 .reports-scheduled-list small, .reports-quick-list small { display: block; color: #64748b; margin-top: 4px; font-weight: 500; }
 .reports-quick-list span { width: 32px; height: 32px; border-radius: 8px; background: #eff6ff; display: grid; place-items: center; }
+.reports-empty-note { margin: 0; min-height: 120px; border: 1px dashed #cbd5e1; border-radius: 8px; color: #64748b; display: grid; place-items: center; text-align: center; padding: 18px; font-size: 13px; font-weight: 850; }
 @media (max-width: 1280px) {
   .reports-page { padding: 22px; }
   .reports-header { flex-direction: column; }

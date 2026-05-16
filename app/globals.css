@@ -4194,7 +4194,8 @@ html body {
 .hr-mobile-sidebar,
 .employee-sidebar,
 .procurement-sidepanel,
-.accounting-shell aside {
+.accounting-shell > .accounting-sidebar,
+.accounting-sidebar {
   background: #000000 !important;
   color: rgb(237, 237, 237) !important;
   border-color: #242424 !important;
@@ -4390,7 +4391,8 @@ thead td,
 .hr-mobile-sidebar *,
 .employee-sidebar *,
 .procurement-sidepanel *,
-.accounting-shell aside * {
+.accounting-shell > .accounting-sidebar *,
+.accounting-sidebar * {
   color: inherit;
 }
 
@@ -4400,7 +4402,8 @@ thead td,
 .hr-mobile-sidebar .is-active,
 .employee-sidebar .is-active,
 .procurement-sidepanel .active,
-.accounting-shell aside .active {
+.accounting-shell > .accounting-sidebar .active,
+.accounting-sidebar .active {
   background: #1f1f1f !important;
   color: rgb(237, 237, 237) !important;
   border-color: transparent !important;
@@ -4424,7 +4427,8 @@ thead td,
 .mobile-nav-drawer .main-sidebar-row.is-active,
 .mobile-nav-drawer .main-sidebar-subrow.is-active,
 .procurement-sidepanel .active,
-.accounting-shell aside .active {
+.accounting-shell > .accounting-sidebar .active,
+.accounting-sidebar .active {
   box-shadow: none !important;
   outline: none !important;
 }
