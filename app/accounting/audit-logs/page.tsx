@@ -25,12 +25,25 @@ import {
   X,
 } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
-import { emptyAccountingData, formatDate, loadAccountingData, subscribeAccountingData } from '@/lib/accounting/data'
+import {
+  emptyAccountingData,
+  formatDate,
+  loadAccountingData,
+  subscribeAccountingData,
+  type AccountingAuditEvent,
+} from '@/lib/accounting/data'
 
 const font = 'var(--font-body)'
 
 type AuditStatus = string
 type AuditAction = string
+type AuditLogView = AccountingAuditEvent & { dateTime: string }
+
+type AuditMenuState = {
+  eventId: string
+  top: number
+  left: number
+}
 
 type Metric = {
   title: string
@@ -41,7 +54,6 @@ type Metric = {
   tone: string
 }
 
-const filters = ['All Modules', 'All Actions', 'All Users', 'All Status']
 const tabs = ['All Logs', 'User Activity', 'Data Changes', 'Security Events', 'System Events', 'Access Management']
 const userColors: Record<string, string> = {
   JU: '#16a34a',
@@ -66,6 +78,18 @@ function AuditPill({ value }: { value: AuditAction | AuditStatus }) {
 
 export default function AuditLogsPage() {
   const [data, setData] = useState(emptyAccountingData)
+  const [activeTab, setActiveTab] = useState(tabs[0])
+  const [query, setQuery] = useState('')
+  const [moduleFilter, setModuleFilter] = useState('All Modules')
+  const [actionFilter, setActionFilter] = useState('All Actions')
+  const [userFilter, setUserFilter] = useState('All Users')
+  const [statusFilter, setStatusFilter] = useState('All Status')
+  const [filtersOpen, setFiltersOpen] = useState(true)
+  const [activeMenu, setActiveMenu] = useState<AuditMenuState | null>(null)
+  const [selectedLogId, setSelectedLogId] = useState('')
+  const [actionNotice, setActionNotice] = useState('')
+  const [currentPage, setCurrentPage] = useState(1)
+  const [pageSize, setPageSize] = useState(10)
 
   useEffect(() => {
     const load = () => setData(loadAccountingData())
@@ -73,7 +97,30 @@ export default function AuditLogsPage() {
     return subscribeAccountingData(load)
   }, [])
 
-  const auditEvents = data.auditEvents.map(event => ({ ...event, dateTime: formatDate(event.dateTime) }))
+  const auditEvents: AuditLogView[] = data.auditEvents.map(event => ({ ...event, dateTime: formatDate(event.dateTime) }))
+  const moduleOptions = Array.from(new Set(auditEvents.map(event => event.module).filter(Boolean))).sort()
+  const actionOptions = Array.from(new Set(auditEvents.map(event => event.action).filter(Boolean))).sort()
+  const userOptions = Array.from(new Set(auditEvents.map(event => event.user).filter(Boolean))).sort()
+  const statusOptions = Array.from(new Set(auditEvents.map(event => event.status).filter(Boolean))).sort()
+  const searchedEvents = auditEvents.filter(event => {
+    const tabMatches =
+      activeTab === 'All Logs' ||
+      (activeTab === 'User Activity' && /user|employee|allowance|loan|payroll/i.test(`${event.module} ${event.action} ${event.details}`)) ||
+      (activeTab === 'Data Changes' && /created|updated|deleted|change|edit|approved/i.test(event.action)) ||
+      (activeTab === 'Security Events' && /security|access|login|password|permission/i.test(`${event.module} ${event.action} ${event.details}`)) ||
+      (activeTab === 'System Events' && /system|sync|export|import|payroll run/i.test(`${event.module} ${event.action} ${event.details}`)) ||
+      (activeTab === 'Access Management' && /access|permission|role|login/i.test(`${event.module} ${event.action} ${event.details}`))
+    const queryValue = query.trim().toLowerCase()
+    const queryMatches = !queryValue || [event.id, event.user, event.role, event.action, event.module, event.details, event.ipAddress, event.status].join(' ').toLowerCase().includes(queryValue)
+    const moduleMatches = moduleFilter === 'All Modules' || event.module === moduleFilter
+    const actionMatches = actionFilter === 'All Actions' || event.action === actionFilter
+    const userMatches = userFilter === 'All Users' || event.user === userFilter
+    const statusMatches = statusFilter === 'All Status' || event.status === statusFilter
+    return tabMatches && queryMatches && moduleMatches && actionMatches && userMatches && statusMatches
+  })
+  const totalPages = Math.max(1, Math.ceil(searchedEvents.length / pageSize))
+  const safeCurrentPage = Math.min(currentPage, totalPages)
+  const pagedEvents = searchedEvents.slice((safeCurrentPage - 1) * pageSize, safeCurrentPage * pageSize)
   const uniqueUsers = new Set(auditEvents.map(event => event.user)).size
   const securityEvents = auditEvents.filter(event => /security|access|login|password|permission/i.test(`${event.module} ${event.action} ${event.details}`)).length
   const failedAttempts = auditEvents.filter(event => event.status === 'Failed' || /failed|denied/i.test(event.action)).length
@@ -85,7 +132,7 @@ export default function AuditLogsPage() {
     failedAttempts,
     dataChanges,
   }
-  const selectedLog = auditEvents[0]
+  const selectedLog = selectedLogId ? auditEvents.find(event => event.id === selectedLogId) : undefined
   const metrics: Metric[] = [
     { title: 'Total Events', value: formatNumber(auditSummary.totalEvents), detail: 'Recorded system events', trend: 'up', icon: FileText, tone: '#2563eb' },
     { title: 'Unique Users', value: formatNumber(auditSummary.uniqueUsers), detail: 'Actors in audit history', trend: 'up', icon: User, tone: '#16a34a' },
@@ -93,6 +140,59 @@ export default function AuditLogsPage() {
     { title: 'Failed Attempts', value: formatNumber(auditSummary.failedAttempts), detail: 'Failed or denied actions', trend: 'down', icon: AlertTriangle, tone: '#f97316' },
     { title: 'Data Changes', value: formatNumber(auditSummary.dataChanges), detail: 'Create, update, and delete actions', trend: 'up', icon: CheckCircle2, tone: '#0f766e' },
   ]
+
+  function resetFilters() {
+    setActiveTab(tabs[0])
+    setQuery('')
+    setModuleFilter('All Modules')
+    setActionFilter('All Actions')
+    setUserFilter('All Users')
+    setStatusFilter('All Status')
+    setCurrentPage(1)
+    setActiveMenu(null)
+    setActionNotice('')
+  }
+
+  function exportEvents(rows = searchedEvents) {
+    const header = ['Event ID', 'Date & Time', 'User', 'Role', 'Action', 'Module', 'Details', 'IP Address', 'Status']
+    const csv = [
+      header.join(','),
+      ...rows.map(event => [event.id, event.dateTime, event.user, event.role, event.action, event.module, event.details, event.ipAddress, event.status].map(value => `"${String(value).replaceAll('"', '""')}"`).join(',')),
+    ].join('\n')
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' })
+    const url = URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = url
+    link.download = rows.length === 1 ? `${rows[0].id}.csv` : `audit-logs-${new Date().toISOString().slice(0, 10)}.csv`
+    link.click()
+    URL.revokeObjectURL(url)
+    setActionNotice(rows.length === 1 ? `${rows[0].id} exported.` : `${rows.length} audit log${rows.length === 1 ? '' : 's'} exported.`)
+    setActiveMenu(null)
+  }
+
+  function copyEventId(event: AuditLogView) {
+    void navigator.clipboard?.writeText(event.id)
+    setSelectedLogId(event.id)
+    setActionNotice(`${event.id} copied to clipboard.`)
+    setActiveMenu(null)
+  }
+
+  function openEvent(event: AuditLogView) {
+    setSelectedLogId(event.id)
+    setActionNotice(`${event.id} selected in Log Details.`)
+    setActiveMenu(null)
+  }
+
+  function toggleMenu(eventId: string, element: HTMLButtonElement) {
+    const rect = element.getBoundingClientRect()
+    setActiveMenu(current => current?.eventId === eventId
+      ? null
+      : {
+        eventId,
+        top: rect.bottom + 6,
+        left: Math.max(12, Math.min(window.innerWidth - 188, rect.right - 172)),
+      })
+  }
 
   return (
     <div className="audit-page" style={{ fontFamily: font }}>
@@ -104,9 +204,9 @@ export default function AuditLogsPage() {
           <p>Track system activities and changes across the platform for security and compliance.</p>
         </div>
         <div className="audit-actions">
-          <button type="button"><CalendarDays size={15} /> Current records</button>
-          <button type="button"><Filter size={15} /> Filters</button>
-          <button type="button">Export <Download size={14} /></button>
+          <button type="button" onClick={resetFilters}><CalendarDays size={15} /> Current records</button>
+          <button type="button" className={filtersOpen ? 'is-active' : undefined} onClick={() => setFiltersOpen(open => !open)}><Filter size={15} /> Filters</button>
+          <button type="button" onClick={() => exportEvents()}>Export <Download size={14} /></button>
         </div>
       </div>
 
@@ -127,20 +227,52 @@ export default function AuditLogsPage() {
       </section>
 
       <nav className="audit-tabs" aria-label="Audit log categories">
-        {tabs.map((tab, index) => <button type="button" key={tab} className={index === 0 ? 'is-active' : undefined}>{tab}</button>)}
+        {tabs.map(tab => (
+          <button
+            type="button"
+            key={tab}
+            className={activeTab === tab ? 'is-active' : undefined}
+            onClick={() => { setActiveTab(tab); setCurrentPage(1); setActiveMenu(null) }}
+          >
+            {tab}
+          </button>
+        ))}
       </nav>
 
-      <section className="audit-filter-panel">
+      {filtersOpen && <section className="audit-filter-panel">
         <label className="audit-search">
           <Search size={16} color="#64748b" />
-          <input placeholder="Search by user, action, module, IP..." />
+          <input value={query} onChange={event => { setQuery(event.target.value); setCurrentPage(1) }} placeholder="Search by user, action, module, IP..." />
         </label>
-        {filters.map(filter => (
-          <button key={filter} type="button">{filter}<ChevronRight size={14} /></button>
-        ))}
-        <button type="button" className="more"><SlidersHorizontal size={15} /> More Filters</button>
-        <button type="button" className="clear"><RotateCcw size={15} /> Clear Filters</button>
-      </section>
+        <label className="audit-select">Module
+          <select value={moduleFilter} onChange={event => { setModuleFilter(event.target.value); setCurrentPage(1) }}>
+            <option>All Modules</option>
+            {moduleOptions.map(option => <option key={option}>{option}</option>)}
+          </select>
+        </label>
+        <label className="audit-select">Action
+          <select value={actionFilter} onChange={event => { setActionFilter(event.target.value); setCurrentPage(1) }}>
+            <option>All Actions</option>
+            {actionOptions.map(option => <option key={option}>{option}</option>)}
+          </select>
+        </label>
+        <label className="audit-select">User
+          <select value={userFilter} onChange={event => { setUserFilter(event.target.value); setCurrentPage(1) }}>
+            <option>All Users</option>
+            {userOptions.map(option => <option key={option}>{option}</option>)}
+          </select>
+        </label>
+        <label className="audit-select">Status
+          <select value={statusFilter} onChange={event => { setStatusFilter(event.target.value); setCurrentPage(1) }}>
+            <option>All Status</option>
+            {statusOptions.map(option => <option key={option}>{option}</option>)}
+          </select>
+        </label>
+        <button type="button" className="more" onClick={() => setQuery('')}><SlidersHorizontal size={15} /> Clear Search</button>
+        <button type="button" className="clear" onClick={resetFilters}><RotateCcw size={15} /> Clear Filters</button>
+      </section>}
+
+      {actionNotice && <div className="audit-notice" role="status">{actionNotice}</div>}
 
       <section className="audit-content">
         <div className="audit-card audit-table-card">
@@ -159,8 +291,8 @@ export default function AuditLogsPage() {
                 </tr>
               </thead>
               <tbody>
-                {auditEvents.map(event => (
-                  <tr key={event.id}>
+                {pagedEvents.map(event => (
+                  <tr key={event.id} className={selectedLog?.id === event.id ? 'is-selected' : undefined}>
                     <td data-label="Date & Time">{event.dateTime}</td>
                     <td data-label="User">
                       <span className="audit-user">
@@ -173,13 +305,24 @@ export default function AuditLogsPage() {
                     <td data-label="Details">{event.details}</td>
                     <td data-label="IP Address">{event.ipAddress}</td>
                     <td data-label="Status"><AuditPill value={event.status} /></td>
-                    <td data-label="Actions"><button type="button" aria-label={`More actions for ${event.id}`}><MoreHorizontal size={16} /></button></td>
+                    <td data-label="Actions">
+                      <div className="audit-row-actions">
+                        <button type="button" aria-expanded={activeMenu?.eventId === event.id} aria-label={`More actions for ${event.id}`} onClick={click => toggleMenu(event.id, click.currentTarget)}><MoreHorizontal size={16} /></button>
+                        {activeMenu?.eventId === event.id && (
+                          <div className="audit-row-menu" role="menu" style={{ top: activeMenu.top, left: activeMenu.left }}>
+                            <button type="button" role="menuitem" onClick={() => openEvent(event)}>View details</button>
+                            <button type="button" role="menuitem" onClick={() => copyEventId(event)}>Copy event ID</button>
+                            <button type="button" role="menuitem" onClick={() => exportEvents([event])}>Export log</button>
+                          </div>
+                        )}
+                      </div>
+                    </td>
                   </tr>
                 ))}
-                {!auditEvents.length && (
+                {!searchedEvents.length && (
                   <tr>
                     <td colSpan={8} style={{ padding: 28, textAlign: 'center', color: '#64748b', fontWeight: 800 }}>
-                      No audit events yet. Finance, payroll, loan, allowance, and employee changes will appear here.
+                      {auditEvents.length ? 'No audit events match these filters.' : 'No audit events yet. Finance, payroll, loan, allowance, and employee changes will appear here.'}
                     </td>
                   </tr>
                 )}
@@ -188,26 +331,28 @@ export default function AuditLogsPage() {
           </div>
 
           <div className="audit-pagination">
-            <span>Showing {auditEvents.length ? 1 : 0} to {auditEvents.length} of {formatNumber(auditSummary.totalEvents)} events</span>
+            <span>Showing {searchedEvents.length ? (safeCurrentPage - 1) * pageSize + 1 : 0} to {Math.min(safeCurrentPage * pageSize, searchedEvents.length)} of {formatNumber(searchedEvents.length)} events</span>
             <div>
-              <button type="button" aria-label="Previous page"><ChevronLeft size={15} /></button>
-              {[1].map(page => <button key={page} type="button" className="is-active">{page}</button>)}
-              {auditEvents.length > 10 && (
+              <button type="button" aria-label="Previous page" disabled={safeCurrentPage === 1} onClick={() => setCurrentPage(page => Math.max(1, page - 1))}><ChevronLeft size={15} /></button>
+              {[1].map(page => <button key={page} type="button" className={safeCurrentPage === page ? 'is-active' : undefined} onClick={() => setCurrentPage(page)}>{page}</button>)}
+              {totalPages > 1 && (
                 <>
                   <span>...</span>
-                  <button type="button">{Math.ceil(auditEvents.length / 10)}</button>
+                  <button type="button" className={safeCurrentPage === totalPages ? 'is-active' : undefined} onClick={() => setCurrentPage(totalPages)}>{totalPages}</button>
                 </>
               )}
-              <button type="button" aria-label="Next page"><ChevronRight size={15} /></button>
+              <button type="button" aria-label="Next page" disabled={safeCurrentPage === totalPages} onClick={() => setCurrentPage(page => Math.min(totalPages, page + 1))}><ChevronRight size={15} /></button>
             </div>
-            <button type="button">10 / page</button>
+            <select value={pageSize} onChange={event => { setPageSize(Number(event.target.value)); setCurrentPage(1) }} aria-label="Rows per page">
+              {[5, 10, 25, 50].map(size => <option key={size} value={size}>{size} / page</option>)}
+            </select>
           </div>
         </div>
 
         {selectedLog ? <section className="audit-card audit-details" aria-label="Selected audit log details">
           <div className="details-title">
             <h2>Log Details</h2>
-            <button type="button" aria-label="Close details"><X size={16} /></button>
+            <button type="button" aria-label="Close details" onClick={() => setSelectedLogId('')}><X size={16} /></button>
           </div>
           <div className="event-id">
             <small>Event ID</small>
@@ -289,7 +434,9 @@ const auditCss = `
 }
 .audit-actions button,
 .audit-filter-panel button,
-.audit-pagination button {
+.audit-filter-panel select,
+.audit-pagination button,
+.audit-pagination select {
   min-height: 38px;
   border: 1px solid #e2e8f0;
   border-radius: 8px;
@@ -300,6 +447,11 @@ const auditCss = `
   font-size: 12.5px;
   font-weight: 850;
   cursor: pointer;
+}
+.audit-actions button.is-active {
+  border-color: #bbf7d0;
+  background: #ecfdf3;
+  color: #047857;
 }
 .audit-card {
   background: #fff;
@@ -408,6 +560,18 @@ const auditCss = `
   gap: 10px;
   background: #fff;
 }
+.audit-select {
+  display: grid;
+  gap: 6px;
+  color: #334155;
+  font-size: 11.5px;
+  font-weight: 900;
+}
+.audit-select select {
+  width: 100%;
+  min-width: 145px;
+  appearance: auto;
+}
 .audit-search input {
   min-width: 0;
   flex: 1;
@@ -435,6 +599,16 @@ const auditCss = `
   display: grid;
   grid-template-columns: minmax(0, 1fr) 360px;
   gap: 18px;
+}
+.audit-notice {
+  margin: -6px 0 16px;
+  border: 1px solid #bbf7d0;
+  border-radius: 8px;
+  background: #f0fdf4;
+  color: #15803d;
+  padding: 10px 12px;
+  font-size: 12.5px;
+  font-weight: 900;
 }
 .audit-table-card {
   min-width: 0;
@@ -465,6 +639,9 @@ const auditCss = `
 .audit-table td {
   color: #0f172a;
   font-weight: 650;
+}
+.audit-table tr.is-selected td {
+  background: #f8fafc;
 }
 .audit-table td:nth-child(5) {
   max-width: 245px;
@@ -530,7 +707,12 @@ const auditCss = `
   background: #f5f3ff;
   color: #7c3aed;
 }
-.audit-table td button {
+.audit-row-actions {
+  position: relative;
+  display: inline-grid;
+  place-items: center;
+}
+.audit-row-actions > button {
   width: 34px;
   height: 34px;
   border: 1px solid #e8edf4;
@@ -540,6 +722,33 @@ const auditCss = `
   display: grid;
   place-items: center;
   cursor: pointer;
+}
+.audit-row-menu {
+  position: fixed;
+  z-index: 1400;
+  width: 172px;
+  border: 1px solid #e8edf4;
+  border-radius: 8px;
+  background: #fff;
+  box-shadow: 0 18px 44px rgba(15, 23, 42, 0.16);
+  padding: 6px;
+  display: grid;
+  gap: 2px;
+}
+.audit-row-menu button {
+  min-height: 34px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: #0f172a;
+  padding: 0 10px;
+  text-align: left;
+  font-size: 12.5px;
+  font-weight: 850;
+  cursor: pointer;
+}
+.audit-row-menu button:hover {
+  background: #f1f5f9;
 }
 .audit-pagination {
   min-height: 66px;
@@ -559,6 +768,13 @@ const auditCss = `
   min-width: 38px;
   padding: 0 10px;
   justify-content: center;
+}
+.audit-pagination button:disabled {
+  opacity: .45;
+  cursor: not-allowed;
+}
+.audit-pagination select {
+  min-width: 104px;
 }
 .audit-pagination button.is-active {
   background: #059669;

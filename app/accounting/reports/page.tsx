@@ -52,6 +52,12 @@ type ReportTab = 'Standard Reports' | 'Custom Reports' | 'Saved Reports' | 'Sche
 
 type QuickActionKey = 'custom' | 'designer' | 'import'
 
+type ReportMenuState = {
+  reportName: string
+  top: number
+  left: number
+}
+
 const reportCategories: ReportCategory[] = [
   { name: 'Financial Statements', description: 'Balance Sheet, P&L, Cash Flow', icon: FileText, tone: '#16a34a' },
   { name: 'Management Reports', description: 'KPIs, Financial Summary, Trends', icon: FileBarChart, tone: '#0f172a' },
@@ -87,7 +93,7 @@ export default function ReportsPage() {
   const [activeCategory, setActiveCategory] = useState(reportCategories[0].name)
   const [reportSearch, setReportSearch] = useState('')
   const [activeQuickAction, setActiveQuickAction] = useState<QuickActionKey | null>(null)
-  const [activeReportMenu, setActiveReportMenu] = useState('')
+  const [activeReportMenu, setActiveReportMenu] = useState<ReportMenuState | null>(null)
   const [customReportName, setCustomReportName] = useState('')
   const [designerMeasure, setDesignerMeasure] = useState('Net Profit')
   const [importMessage, setImportMessage] = useState('')
@@ -202,7 +208,7 @@ export default function ReportsPage() {
     setActiveTab('Standard Reports')
     setActiveCategory(reportCategories[0].name)
     setReportSearch('')
-    setActiveReportMenu('')
+    setActiveReportMenu(null)
     setActiveQuickAction(null)
     setOpenedReportName('')
     setActionNotice('')
@@ -236,14 +242,14 @@ export default function ReportsPage() {
   function scheduleReport(report: GeneratedReport) {
     setScheduledReportNames(current => current.includes(report.name) ? current : [...current, report.name])
     setActionNotice(`${report.name} has been scheduled monthly.`)
-    setActiveReportMenu('')
+    setActiveReportMenu(null)
   }
 
   function openReport(report: GeneratedReport) {
     setOpenedReportName(report.name)
     setActiveCategory(report.category)
     setActionNotice(`${report.name} is open in preview.`)
-    setActiveReportMenu('')
+    setActiveReportMenu(null)
   }
 
   function downloadReport(report: GeneratedReport) {
@@ -259,7 +265,18 @@ export default function ReportsPage() {
     link.click()
     URL.revokeObjectURL(url)
     setActionNotice(`${report.name} download started.`)
-    setActiveReportMenu('')
+    setActiveReportMenu(null)
+  }
+
+  function toggleReportMenu(reportName: string, element: HTMLButtonElement) {
+    const rect = element.getBoundingClientRect()
+    setActiveReportMenu(current => current?.reportName === reportName
+      ? null
+      : {
+        reportName,
+        top: rect.bottom + 6,
+        left: Math.max(12, Math.min(window.innerWidth - 184, rect.right - 168)),
+      })
   }
 
   return (
@@ -436,14 +453,14 @@ export default function ReportsPage() {
                                 <button
                                   type="button"
                                   className="reports-icon-button"
-                                  aria-expanded={activeReportMenu === report.name}
+                                  aria-expanded={activeReportMenu?.reportName === report.name}
                                   aria-label={`Open actions for ${report.name}`}
-                                  onClick={() => setActiveReportMenu(activeReportMenu === report.name ? '' : report.name)}
+                                  onClick={event => toggleReportMenu(report.name, event.currentTarget)}
                                 >
                                   <MoreHorizontal size={15} />
                                 </button>
-                                {activeReportMenu === report.name && (
-                                  <div className="reports-row-menu" role="menu">
+                                {activeReportMenu?.reportName === report.name && (
+                                  <div className="reports-row-menu" role="menu" style={{ top: activeReportMenu.top, left: activeReportMenu.left }}>
                                     <button type="button" role="menuitem" onClick={event => { event.stopPropagation(); openReport(report) }}>Open report</button>
                                     <button type="button" role="menuitem" onClick={event => { event.stopPropagation(); downloadReport(report) }}>Download {report.format}</button>
                                     <button type="button" role="menuitem" onClick={event => { event.stopPropagation(); scheduleReport(report) }}>{scheduledReportNames.includes(report.name) ? 'Scheduled' : 'Schedule report'}</button>
@@ -613,7 +630,7 @@ const reportsCss = `
 .reports-expense-list p { margin: 0; display: grid; grid-template-columns: 12px minmax(0, 1fr); gap: 10px; font-size: 13px; }
 .reports-expense-list span { width: 12px; height: 12px; border-radius: 4px; margin-top: 2px; }
 .reports-expense-list strong { display: block; color: #334155; margin-top: 3px; }
-.reports-table-wrap { overflow-x: auto; overflow-y: visible; padding-bottom: 72px; margin-bottom: -72px; }
+.reports-table-wrap { overflow-x: auto; overflow-y: visible; }
 .reports-table { width: 100%; min-width: 760px; border-collapse: collapse; }
 .reports-schedule-table { min-width: 700px; }
 .reports-table th { text-align: left; padding: 12px 10px; color: #64748b; font-size: 11px; font-weight: 900; }
@@ -624,7 +641,7 @@ const reportsCss = `
 .reports-status { background: #dcfce7; color: #15803d; }
 .reports-icon-button { width: 32px; height: 32px; border: 1px solid #e8edf4; border-radius: 7px; background: #fff; display: grid; place-items: center; cursor: pointer; }
 .reports-row-actions { position: relative; display: inline-grid; place-items: center; }
-.reports-row-menu { position: absolute; top: calc(100% + 6px); right: 0; z-index: 80; width: 168px; border: 1px solid #e8edf4; border-radius: 8px; background: #fff; box-shadow: 0 18px 44px rgba(15,23,42,.16); padding: 6px; display: grid; gap: 2px; }
+.reports-row-menu { position: fixed; z-index: 1400; width: 168px; border: 1px solid #e8edf4; border-radius: 8px; background: #fff; box-shadow: 0 18px 44px rgba(15,23,42,.16); padding: 6px; display: grid; gap: 2px; }
 .reports-row-menu button { min-height: 34px; border: 0; border-radius: 6px; background: transparent; color: #0f172a; padding: 0 10px; text-align: left; font-size: 12.5px; font-weight: 850; cursor: pointer; }
 .reports-row-menu button:hover { background: #f1f5f9; }
 .reports-action-notice { margin: -4px 0 12px; border: 1px solid #bbf7d0; border-radius: 8px; background: #f0fdf4; color: #15803d; padding: 10px 12px; font-size: 12.5px; font-weight: 900; }
@@ -682,14 +699,13 @@ const reportsCss = `
   .reports-tabs { margin-left: -16px; margin-right: -16px; padding-left: 16px; padding-right: 16px; }
   .reports-card { padding: 14px; }
   .reports-bars { overflow-x: auto; grid-template-columns: repeat(6, 44px); }
-  .reports-table-wrap { overflow: visible; padding-bottom: 0; margin-bottom: 0; }
+  .reports-table-wrap { overflow: visible; }
   .reports-table, .reports-table thead, .reports-table tbody, .reports-table tr, .reports-table td { display: block; width: 100%; min-width: 0; }
   .reports-table thead { display: none; }
   .reports-table tr { border: 1px solid #eef2f7; border-radius: 8px; margin-bottom: 12px; background: #fff; overflow: hidden; }
   .reports-table td { border-top: 0; display: grid; grid-template-columns: 112px minmax(0, 1fr); gap: 10px; padding: 10px 12px; }
   .reports-table td::before { content: attr(data-label); color: #64748b; font-size: 11px; font-weight: 900; text-transform: uppercase; }
   .reports-row-actions { justify-self: start; }
-  .reports-row-menu { left: 0; right: auto; }
   .reports-open-preview { display: grid; }
   .reports-open-preview div:last-child { justify-content: flex-start; }
   .reports-scheduled-list div, .reports-quick-list button { grid-template-columns: 32px minmax(0, 1fr); }
