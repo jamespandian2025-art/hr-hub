@@ -406,7 +406,7 @@ const projectManagementCss = `
 .pm-kpi em { display: block; color: #16a34a; font-style: normal; font-size: 12px; font-weight: 800; margin-top: 8px; }
 .pm-kpi em.negative { color: #ef4444; }
 .pm-tabs { display: flex; gap: 28px; border-bottom: 1px solid #dfe7f2; overflow-x: auto; margin-bottom: 20px; }
-.pm-tabs button { border: 0; border-bottom: 3px solid transparent; min-height: 48px; background: transparent; color: #091133; font-weight: 900; cursor: pointer; white-space: nowrap; }
+.pm-tabs button { border: 0; border-bottom: 3px solid transparent; min-height: 48px; background: transparent; color: #091133; font-size: 13px; font-weight: 900; cursor: pointer; white-space: nowrap; }
 .pm-tabs button.active { color: #16a34a; border-bottom-color: #16a34a; }
 .pm-overview-grid { display: grid; grid-template-columns: minmax(0, 1.05fr) minmax(0, 1.2fr) minmax(280px, .9fr); gap: 18px; align-items: start; }
 .pm-recent { grid-column: span 2; }
