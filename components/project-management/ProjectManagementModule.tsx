@@ -595,13 +595,14 @@ const projectManagementCss = `
     scrollbar-width: none;
   }
   .pm-tabs button {
-    min-height: 38px;
-    border: 1px solid transparent;
-    border-radius: 999px;
-    padding: 0 12px;
+    min-height: 40px;
+    border: 0;
+    border-bottom: 2px solid transparent;
+    border-radius: 0;
+    padding: 0;
     font-size: 13px;
   }
-  .pm-tabs button.active { border-color: #bbf7d0; background: #dcfce7; color: #15803d; }
+  .pm-tabs button.active { background: transparent; color: #16a34a; border-bottom-color: #16a34a; }
   .pm-filter-panel {
     position: fixed;
     left: 0;

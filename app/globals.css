@@ -3010,7 +3010,7 @@ html[data-theme='dark'] .hr-topbar .hr-primary-button {
   opacity: 0;
   pointer-events: none;
   transition: opacity 0.2s ease;
-  z-index: 90;
+  z-index: 900;
 }
 
 .mobile-nav-drawer {
@@ -3021,7 +3021,8 @@ html[data-theme='dark'] .hr-topbar .hr-primary-button {
   background: var(--color-surface);
   transform: translateX(-100%);
   transition: transform 0.22s ease;
-  z-index: 100;
+  z-index: 1000;
+  isolation: isolate;
   overflow-y: auto;
   box-shadow: var(--shadow-lg);
 }
