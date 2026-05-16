@@ -659,13 +659,13 @@ export default function PayrollFinancePage() {
           {totalPayrollCost > 0 ? (
             <div className="payroll-breakdown">
               <div className="payroll-donut" style={{ background: `conic-gradient(#16a34a 0 ${grossCostPercent}%, #2563eb ${grossCostPercent}% 100%)` }}>
-                <span><strong>{money(totalPayrollCost).replace('.00', '')}</strong><small>Employer Cost</small></span>
+                <span><strong>{money(totalPayrollCost)}</strong><small>Total Cost</small></span>
               </div>
               <div className="payroll-breakdown-list">
-                <p><span style={{ background: '#16a34a' }} /> Gross Pay <strong>{money(grossPay)} ({grossCostPercent.toFixed(1)}% of employer cost)</strong></p>
-                <p><span style={{ background: '#2563eb' }} /> Employer Contributions <strong>{money(employerContributions)} ({employerCostPercent.toFixed(1)}% of employer cost)</strong></p>
-                <p className="is-muted"><span style={{ background: '#7c3aed' }} /> Employee Deductions <strong>{money(totalDeductions)} ({deductionPercent.toFixed(1)}% of gross pay)</strong></p>
-                <p className="is-muted"><span style={{ background: '#0ea5e9' }} /> Net Pay <strong>{money(netPay)} ({netPayPercent.toFixed(1)}% of gross pay)</strong></p>
+                <p><span style={{ background: '#16a34a' }} /><b>Gross Pay</b><strong>{money(grossPay)}</strong><small>{grossCostPercent.toFixed(1)}% of employer cost</small></p>
+                <p><span style={{ background: '#2563eb' }} /><b>Employer Contributions</b><strong>{money(employerContributions)}</strong><small>{employerCostPercent.toFixed(1)}% of employer cost</small></p>
+                <p className="is-muted"><span style={{ background: '#7c3aed' }} /><b>Employee Deductions</b><strong>{money(totalDeductions)}</strong><small>{deductionPercent.toFixed(1)}% of gross pay</small></p>
+                <p className="is-muted"><span style={{ background: '#0ea5e9' }} /><b>Net Pay</b><strong>{money(netPay)}</strong><small>{netPayPercent.toFixed(1)}% of gross pay</small></p>
               </div>
             </div>
           ) : <div className="payroll-empty">No payroll cost data yet. HR payroll records will populate this breakdown.</div>}
@@ -1021,17 +1021,19 @@ const payrollCss = `
 .bar.net { background: #2563eb; }
 .payroll-month i { position: absolute; width: 8px; height: 8px; border-radius: 999px; background: #f59e0b; }
 .payroll-month small { color: #334155; font-size: 11px; }
-.payroll-cost-card { display: flex; flex-direction: column; }
-.payroll-breakdown { display: grid; grid-template-columns: 172px minmax(0, 1fr); gap: 22px; align-items: center; }
-.payroll-donut { width: 156px; height: 156px; border-radius: 50%; display: grid; place-items: center; }
-.payroll-donut span { width: 96px; height: 96px; border-radius: 50%; background: #fff; display: grid; place-items: center; text-align: center; }
-.payroll-donut strong { font-size: 20px; }
-.payroll-donut small { color: #64748b; font-size: 12px; font-weight: 850; }
-.payroll-breakdown-list { display: grid; gap: 12px; }
-.payroll-breakdown-list p { margin: 0; display: grid; grid-template-columns: 12px minmax(0, 1fr); gap: 10px; font-size: 13px; }
-.payroll-breakdown-list p span { width: 12px; height: 12px; border-radius: 4px; margin-top: 3px; }
-.payroll-breakdown-list strong { display: block; margin-top: 3px; color: #334155; line-height: 1.35; }
-.payroll-breakdown-list .is-muted { color: #475569; }
+.payroll-cost-card { display: flex; flex-direction: column; min-width: 0; }
+.payroll-breakdown { display: grid; grid-template-columns: minmax(138px, .72fr) minmax(190px, 1fr); gap: 20px; align-items: center; min-width: 0; }
+.payroll-donut { width: clamp(132px, 12vw, 156px); height: clamp(132px, 12vw, 156px); border-radius: 50%; display: grid; place-items: center; justify-self: center; }
+.payroll-donut span { width: 62%; height: 62%; border-radius: 50%; background: #fff; display: grid; place-items: center; align-content: center; text-align: center; padding: 10px; }
+.payroll-donut strong { font-size: clamp(14px, 1.25vw, 18px); line-height: 1.1; overflow-wrap: anywhere; }
+.payroll-donut small { color: #64748b; font-size: 11px; font-weight: 850; margin-top: 4px; }
+.payroll-breakdown-list { display: grid; gap: 10px; min-width: 0; }
+.payroll-breakdown-list p { margin: 0; display: grid; grid-template-columns: 12px minmax(0, 1fr) auto; gap: 4px 10px; align-items: center; font-size: 12.5px; min-width: 0; }
+.payroll-breakdown-list p span { width: 12px; height: 12px; border-radius: 4px; grid-row: span 2; }
+.payroll-breakdown-list b { color: #0f172a; font-size: 12.5px; font-weight: 900; min-width: 0; overflow-wrap: anywhere; }
+.payroll-breakdown-list strong { color: #0f172a; line-height: 1.2; text-align: right; white-space: nowrap; font-size: 12.5px; }
+.payroll-breakdown-list small { grid-column: 2 / -1; color: #64748b; font-size: 11px; font-weight: 800; line-height: 1.25; }
+.payroll-breakdown-list .is-muted b { color: #475569; }
 .payroll-cost-row { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); margin-top: auto; background: #f8fafc; border-radius: 8px; overflow: hidden; }
 .payroll-cost-row span { padding: 14px; color: #334155; font-size: 12.5px; }
 .payroll-cost-row strong { display: block; color: #0f172a; font-size: 16px; margin-top: 6px; }
@@ -1077,7 +1079,8 @@ const payrollCss = `
 }
 @media (max-width: 900px) {
   .payroll-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .payroll-breakdown, .payroll-cost-row { grid-template-columns: 1fr; }
+  .payroll-breakdown { grid-template-columns: minmax(130px, .7fr) minmax(180px, 1fr); }
+  .payroll-cost-row { grid-template-columns: 1fr; }
   .payroll-compliance-list div { grid-template-columns: 42px minmax(0, 1fr) auto; }
   .payroll-pagination { flex-direction: column; align-items: flex-start; }
   .payroll-request-grid { grid-template-columns: 1fr; }
@@ -1090,6 +1093,10 @@ const payrollCss = `
   .payroll-value { font-size: 21px; }
   .payroll-tabs { margin-left: -16px; margin-right: -16px; padding-left: 16px; padding-right: 16px; }
   .payroll-card { padding: 14px; }
+  .payroll-breakdown { grid-template-columns: 1fr; }
+  .payroll-breakdown-list p { grid-template-columns: 12px minmax(0, 1fr); }
+  .payroll-breakdown-list strong { text-align: left; white-space: normal; }
+  .payroll-breakdown-list small { grid-column: 2; }
   .payroll-flow-steps { grid-template-columns: 1fr; }
   .loan-term-review { grid-template-columns: 1fr; }
   .payroll-bars { overflow-x: auto; grid-template-columns: repeat(6, 48px); }

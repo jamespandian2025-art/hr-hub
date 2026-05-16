@@ -147,6 +147,17 @@ const roundButtonStyle: React.CSSProperties = {
 }
 
 const procurementShellCss = `
+.procurement-sidepanel {
+  background: #000000 !important;
+  color: rgb(237, 237, 237) !important;
+  border-right: 1px solid #242424;
+}
+.procurement-sidepanel * {
+  border-color: #242424;
+}
+.procurement-sidepanel a {
+  color: inherit;
+}
 .procurement-back-link {
   min-height: 36px;
   margin: 0 8px 14px;
