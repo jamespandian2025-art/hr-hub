@@ -156,7 +156,7 @@ export default function ReportsPage() {
       </nav>
 
       <section className="reports-layout">
-        <aside className="reports-card reports-browser">
+        <section className="reports-card reports-browser" aria-label="Browse reports">
           <h2>Browse Reports</h2>
           <label><Search size={15} color="#64748b" /><input placeholder="Search reports..." /></label>
           <div className="reports-category-list">
@@ -175,7 +175,7 @@ export default function ReportsPage() {
             <p>Create a custom report tailored to your business.</p>
             <button type="button">Create Custom Report <Plus size={14} /></button>
           </div>
-        </aside>
+        </section>
 
         <main className="reports-main">
           <section className="reports-top-panels">
@@ -243,7 +243,7 @@ export default function ReportsPage() {
               <div className="reports-pagination"><strong>Showing {generatedReports.length ? 1 : 0} to {generatedReports.length} of {generatedReports.length} reports</strong><div>{['‹', '1', '›'].map((p, i) => <button key={`${p}-${i}`} className={p === '1' ? 'is-active' : undefined}>{p}</button>)}<button>{Math.max(generatedReports.length, 1)} / page <ChevronDown size={14} /></button></div></div>
             </div>
 
-            <aside className="reports-side-stack">
+            <section className="reports-side-stack" aria-label="Report tools">
               <div className="reports-card">
                 <div className="reports-panel-header"><h2>Scheduled Reports</h2><Link href="/accounting/reports">View All</Link></div>
                 <div className="reports-scheduled-list">
@@ -274,7 +274,7 @@ export default function ReportsPage() {
                   })}
                 </div>
               </div>
-            </aside>
+            </section>
           </section>
         </main>
       </section>
@@ -291,6 +291,9 @@ const reportsCss = `
 .reports-actions button, .reports-panel-header button, .reports-pagination button { min-height: 38px; border-radius: 8px; border: 1px solid #e8edf4; background: #fff; color: #0f172a; display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 0 12px; font-size: 12.5px; font-weight: 850; cursor: pointer; }
 .reports-metrics { display: grid; grid-template-columns: repeat(6, minmax(155px, 1fr)); gap: 18px; margin-bottom: 18px; }
 .reports-card { background: #fff; border: 1px solid #e8edf4; border-radius: 8px; padding: 18px; box-shadow: 0 1px 2px rgba(15, 23, 42, .03); min-width: 0; }
+.reports-browser, .reports-side-stack, .reports-side-stack .reports-card { background: #fff !important; color: #0f172a !important; border-color: #e8edf4 !important; }
+.reports-browser h2, .reports-browser strong, .reports-side-stack h2, .reports-side-stack strong { color: #0f172a !important; }
+.reports-browser small, .reports-browser p, .reports-side-stack small { color: #64748b !important; }
 .reports-metric-card { min-height: 96px; display: flex; align-items: center; }
 .reports-metric-icon { width: 48px; height: 48px; border-radius: 9px; display: grid; place-items: center; margin-right: 14px; flex: 0 0 auto; }
 .reports-metric-card > span:last-child { min-width: 0; }
@@ -307,7 +310,8 @@ const reportsCss = `
 .reports-browser input { flex: 1; min-width: 0; border: 0; outline: 0; background: transparent; font-size: 12.5px; }
 .reports-category-list { display: grid; gap: 8px; }
 .reports-category-list button { border: 0; border-radius: 8px; background: #fff; display: grid; grid-template-columns: 36px minmax(0, 1fr); gap: 12px; align-items: center; min-height: 62px; padding: 10px; color: #0f172a; text-align: left; cursor: pointer; }
-.reports-category-list button.is-active { background: #ecfdf3; }
+.reports-category-list button, .reports-custom-card, .reports-quick-list button { background: #fff !important; color: #0f172a !important; }
+.reports-category-list button.is-active { background: #ecfdf3 !important; }
 .reports-category-list button span { width: 34px; height: 34px; border-radius: 8px; display: grid; place-items: center; }
 .reports-category-list small { display: block; color: #64748b; margin-top: 3px; font-weight: 500; }
 .reports-custom-card { margin-top: auto; background: #f8fafc; border: 1px solid #eef2f7; border-radius: 8px; padding: 16px; }
