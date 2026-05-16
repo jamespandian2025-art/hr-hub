@@ -107,6 +107,7 @@ export default function AccountingShell({ children }: { children: React.ReactNod
   const [notificationsOpen, setNotificationsOpen] = useState(false)
   const [newMenuOpen, setNewMenuOpen] = useState(false)
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false)
+  const [isMobileLayout, setIsMobileLayout] = useState(false)
   const [loanRequests, setLoanRequests] = useState<LoanRequest[]>([])
   const [allowanceRequests, setAllowanceRequests] = useState<AllowanceRequest[]>([])
   const [outboundNotifications, setOutboundNotifications] = useState<FinanceOutboundNotification[]>([])
@@ -121,6 +122,17 @@ export default function AccountingShell({ children }: { children: React.ReactNod
     loadAccount()
     window.addEventListener('storage', loadAccount)
     return () => window.removeEventListener('storage', loadAccount)
+  }, [])
+
+  useEffect(() => {
+    const updateLayout = () => setIsMobileLayout(window.innerWidth <= 900)
+    updateLayout()
+    window.addEventListener('resize', updateLayout)
+    window.addEventListener('orientationchange', updateLayout)
+    return () => {
+      window.removeEventListener('resize', updateLayout)
+      window.removeEventListener('orientationchange', updateLayout)
+    }
   }, [])
 
   useEffect(() => {
@@ -220,9 +232,62 @@ export default function AccountingShell({ children }: { children: React.ReactNod
   const notificationBadgeCount = accountingNotifications.length
   const displayName = account.fullName || account.name || account.email || 'Finance User'
   const avatarText = displayName.split(/\s+/).filter(Boolean).map(part => part[0]).join('').slice(0, 2).toUpperCase() || 'FP'
+  const shellStyle: React.CSSProperties = {
+    minHeight: '100vh',
+    height: '100dvh',
+    overflow: 'hidden',
+    background: '#f7f9fc',
+    display: 'grid',
+    gridTemplateColumns: isMobileLayout ? 'minmax(0, 1fr)' : '250px minmax(0, 1fr)',
+    fontFamily: font,
+    color: '#111827',
+  }
+  const sidebarStyle: React.CSSProperties = {
+    minHeight: '100vh',
+    height: '100dvh',
+    position: isMobileLayout ? 'fixed' : 'sticky',
+    top: 0,
+    left: isMobileLayout ? 0 : undefined,
+    width: isMobileLayout ? 'min(294px, 86vw)' : undefined,
+    maxWidth: isMobileLayout ? '86vw' : undefined,
+    alignSelf: 'start',
+    background: '#000',
+    color: '#ededed',
+    padding: '18px 10px',
+    display: 'flex',
+    flexDirection: 'column',
+    gap: 14,
+    zIndex: isMobileLayout ? 1000 : 70,
+    transform: isMobileLayout && !mobileSidebarOpen ? 'translateX(-104%)' : 'translateX(0)',
+    transition: isMobileLayout ? 'transform 180ms ease' : undefined,
+    boxShadow: isMobileLayout ? '28px 0 80px rgba(15, 23, 42, .34)' : undefined,
+  }
+  const headerStyle: React.CSSProperties = {
+    height: isMobileLayout ? 'auto' : 76,
+    minHeight: isMobileLayout ? 64 : undefined,
+    position: 'sticky',
+    top: 0,
+    zIndex: 80,
+    background: 'rgba(255,255,255,0.94)',
+    backdropFilter: 'blur(16px)',
+    borderBottom: '1px solid #e8edf4',
+    display: 'grid',
+    gridTemplateColumns: isMobileLayout ? '1fr' : 'auto minmax(280px, 520px) auto',
+    alignItems: isMobileLayout ? 'stretch' : 'center',
+    gap: isMobileLayout ? 10 : 18,
+    padding: isMobileLayout ? '10px 12px' : '0 28px',
+  }
+  const headerActionsStyle: React.CSSProperties = {
+    display: isMobileLayout ? 'grid' : 'flex',
+    gridTemplateColumns: isMobileLayout ? '44px minmax(0, 1fr) 44px 44px' : undefined,
+    alignItems: 'center',
+    justifyContent: isMobileLayout ? 'stretch' : 'flex-end',
+    gap: isMobileLayout ? 8 : 10,
+    width: isMobileLayout ? '100%' : undefined,
+  }
 
   return (
-    <div className="accounting-shell" style={{ minHeight: '100vh', height: '100vh', overflow: 'hidden', background: '#f7f9fc', display: 'grid', gridTemplateColumns: '250px minmax(0, 1fr)', fontFamily: font, color: '#111827' }}>
+    <div className={`accounting-shell${isMobileLayout ? ' accounting-shell-mobile' : ''}`} style={shellStyle}>
       <style>{accountingShellCss}</style>
       <button
         type="button"
@@ -230,7 +295,7 @@ export default function AccountingShell({ children }: { children: React.ReactNod
         aria-label="Close accounting navigation"
         onClick={() => setMobileSidebarOpen(false)}
       />
-      <aside className={`accounting-sidebar${mobileSidebarOpen ? ' is-open' : ''}`} style={{ minHeight: '100vh', height: '100vh', position: 'sticky', top: 0, alignSelf: 'start', background: '#000', color: '#ededed', padding: '18px 10px', display: 'flex', flexDirection: 'column', gap: 14 }}>
+      <aside className={`accounting-sidebar${mobileSidebarOpen ? ' is-open' : ''}`} style={sidebarStyle}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '0 6px 4px' }}>
           <span style={{ width: 36, height: 36, borderRadius: 10, background: '#ededed', color: '#000', display: 'grid', placeItems: 'center', fontWeight: 700, fontSize: 16 }}>W</span>
           <span>
@@ -262,7 +327,7 @@ export default function AccountingShell({ children }: { children: React.ReactNod
       </aside>
 
       <div className="accounting-content-column" style={{ minWidth: 0 }}>
-        <header className="accounting-sticky-header" style={{ height: 76, position: 'sticky', top: 0, zIndex: 30, background: 'rgba(255,255,255,0.94)', backdropFilter: 'blur(16px)', borderBottom: '1px solid #e8edf4', display: 'grid', gridTemplateColumns: 'auto minmax(280px, 520px) auto', alignItems: 'center', gap: 18, padding: '0 28px' }}>
+        <header className="accounting-sticky-header" style={headerStyle}>
           <div className="accounting-header-title" style={{ display: 'flex', alignItems: 'center', gap: 12, minWidth: 0 }}>
             <button
               type="button"
@@ -287,7 +352,7 @@ export default function AccountingShell({ children }: { children: React.ReactNod
             <Search size={16} color="#64748b" />
             <input placeholder="Search Finance" aria-label="Search Finance" style={{ flex: 1, border: 0, outline: 0, background: 'transparent', fontSize: 13, color: '#0f172a' }} />
           </label>
-          <div className="accounting-header-actions" style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 10 }}>
+          <div className="accounting-header-actions" style={headerActionsStyle}>
             <button type="button" aria-label="Notifications" onClick={() => setNotificationsOpen(open => !open)} style={{ ...roundButtonStyle, position: 'relative' }}>
               <Bell size={18} />
               {notificationBadgeCount > 0 && (
@@ -664,6 +729,66 @@ const accountingShellCss = `
   padding: 0;
   margin: 0;
   background: transparent;
+}
+.accounting-shell-mobile {
+  grid-template-columns: minmax(0, 1fr) !important;
+  height: 100vh !important;
+  height: 100dvh !important;
+  max-height: 100vh !important;
+  max-height: 100dvh !important;
+  overflow: hidden !important;
+}
+.accounting-shell-mobile .accounting-content-column {
+  width: 100%;
+  height: 100vh !important;
+  height: 100dvh !important;
+  min-height: 0 !important;
+  max-height: 100vh !important;
+  max-height: 100dvh !important;
+  display: grid !important;
+  grid-template-rows: auto minmax(0, 1fr) !important;
+  overflow: hidden !important;
+}
+.accounting-shell-mobile .accounting-scroll-content {
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  overflow-y: auto !important;
+  overflow-x: hidden !important;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
+}
+.accounting-shell-mobile .accounting-sticky-header {
+  height: auto !important;
+  min-height: 64px;
+  grid-template-columns: 1fr !important;
+  align-items: stretch !important;
+  gap: 10px !important;
+  padding: 10px 12px !important;
+}
+.accounting-shell-mobile .accounting-header-title,
+.accounting-shell-mobile .accounting-header-search {
+  width: 100%;
+  min-height: 44px;
+}
+.accounting-shell-mobile .accounting-header-actions {
+  width: 100%;
+  display: grid !important;
+  grid-template-columns: 44px minmax(0, 1fr) 44px 44px;
+  align-items: center !important;
+  justify-content: stretch !important;
+  gap: 8px !important;
+}
+.accounting-shell-mobile .accounting-header-actions > button,
+.accounting-shell-mobile .accounting-header-actions > div > button {
+  min-height: 44px !important;
+}
+.accounting-shell-mobile .accounting-header-actions > button:nth-child(2) {
+  width: 100% !important;
+  justify-content: center !important;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
 }
 .accounting-sidebar {
   position: sticky !important;
