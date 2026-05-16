@@ -127,7 +127,7 @@ export default function AuditLogsPage() {
       </section>
 
       <nav className="audit-tabs" aria-label="Audit log categories">
-        {tabs.map((tab, index) => <button key={tab} className={index === 0 ? 'is-active' : undefined}>{tab}</button>)}
+        {tabs.map((tab, index) => <button type="button" key={tab} className={index === 0 ? 'is-active' : undefined}>{tab}</button>)}
       </nav>
 
       <section className="audit-filter-panel">
@@ -191,16 +191,20 @@ export default function AuditLogsPage() {
             <span>Showing {auditEvents.length ? 1 : 0} to {auditEvents.length} of {formatNumber(auditSummary.totalEvents)} events</span>
             <div>
               <button type="button" aria-label="Previous page"><ChevronLeft size={15} /></button>
-              {[1, 2, 3].map(page => <button key={page} type="button" className={page === 1 ? 'is-active' : undefined}>{page}</button>)}
-              <span>...</span>
-              <button type="button">876</button>
+              {[1].map(page => <button key={page} type="button" className="is-active">{page}</button>)}
+              {auditEvents.length > 10 && (
+                <>
+                  <span>...</span>
+                  <button type="button">{Math.ceil(auditEvents.length / 10)}</button>
+                </>
+              )}
               <button type="button" aria-label="Next page"><ChevronRight size={15} /></button>
             </div>
             <button type="button">10 / page</button>
           </div>
         </div>
 
-        {selectedLog ? <aside className="audit-card audit-details">
+        {selectedLog ? <section className="audit-card audit-details" aria-label="Selected audit log details">
           <div className="details-title">
             <h2>Log Details</h2>
             <button type="button" aria-label="Close details"><X size={16} /></button>
@@ -236,7 +240,7 @@ export default function AuditLogsPage() {
             Related Record
             <strong>View Employee <ExternalLink size={14} /></strong>
           </Link>
-        </aside> : <aside className="audit-card audit-details"><div className="detail-note"><small>Log Details</small><p>No audit event selected.</p></div></aside>}
+        </section> : <section className="audit-card audit-details audit-details-empty" aria-label="Audit log details"><div className="detail-note"><small>Log Details</small><p>No audit event selected.</p></div></section>}
       </section>
     </div>
   )
@@ -562,8 +566,28 @@ const auditCss = `
   color: #fff;
 }
 .audit-details {
+  background: #fff !important;
+  color: #0f172a !important;
+  border-color: #e8edf4 !important;
   padding: 20px;
   align-self: start;
+}
+.audit-details-empty {
+  min-height: 118px;
+}
+.audit-details-empty .detail-note {
+  border-top: 0;
+  margin-bottom: 0;
+  padding-top: 0;
+}
+.audit-details-empty small {
+  display: block;
+  color: #475569;
+  font-size: 12px;
+  font-weight: 900;
+}
+.audit-details-empty p {
+  color: #64748b;
 }
 .details-title {
   display: flex;
