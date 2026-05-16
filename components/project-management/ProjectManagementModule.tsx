@@ -10,8 +10,6 @@ import {
   Clock3,
   FileText,
   Filter,
-  FolderKanban,
-  LayoutGrid,
   ListChecks,
   MoreHorizontal,
   Paperclip,
@@ -56,7 +54,6 @@ function defaultProjectDraft(clientId: string) {
 export default function ProjectManagementModule() {
   const store = useProjectManagement()
   const { state, filters, setFilters, filteredProjects } = store
-  const [sidebarOpen, setSidebarOpen] = useState(false)
   const [showCreate, setShowCreate] = useState(false)
   const [draggedTask, setDraggedTask] = useState<string | null>(null)
   const [draft, setDraft] = useState(() => defaultProjectDraft(state.clients[0]?.id || ''))
@@ -95,26 +92,8 @@ export default function ProjectManagementModule() {
   return (
     <div className="pm-shell">
       <style>{projectManagementCss}</style>
-      <aside className={`pm-sidebar ${sidebarOpen ? 'is-open' : ''}`}>
-        <div className="pm-brand"><span>W</span><strong>WiseFlow</strong><small>Enterprise OS</small></div>
-        <nav aria-label="Project Management sections">
-          {[
-            ['Core', ['Dashboard', 'Client Database', 'Sales', 'Project Management']],
-            ['Operations', ['Financials', 'HR', 'Procurement', 'Warehouse', 'Reports']],
-            ['Productivity', ['Workflows', 'Datasets', 'File Storage', 'Messages']],
-          ].map(([section, items]) => (
-            <div key={section as string}>
-              <p>{section}</p>
-              {(items as string[]).map(item => <button key={item} className={item === 'Project Management' ? 'active' : undefined} type="button"><FolderKanban size={16} />{item}</button>)}
-            </div>
-          ))}
-        </nav>
-      </aside>
-      <button className={`pm-overlay ${sidebarOpen ? 'is-open' : ''}`} type="button" aria-label="Close menu" onClick={() => setSidebarOpen(false)} />
-
-      <main className="pm-workspace">
+      <div className="pm-workspace">
         <header className="pm-header">
-          <button type="button" className="pm-mobile-menu" onClick={() => setSidebarOpen(true)}><LayoutGrid size={18} /></button>
           <div className="pm-title-block">
             <h1>Project Management</h1>
             <p>Plan, track and deliver projects successfully.</p>
@@ -164,7 +143,7 @@ export default function ProjectManagementModule() {
             {store.activeTab === 'Documents' && <Documents state={state} />}
           </>
         )}
-      </main>
+      </div>
     </div>
   )
 }
@@ -278,25 +257,15 @@ function QuickActions() { return <div className="pm-actions">{[['New Project', P
 function BarList({ items }: { items: Array<{ label: string; value: number; max: number }> }) { return <div className="pm-bar-list">{items.map(item => <p key={item.label}><span>{item.label}</span><strong>{formatMoney(item.value)}</strong><Progress value={item.max ? (item.value / item.max) * 100 : 0} /></p>)}</div> }
 
 const projectManagementCss = `
-.pm-shell { min-height: 100vh; display: grid; grid-template-columns: 260px minmax(0, 1fr); background: #fff; color: #091133; font-family: var(--font-space-grotesk), "Space Grotesk", sans-serif; }
-.pm-sidebar { background: radial-gradient(circle at 30% 0%, #063a35, #001323 45%, #000814); color: #eaf7f2; padding: 24px 16px; min-height: 100vh; position: sticky; top: 0; overflow-y: auto; }
-.pm-brand { display: grid; grid-template-columns: 44px 1fr; gap: 10px; align-items: center; margin-bottom: 28px; }
-.pm-brand span { width: 44px; height: 44px; border-radius: 10px; background: #16a34a; display: grid; place-items: center; font-weight: 900; font-size: 22px; grid-row: span 2; }
-.pm-brand strong { font-size: 22px; line-height: 1; }
-.pm-brand small { color: #b6c8d6; }
-.pm-sidebar nav { display: grid; gap: 24px; }
-.pm-sidebar p { margin: 0 0 8px; color: #9fb2c3; text-transform: uppercase; font-size: 12px; letter-spacing: .08em; }
-.pm-sidebar button { width: 100%; min-height: 38px; border: 0; border-radius: 8px; background: transparent; color: #e5edf6; display: flex; align-items: center; gap: 10px; padding: 0 10px; cursor: pointer; font-weight: 700; }
-.pm-sidebar button.active, .pm-sidebar button:hover { background: rgba(22, 163, 74, .35); color: #fff; }
-.pm-workspace { min-width: 0; padding: 28px; overflow: hidden; }
-.pm-header { display: grid; grid-template-columns: minmax(220px, 1fr) auto; gap: 16px; align-items: start; margin-bottom: 24px; }
+.pm-shell { display: grid; gap: 22px; color: #0f172a; font-family: var(--font-space-grotesk), "Space Grotesk", sans-serif; }
+.pm-workspace { min-width: 0; display: grid; gap: 22px; }
+.pm-header { display: grid; grid-template-columns: minmax(220px, 1fr) auto; gap: 16px; align-items: start; }
 .pm-title-block h1 { margin: 0; font-size: clamp(26px, 3vw, 34px); line-height: 1.1; }
 .pm-title-block p { margin: 8px 0 0; color: #23335f; }
 .pm-header-actions { display: flex; gap: 12px; justify-content: flex-end; flex-wrap: wrap; }
 .pm-control, .pm-primary, .pm-select, .pm-search { min-height: 42px; border: 1px solid #dbe3ef; border-radius: 8px; background: #fff; color: #091133; display: inline-flex; align-items: center; gap: 9px; padding: 0 14px; font-weight: 800; }
 .pm-primary { background: #16a34a; border-color: #16a34a; color: #fff; cursor: pointer; }
 .pm-search input { border: 0; outline: 0; min-width: 220px; font: inherit; }
-.pm-mobile-menu { display: none; }
 .pm-card { background: #fff; border: 1px solid #e6edf6; border-radius: 16px; box-shadow: 0 12px 34px rgba(9, 17, 51, .06); padding: 20px; min-width: 0; }
 .pm-kpis { display: grid; grid-template-columns: repeat(5, minmax(170px, 1fr)); gap: 18px; margin-bottom: 22px; }
 .pm-kpi { display: flex; align-items: center; gap: 18px; min-height: 112px; }
@@ -367,8 +336,6 @@ const projectManagementCss = `
 .pm-detail-head h2 { margin: 0; }
 .pm-detail-head p { margin: 5px 0 0; color: #23335f; }
 .pm-detail-head > button:first-child { border: 1px solid #dbe3ef; border-radius: 8px; background: #fff; min-height: 38px; padding: 0 12px; font-weight: 900; cursor: pointer; }
-.pm-overlay { display: none; }
-@media (max-width: 1280px) { .pm-shell { grid-template-columns: 230px minmax(0, 1fr); } .pm-kpis { grid-template-columns: repeat(3, 1fr); } .pm-overview-grid { grid-template-columns: 1fr; } .pm-recent { grid-column: auto; } .pm-resource-grid, .pm-doc-grid, .pm-budget-grid { grid-template-columns: 1fr 1fr; } .pm-header { grid-template-columns: 1fr; } .pm-header-actions { justify-content: flex-start; } }
-@media (max-width: 1024px) { .pm-shell { grid-template-columns: 1fr; } .pm-sidebar { position: fixed; inset: 0 auto 0 0; width: 280px; z-index: 60; transform: translateX(-100%); transition: transform 180ms ease; } .pm-sidebar.is-open { transform: translateX(0); } .pm-overlay.is-open { display: block; position: fixed; inset: 0; background: rgba(2, 6, 23, .42); z-index: 50; border: 0; } .pm-mobile-menu { display: inline-grid; width: 42px; height: 42px; border: 1px solid #dbe3ef; border-radius: 10px; background: #fff; place-items: center; } .pm-header { grid-template-columns: auto 1fr; } .pm-header-actions { grid-column: 1 / -1; } }
-@media (max-width: 640px) { .pm-workspace { padding: 16px; } .pm-kpis, .pm-resource-grid, .pm-doc-grid, .pm-budget-grid, .pm-form { grid-template-columns: 1fr; } .pm-header-actions, .pm-search, .pm-control, .pm-primary { width: 100%; justify-content: center; } .pm-search input { min-width: 0; width: 100%; } .pm-donut-wrap, .pm-budget-summary, .pm-detail-head { grid-template-columns: 1fr; } .pm-donut { width: 180px; height: 180px; margin: auto; } .pm-list article { grid-template-columns: 34px 1fr; } .pm-list em, .pm-list .pm-pill { grid-column: 2; } .pm-wide { grid-column: auto; } .pm-table { min-width: 760px; } }
+@media (max-width: 1280px) { .pm-kpis { grid-template-columns: repeat(3, 1fr); } .pm-overview-grid { grid-template-columns: 1fr; } .pm-recent { grid-column: auto; } .pm-resource-grid, .pm-doc-grid, .pm-budget-grid { grid-template-columns: 1fr 1fr; } .pm-header { grid-template-columns: 1fr; } .pm-header-actions { justify-content: flex-start; } }
+@media (max-width: 640px) { .pm-kpis, .pm-resource-grid, .pm-doc-grid, .pm-budget-grid, .pm-form { grid-template-columns: 1fr; } .pm-header-actions, .pm-search, .pm-control, .pm-primary { width: 100%; justify-content: center; } .pm-search input { min-width: 0; width: 100%; } .pm-donut-wrap, .pm-budget-summary, .pm-detail-head { grid-template-columns: 1fr; } .pm-donut { width: 180px; height: 180px; margin: auto; } .pm-list article { grid-template-columns: 34px 1fr; } .pm-list em, .pm-list .pm-pill { grid-column: 2; } .pm-wide { grid-column: auto; } .pm-table { min-width: 760px; } }
 `

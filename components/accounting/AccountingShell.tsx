@@ -10,8 +10,6 @@ import {
   Banknote,
   Bell,
   BookOpenCheck,
-  CalendarDays,
-  ChevronDown,
   FileBarChart,
   FileClock,
   FileText,
@@ -23,6 +21,7 @@ import {
   ReceiptText,
   Search,
   ShieldCheck,
+  UserPlus,
   WalletCards,
   X,
 } from 'lucide-react'
@@ -43,6 +42,16 @@ type FinanceOutboundNotification = {
   status?: string
   target?: string
   createdAt?: string
+}
+
+type StoredAccount = {
+  company?: string
+  fullName?: string
+  name?: string
+  email?: string
+  photo?: string
+  profilePhoto?: string
+  role?: string
 }
 
 type AccountingNotification = {
@@ -101,6 +110,18 @@ export default function AccountingShell({ children }: { children: React.ReactNod
   const [loanRequests, setLoanRequests] = useState<LoanRequest[]>([])
   const [allowanceRequests, setAllowanceRequests] = useState<AllowanceRequest[]>([])
   const [outboundNotifications, setOutboundNotifications] = useState<FinanceOutboundNotification[]>([])
+  const [account, setAccount] = useState<StoredAccount>({})
+
+  useEffect(() => {
+    const loadAccount = () => {
+      const accountRaw = loadStored<StoredAccount>('flowsys-account', {})
+      const sessionRaw = loadStored<StoredAccount>('flowsys-auth-session', {})
+      setAccount({ ...sessionRaw, ...accountRaw })
+    }
+    loadAccount()
+    window.addEventListener('storage', loadAccount)
+    return () => window.removeEventListener('storage', loadAccount)
+  }, [])
 
   useEffect(() => {
     let cancelled = false
@@ -186,6 +207,8 @@ export default function AccountingShell({ children }: { children: React.ReactNod
   }, [allowanceRequests, loanRequests, outboundNotifications])
 
   const notificationBadgeCount = accountingNotifications.length
+  const displayName = account.fullName || account.name || account.email || 'Finance User'
+  const avatarText = displayName.split(/\s+/).filter(Boolean).map(part => part[0]).join('').slice(0, 2).toUpperCase() || 'FP'
 
   return (
     <div className="accounting-shell" style={{ minHeight: '100vh', height: '100vh', overflow: 'hidden', background: '#f7f9fc', display: 'grid', gridTemplateColumns: '250px minmax(0, 1fr)', fontFamily: font, color: '#111827' }}>
@@ -233,10 +256,9 @@ export default function AccountingShell({ children }: { children: React.ReactNod
           </div>
           <label style={{ height: 40, borderRadius: 8, background: '#fff', display: 'flex', alignItems: 'center', gap: 10, padding: '0 14px', border: '1px solid #e8edf4', boxShadow: '0 1px 2px rgba(15,23,42,0.03)' }}>
             <Search size={16} color="#64748b" />
-            <input placeholder="Search transactions, invoices, bills..." style={{ flex: 1, border: 0, outline: 0, background: 'transparent', fontSize: 13, color: '#0f172a' }} />
+            <input placeholder="Search Finance" aria-label="Search Finance" style={{ flex: 1, border: 0, outline: 0, background: 'transparent', fontSize: 13, color: '#0f172a' }} />
           </label>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 10 }}>
-            <button type="button" style={dateButtonStyle}><CalendarDays size={15} /> Current records</button>
             <button type="button" aria-label="Notifications" onClick={() => setNotificationsOpen(open => !open)} style={{ ...roundButtonStyle, position: 'relative' }}>
               <Bell size={18} />
               {notificationBadgeCount > 0 && (
@@ -283,6 +305,9 @@ export default function AccountingShell({ children }: { children: React.ReactNod
                 </button>
               </div>
             )}
+            <button type="button" onClick={() => router.push('/hr/employees/new')} style={employeeButtonStyle}>
+              <UserPlus size={16} /> Add employee
+            </button>
             <div style={{ position: 'relative' }}>
               <button
                 type="button"
@@ -292,9 +317,9 @@ export default function AccountingShell({ children }: { children: React.ReactNod
                 }}
                 aria-expanded={newMenuOpen}
                 aria-haspopup="menu"
-                style={primaryButtonStyle}
+                style={plusButtonStyle}
               >
-                <Plus size={16} /> New <ChevronDown size={13} />
+                <Plus size={18} />
               </button>
               {newMenuOpen && (
                 <div role="menu" style={newMenuStyle}>
@@ -322,6 +347,12 @@ export default function AccountingShell({ children }: { children: React.ReactNod
                 </div>
               )}
             </div>
+            <button type="button" aria-label="Account profile" onClick={() => router.push('/settings/company')} style={avatarButtonStyle}>
+              {account.profilePhoto || account.photo ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={account.profilePhoto || account.photo} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: 'inherit' }} />
+              ) : avatarText}
+            </button>
           </div>
         </header>
         <main className="accounting-scroll-content">{children}</main>
@@ -376,34 +407,46 @@ const roundButtonStyle: React.CSSProperties = {
   cursor: 'pointer',
 }
 
-const dateButtonStyle: React.CSSProperties = {
+const employeeButtonStyle: React.CSSProperties = {
   minHeight: 38,
-  borderRadius: 8,
-  border: '1px solid #e8edf4',
-  background: '#fff',
-  color: '#0f172a',
+  borderRadius: 999,
+  border: '1px solid #16a34a',
+  background: '#16a34a',
+  color: '#00140a',
   display: 'flex',
   alignItems: 'center',
   gap: 8,
-  padding: '0 12px',
+  padding: '0 18px',
   fontSize: 12.5,
-  fontWeight: 800,
+  fontWeight: 950,
   cursor: 'pointer',
 }
 
-const primaryButtonStyle: React.CSSProperties = {
-  minHeight: 38,
-  borderRadius: 8,
-  border: '1px solid #16a34a',
-  background: '#16a34a',
-  color: '#fff',
-  display: 'flex',
-  alignItems: 'center',
-  gap: 7,
-  padding: '0 13px',
-  fontSize: 12.5,
-  fontWeight: 900,
+const plusButtonStyle: React.CSSProperties = {
+  width: 38,
+  height: 38,
+  borderRadius: 999,
+  border: '1px solid #d7dde6',
+  background: '#fff',
+  color: '#0f172a',
+  display: 'grid',
+  placeItems: 'center',
   cursor: 'pointer',
+}
+
+const avatarButtonStyle: React.CSSProperties = {
+  width: 40,
+  height: 40,
+  borderRadius: 999,
+  border: '1px solid #d7dde6',
+  background: '#22c55e',
+  color: '#04130a',
+  display: 'grid',
+  placeItems: 'center',
+  fontSize: 13,
+  fontWeight: 950,
+  cursor: 'pointer',
+  overflow: 'hidden',
 }
 
 const newMenuStyle: React.CSSProperties = {

@@ -1,7 +1,7 @@
 'use client'
 
 import Link from 'next/link'
-import { useEffect, useMemo, useState } from 'react'
+import { ChangeEvent, FormEvent, useEffect, useMemo, useRef, useState } from 'react'
 import {
   ArrowDownLeft,
   ArrowUpRight,
@@ -21,8 +21,45 @@ import {
 } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import { emptyAccountingData, formatDate, loadAccountingData, monthlySeries, money, subscribeAccountingData } from '@/lib/accounting/data'
+import { getActiveCompany } from '@/lib/tenant/company'
 
 const font = 'var(--font-body)'
+const bankStorageKey = 'flowsys-bank-accounts'
+const transactionStorageKey = 'flowsys-accounting-transactions'
+const today = new Date().toISOString().slice(0, 10)
+
+type BankingTab = 'Accounts' | 'Transactions' | 'Reconciliation' | 'Payments'
+type BankingAction = 'add-account' | 'payment' | 'plaid' | 'transfer' | 'statement' | null
+type StoredRow = Record<string, unknown>
+
+const bankingTabs: BankingTab[] = ['Accounts', 'Transactions', 'Reconciliation', 'Payments']
+
+const initialAccountForm = {
+  name: '',
+  type: 'Checking',
+  number: '',
+  bank: '',
+  balance: '',
+  status: 'Active',
+}
+
+const initialPaymentForm = {
+  date: today,
+  description: '',
+  account: '',
+  amount: '',
+  reference: '',
+  category: 'Payment',
+}
+
+const initialTransferForm = {
+  date: today,
+  description: 'Bank transfer',
+  fromAccount: '',
+  toAccount: '',
+  amount: '',
+  reference: '',
+}
 
 function areaPath(points: number[][]) {
   if (!points.length) return ''
@@ -38,6 +75,17 @@ function StatusPill({ value }: { value: string }) {
 
 export default function BankingPage() {
   const [data, setData] = useState(emptyAccountingData)
+  const [activeTab, setActiveTab] = useState<BankingTab>('Accounts')
+  const [search, setSearch] = useState('')
+  const [accountFilter, setAccountFilter] = useState('All Accounts')
+  const [typeFilter, setTypeFilter] = useState('All Types')
+  const [statusFilter, setStatusFilter] = useState('All Status')
+  const [modal, setModal] = useState<BankingAction>(null)
+  const [notice, setNotice] = useState('')
+  const [accountForm, setAccountForm] = useState(initialAccountForm)
+  const [paymentForm, setPaymentForm] = useState(initialPaymentForm)
+  const [transferForm, setTransferForm] = useState(initialTransferForm)
+  const fileInputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
     const load = () => setData(loadAccountingData())
@@ -47,8 +95,11 @@ export default function BankingPage() {
 
   const bankAccounts = data.bankAccounts
   const bankTransactions = data.transactions.map(transaction => ({
+    id: transaction.id,
     date: formatDate(transaction.date),
+    rawDate: transaction.date,
     description: transaction.description,
+    detail: transaction.secondary,
     account: transaction.account,
     type: transaction.type === 'Income' ? 'Payment Received' as const : transaction.type === 'Expense' ? 'Expense' as const : 'Transfer' as const,
     reference: transaction.reference || transaction.id,
@@ -56,9 +107,38 @@ export default function BankingPage() {
     outflow: transaction.outflow,
     balance: transaction.balance,
     status: ['Reconciled', 'Paid', 'Completed'].includes(transaction.status) ? 'Matched' as const : 'Pending' as const,
+    category: transaction.category,
   }))
+  const accountOptions = useMemo(() => Array.from(new Set([
+    ...bankAccounts.map(account => account.name),
+    ...bankTransactions.map(transaction => transaction.account),
+  ].filter(Boolean))).sort(), [bankAccounts, bankTransactions])
+  const visibleAccounts = useMemo(() => {
+    const query = search.trim().toLowerCase()
+    return bankAccounts.filter(account => {
+      const accountMatches = accountFilter === 'All Accounts' || account.name === accountFilter || account.bank === accountFilter
+      const statusMatches = statusFilter === 'All Status' || account.status === statusFilter
+      const queryMatches = !query || [account.name, account.type, account.number, account.bank, account.status].join(' ').toLowerCase().includes(query)
+      return accountMatches && statusMatches && queryMatches
+    })
+  }, [accountFilter, bankAccounts, search, statusFilter])
+  const visibleTransactions = useMemo(() => {
+    const query = search.trim().toLowerCase()
+    return bankTransactions.filter(transaction => {
+      const accountMatches = accountFilter === 'All Accounts' || transaction.account === accountFilter
+      const typeMatches = typeFilter === 'All Types' || transaction.type === typeFilter
+      const statusMatches = statusFilter === 'All Status' || transaction.status === statusFilter
+      const tabMatches =
+        activeTab === 'Accounts' ||
+        activeTab === 'Transactions' ||
+        (activeTab === 'Reconciliation' && transaction.status === 'Pending') ||
+        (activeTab === 'Payments' && transaction.outflow > 0)
+      const queryMatches = !query || [transaction.description, transaction.detail, transaction.account, transaction.reference, transaction.type, transaction.status, transaction.category].join(' ').toLowerCase().includes(query)
+      return accountMatches && typeMatches && statusMatches && tabMatches && queryMatches
+    })
+  }, [accountFilter, activeTab, bankTransactions, search, statusFilter, typeFilter])
   const cashFlow = useMemo(() => monthlySeries(data.transactions).map(month => ({ day: month.label, inflow: month.revenue, outflow: month.expenses })), [data.transactions])
-  const feeds = bankAccounts.map(account => account.bank).filter(Boolean)
+  const feeds = visibleAccounts.map(account => account.bank).filter(Boolean)
   const totalBalance = bankAccounts.reduce((sum, account) => sum + account.balance, 0)
   const visibleInflow = bankTransactions.reduce((sum, transaction) => sum + transaction.inflow, 0)
   const visibleOutflow = bankTransactions.reduce((sum, transaction) => sum + transaction.outflow, 0)
@@ -73,12 +153,174 @@ export default function BankingPage() {
     { title: 'To Reconcile', value: String(toReconcile), detail: money(bankTransactions.filter(row => row.status === 'Pending').reduce((sum, row) => sum + row.inflow + row.outflow, 0), data.currency), icon: ReceiptText, tone: '#7c3aed' },
     { title: 'Open Payments', value: String(overduePayments), detail: money(data.bills.reduce((sum, bill) => sum + bill.balanceDue, 0), data.currency), icon: Clock3, tone: '#ef4444' },
   ]
-  const quickActions: Array<{ label: string; icon: LucideIcon }> = [
-    { label: 'Make a Payment', icon: CreditCard },
-    { label: 'Plaid Setup', icon: Settings },
-    { label: 'Transfer Records', icon: SlidersHorizontal },
-    { label: 'Upload Bank Statement', icon: Download },
+  const quickActions: Array<{ label: string; icon: LucideIcon; action: BankingAction }> = [
+    { label: 'Make a Payment', icon: CreditCard, action: 'payment' },
+    { label: 'Plaid Setup', icon: Settings, action: 'plaid' },
+    { label: 'Transfer Records', icon: SlidersHorizontal, action: 'transfer' },
+    { label: 'Upload Bank Statement', icon: Download, action: 'statement' },
   ]
+  const tabCounts: Record<BankingTab, number> = {
+    Accounts: bankAccounts.length,
+    Transactions: bankTransactions.length,
+    Reconciliation: toReconcile,
+    Payments: bankTransactions.filter(transaction => transaction.outflow > 0).length,
+  }
+  const selectTab = (tab: BankingTab) => {
+    setActiveTab(tab)
+    setAccountFilter('All Accounts')
+    setTypeFilter('All Types')
+    setStatusFilter('All Status')
+    setNotice('')
+  }
+  const resetFilters = () => {
+    setSearch('')
+    setAccountFilter('All Accounts')
+    setTypeFilter('All Types')
+    setStatusFilter('All Status')
+  }
+  const refreshData = (message?: string) => {
+    setData(loadAccountingData())
+    window.dispatchEvent(new Event('wiseflow-accounting-refresh'))
+    if (message) setNotice(message)
+  }
+  const storageKey = (key: string) => {
+    const companyId = getActiveCompany()?.id
+    return companyId ? `${key}:${companyId}` : key
+  }
+  const loadRows = (key: string): StoredRow[] => {
+    try {
+      const parsed = JSON.parse(window.localStorage.getItem(storageKey(key)) || '[]') as unknown
+      return Array.isArray(parsed) ? parsed.filter((row): row is StoredRow => Boolean(row) && typeof row === 'object') : []
+    } catch {
+      return []
+    }
+  }
+  const saveRows = (key: string, rows: StoredRow[]) => {
+    window.localStorage.setItem(storageKey(key), JSON.stringify(rows))
+  }
+  const openModal = (action: BankingAction) => {
+    setNotice('')
+    setModal(action)
+    if (action === 'payment') setPaymentForm(previous => ({ ...previous, account: previous.account || accountOptions[0] || '' }))
+    if (action === 'transfer') setTransferForm(previous => ({ ...previous, fromAccount: previous.fromAccount || accountOptions[0] || '', toAccount: previous.toAccount || accountOptions[1] || accountOptions[0] || '' }))
+  }
+  const submitAccount = (event: FormEvent) => {
+    event.preventDefault()
+    const balance = Number(accountForm.balance)
+    const rows = loadRows(bankStorageKey)
+    const next = {
+      id: `bank_${Date.now()}`,
+      name: accountForm.name.trim(),
+      type: accountForm.type,
+      number: accountForm.number.trim().slice(-4),
+      bank: accountForm.bank.trim(),
+      currency: data.currency,
+      balance: Number.isFinite(balance) ? balance : 0,
+      status: accountForm.status,
+      color: '#16a34a',
+    }
+    saveRows(bankStorageKey, [next, ...rows])
+    setAccountForm(initialAccountForm)
+    setModal(null)
+    refreshData('Bank account added.')
+  }
+  const submitPayment = (event: FormEvent) => {
+    event.preventDefault()
+    const amount = Math.max(Number(paymentForm.amount), 0)
+    if (!amount) return
+    const rows = loadRows(transactionStorageKey)
+    const next = {
+      id: `payment_${Date.now()}`,
+      date: paymentForm.date,
+      description: paymentForm.description.trim() || 'Bank payment',
+      account: paymentForm.account || accountOptions[0] || 'Bank account',
+      category: paymentForm.category,
+      type: 'Expense',
+      reference: paymentForm.reference.trim() || `PAY-${Date.now()}`,
+      outflow: amount,
+      amount,
+      balance: 0,
+      status: 'Reconciled',
+    }
+    saveRows(transactionStorageKey, [next, ...rows])
+    setPaymentForm({ ...initialPaymentForm, account: paymentForm.account })
+    setModal(null)
+    setActiveTab('Payments')
+    refreshData('Payment recorded.')
+  }
+  const submitTransfer = (event: FormEvent) => {
+    event.preventDefault()
+    const amount = Math.max(Number(transferForm.amount), 0)
+    if (!amount) return
+    const rows = loadRows(transactionStorageKey)
+    const next = {
+      id: `transfer_${Date.now()}`,
+      date: transferForm.date,
+      description: transferForm.description.trim() || 'Bank transfer',
+      account: transferForm.fromAccount || 'Bank transfer',
+      category: 'Transfer',
+      type: 'Transfer',
+      reference: transferForm.reference.trim() || `TRF-${Date.now()}`,
+      inflow: amount,
+      outflow: amount,
+      amount,
+      balance: 0,
+      status: 'Reconciled',
+      notes: `Transfer to ${transferForm.toAccount}`,
+    }
+    saveRows(transactionStorageKey, [next, ...rows])
+    setTransferForm({ ...initialTransferForm, fromAccount: transferForm.fromAccount, toAccount: transferForm.toAccount })
+    setModal(null)
+    setActiveTab('Transactions')
+    refreshData('Transfer recorded.')
+  }
+  const importStatement = async (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0]
+    if (!file) return
+    const text = await file.text()
+    const [, ...lines] = text.split(/\r?\n/).filter(Boolean)
+    const imported = lines.map((line, index) => {
+      const [dateValue, description, amountValue, typeValue, referenceValue, accountValue] = line.split(',').map(value => value?.trim().replace(/^"|"$/g, ''))
+      const amount = Math.abs(Number((amountValue || '').replace(/[^0-9.-]+/g, ''))) || 0
+      const isExpense = (typeValue || '').toLowerCase().includes('expense') || Number(amountValue) < 0
+      return {
+        id: `statement_${Date.now()}_${index}`,
+        date: dateValue || today,
+        description: description || `Statement row ${index + 1}`,
+        account: accountValue || accountOptions[0] || 'Imported statement',
+        category: isExpense ? 'Statement Expense' : 'Statement Income',
+        type: isExpense ? 'Expense' : 'Income',
+        reference: referenceValue || `STM-${Date.now()}-${index + 1}`,
+        amount,
+        inflow: isExpense ? 0 : amount,
+        outflow: isExpense ? amount : 0,
+        balance: 0,
+        status: 'Pending',
+      }
+    }).filter(row => row.amount > 0)
+    if (imported.length) saveRows(transactionStorageKey, [...imported, ...loadRows(transactionStorageKey)])
+    event.target.value = ''
+    setModal(null)
+    setActiveTab('Reconciliation')
+    refreshData(imported.length ? `${imported.length} statement transaction${imported.length === 1 ? '' : 's'} imported.` : 'No valid statement rows found.')
+  }
+  const reconcileTransaction = (reference: string) => {
+    const rows = loadRows(transactionStorageKey)
+    saveRows(transactionStorageKey, rows.map(row => String(row.reference || row.id) === reference ? { ...row, status: 'Reconciled' } : row))
+    refreshData('Transaction reconciled.')
+  }
+  const exportTransactions = () => {
+    const headers = ['Date', 'Description', 'Account', 'Type', 'Reference', 'Inflow', 'Outflow', 'Balance', 'Status']
+    const csv = [headers, ...visibleTransactions.map(row => [row.rawDate, row.description, row.account, row.type, row.reference, row.inflow, row.outflow, row.balance, row.status])]
+      .map(row => row.map(value => `"${String(value).replaceAll('"', '""')}"`).join(','))
+      .join('\n')
+    const url = window.URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }))
+    const link = document.createElement('a')
+    link.href = url
+    link.download = `banking-transactions-${today}.csv`
+    link.click()
+    window.URL.revokeObjectURL(url)
+  }
 
   return (
     <div className="banking-page" style={{ fontFamily: font }}>
@@ -91,12 +333,13 @@ export default function BankingPage() {
         <div className="banking-header-actions">
           <label className="banking-search">
             <Search size={16} color="#64748b" />
-            <input placeholder="Search accounts, transactions..." />
+            <input value={search} onChange={event => setSearch(event.target.value)} placeholder="Search accounts, transactions..." />
           </label>
-          <button type="button" className="banking-toolbar-button"><Filter size={15} /> Filters</button>
-          <button type="button" className="banking-primary-button"><Plus size={15} /> Add Account <ChevronDown size={13} /></button>
+          <button type="button" className="banking-toolbar-button" onClick={resetFilters}><Filter size={15} /> Current records</button>
+          <button type="button" className="banking-primary-button" onClick={() => openModal('add-account')}><Plus size={15} /> Add Account <ChevronDown size={13} /></button>
         </div>
       </div>
+      {notice && <div className="banking-notice" role="status">{notice}</div>}
 
       <section className="banking-metrics">
         {metrics.map(metric => {
@@ -114,11 +357,15 @@ export default function BankingPage() {
         })}
       </section>
 
-      <nav className="banking-tabs" aria-label="Banking sections">
-        {['Accounts', 'Transactions', 'Reconciliation', 'Payments'].map((tab, index) => <button key={tab} type="button" className={index === 0 ? 'is-active' : undefined}>{tab}</button>)}
+      <nav className="banking-tabs" aria-label="Banking sections" role="tablist">
+        {bankingTabs.map(tab => (
+          <button key={tab} type="button" role="tab" className={activeTab === tab ? 'is-active' : undefined} aria-selected={activeTab === tab} onClick={() => selectTab(tab)}>
+            {tab} <span>{tabCounts[tab]}</span>
+          </button>
+        ))}
       </nav>
 
-      <section className="banking-grid">
+      {(activeTab === 'Accounts' || activeTab === 'Reconciliation') && <section className="banking-grid">
         <div className="banking-card banking-accounts-panel">
           <div className="banking-panel-header">
             <h2>Bank Accounts</h2>
@@ -130,7 +377,7 @@ export default function BankingPage() {
                 <tr>{['Account', 'Account Number', 'Bank', 'Currency', 'Balance', 'Status', 'Actions'].map(column => <th key={column}>{column}</th>)}</tr>
               </thead>
               <tbody>
-                {bankAccounts.map(account => (
+                {visibleAccounts.map(account => (
                   <tr key={account.number}>
                     <td data-label="Account">
                       <span className="bank-logo" style={{ background: account.color }}>{account.bank.slice(0, 2).toUpperCase()}</span>
@@ -141,13 +388,14 @@ export default function BankingPage() {
                     <td data-label="Currency">{data.currency}</td>
                     <td data-label="Balance">{money(account.balance, data.currency)}</td>
                     <td data-label="Status"><StatusPill value={account.status} /></td>
-                    <td data-label="Actions"><button type="button" aria-label={`Actions for ${account.name}`} className="banking-icon-button"><MoreHorizontal size={15} /></button></td>
+                    <td data-label="Actions"><button type="button" aria-label={`Filter transactions for ${account.name}`} onClick={() => { setAccountFilter(account.name); setActiveTab('Transactions') }} className="banking-icon-button"><MoreHorizontal size={15} /></button></td>
                   </tr>
                 ))}
+                {!visibleAccounts.length && <tr><td colSpan={7} className="banking-empty">No bank accounts match your filters.</td></tr>}
               </tbody>
             </table>
           </div>
-          <Link href="/accounting/banking" className="banking-add-link">+ Add Bank Account</Link>
+          <button type="button" className="banking-add-link banking-link-button" onClick={() => openModal('add-account')}>+ Add Bank Account</button>
         </div>
 
         <div className="banking-side-stack">
@@ -171,26 +419,31 @@ export default function BankingPage() {
           <div className="banking-card">
             <h2 className="banking-card-heading">Quick Actions</h2>
             <div className="banking-actions">
-              {quickActions.map(({ label, icon: Icon }) => (
-                <button key={label} type="button">
+              {quickActions.map(({ label, icon: Icon, action }) => (
+                <button key={label} type="button" onClick={() => openModal(action)}>
                   <span><Icon size={15} /></span>
                   {label}
                   <ChevronDown size={15} />
                 </button>
               ))}
             </div>
+            <input ref={fileInputRef} type="file" accept=".csv,text/csv" className="sr-only" onChange={importStatement} />
           </div>
         </div>
-      </section>
+      </section>}
 
-      <section className="banking-grid banking-lower-grid">
+      {(activeTab === 'Transactions' || activeTab === 'Reconciliation' || activeTab === 'Payments' || activeTab === 'Accounts') && <section className="banking-grid banking-lower-grid">
         <div className="banking-card">
           <div className="banking-panel-header">
-            <h2>Recent Transactions</h2>
+            <h2>{activeTab === 'Reconciliation' ? 'Transactions To Reconcile' : activeTab === 'Payments' ? 'Payment Records' : 'Recent Transactions'}</h2>
             <Link href="/accounting/transactions">View All Transactions</Link>
           </div>
           <div className="banking-filter-row">
-            {['All Accounts', 'All Types', 'All Status', 'Current records'].map(label => <button key={label} type="button">{label} <ChevronDown size={14} /></button>)}
+            <SelectFilter label="Account" value={accountFilter} onChange={setAccountFilter} options={['All Accounts', ...accountOptions]} />
+            <SelectFilter label="Type" value={typeFilter} onChange={setTypeFilter} options={['All Types', 'Payment Received', 'Expense', 'Transfer']} />
+            <SelectFilter label="Status" value={statusFilter} onChange={setStatusFilter} options={['All Status', 'Matched', 'Pending']} />
+            <button type="button" onClick={resetFilters}>Current records <ChevronDown size={14} /></button>
+            <button type="button" onClick={exportTransactions}>Export <Download size={14} /></button>
           </div>
           <div className="banking-table-wrap">
             <table className="banking-table banking-transactions-table">
@@ -198,8 +451,8 @@ export default function BankingPage() {
                 <tr>{['Date', 'Description', 'Account', 'Type', 'Reference', 'Inflow', 'Outflow', 'Balance', 'Status'].map(column => <th key={column}>{column}</th>)}</tr>
               </thead>
               <tbody>
-                {bankTransactions.map(transaction => (
-                  <tr key={transaction.reference}>
+                {visibleTransactions.map(transaction => (
+                  <tr key={transaction.id}>
                     <td data-label="Date">{transaction.date}</td>
                     <td data-label="Description"><strong>{transaction.description}</strong></td>
                     <td data-label="Account">{transaction.account}</td>
@@ -208,13 +461,16 @@ export default function BankingPage() {
                     <td data-label="Inflow">{transaction.inflow ? money(transaction.inflow, data.currency) : '-'}</td>
                     <td data-label="Outflow">{transaction.outflow ? money(transaction.outflow, data.currency) : '-'}</td>
                     <td data-label="Balance">{money(transaction.balance, data.currency)}</td>
-                    <td data-label="Status"><StatusPill value={transaction.status} /></td>
+                    <td data-label="Status">
+                      {transaction.status === 'Pending' ? <button type="button" className="banking-reconcile-button" onClick={() => reconcileTransaction(transaction.reference)}>Reconcile</button> : <StatusPill value={transaction.status} />}
+                    </td>
                   </tr>
                 ))}
+                {!visibleTransactions.length && <tr><td colSpan={9} className="banking-empty">No transactions match the selected view.</td></tr>}
               </tbody>
             </table>
           </div>
-          <strong className="banking-showing">Showing {bankTransactions.length ? 1 : 0} to {bankTransactions.length} of {bankTransactions.length} transactions</strong>
+          <strong className="banking-showing">Showing {visibleTransactions.length ? 1 : 0} to {visibleTransactions.length} of {bankTransactions.length} transactions</strong>
         </div>
 
         <div className="banking-card">
@@ -230,16 +486,116 @@ export default function BankingPage() {
                 <em>Connected</em>
               </div>
             ))}
+            {!feeds.length && <p className="banking-feed-empty">No connected bank feeds yet.</p>}
           </div>
-          <Link href="/accounting/banking" className="banking-add-link">View All Feeds</Link>
+          <button type="button" className="banking-add-link banking-link-button" onClick={() => openModal('plaid')}>View All Feeds</button>
         </div>
-      </section>
+      </section>}
+
+      {modal && (
+        <div className="banking-modal-backdrop" role="dialog" aria-modal="true">
+          <div className="banking-modal">
+            <div className="banking-panel-header">
+              <h2>{modalTitle(modal)}</h2>
+              <button type="button" className="banking-icon-button" onClick={() => setModal(null)} aria-label="Close banking action">x</button>
+            </div>
+            {modal === 'add-account' && (
+              <form className="banking-form" onSubmit={submitAccount}>
+                <FormField label="Account name" value={accountForm.name} onChange={value => setAccountForm({ ...accountForm, name: value })} required />
+                <FormField label="Bank" value={accountForm.bank} onChange={value => setAccountForm({ ...accountForm, bank: value })} required />
+                <FormField label="Last 4 digits" value={accountForm.number} onChange={value => setAccountForm({ ...accountForm, number: value })} required />
+                <FormField label="Opening balance" type="number" value={accountForm.balance} onChange={value => setAccountForm({ ...accountForm, balance: value })} required />
+                <SelectFormField label="Type" value={accountForm.type} options={['Checking', 'Savings', 'Credit Card', 'Payroll', 'Cash']} onChange={value => setAccountForm({ ...accountForm, type: value })} />
+                <SelectFormField label="Status" value={accountForm.status} options={['Active', 'Connected', 'Pending', 'Inactive']} onChange={value => setAccountForm({ ...accountForm, status: value })} />
+                <button type="submit" className="banking-primary-button">Save Account</button>
+              </form>
+            )}
+            {modal === 'payment' && (
+              <form className="banking-form" onSubmit={submitPayment}>
+                <FormField label="Date" type="date" value={paymentForm.date} onChange={value => setPaymentForm({ ...paymentForm, date: value })} required />
+                <FormField label="Description" value={paymentForm.description} onChange={value => setPaymentForm({ ...paymentForm, description: value })} required />
+                <SelectFormField label="Account" value={paymentForm.account} options={accountOptions.length ? accountOptions : ['Bank account']} onChange={value => setPaymentForm({ ...paymentForm, account: value })} />
+                <FormField label="Amount" type="number" value={paymentForm.amount} onChange={value => setPaymentForm({ ...paymentForm, amount: value })} required />
+                <FormField label="Reference" value={paymentForm.reference} onChange={value => setPaymentForm({ ...paymentForm, reference: value })} />
+                <FormField label="Category" value={paymentForm.category} onChange={value => setPaymentForm({ ...paymentForm, category: value })} />
+                <button type="submit" className="banking-primary-button">Record Payment</button>
+              </form>
+            )}
+            {modal === 'transfer' && (
+              <form className="banking-form" onSubmit={submitTransfer}>
+                <FormField label="Date" type="date" value={transferForm.date} onChange={value => setTransferForm({ ...transferForm, date: value })} required />
+                <FormField label="Description" value={transferForm.description} onChange={value => setTransferForm({ ...transferForm, description: value })} required />
+                <SelectFormField label="From account" value={transferForm.fromAccount} options={accountOptions.length ? accountOptions : ['Bank account']} onChange={value => setTransferForm({ ...transferForm, fromAccount: value })} />
+                <SelectFormField label="To account" value={transferForm.toAccount} options={accountOptions.length ? accountOptions : ['Bank account']} onChange={value => setTransferForm({ ...transferForm, toAccount: value })} />
+                <FormField label="Amount" type="number" value={transferForm.amount} onChange={value => setTransferForm({ ...transferForm, amount: value })} required />
+                <FormField label="Reference" value={transferForm.reference} onChange={value => setTransferForm({ ...transferForm, reference: value })} />
+                <button type="submit" className="banking-primary-button">Record Transfer</button>
+              </form>
+            )}
+            {modal === 'plaid' && (
+              <div className="banking-modal-copy">
+                <p>Bank feeds are connected from the same bank account records used across Accounting. Add or update accounts here, then feeds and balances refresh everywhere.</p>
+                <button type="button" className="banking-primary-button" onClick={() => setModal('add-account')}>Connect Bank Account</button>
+              </div>
+            )}
+            {modal === 'statement' && (
+              <div className="banking-modal-copy">
+                <p>Upload a CSV with columns: date, description, amount, type, reference, account. Imported rows are added as pending transactions for reconciliation.</p>
+                <button type="button" className="banking-primary-button" onClick={() => fileInputRef.current?.click()}>Choose CSV</button>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   )
 }
 
 function Legend({ color, label }: { color: string; label: string }) {
   return <span className="banking-legend-item"><span style={{ background: color }} />{label}</span>
+}
+
+function modalTitle(action: Exclude<BankingAction, null>) {
+  const titles: Record<Exclude<BankingAction, null>, string> = {
+    'add-account': 'Add Bank Account',
+    payment: 'Make a Payment',
+    plaid: 'Bank Feed Setup',
+    transfer: 'Transfer Records',
+    statement: 'Upload Bank Statement',
+  }
+  return titles[action]
+}
+
+function SelectFilter({ label, value, options, onChange }: { label: string; value: string; options: string[]; onChange: (value: string) => void }) {
+  return (
+    <label className="banking-select-filter">
+      <span className="sr-only">{label}</span>
+      <select value={value} onChange={event => onChange(event.target.value)}>
+        {options.map(option => <option key={option} value={option}>{option}</option>)}
+      </select>
+      <ChevronDown size={14} />
+    </label>
+  )
+}
+
+function FormField({ label, value, onChange, type = 'text', required = false }: { label: string; value: string; onChange: (value: string) => void; type?: string; required?: boolean }) {
+  return (
+    <label className="banking-field">
+      <span>{label}</span>
+      <input type={type} value={value} required={required} onChange={event => onChange(event.target.value)} />
+    </label>
+  )
+}
+
+function SelectFormField({ label, value, options, onChange }: { label: string; value: string; options: string[]; onChange: (value: string) => void }) {
+  return (
+    <label className="banking-field">
+      <span>{label}</span>
+      <select value={value} onChange={event => onChange(event.target.value)}>
+        {options.map(option => <option key={option} value={option}>{option}</option>)}
+      </select>
+    </label>
+  )
 }
 
 const bankingCss = `
@@ -252,6 +608,7 @@ const bankingCss = `
 .banking-search input { flex: 1; min-width: 0; border: 0; outline: 0; background: transparent; font-size: 12.5px; color: #0f172a; }
 .banking-toolbar-button, .banking-primary-button, .banking-filter-row button { min-height: 38px; border-radius: 8px; border: 1px solid #e8edf4; background: #fff; color: #0f172a; display: flex; align-items: center; gap: 8px; padding: 0 12px; font-size: 12.5px; font-weight: 850; cursor: pointer; }
 .banking-primary-button { border-color: #16a34a; background: #16a34a; color: #fff; font-weight: 950; }
+.banking-notice { border: 1px solid #bbf7d0; background: #f0fdf4; color: #15803d; border-radius: 8px; padding: 10px 12px; font-size: 12.5px; font-weight: 900; margin: -10px 0 18px; }
 .banking-metrics { display: grid; grid-template-columns: repeat(5, minmax(170px, 1fr)); gap: 18px; margin-bottom: 18px; }
 .banking-card { background: #fff; border: 1px solid #e8edf4; border-radius: 8px; padding: 18px; box-shadow: 0 1px 2px rgba(15, 23, 42, .03); }
 .banking-metric-card { min-height: 100px; display: flex; align-items: center; }
@@ -260,8 +617,10 @@ const bankingCss = `
 .banking-card-value { display: block; color: #0f172a; font-size: 23px; margin-top: 8px; white-space: nowrap; }
 .banking-card-detail { display: block; color: #334155; font-size: 11.5px; font-weight: 900; margin-top: 8px; }
 .banking-tabs { display: flex; align-items: center; gap: 32px; border-bottom: 1px solid #e8edf4; padding-left: 14px; overflow-x: auto; }
-.banking-tabs button { border: 0; border-bottom: 2px solid transparent; background: transparent; color: #0f172a; min-height: 48px; padding: 0; font-size: 12.5px; font-weight: 900; cursor: pointer; white-space: nowrap; }
+.banking-tabs button { border: 0; border-bottom: 2px solid transparent; background: transparent; color: #0f172a; min-height: 48px; padding: 0; font-size: 12.5px; font-weight: 900; cursor: pointer; white-space: nowrap; display: inline-flex; align-items: center; gap: 7px; }
 .banking-tabs button.is-active { color: #16a34a; border-bottom-color: #16a34a; }
+.banking-tabs span { min-width: 21px; min-height: 21px; border-radius: 999px; background: #f1f5f9; color: #475569; display: grid; place-items: center; font-size: 11px; }
+.banking-tabs button.is-active span { background: #dcfce7; color: #15803d; }
 .banking-grid { display: grid; grid-template-columns: minmax(0, 1fr) 420px; gap: 16px; margin-top: 0; }
 .banking-lower-grid { margin-top: 16px; }
 .banking-side-stack { display: grid; gap: 16px; }
@@ -283,6 +642,7 @@ const bankingCss = `
 .banking-status-pill { display: inline-flex; min-height: 24px; align-items: center; border-radius: 7px; background: #dcfce7; color: #15803d; padding: 0 9px; font-size: 11.5px; font-weight: 900; }
 .banking-icon-button { width: 32px; height: 32px; border: 1px solid #e8edf4; border-radius: 7px; background: #fff; color: #0f172a; display: grid; place-items: center; cursor: pointer; }
 .banking-add-link { display: block; text-align: center; margin-top: 14px; color: #16a34a; }
+.banking-link-button { width: 100%; border: 0; background: transparent; cursor: pointer; font: inherit; }
 .banking-legend { display: flex; justify-content: center; gap: 18px; color: #334155; font-size: 12px; font-weight: 850; }
 .banking-legend-item { display: inline-flex; align-items: center; gap: 8px; }
 .banking-legend-item span { width: 14px; height: 6px; border-radius: 999px; }
@@ -293,11 +653,26 @@ const bankingCss = `
 .banking-actions button { border: 0; background: #fff; color: #0f172a; display: grid; grid-template-columns: 28px minmax(0, 1fr) 16px; align-items: center; gap: 10px; min-height: 38px; font-size: 12.5px; font-weight: 900; cursor: pointer; text-align: left; }
 .banking-actions button span { width: 28px; height: 28px; border-radius: 7px; background: #eff6ff; color: #2563eb; display: grid; place-items: center; }
 .banking-filter-row { display: flex; flex-wrap: wrap; gap: 12px; margin-bottom: 14px; }
+.banking-select-filter { min-height: 38px; border-radius: 8px; border: 1px solid #e8edf4; background: #fff; color: #0f172a; display: flex; align-items: center; gap: 8px; padding: 0 12px; font-size: 12.5px; font-weight: 850; }
+.banking-select-filter select { appearance: none; border: 0; outline: 0; background: transparent; color: #0f172a; font: inherit; font-weight: 850; cursor: pointer; min-width: 120px; }
 .banking-showing { display: block; color: #0f172a; font-size: 12.5px; margin-top: 16px; }
+.banking-empty { padding: 26px !important; text-align: center; color: #64748b !important; font-weight: 850; display: table-cell !important; }
+.banking-reconcile-button { min-height: 28px; border: 0; border-radius: 7px; background: #dcfce7; color: #15803d; padding: 0 10px; font-size: 11.5px; font-weight: 900; cursor: pointer; }
 .banking-feeds { display: grid; gap: 18px; margin-top: 22px; }
 .banking-feeds div { display: grid; grid-template-columns: 14px minmax(0, 1fr) auto; align-items: center; gap: 12px; font-size: 13px; }
 .feed-dot { width: 9px; height: 9px; border-radius: 999px; }
 .banking-feeds em { color: #16a34a; font-style: normal; font-size: 12px; font-weight: 900; }
+.banking-feed-empty { margin: 0; color: #64748b; font-size: 12.5px; font-weight: 850; }
+.banking-modal-backdrop { position: fixed; inset: 0; z-index: 80; background: rgba(15, 23, 42, .36); display: grid; place-items: center; padding: 20px; }
+.banking-modal { width: min(560px, 100%); max-height: min(760px, calc(100dvh - 40px)); overflow: auto; background: #fff; border-radius: 12px; border: 1px solid #e8edf4; box-shadow: 0 24px 80px rgba(15, 23, 42, .24); padding: 20px; }
+.banking-form { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
+.banking-form .banking-primary-button { grid-column: 1 / -1; justify-content: center; min-height: 44px; }
+.banking-field { display: grid; gap: 7px; color: #0f172a; font-size: 12px; font-weight: 900; }
+.banking-field input, .banking-field select { min-height: 40px; border-radius: 8px; border: 1px solid #e8edf4; background: #fff; color: #0f172a; padding: 0 12px; font: inherit; outline: 0; }
+.banking-field input:focus-visible, .banking-field select:focus-visible, .banking-select-filter select:focus-visible, .banking-search input:focus-visible { box-shadow: 0 0 0 3px rgba(22, 163, 74, .18); }
+.banking-modal-copy { display: grid; gap: 16px; color: #334155; font-size: 13px; line-height: 1.55; }
+.banking-modal-copy p { margin: 0; }
+.sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
 @media (max-width: 1280px) {
   .banking-page { padding: 22px; }
   .banking-header { flex-direction: column; }
@@ -325,5 +700,7 @@ const bankingCss = `
   .banking-table td::before { content: attr(data-label); color: #64748b; font-size: 11px; font-weight: 900; text-transform: uppercase; }
   .bank-logo { display: none; }
   .banking-filter-row { display: grid; grid-template-columns: 1fr; }
+  .banking-select-filter { width: 100%; justify-content: space-between; }
+  .banking-form { grid-template-columns: 1fr; }
 }
 `
