@@ -189,6 +189,10 @@ export default function ProjectManagementModule() {
         </header>
 
         {filtersOpen && (
+          <div className="pm-filter-backdrop" aria-hidden="true" />
+        )}
+
+        {filtersOpen && (
           <section className="pm-card pm-filter-panel" aria-label="Project filters" ref={filterPanelRef}>
             <Field label="Date from"><input type="date" value={filters.dateFrom} onChange={event => setFilters(prev => ({ ...prev, dateFrom: event.target.value }))} /></Field>
             <Field label="Date to"><input type="date" value={filters.dateTo} onChange={event => setFilters(prev => ({ ...prev, dateTo: event.target.value }))} /></Field>
@@ -557,6 +561,12 @@ const projectManagementCss = `
   .pm-date-control { order: 2; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
   .pm-filter-control { order: 3; }
   .pm-bell-control { display: none; }
+  .pm-filter-backdrop {
+    position: fixed;
+    inset: 0;
+    z-index: 850;
+    background: rgba(15, 23, 42, .34);
+  }
   .pm-new-project-button {
     position: fixed;
     right: 16px;
@@ -602,15 +612,15 @@ const projectManagementCss = `
     padding: 0;
     font-size: 13px;
   }
-  .pm-tabs button.active { background: transparent; color: #16a34a; border-bottom-color: #16a34a; }
+  .pm-tabs button.active { background: transparent; color: #111827; border-bottom-color: #111827; }
   .pm-filter-panel {
     position: fixed;
     left: 0;
     right: 0;
     bottom: 0;
-    z-index: 95;
+    z-index: 860;
     grid-template-columns: 1fr;
-    max-height: 82dvh;
+    max-height: min(82dvh, calc(100dvh - 88px));
     overflow: auto;
     border-radius: 20px 20px 0 0;
     padding: 18px;
