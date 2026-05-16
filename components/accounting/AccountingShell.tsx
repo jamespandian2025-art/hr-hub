@@ -188,9 +188,9 @@ export default function AccountingShell({ children }: { children: React.ReactNod
   const notificationBadgeCount = accountingNotifications.length
 
   return (
-    <div className="accounting-shell" style={{ minHeight: '100vh', background: '#f7f9fc', display: 'grid', gridTemplateColumns: '250px minmax(0, 1fr)', fontFamily: font, color: '#111827' }}>
+    <div className="accounting-shell" style={{ minHeight: '100vh', height: '100vh', overflow: 'hidden', background: '#f7f9fc', display: 'grid', gridTemplateColumns: '250px minmax(0, 1fr)', fontFamily: font, color: '#111827' }}>
       <style>{accountingShellCss}</style>
-      <aside className="accounting-sidebar" style={{ minHeight: '100vh', position: 'sticky', top: 0, alignSelf: 'start', background: '#000', color: '#ededed', padding: '18px 10px', display: 'flex', flexDirection: 'column', gap: 14 }}>
+      <aside className="accounting-sidebar" style={{ minHeight: '100vh', height: '100vh', position: 'sticky', top: 0, alignSelf: 'start', background: '#000', color: '#ededed', padding: '18px 10px', display: 'flex', flexDirection: 'column', gap: 14 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '0 6px 4px' }}>
           <span style={{ width: 36, height: 36, borderRadius: 10, background: '#ededed', color: '#000', display: 'grid', placeItems: 'center', fontWeight: 700, fontSize: 16 }}>W</span>
           <span>
@@ -324,7 +324,7 @@ export default function AccountingShell({ children }: { children: React.ReactNod
             </div>
           </div>
         </header>
-        <main>{children}</main>
+        <main className="accounting-scroll-content">{children}</main>
       </div>
     </div>
   )
@@ -563,8 +563,13 @@ const notificationFooterStyle: React.CSSProperties = {
 
 const accountingShellCss = `
 .accounting-shell {
+  height: 100vh;
+  height: 100dvh;
   min-height: 100vh;
-  align-items: start;
+  max-height: 100vh;
+  max-height: 100dvh;
+  align-items: stretch;
+  overflow: hidden;
 }
 .accounting-sidebar {
   position: sticky !important;
@@ -584,12 +589,27 @@ const accountingShellCss = `
 }
 .accounting-content-column {
   min-width: 0;
+  min-height: 0;
+  height: 100vh;
+  height: 100dvh;
+  display: grid;
+  grid-template-rows: 76px minmax(0, 1fr);
+  overflow: hidden;
 }
 .accounting-sticky-header {
   position: sticky !important;
   top: 0 !important;
   z-index: 80 !important;
   width: 100%;
+  grid-row: 1;
+}
+.accounting-scroll-content {
+  min-height: 0;
+  grid-row: 2;
+  overflow-y: auto;
+  overflow-x: hidden;
+  overscroll-behavior: contain;
+  background: #ffffff;
 }
 .accounting-nav-row {
   min-height: 36px;
@@ -627,9 +647,17 @@ const accountingShellCss = `
   color: #ededed;
 }
 @media (max-width: 900px) {
+  .accounting-shell {
+    display: grid !important;
+    grid-template-columns: 1fr !important;
+    height: auto;
+    max-height: none;
+    overflow: visible;
+  }
+
   .accounting-sidebar {
-    position: sticky !important;
-    top: 0 !important;
+    position: relative !important;
+    top: auto !important;
     height: auto;
     min-height: auto !important;
     max-height: none;
@@ -641,6 +669,17 @@ const accountingShellCss = `
     position: sticky !important;
     top: 0 !important;
     z-index: 80 !important;
+  }
+
+  .accounting-content-column {
+    height: auto;
+    min-height: 100vh;
+    display: block;
+    overflow: visible;
+  }
+
+  .accounting-scroll-content {
+    overflow: visible;
   }
 }
 `
