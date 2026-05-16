@@ -111,4 +111,6 @@ export type ProjectFilters = {
   priority: string
   assignee: string
   department: string
+  dateFrom: string
+  dateTo: string
 }

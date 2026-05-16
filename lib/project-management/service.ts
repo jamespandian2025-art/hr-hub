@@ -1,7 +1,7 @@
 'use client'
 
 import { projectManagementSeed } from './mock-data'
-import type { ProjectManagementState, ProjectRecord, ProjectTask, TaskStatus } from './types'
+import type { DocumentType, ProjectDocument, ProjectManagementState, ProjectRecord, ProjectTask, ProjectTimeLog, TaskPriority, TaskStatus } from './types'
 
 const storageKey = 'wiseflow-project-management-state'
 const legacyProjectsKey = 'flowsys-projects'
@@ -118,4 +118,52 @@ export function addTaskRecord(state: ProjectManagementState, projectId: string):
     progress: 0,
   }
   return { ...state, tasks: [task, ...state.tasks] }
+}
+
+export function createTaskRecord(state: ProjectManagementState, draft: { projectId: string; title: string; description: string; assigneeId: string; priority: TaskPriority; dueDate: string }): ProjectManagementState {
+  const task: ProjectTask = {
+    id: `tsk-${Date.now()}`,
+    projectId: draft.projectId,
+    assigneeId: draft.assigneeId || state.members[0]?.id || 'user-ec',
+    title: draft.title,
+    description: draft.description,
+    priority: draft.priority,
+    status: 'To Do',
+    dueDate: draft.dueDate,
+    dependencies: [],
+    labels: ['Assigned'],
+    attachments: 0,
+    comments: 0,
+    progress: 0,
+  }
+  return { ...state, tasks: [task, ...state.tasks] }
+}
+
+export function createTimeLogRecord(state: ProjectManagementState, draft: { projectId: string; taskId: string; employeeId: string; hours: number; date: string; billable: boolean }): ProjectManagementState {
+  const log: ProjectTimeLog = {
+    id: `log-${Date.now()}`,
+    taskId: draft.taskId,
+    employeeId: draft.employeeId || state.members[0]?.id || 'user-ec',
+    projectId: draft.projectId,
+    hours: draft.hours,
+    date: draft.date,
+    billable: draft.billable,
+    approved: false,
+  }
+  return { ...state, timeLogs: [log, ...state.timeLogs] }
+}
+
+export function createDocumentRecord(state: ProjectManagementState, draft: { projectId: string; name: string; type: DocumentType; folder: string; size: string; ownerId: string }): ProjectManagementState {
+  const document: ProjectDocument = {
+    id: `doc-${Date.now()}`,
+    projectId: draft.projectId,
+    name: draft.name,
+    type: draft.type,
+    folder: draft.folder || 'Project Files',
+    size: draft.size || '0 KB',
+    version: 'v1',
+    updatedAt: new Date().toISOString().slice(0, 10),
+    ownerId: draft.ownerId || state.members[0]?.id || 'user-ec',
+  }
+  return { ...state, documents: [document, ...state.documents] }
 }

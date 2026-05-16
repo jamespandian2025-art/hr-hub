@@ -20,13 +20,14 @@ import {
 } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import { budgetSummary, formatDate, formatMoney, initials, monthlyStatusTrend, progressSegments, projectStats, tasksByStatus, workloadByMember } from '@/lib/project-management/metrics'
-import type { ProjectManagementState, ProjectRecord, ProjectTask, TaskStatus } from '@/lib/project-management/types'
+import type { DocumentType, ProjectManagementState, ProjectRecord, ProjectTask, TaskPriority, TaskStatus } from '@/lib/project-management/types'
 import { useProjectManagement } from './useProjectManagement'
 
 const tabs = ['Overview', 'Projects', 'Tasks', 'Kanban', 'Timeline', 'Resources', 'Time Logs', 'Budget', 'Documents']
 const detailTabs = ['Overview', 'Tasks', 'Kanban', 'Timeline', 'Files', 'Budget', 'Team', 'Activity Logs']
 const statusOptions = ['All', 'Planning', 'Active', 'In Progress', 'On Hold', 'Completed', 'Cancelled']
 const priorityOptions = ['All', 'Low', 'Medium', 'High', 'Critical']
+const documentTypes: DocumentType[] = ['PDF', 'DOCX', 'XLSX', 'Image', 'CAD']
 const colors = {
   green: '#16a34a',
   blue: '#2f80ed',
@@ -51,22 +52,61 @@ function defaultProjectDraft(clientId: string) {
   }
 }
 
+function defaultTaskDraft(state: ProjectManagementState) {
+  return {
+    projectId: state.projects[0]?.id || '',
+    title: '',
+    description: '',
+    assigneeId: state.members[0]?.id || '',
+    priority: 'Medium' as TaskPriority,
+    dueDate: new Date(Date.now() + 7 * 86400000).toISOString().slice(0, 10),
+  }
+}
+
+function defaultTimeDraft(state: ProjectManagementState) {
+  return {
+    projectId: state.projects[0]?.id || '',
+    taskId: state.tasks[0]?.id || '',
+    employeeId: state.members[0]?.id || '',
+    hours: '1',
+    date: new Date().toISOString().slice(0, 10),
+    billable: true,
+  }
+}
+
+function defaultDocumentDraft(state: ProjectManagementState) {
+  return {
+    projectId: state.projects[0]?.id || '',
+    name: '',
+    type: 'PDF' as DocumentType,
+    folder: 'Project Files',
+    size: '0 KB',
+    ownerId: state.members[0]?.id || '',
+  }
+}
+
 export default function ProjectManagementModule() {
   const store = useProjectManagement()
-  const { state, filters, setFilters, filteredProjects } = store
+  const { state, filters, setFilters, filteredProjects, filteredState } = store
   const [showCreate, setShowCreate] = useState(false)
+  const [filtersOpen, setFiltersOpen] = useState(false)
+  const [actionModal, setActionModal] = useState<'task' | 'time' | 'document' | null>(null)
   const [draggedTask, setDraggedTask] = useState<string | null>(null)
   const [draft, setDraft] = useState(() => defaultProjectDraft(state.clients[0]?.id || ''))
-  const stats = projectStats(state)
-  const budget = budgetSummary(state)
+  const [taskDraft, setTaskDraft] = useState(() => defaultTaskDraft(state))
+  const [timeDraft, setTimeDraft] = useState(() => defaultTimeDraft(state))
+  const [documentDraft, setDocumentDraft] = useState(() => defaultDocumentDraft(state))
+  const stats = projectStats(filteredState)
+  const budget = budgetSummary(filteredState)
   const departments = useMemo(() => ['All', ...Array.from(new Set(state.projects.map(project => project.department)))], [state.projects])
+  const dateRangeLabel = filters.dateFrom || filters.dateTo ? `${filters.dateFrom || 'Start'} - ${filters.dateTo || 'End'}` : 'All project dates'
 
   const kpis = [
-    { title: 'Total Projects', value: String(stats.totalProjects), change: '+14.6%', comparison: 'vs prior period', icon: BriefcaseBusiness, tone: colors.green },
-    { title: 'Completed Projects', value: String(stats.completedProjects), change: '+23.8%', comparison: 'vs prior period', icon: CheckCircle2, tone: colors.blue },
-    { title: 'In Progress Projects', value: String(stats.inProgressProjects), change: '+5.3%', comparison: 'vs prior period', icon: Clock3, tone: colors.purple },
-    { title: 'On Hold Projects', value: String(stats.onHoldProjects), change: '-7.1%', comparison: 'vs prior period', icon: Timer, tone: colors.orange, negative: true },
-    { title: 'Total Budget', value: formatMoney(stats.totalBudget), change: '+12.4%', comparison: 'vs prior period', icon: WalletCards, tone: '#14b8a6' },
+    { title: 'Total Projects', value: String(stats.totalProjects), change: `${filteredState.tasks.length} tasks`, comparison: 'in view', icon: BriefcaseBusiness, tone: colors.green },
+    { title: 'Completed Projects', value: String(stats.completedProjects), change: `${Math.round((stats.completedProjects / Math.max(stats.totalProjects, 1)) * 100)}%`, comparison: 'complete', icon: CheckCircle2, tone: colors.blue },
+    { title: 'In Progress Projects', value: String(stats.inProgressProjects), change: `${filteredState.milestones.length} milestones`, comparison: 'tracked', icon: Clock3, tone: colors.purple },
+    { title: 'On Hold Projects', value: String(stats.onHoldProjects), change: `${stats.onHoldProjects}`, comparison: 'needs review', icon: Timer, tone: colors.orange, negative: stats.onHoldProjects > 0 },
+    { title: 'Total Budget', value: formatMoney(stats.totalBudget), change: formatMoney(budget.remaining), comparison: 'remaining', icon: WalletCards, tone: '#14b8a6' },
   ]
 
   const createProject = (event: FormEvent) => {
@@ -81,6 +121,30 @@ export default function ProjectManagementModule() {
     })
     setDraft(prev => ({ ...prev, name: '', description: '', budget: '0' }))
     setShowCreate(false)
+  }
+
+  const submitTask = (event: FormEvent) => {
+    event.preventDefault()
+    store.createTask({ ...taskDraft, title: taskDraft.title.trim() || 'New task' })
+    setTaskDraft(defaultTaskDraft(state))
+    setActionModal(null)
+    store.setActiveTab('Tasks')
+  }
+
+  const submitTime = (event: FormEvent) => {
+    event.preventDefault()
+    store.createTimeLog({ ...timeDraft, hours: Number(timeDraft.hours) || 0 })
+    setTimeDraft(defaultTimeDraft(state))
+    setActionModal(null)
+    store.setActiveTab('Time Logs')
+  }
+
+  const submitDocument = (event: FormEvent) => {
+    event.preventDefault()
+    store.createDocument({ ...documentDraft, name: documentDraft.name.trim() || 'Project document' })
+    setDocumentDraft(defaultDocumentDraft(state))
+    setActionModal(null)
+    store.setActiveTab('Documents')
   }
 
   const onDropTask = (status: TaskStatus) => {
@@ -99,13 +163,24 @@ export default function ProjectManagementModule() {
             <p>Plan, track and deliver projects successfully.</p>
           </div>
           <div className="pm-header-actions">
-            <button type="button" className="pm-control"><CalendarDays size={15} /> May 1 - May 31, 2026 <ChevronDown size={13} /></button>
+            <button type="button" className="pm-control" onClick={() => setFiltersOpen(open => !open)}><CalendarDays size={15} /> {dateRangeLabel} <ChevronDown size={13} /></button>
             <label className="pm-search"><Search size={16} /><input value={filters.query} onChange={event => setFilters(prev => ({ ...prev, query: event.target.value }))} placeholder="Search projects, tasks, documents..." /></label>
             <button type="button" className="pm-control"><Bell size={15} /></button>
-            <button type="button" className="pm-control"><Filter size={15} /> Filters</button>
+            <button type="button" className="pm-control" onClick={() => setFiltersOpen(open => !open)}><Filter size={15} /> Filters</button>
             <button type="button" className="pm-primary" onClick={() => setShowCreate(true)}><Plus size={16} /> New Project <ChevronDown size={13} /></button>
           </div>
         </header>
+
+        {filtersOpen && (
+          <section className="pm-card pm-filter-panel" aria-label="Project filters">
+            <Field label="Date from"><input type="date" value={filters.dateFrom} onChange={event => setFilters(prev => ({ ...prev, dateFrom: event.target.value }))} /></Field>
+            <Field label="Date to"><input type="date" value={filters.dateTo} onChange={event => setFilters(prev => ({ ...prev, dateTo: event.target.value }))} /></Field>
+            <Field label="Status"><Select value={filters.status} options={statusOptions} onChange={value => setFilters(prev => ({ ...prev, status: value }))} /></Field>
+            <Field label="Priority"><Select value={filters.priority} options={priorityOptions} onChange={value => setFilters(prev => ({ ...prev, priority: value }))} /></Field>
+            <Field label="Department"><Select value={filters.department} options={departments} onChange={value => setFilters(prev => ({ ...prev, department: value }))} /></Field>
+            <div className="pm-form-actions"><button type="button" className="pm-control" onClick={() => setFilters(prev => ({ ...prev, status: 'All', priority: 'All', assignee: 'All', department: 'All', dateFrom: '', dateTo: '' }))}>Reset Filters</button></div>
+          </section>
+        )}
 
         <section className="pm-kpis">
           {kpis.map(kpi => <KpiCard key={kpi.title} {...kpi} />)}
@@ -132,18 +207,58 @@ export default function ProjectManagementModule() {
           <ProjectDetails state={state} project={store.selectedProject} active={store.detailTab} onTab={store.setDetailTab} onClose={() => store.setSelectedProjectId(null)} onAddTask={store.addTask} onDrag={setDraggedTask} onDrop={onDropTask} />
         ) : (
           <>
-            {store.activeTab === 'Overview' && <Overview state={state} projects={filteredProjects} budget={budget} onOpen={store.setSelectedProjectId} />}
+            {store.activeTab === 'Overview' && <Overview state={filteredState} projects={filteredProjects} budget={budget} onOpen={store.setSelectedProjectId} onAction={setActionModal} onNewProject={() => setShowCreate(true)} />}
             {store.activeTab === 'Projects' && <ProjectsTab state={state} projects={filteredProjects} filters={filters} departments={departments} onFilters={setFilters} onOpen={store.setSelectedProjectId} />}
-            {store.activeTab === 'Tasks' && <TasksTab state={state} />}
-            {store.activeTab === 'Kanban' && <Kanban state={state} onDrag={setDraggedTask} onDrop={onDropTask} />}
-            {store.activeTab === 'Timeline' && <Timeline state={state} />}
-            {store.activeTab === 'Resources' && <Resources state={state} />}
-            {store.activeTab === 'Time Logs' && <TimeLogs state={state} />}
-            {store.activeTab === 'Budget' && <BudgetTab state={state} budget={budget} />}
-            {store.activeTab === 'Documents' && <Documents state={state} />}
+            {store.activeTab === 'Tasks' && <TasksTab state={filteredState} />}
+            {store.activeTab === 'Kanban' && <Kanban state={filteredState} onDrag={setDraggedTask} onDrop={onDropTask} />}
+            {store.activeTab === 'Timeline' && <Timeline state={filteredState} />}
+            {store.activeTab === 'Resources' && <Resources state={filteredState} />}
+            {store.activeTab === 'Time Logs' && <TimeLogs state={filteredState} />}
+            {store.activeTab === 'Budget' && <BudgetTab state={filteredState} budget={budget} />}
+            {store.activeTab === 'Documents' && <Documents state={filteredState} />}
           </>
         )}
       </div>
+
+      {actionModal && (
+        <div className="pm-modal-backdrop" role="dialog" aria-modal="true">
+          <div className="pm-card pm-modal">
+            <div className="pm-section-header"><h2>{actionModal === 'task' ? 'Assign Task' : actionModal === 'time' ? 'Log Time' : 'Upload Document'}</h2><button type="button" onClick={() => setActionModal(null)}>Close</button></div>
+            {actionModal === 'task' && (
+              <form className="pm-form pm-modal-form" onSubmit={submitTask}>
+                <Field label="Project"><select value={taskDraft.projectId} onChange={event => setTaskDraft(prev => ({ ...prev, projectId: event.target.value }))}>{state.projects.map(project => <option key={project.id} value={project.id}>{project.name}</option>)}</select></Field>
+                <Field label="Assignee"><select value={taskDraft.assigneeId} onChange={event => setTaskDraft(prev => ({ ...prev, assigneeId: event.target.value }))}>{state.members.map(member => <option key={member.id} value={member.id}>{member.name}</option>)}</select></Field>
+                <Field label="Priority"><select value={taskDraft.priority} onChange={event => setTaskDraft(prev => ({ ...prev, priority: event.target.value as TaskPriority }))}>{priorityOptions.filter(option => option !== 'All').map(option => <option key={option} value={option}>{option}</option>)}</select></Field>
+                <Field label="Due date"><input type="date" value={taskDraft.dueDate} onChange={event => setTaskDraft(prev => ({ ...prev, dueDate: event.target.value }))} /></Field>
+                <Field label="Task title"><input value={taskDraft.title} onChange={event => setTaskDraft(prev => ({ ...prev, title: event.target.value }))} required /></Field>
+                <label className="pm-field pm-wide"><span>Description</span><textarea value={taskDraft.description} onChange={event => setTaskDraft(prev => ({ ...prev, description: event.target.value }))} rows={3} /></label>
+                <div className="pm-form-actions"><button type="submit" className="pm-primary">Assign Task</button></div>
+              </form>
+            )}
+            {actionModal === 'time' && (
+              <form className="pm-form pm-modal-form" onSubmit={submitTime}>
+                <Field label="Project"><select value={timeDraft.projectId} onChange={event => setTimeDraft(prev => ({ ...prev, projectId: event.target.value }))}>{state.projects.map(project => <option key={project.id} value={project.id}>{project.name}</option>)}</select></Field>
+                <Field label="Task"><select value={timeDraft.taskId} onChange={event => setTimeDraft(prev => ({ ...prev, taskId: event.target.value }))}>{state.tasks.map(task => <option key={task.id} value={task.id}>{task.title}</option>)}</select></Field>
+                <Field label="Employee"><select value={timeDraft.employeeId} onChange={event => setTimeDraft(prev => ({ ...prev, employeeId: event.target.value }))}>{state.members.map(member => <option key={member.id} value={member.id}>{member.name}</option>)}</select></Field>
+                <Field label="Hours"><input type="number" min="0" step="0.25" value={timeDraft.hours} onChange={event => setTimeDraft(prev => ({ ...prev, hours: event.target.value }))} /></Field>
+                <Field label="Date"><input type="date" value={timeDraft.date} onChange={event => setTimeDraft(prev => ({ ...prev, date: event.target.value }))} /></Field>
+                <label className="pm-check"><input type="checkbox" checked={timeDraft.billable} onChange={event => setTimeDraft(prev => ({ ...prev, billable: event.target.checked }))} /> Billable</label>
+                <div className="pm-form-actions"><button type="submit" className="pm-primary">Log Time</button></div>
+              </form>
+            )}
+            {actionModal === 'document' && (
+              <form className="pm-form pm-modal-form" onSubmit={submitDocument}>
+                <Field label="Project"><select value={documentDraft.projectId} onChange={event => setDocumentDraft(prev => ({ ...prev, projectId: event.target.value }))}>{state.projects.map(project => <option key={project.id} value={project.id}>{project.name}</option>)}</select></Field>
+                <Field label="Document name"><input value={documentDraft.name} onChange={event => setDocumentDraft(prev => ({ ...prev, name: event.target.value }))} required /></Field>
+                <Field label="Type"><select value={documentDraft.type} onChange={event => setDocumentDraft(prev => ({ ...prev, type: event.target.value as DocumentType }))}>{documentTypes.map(type => <option key={type} value={type}>{type}</option>)}</select></Field>
+                <Field label="Folder"><input value={documentDraft.folder} onChange={event => setDocumentDraft(prev => ({ ...prev, folder: event.target.value }))} /></Field>
+                <Field label="Size"><input value={documentDraft.size} onChange={event => setDocumentDraft(prev => ({ ...prev, size: event.target.value }))} /></Field>
+                <div className="pm-form-actions"><button type="submit" className="pm-primary">Upload Document</button></div>
+              </form>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   )
 }
@@ -160,22 +275,22 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
   return <label className="pm-field" htmlFor={fieldId(label)}><span>{label}</span>{children}</label>
 }
 
-function Overview({ state, projects, budget, onOpen }: { state: ProjectManagementState; projects: ProjectRecord[]; budget: ReturnType<typeof budgetSummary>; onOpen: (id: string) => void }) {
+function Overview({ state, projects, budget, onOpen, onAction, onNewProject }: { state: ProjectManagementState; projects: ProjectRecord[]; budget: ReturnType<typeof budgetSummary>; onOpen: (id: string) => void; onAction: (action: 'task' | 'time' | 'document') => void; onNewProject: () => void }) {
   const segments = progressSegments(state)
   const trend = monthlyStatusTrend(state)
   return (
     <section className="pm-overview-grid">
-      <div className="pm-card pm-progress"><SectionTitle title="Project Progress Overview" /><Donut data={segments} center={String(state.projects.length)} sub="Total Projects" /></div>
+      <div className="pm-card pm-progress-card"><SectionTitle title="Project Progress Overview" /><Donut data={segments} center={String(state.projects.length)} sub="Total Projects" /></div>
       <div className="pm-card pm-trend"><SectionTitle title="Projects by Status" action="By Month" /><LineChart data={trend} /></div>
       <div className="pm-card pm-milestones"><SectionTitle title="Upcoming Milestones" action="View All" /><MilestoneList state={state} /></div>
       <div className="pm-card pm-recent"><SectionTitle title="Recent Projects" action="View All" /><ProjectTable state={state} projects={projects.slice(0, 5)} onOpen={onOpen} /></div>
       <div className="pm-card"><SectionTitle title="Project Budget Summary" action="View Report" /><BudgetSummary budget={budget} /></div>
-      <div className="pm-card"><SectionTitle title="Quick Actions" /><QuickActions /></div>
+      <div className="pm-card"><SectionTitle title="Quick Actions" /><QuickActions onNewProject={onNewProject} onAction={onAction} /></div>
     </section>
   )
 }
 
-function ProjectsTab({ state, projects, filters, departments, onFilters, onOpen }: { state: ProjectManagementState; projects: ProjectRecord[]; filters: { status: string; priority: string; assignee: string; department: string }; departments: string[]; onFilters: React.Dispatch<React.SetStateAction<{ query: string; status: string; priority: string; assignee: string; department: string }>>; onOpen: (id: string) => void }) {
+function ProjectsTab({ state, projects, filters, departments, onFilters, onOpen }: { state: ProjectManagementState; projects: ProjectRecord[]; filters: { query: string; status: string; priority: string; assignee: string; department: string; dateFrom: string; dateTo: string }; departments: string[]; onFilters: React.Dispatch<React.SetStateAction<{ query: string; status: string; priority: string; assignee: string; department: string; dateFrom: string; dateTo: string }>>; onOpen: (id: string) => void }) {
   return <section className="pm-card"><div className="pm-filter-row"><Select value={filters.status} options={statusOptions} onChange={value => onFilters(prev => ({ ...prev, status: value }))} /><Select value={filters.priority} options={priorityOptions} onChange={value => onFilters(prev => ({ ...prev, priority: value }))} /><Select value={filters.assignee} options={['All', ...state.members.map(m => m.id)]} labels={Object.fromEntries(state.members.map(m => [m.id, m.name]))} onChange={value => onFilters(prev => ({ ...prev, assignee: value }))} /><Select value={filters.department} options={departments} onChange={value => onFilters(prev => ({ ...prev, department: value }))} /></div><ProjectTable state={state} projects={projects} onOpen={onOpen} /></section>
 }
 
@@ -184,7 +299,11 @@ function Select({ value, options, labels = {}, onChange }: { value: string; opti
 }
 
 function ProjectTable({ state, projects, onOpen }: { state: ProjectManagementState; projects: ProjectRecord[]; onOpen: (id: string) => void }) {
-  return <div className="pm-table-wrap"><table className="pm-table"><thead><tr>{['Project Name', 'Client', 'Project Manager', 'Status', 'Progress', 'Budget', 'Due Date', 'Actions'].map(head => <th key={head}>{head}</th>)}</tr></thead><tbody>{projects.map(project => { const client = state.clients.find(c => c.id === project.clientId); const manager = state.members.find(m => m.id === project.managerId); return <tr key={project.id}><td><strong>{project.name}</strong><small>{project.tags.join(', ') || project.department}</small></td><td>{client?.name || project.clientId}</td><td><Avatar member={manager} /> {manager?.name || '-'}</td><td><Pill value={project.status} /></td><td><Progress value={project.progress} /></td><td>{formatMoney(project.budget)}</td><td>{formatDate(project.dueDate)}</td><td><button type="button" className="pm-icon-btn" onClick={() => onOpen(project.id)}><MoreHorizontal size={16} /></button></td></tr> })}</tbody></table></div>
+  if (!projects.length) return <EmptyState title="No projects found" body="Create a project or adjust filters to see project records." />
+  return <>
+    <div className="pm-table-wrap"><table className="pm-table"><thead><tr>{['Project Name', 'Client', 'Project Manager', 'Status', 'Progress', 'Budget', 'Due Date', 'Actions'].map(head => <th key={head}>{head}</th>)}</tr></thead><tbody>{projects.map(project => { const client = state.clients.find(c => c.id === project.clientId); const manager = state.members.find(m => m.id === project.managerId); return <tr key={project.id}><td><strong>{project.name}</strong><small>{project.tags.join(', ') || project.department}</small></td><td>{client?.name || project.clientId}</td><td><Avatar member={manager} /> {manager?.name || '-'}</td><td><Pill value={project.status} /></td><td><Progress value={project.progress} /></td><td>{formatMoney(project.budget)}</td><td>{formatDate(project.dueDate)}</td><td><button type="button" className="pm-icon-btn" onClick={() => onOpen(project.id)} aria-label={`Open ${project.name}`}><MoreHorizontal size={16} /></button></td></tr> })}</tbody></table></div>
+    <div className="pm-mobile-projects">{projects.map(project => { const client = state.clients.find(c => c.id === project.clientId); return <article key={project.id} className="pm-mobile-project-card"><div><strong>{project.name}</strong><button type="button" className="pm-icon-btn" onClick={() => onOpen(project.id)} aria-label={`Open ${project.name}`}><MoreHorizontal size={16} /></button></div><small>{client?.name || project.clientId}</small><Pill value={project.status} /><span>{formatMoney(project.budget)} · Due {formatDate(project.dueDate)}</span><Progress value={project.progress} /></article> })}</div>
+  </>
 }
 
 function TasksTab({ state }: { state: ProjectManagementState }) {
@@ -253,21 +372,33 @@ function LineChart({ data }: { data: ReturnType<typeof monthlyStatusTrend> }) {
 
 function MilestoneList({ state }: { state: ProjectManagementState }) { return <div className="pm-list">{state.milestones.slice(0, 5).map(m => { const p = state.projects.find(project => project.id === m.projectId); return <article key={m.id}><CalendarDays size={17} /><span><strong>{m.title}</strong><small>{p?.name}</small></span><em>{formatDate(m.dueDate)}</em><Pill value={m.priority} /></article> })}</div> }
 function BudgetSummary({ budget }: { budget: ReturnType<typeof budgetSummary> }) { return <div className="pm-budget-summary">{Object.entries(budget).map(([key, value]) => <span key={key}><small>{key}</small><strong>{formatMoney(value)}</strong></span>)}<Progress value={budget.total ? ((budget.spent + budget.committed) / budget.total) * 100 : 0} /></div> }
-function QuickActions() { return <div className="pm-actions">{[['New Project', Plus], ['Assign Task', ListChecks], ['Log Time', Timer], ['Upload Document', FileText]].map(([label, Icon]) => { const I = Icon as LucideIcon; return <button key={label as string} type="button"><span><I size={16} /></span>{label as string}<ChevronDown size={15} /></button> })}</div> }
+function QuickActions({ onNewProject, onAction }: { onNewProject: () => void; onAction: (action: 'task' | 'time' | 'document') => void }) {
+  const actions: Array<{ label: string; icon: LucideIcon; onClick: () => void }> = [
+    { label: 'New Project', icon: Plus, onClick: onNewProject },
+    { label: 'Assign Task', icon: ListChecks, onClick: () => onAction('task') },
+    { label: 'Log Time', icon: Timer, onClick: () => onAction('time') },
+    { label: 'Upload Document', icon: FileText, onClick: () => onAction('document') },
+  ]
+  return <div className="pm-actions">{actions.map(({ label, icon: Icon, onClick }) => <button key={label} type="button" onClick={onClick}><span><Icon size={16} /></span>{label}<ChevronDown size={15} /></button>)}</div>
+}
 function BarList({ items }: { items: Array<{ label: string; value: number; max: number }> }) { return <div className="pm-bar-list">{items.map(item => <p key={item.label}><span>{item.label}</span><strong>{formatMoney(item.value)}</strong><Progress value={item.max ? (item.value / item.max) * 100 : 0} /></p>)}</div> }
+function EmptyState({ title, body }: { title: string; body: string }) {
+  return <div className="pm-empty"><strong>{title}</strong><p>{body}</p></div>
+}
 
 const projectManagementCss = `
 .pm-shell { display: grid; gap: 22px; color: #0f172a; font-family: var(--font-space-grotesk), "Space Grotesk", sans-serif; }
+.pm-shell, .pm-workspace { max-width: 100%; overflow-x: clip; }
 .pm-workspace { min-width: 0; display: grid; gap: 22px; }
 .pm-header { display: grid; grid-template-columns: minmax(220px, 1fr) auto; gap: 16px; align-items: start; }
 .pm-title-block h1 { margin: 0; font-size: clamp(26px, 3vw, 34px); line-height: 1.1; }
 .pm-title-block p { margin: 8px 0 0; color: #23335f; }
 .pm-header-actions { display: flex; gap: 12px; justify-content: flex-end; flex-wrap: wrap; }
-.pm-control, .pm-primary, .pm-select, .pm-search { min-height: 42px; border: 1px solid #dbe3ef; border-radius: 8px; background: #fff; color: #091133; display: inline-flex; align-items: center; gap: 9px; padding: 0 14px; font-weight: 800; }
+.pm-control, .pm-primary, .pm-select, .pm-search { min-height: 42px; border: 1px solid #dbe3ef; border-radius: 8px; background: #fff; color: #091133; display: inline-flex; align-items: center; gap: 9px; padding: 0 14px; font-weight: 800; max-width: 100%; }
 .pm-primary { background: #16a34a; border-color: #16a34a; color: #fff; cursor: pointer; }
-.pm-search input { border: 0; outline: 0; min-width: 220px; font: inherit; }
+.pm-search input { border: 0; outline: 0; min-width: min(220px, 42vw); font: inherit; max-width: 100%; }
 .pm-card { background: #fff; border: 1px solid #e6edf6; border-radius: 16px; box-shadow: 0 12px 34px rgba(9, 17, 51, .06); padding: 20px; min-width: 0; }
-.pm-kpis { display: grid; grid-template-columns: repeat(5, minmax(170px, 1fr)); gap: 18px; margin-bottom: 22px; }
+.pm-kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(210px, 100%), 1fr)); gap: 18px; margin-bottom: 0; }
 .pm-kpi { display: flex; align-items: center; gap: 18px; min-height: 112px; }
 .pm-kpi > span { width: 56px; height: 56px; border-radius: 12px; display: grid; place-items: center; flex: 0 0 auto; }
 .pm-kpi small, .pm-card small { color: #23335f; font-weight: 800; }
@@ -277,12 +408,12 @@ const projectManagementCss = `
 .pm-tabs { display: flex; gap: 28px; border-bottom: 1px solid #dfe7f2; overflow-x: auto; margin-bottom: 20px; }
 .pm-tabs button { border: 0; border-bottom: 3px solid transparent; min-height: 48px; background: transparent; color: #091133; font-weight: 900; cursor: pointer; white-space: nowrap; }
 .pm-tabs button.active { color: #16a34a; border-bottom-color: #16a34a; }
-.pm-overview-grid { display: grid; grid-template-columns: 1.05fr 1.2fr .9fr; gap: 18px; }
+.pm-overview-grid { display: grid; grid-template-columns: minmax(0, 1.05fr) minmax(0, 1.2fr) minmax(280px, .9fr); gap: 18px; align-items: start; }
 .pm-recent { grid-column: span 2; }
 .pm-section-header { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-bottom: 16px; }
 .pm-section-header h2 { margin: 0; font-size: 18px; }
 .pm-section-header button { border: 0; background: transparent; color: #2563eb; font-weight: 900; cursor: pointer; }
-.pm-donut-wrap { display: grid; grid-template-columns: 220px 1fr; align-items: center; gap: 20px; }
+.pm-donut-wrap { display: grid; grid-template-columns: minmax(160px, 220px) minmax(0, 1fr); align-items: center; gap: 20px; }
 .pm-donut { width: 200px; height: 200px; border-radius: 50%; display: grid; place-items: center; }
 .pm-donut span { width: 112px; height: 112px; border-radius: 50%; background: #fff; display: grid; place-items: center; text-align: center; align-content: center; }
 .pm-donut strong { font-size: 28px; }
@@ -290,11 +421,12 @@ const projectManagementCss = `
 .pm-legend p { display: grid; grid-template-columns: 10px 1fr auto; gap: 10px; align-items: center; margin: 0; font-size: 13px; }
 .pm-legend i { width: 10px; height: 10px; border-radius: 999px; }
 .pm-line { min-height: 260px; display: grid; grid-template-rows: 1fr auto; }
-.pm-line svg { width: 100%; height: 250px; }
+.pm-line svg { width: 100%; height: clamp(180px, 24vw, 250px); }
 .pm-line div { display: flex; justify-content: space-between; color: #23335f; font-size: 12px; font-weight: 800; }
 .pm-list article { display: grid; grid-template-columns: 34px 1fr auto auto; gap: 10px; align-items: center; }
 .pm-list svg { width: 34px; height: 34px; padding: 8px; border-radius: 9px; background: #e6fffb; color: #0891b2; }
 .pm-table-wrap { overflow-x: auto; }
+.pm-mobile-projects { display: none; }
 .pm-table { width: 100%; min-width: 820px; border-collapse: collapse; }
 .pm-table th { text-align: left; padding: 13px 14px; background: #f8fafc; color: #23335f; font-size: 12px; }
 .pm-table td { padding: 14px; border-top: 1px solid #edf2f8; font-size: 13px; vertical-align: middle; }
@@ -315,12 +447,13 @@ const projectManagementCss = `
 .pm-chip-row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
 .pm-chip-row span:not(.pm-pill) { display: inline-flex; align-items: center; gap: 4px; color: #64748b; font-size: 12px; }
 .pm-task-card footer { display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 8px; }
-.pm-timeline { display: grid; gap: 14px; min-width: 720px; }
-.pm-timeline div { display: grid; grid-template-columns: 180px 1fr; align-items: center; }
+.pm-timeline { display: grid; gap: 14px; min-width: 0; overflow-x: auto; }
+.pm-timeline div { min-width: 720px; display: grid; grid-template-columns: 180px 1fr; align-items: center; }
 .pm-timeline strong { display: block; height: 28px; border-radius: 999px; background: linear-gradient(90deg, #16a34a, #2f80ed); color: #fff; padding: 6px 10px; font-size: 12px; }
 .pm-resource-grid, .pm-doc-grid, .pm-budget-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; }
 .pm-resource-grid article, .pm-doc-grid article { border: 1px solid #e6edf6; border-radius: 14px; padding: 16px; display: grid; gap: 8px; }
-.pm-budget-summary { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; }
+.pm-budget-summary { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 14px; }
+.pm-budget-summary span { min-width: 0; overflow-wrap: anywhere; }
 .pm-budget-summary .pm-progress { grid-column: 1 / -1; width: 100%; }
 .pm-actions button { min-height: 52px; border: 0; background: #fff; display: grid; grid-template-columns: 34px 1fr auto; align-items: center; gap: 10px; text-align: left; font-weight: 900; cursor: pointer; }
 .pm-actions span { width: 34px; height: 34px; border-radius: 10px; background: #dcfce7; color: #16a34a; display: grid; place-items: center; }
@@ -331,11 +464,19 @@ const projectManagementCss = `
 .pm-field textarea { padding: 10px 12px; resize: vertical; }
 .pm-wide { grid-column: span 3; }
 .pm-form-actions { grid-column: 1 / -1; display: flex; justify-content: flex-end; }
+.pm-filter-panel { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 14px; align-items: end; }
+.pm-modal-backdrop { position: fixed; inset: 0; z-index: 120; background: rgba(15, 23, 42, .38); display: grid; place-items: center; padding: 20px; }
+.pm-modal { width: min(760px, 100%); max-height: min(760px, calc(100dvh - 40px)); overflow: auto; }
+.pm-modal-form { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.pm-check { min-height: 42px; display: flex; align-items: center; gap: 8px; font-weight: 900; color: #23335f; }
+.pm-empty { min-height: 160px; border: 1px dashed #dbe3ef; border-radius: 14px; display: grid; place-items: center; text-align: center; align-content: center; gap: 8px; color: #64748b; padding: 20px; }
+.pm-empty strong { color: #0f172a; }
+.pm-empty p { margin: 0; max-width: 360px; }
 .pm-detail { display: grid; gap: 18px; }
 .pm-detail-head { display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 16px; }
 .pm-detail-head h2 { margin: 0; }
 .pm-detail-head p { margin: 5px 0 0; color: #23335f; }
 .pm-detail-head > button:first-child { border: 1px solid #dbe3ef; border-radius: 8px; background: #fff; min-height: 38px; padding: 0 12px; font-weight: 900; cursor: pointer; }
-@media (max-width: 1280px) { .pm-kpis { grid-template-columns: repeat(3, 1fr); } .pm-overview-grid { grid-template-columns: 1fr; } .pm-recent { grid-column: auto; } .pm-resource-grid, .pm-doc-grid, .pm-budget-grid { grid-template-columns: 1fr 1fr; } .pm-header { grid-template-columns: 1fr; } .pm-header-actions { justify-content: flex-start; } }
-@media (max-width: 640px) { .pm-kpis, .pm-resource-grid, .pm-doc-grid, .pm-budget-grid, .pm-form { grid-template-columns: 1fr; } .pm-header-actions, .pm-search, .pm-control, .pm-primary { width: 100%; justify-content: center; } .pm-search input { min-width: 0; width: 100%; } .pm-donut-wrap, .pm-budget-summary, .pm-detail-head { grid-template-columns: 1fr; } .pm-donut { width: 180px; height: 180px; margin: auto; } .pm-list article { grid-template-columns: 34px 1fr; } .pm-list em, .pm-list .pm-pill { grid-column: 2; } .pm-wide { grid-column: auto; } .pm-table { min-width: 760px; } }
+@media (max-width: 1280px) { .pm-overview-grid { grid-template-columns: 1fr; } .pm-recent { grid-column: auto; } .pm-resource-grid, .pm-doc-grid, .pm-budget-grid { grid-template-columns: 1fr 1fr; } .pm-header { grid-template-columns: 1fr; } .pm-header-actions { justify-content: flex-start; } }
+@media (max-width: 760px) { .pm-header { gap: 12px; } .pm-title-block h1 { font-size: clamp(24px, 8vw, 30px); } .pm-header-actions { display: grid; grid-template-columns: 1fr; } .pm-search, .pm-control, .pm-primary { width: 100%; justify-content: center; min-height: 44px; } .pm-search { justify-content: flex-start; } .pm-search input { min-width: 0; width: 100%; } .pm-kpis { display: flex; overflow-x: auto; scroll-snap-type: x mandatory; padding-bottom: 4px; margin-right: -16px; } .pm-kpi { min-width: 240px; scroll-snap-align: start; } .pm-resource-grid, .pm-doc-grid, .pm-budget-grid, .pm-form, .pm-modal-form, .pm-filter-panel { grid-template-columns: 1fr; } .pm-tabs { margin-left: -16px; margin-right: -16px; padding-left: 16px; padding-right: 16px; } .pm-donut-wrap, .pm-budget-summary, .pm-detail-head { grid-template-columns: 1fr; } .pm-donut { width: 180px; height: 180px; margin: auto; } .pm-list article { grid-template-columns: 34px 1fr; align-items: start; } .pm-list em, .pm-list .pm-pill { grid-column: 2; } .pm-wide { grid-column: auto; } .pm-table-wrap { display: none; } .pm-mobile-projects { display: grid; gap: 12px; } .pm-mobile-project-card { border: 1px solid #e6edf6; border-radius: 14px; padding: 14px; display: grid; gap: 10px; } .pm-mobile-project-card > div { display: flex; align-items: center; justify-content: space-between; gap: 10px; } .pm-mobile-project-card strong { overflow-wrap: anywhere; } .pm-mobile-project-card span:not(.pm-pill):not(.pm-progress) { color: #64748b; font-size: 12px; font-weight: 800; } .pm-kanban { grid-template-columns: repeat(4, minmax(78vw, 1fr)); margin-right: -16px; } .pm-task-card footer { grid-template-columns: auto 1fr; } .pm-task-card footer .pm-progress { grid-column: 1 / -1; width: 100%; } .pm-timeline div { min-width: 620px; } .pm-modal-backdrop { align-items: end; padding: 0; } .pm-modal { width: 100%; max-height: 92dvh; border-radius: 18px 18px 0 0; } }
 `
