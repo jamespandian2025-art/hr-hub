@@ -1,5 +1,5 @@
-import { redirect } from 'next/navigation'
+import ProjectManagementModule from '@/components/project-management/ProjectManagementModule'
 
 export default function ProjectManagementPage() {
-  redirect('/projects')
+  return <ProjectManagementModule />
 }

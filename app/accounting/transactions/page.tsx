@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { ChangeEvent, useEffect, useMemo, useState } from 'react'
 import {
   ArrowDownCircle,
   ArrowUpCircle,
@@ -20,6 +20,10 @@ const font = 'var(--font-body)'
 
 type TransactionType = 'Deposit' | 'Withdrawal' | 'Transfer'
 type TransactionStatus = 'Reconciled' | 'Unreconciled'
+type TransactionTab = 'All Transactions' | 'Unreconciled' | 'Deposits' | 'Withdrawals' | 'Transfers'
+type PaginationItem = number | 'ellipsis'
+
+const PAGE_SIZE_OPTIONS = [5, 10, 25, 50, 100]
 
 function TransactionTypePill({ value }: { value: TransactionType }) {
   const styles: Record<TransactionType, { bg: string; color: string }> = {
@@ -50,6 +54,16 @@ function CategoryPill({ value }: { value: string }) {
 
 export default function TransactionsPage() {
   const [data, setData] = useState(emptyAccountingData)
+  const [activeTab, setActiveTab] = useState<TransactionTab>('All Transactions')
+  const [headerSearch, setHeaderSearch] = useState('')
+  const [tableSearch, setTableSearch] = useState('')
+  const [accountFilter, setAccountFilter] = useState('All Accounts')
+  const [typeFilter, setTypeFilter] = useState('All Types')
+  const [statusFilter, setStatusFilter] = useState('All Status')
+  const [moreFiltersOpen, setMoreFiltersOpen] = useState(false)
+  const [selectedRows, setSelectedRows] = useState<string[]>([])
+  const [currentPage, setCurrentPage] = useState(1)
+  const [pageSize, setPageSize] = useState(10)
 
   useEffect(() => {
     const load = () => setData(loadAccountingData())
@@ -57,7 +71,8 @@ export default function TransactionsPage() {
     return subscribeAccountingData(load)
   }, [])
 
-  const transactions = data.transactions.map(transaction => ({
+  const transactions = useMemo(() => data.transactions.map(transaction => ({
+    id: transaction.id,
     date: formatDate(transaction.date),
     description: transaction.description,
     detail: transaction.secondary,
@@ -70,7 +85,36 @@ export default function TransactionsPage() {
     balance: transaction.balance,
     status: ['Reconciled', 'Paid', 'Completed'].includes(transaction.status) ? 'Reconciled' as const : 'Unreconciled' as const,
     category: transaction.category,
-  }))
+  })), [data.transactions])
+  const accounts = useMemo(() => Array.from(new Set(transactions.map(transaction => transaction.account).filter(Boolean))).sort(), [transactions])
+  const categories = useMemo(() => Array.from(new Set(transactions.map(transaction => transaction.category).filter(Boolean))).sort(), [transactions])
+  const visibleTransactions = useMemo(() => {
+    const query = [headerSearch, tableSearch].join(' ').trim().toLowerCase()
+    return transactions.filter(transaction => {
+      const tabMatches =
+        activeTab === 'All Transactions' ||
+        (activeTab === 'Unreconciled' && transaction.status === 'Unreconciled') ||
+        (activeTab === 'Deposits' && transaction.type === 'Deposit') ||
+        (activeTab === 'Withdrawals' && transaction.type === 'Withdrawal') ||
+        (activeTab === 'Transfers' && transaction.type === 'Transfer')
+      const accountMatches = accountFilter === 'All Accounts' || transaction.account === accountFilter
+      const typeMatches = typeFilter === 'All Types' || transaction.type === typeFilter
+      const statusMatches = statusFilter === 'All Status' || transaction.status === statusFilter
+      const queryMatches = !query || [transaction.description, transaction.detail, transaction.account, transaction.reference, transaction.category, transaction.type, transaction.status].join(' ').toLowerCase().includes(query)
+      return tabMatches && accountMatches && typeMatches && statusMatches && queryMatches
+    })
+  }, [accountFilter, activeTab, headerSearch, statusFilter, tableSearch, transactions, typeFilter])
+  const filteredTotal = visibleTransactions.length
+  const totalPages = Math.max(1, Math.ceil(filteredTotal / pageSize))
+  const safeCurrentPage = Math.min(currentPage, totalPages)
+  const pageStart = filteredTotal ? (safeCurrentPage - 1) * pageSize + 1 : 0
+  const pageEnd = Math.min(safeCurrentPage * pageSize, filteredTotal)
+  const paginatedTransactions = useMemo(() => {
+    const start = (safeCurrentPage - 1) * pageSize
+    return visibleTransactions.slice(start, start + pageSize)
+  }, [pageSize, safeCurrentPage, visibleTransactions])
+  const paginationItems = useMemo(() => getPaginationItems(safeCurrentPage, totalPages), [safeCurrentPage, totalPages])
+  const allPageRowsSelected = paginatedTransactions.length > 0 && paginatedTransactions.every(transaction => selectedRows.includes(transaction.id))
   const totalTransactions = transactions.length
   const accountCount = new Set(transactions.map(transaction => transaction.account).filter(Boolean)).size
   const totalInflow = transactions.reduce((sum, transaction) => sum + transaction.inflow, 0)
@@ -87,6 +131,56 @@ export default function TransactionsPage() {
     { title: 'Net Cash Flow', value: money(netCashFlow, data.currency), detail: 'Inflow minus outflow', icon: SlidersHorizontal, tone: '#7c3aed', up: netCashFlow >= 0 },
     { title: 'Unreconciled', value: String(unreconciled), detail: money(unreconciledValue, data.currency), icon: Banknote, tone: '#f59e0b' },
   ]
+  const tabCounts: Record<TransactionTab, number> = {
+    'All Transactions': transactions.length,
+    Unreconciled: transactions.filter(transaction => transaction.status === 'Unreconciled').length,
+    Deposits: transactions.filter(transaction => transaction.type === 'Deposit').length,
+    Withdrawals: transactions.filter(transaction => transaction.type === 'Withdrawal').length,
+    Transfers: transactions.filter(transaction => transaction.type === 'Transfer').length,
+  }
+  const resetFilters = () => {
+    setActiveTab('All Transactions')
+    setHeaderSearch('')
+    setTableSearch('')
+    setAccountFilter('All Accounts')
+    setTypeFilter('All Types')
+    setStatusFilter('All Status')
+    setSelectedRows([])
+    setCurrentPage(1)
+  }
+  const toggleSelectAll = (event: ChangeEvent<HTMLInputElement>) => {
+    const pageRowIds = paginatedTransactions.map(transaction => transaction.id)
+    setSelectedRows(previous => {
+      if (event.target.checked) return Array.from(new Set([...previous, ...pageRowIds]))
+      return previous.filter(id => !pageRowIds.includes(id))
+    })
+  }
+  const toggleSelectRow = (id: string) => {
+    setSelectedRows(previous => previous.includes(id) ? previous.filter(item => item !== id) : [...previous, id])
+  }
+  const exportCsv = () => {
+    if (typeof window === 'undefined') return
+    const headers = ['Date', 'Description', 'Account', 'Type', 'Reference', 'Inflow', 'Outflow', 'Balance', 'Status', 'Category']
+    const rows = visibleTransactions.map(transaction => [
+      transaction.date,
+      transaction.description,
+      transaction.account,
+      transaction.type,
+      transaction.reference,
+      transaction.inflow,
+      transaction.outflow,
+      transaction.balance,
+      transaction.status,
+      transaction.category,
+    ])
+    const csv = [headers, ...rows].map(row => row.map(value => `"${String(value).replaceAll('"', '""')}"`).join(',')).join('\n')
+    const url = window.URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }))
+    const link = document.createElement('a')
+    link.href = url
+    link.download = `accounting-transactions-${new Date().toISOString().slice(0, 10)}.csv`
+    link.click()
+    window.URL.revokeObjectURL(url)
+  }
 
   return (
     <div className="tx-page" style={{ fontFamily: font }}>
@@ -99,11 +193,11 @@ export default function TransactionsPage() {
         <div className="tx-header-actions">
           <label className="tx-search">
             <Search size={16} color="#64748b" />
-            <input placeholder="Search transactions, accounts, reference..." />
+            <input value={headerSearch} onChange={event => { setHeaderSearch(event.target.value); setCurrentPage(1) }} placeholder="Search transactions, accounts, reference..." />
           </label>
-          <button type="button" className="tx-toolbar-button"><Filter size={15} /> Filters</button>
-          <button type="button" className="tx-toolbar-button"><CalendarDays size={15} /> Current records</button>
-          <button type="button" className="tx-toolbar-button">Export <Download size={14} /></button>
+          <button type="button" className="tx-toolbar-button" onClick={() => setMoreFiltersOpen(open => !open)}><Filter size={15} /> Filters</button>
+          <button type="button" className="tx-toolbar-button" onClick={resetFilters}><CalendarDays size={15} /> Current records</button>
+          <button type="button" className="tx-toolbar-button" onClick={exportCsv}>Export <Download size={14} /></button>
         </div>
       </div>
 
@@ -125,37 +219,54 @@ export default function TransactionsPage() {
 
       <section className="tx-account-select">
         <strong>Accounts</strong>
-        <button type="button">All Accounts ({accountCount}) <ChevronDown size={15} /></button>
+        <label>
+          <select value={accountFilter} onChange={event => { setAccountFilter(event.target.value); setCurrentPage(1) }} aria-label="Filter transactions by account">
+            <option value="All Accounts">All Accounts ({accountCount})</option>
+            {accounts.map(account => <option key={account} value={account}>{account}</option>)}
+          </select>
+          <ChevronDown size={15} />
+        </label>
       </section>
 
       <nav className="tx-tabs" aria-label="Transaction filters">
-        {['All Transactions', 'Unreconciled', 'Deposits', 'Withdrawals', 'Transfers'].map((tab, index) => (
-          <button key={tab} type="button" className={index === 0 ? 'is-active' : undefined}>{tab}</button>
+        {(['All Transactions', 'Unreconciled', 'Deposits', 'Withdrawals', 'Transfers'] as TransactionTab[]).map(tab => (
+          <button key={tab} type="button" className={activeTab === tab ? 'is-active' : undefined} onClick={() => { setActiveTab(tab); setCurrentPage(1) }}>
+            {tab} <span>{tabCounts[tab]}</span>
+          </button>
         ))}
       </nav>
 
       <section className="tx-table-card">
         <div className="tx-filterbar">
-          <label className="tx-filter-search"><Search size={15} color="#64748b" /><input placeholder="Search transactions..." /></label>
-          <button type="button">All Types <ChevronDown size={14} /></button>
-          <button type="button">All Status <ChevronDown size={14} /></button>
-          <button type="button">All Accounts <ChevronDown size={14} /></button>
-          <button type="button"><CalendarDays size={15} /> Current records</button>
-          <button type="button"><SlidersHorizontal size={15} /> More Filters</button>
+          <label className="tx-filter-search"><Search size={15} color="#64748b" /><input value={tableSearch} onChange={event => { setTableSearch(event.target.value); setCurrentPage(1) }} placeholder="Search transactions..." /></label>
+          <SelectButton label="Transaction type" value={typeFilter} onChange={value => { setTypeFilter(value); setCurrentPage(1) }} options={['All Types', 'Deposit', 'Withdrawal', 'Transfer']} />
+          <SelectButton label="Transaction status" value={statusFilter} onChange={value => { setStatusFilter(value); setCurrentPage(1) }} options={['All Status', 'Reconciled', 'Unreconciled']} />
+          <SelectButton label="Transaction account" value={accountFilter} onChange={value => { setAccountFilter(value); setCurrentPage(1) }} options={['All Accounts', ...accounts]} />
+          <button type="button" onClick={resetFilters}><CalendarDays size={15} /> Current records</button>
+          <button type="button" onClick={() => setMoreFiltersOpen(open => !open)}><SlidersHorizontal size={15} /> More Filters</button>
         </div>
+        {moreFiltersOpen && (
+          <div className="tx-more-filters">
+            <strong>Category</strong>
+            <div>
+              <button type="button" onClick={() => { setTableSearch(''); setCurrentPage(1) }}>All Categories</button>
+              {categories.map(category => <button key={category} type="button" onClick={() => { setTableSearch(category); setCurrentPage(1) }}>{category}</button>)}
+            </div>
+          </div>
+        )}
 
         <div className="tx-table-wrap">
           <table className="tx-table">
             <thead>
               <tr>
-                <th><input type="checkbox" aria-label="Select all transactions" /></th>
+                <th><input type="checkbox" aria-label="Select transactions on this page" checked={allPageRowsSelected} onChange={toggleSelectAll} /></th>
                 {['Date', 'Description', 'Account', 'Type', 'Reference', 'Inflow', 'Outflow', 'Balance', 'Status', 'Category', 'Actions'].map(column => <th key={column}>{column}</th>)}
               </tr>
             </thead>
             <tbody>
-              {transactions.map(transaction => (
-                <tr key={transaction.reference}>
-                  <td data-label="Select"><input type="checkbox" aria-label={`Select ${transaction.description}`} /></td>
+              {paginatedTransactions.map(transaction => (
+                <tr key={transaction.id}>
+                  <td data-label="Select"><input type="checkbox" checked={selectedRows.includes(transaction.id)} onChange={() => toggleSelectRow(transaction.id)} aria-label={`Select ${transaction.description}`} /></td>
                   <td data-label="Date">{transaction.date}</td>
                   <td data-label="Description"><strong>{transaction.description}</strong><small>{transaction.detail}</small></td>
                   <td data-label="Account"><strong>{transaction.account}</strong><small>{transaction.accountDetail}</small></td>
@@ -169,10 +280,10 @@ export default function TransactionsPage() {
                   <td data-label="Actions"><button type="button" aria-label={`Actions for ${transaction.description}`} className="tx-icon-button"><MoreHorizontal size={15} /></button></td>
                 </tr>
               ))}
-              {!transactions.length && (
+              {!filteredTotal && (
                 <tr>
                   <td colSpan={12} style={{ padding: 28, textAlign: 'center', color: '#64748b', fontWeight: 800 }}>
-                    No transactions yet. Paid invoices, paid bills, expenses, payroll, and ledger imports will appear here.
+                    {transactions.length ? 'No transactions match the selected filters.' : 'No transactions yet. Paid invoices, paid bills, expenses, payroll, and ledger imports will appear here.'}
                   </td>
                 </tr>
               )}
@@ -181,16 +292,65 @@ export default function TransactionsPage() {
         </div>
 
         <div className="tx-pagination">
-          <strong>Showing {transactions.length ? 1 : 0} to {transactions.length} of {totalTransactions} transactions</strong>
+          <strong>Showing {pageStart} to {pageEnd} of {filteredTotal} transactions{filteredTotal !== totalTransactions ? ` (filtered from ${totalTransactions})` : ''}{selectedRows.length ? ` (${selectedRows.length} selected)` : ''}</strong>
           <div>
-            {['‹', '1', '2', '3', '4', '5', '...', '25', '›'].map((page, index) => (
-              <button key={`${page}-${index}`} type="button" className={page === '1' ? 'is-active' : undefined}>{page}</button>
+            <button type="button" disabled={safeCurrentPage === 1} onClick={() => setCurrentPage(page => Math.max(1, page - 1))} aria-label="Previous page">‹</button>
+            {paginationItems.map((page, index) => page === 'ellipsis' ? (
+              <span key={`ellipsis-${index}`} className="tx-ellipsis" aria-hidden="true">...</span>
+            ) : (
+              <button key={page} type="button" className={page === safeCurrentPage ? 'is-active' : undefined} onClick={() => setCurrentPage(page)} aria-current={page === safeCurrentPage ? 'page' : undefined}>{page}</button>
             ))}
-            <button type="button" className="tx-page-size">10 / page <ChevronDown size={14} /></button>
+            <button type="button" disabled={safeCurrentPage === totalPages} onClick={() => setCurrentPage(page => Math.min(totalPages, page + 1))} aria-label="Next page">›</button>
+            <label className="tx-page-size">
+              <span className="sr-only">Rows per page</span>
+              <select value={pageSize} onChange={event => { setPageSize(Number(event.target.value)); setCurrentPage(1) }}>
+                {PAGE_SIZE_OPTIONS.map(option => <option key={option} value={option}>{option} / page</option>)}
+              </select>
+              <ChevronDown size={14} />
+            </label>
           </div>
         </div>
       </section>
     </div>
+  )
+}
+
+function getPaginationItems(currentPage: number, totalPages: number): PaginationItem[] {
+  if (totalPages <= 7) return Array.from({ length: totalPages }, (_, index) => index + 1)
+
+  const pages = new Set([1, totalPages, currentPage - 1, currentPage, currentPage + 1])
+  if (currentPage <= 3) {
+    pages.add(2)
+    pages.add(3)
+    pages.add(4)
+  }
+  if (currentPage >= totalPages - 2) {
+    pages.add(totalPages - 1)
+    pages.add(totalPages - 2)
+    pages.add(totalPages - 3)
+  }
+
+  const sortedPages = Array.from(pages)
+    .filter(page => page >= 1 && page <= totalPages)
+    .sort((a, b) => a - b)
+
+  return sortedPages.reduce<PaginationItem[]>((items, page, index) => {
+    const previous = sortedPages[index - 1]
+    if (previous && page - previous > 1) items.push('ellipsis')
+    items.push(page)
+    return items
+  }, [])
+}
+
+function SelectButton({ label, value, options, onChange }: { label: string; value: string; options: string[]; onChange: (value: string) => void }) {
+  return (
+    <label className="tx-select-button">
+      <span className="sr-only">{label}</span>
+      <select value={value} onChange={event => onChange(event.target.value)}>
+        {options.map(option => <option key={option} value={option}>{option}</option>)}
+      </select>
+      <ChevronDown size={14} />
+    </label>
   )
 }
 
@@ -203,7 +363,8 @@ const transactionsCss = `
 .tx-search, .tx-filter-search { min-height: 40px; border-radius: 8px; background: #fff; display: flex; align-items: center; gap: 10px; padding: 0 13px; border: 1px solid #e8edf4; }
 .tx-search { width: min(360px, 38vw); }
 .tx-search input, .tx-filter-search input { flex: 1; min-width: 0; border: 0; outline: 0; background: transparent; font-size: 12.5px; color: #0f172a; }
-.tx-toolbar-button, .tx-filterbar button { min-height: 40px; border-radius: 8px; border: 1px solid #e8edf4; background: #fff; color: #0f172a; display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 0 12px; font-size: 12.5px; font-weight: 850; cursor: pointer; white-space: nowrap; }
+.tx-toolbar-button, .tx-filterbar button, .tx-select-button { min-height: 40px; border-radius: 8px; border: 1px solid #e8edf4; background: #fff; color: #0f172a; display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 0 12px; font-size: 12.5px; font-weight: 850; cursor: pointer; white-space: nowrap; }
+.tx-select-button select, .tx-account-select select { appearance: none; border: 0; outline: 0; background: transparent; color: #0f172a; font: inherit; font-weight: 850; width: 100%; cursor: pointer; }
 .tx-metrics { display: grid; grid-template-columns: repeat(5, minmax(170px, 1fr)); gap: 18px; margin-bottom: 24px; }
 .tx-card, .tx-account-select, .tx-table-card { background: #fff; border: 1px solid #e8edf4; border-radius: 8px; box-shadow: 0 1px 2px rgba(15, 23, 42, .03); }
 .tx-card { min-height: 100px; padding: 18px; }
@@ -214,12 +375,19 @@ const transactionsCss = `
 .tx-card-detail { display: block; font-size: 11.5px; font-weight: 900; margin-top: 8px; }
 .tx-account-select { width: min(360px, 100%); min-height: 58px; display: grid; grid-template-columns: 82px minmax(0, 1fr); align-items: center; gap: 12px; padding: 10px 14px; margin-bottom: 24px; }
 .tx-account-select strong { font-size: 13px; }
-.tx-account-select button { min-height: 40px; border: 1px solid #e8edf4; border-radius: 8px; background: #fff; display: flex; align-items: center; justify-content: space-between; padding: 0 14px; color: #0f172a; font-size: 13px; font-weight: 850; }
+.tx-account-select label { min-height: 40px; border: 1px solid #e8edf4; border-radius: 8px; background: #fff; display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 0 14px; color: #0f172a; font-size: 13px; font-weight: 850; }
 .tx-tabs { display: flex; gap: 30px; border-bottom: 1px solid #e8edf4; padding-left: 14px; overflow-x: auto; }
-.tx-tabs button { border: 0; border-bottom: 2px solid transparent; background: transparent; color: #0f172a; min-height: 48px; padding: 0; font-size: 12.5px; font-weight: 900; cursor: pointer; white-space: nowrap; }
+.tx-tabs button { border: 0; border-bottom: 2px solid transparent; background: transparent; color: #0f172a; min-height: 48px; padding: 0; font-size: 12.5px; font-weight: 900; cursor: pointer; white-space: nowrap; display: inline-flex; align-items: center; gap: 7px; }
 .tx-tabs button.is-active { color: #16a34a; border-bottom-color: #16a34a; }
+.tx-tabs span { min-width: 21px; min-height: 21px; border-radius: 999px; background: #f1f5f9; color: #475569; display: grid; place-items: center; font-size: 11px; }
+.tx-tabs button.is-active span { background: #dcfce7; color: #15803d; }
 .tx-table-card { border-top-left-radius: 0; border-top-right-radius: 0; padding: 18px; }
 .tx-filterbar { display: grid; grid-template-columns: minmax(220px, 1fr) repeat(5, minmax(140px, auto)); gap: 14px; align-items: center; margin-bottom: 18px; }
+.tx-more-filters { border: 1px solid #eef2f7; background: #f8fafc; border-radius: 8px; padding: 12px; margin: -4px 0 18px; display: grid; gap: 10px; }
+.tx-more-filters strong { font-size: 12px; color: #475569; }
+.tx-more-filters div { display: flex; gap: 8px; flex-wrap: wrap; }
+.tx-more-filters button { border: 1px solid #e8edf4; border-radius: 999px; min-height: 30px; background: #fff; color: #0f172a; padding: 0 10px; font-size: 12px; font-weight: 850; cursor: pointer; }
+.sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
 .tx-table-wrap { overflow-x: auto; border: 1px solid #eef2f7; border-radius: 8px; }
 .tx-table { width: 100%; min-width: 1220px; border-collapse: collapse; }
 .tx-table th { text-align: left; padding: 12px 14px; color: #64748b; font-size: 11px; text-transform: uppercase; font-weight: 900; background: #f8fafc; }
@@ -237,7 +405,10 @@ const transactionsCss = `
 .tx-pagination > div { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
 .tx-pagination button { min-width: 34px; height: 32px; border-radius: 7px; border: 1px solid #e8edf4; background: #fff; color: #0f172a; font-weight: 900; cursor: pointer; }
 .tx-pagination button.is-active { background: #16a34a; border-color: #16a34a; color: #fff; }
-.tx-page-size { display: flex; align-items: center; gap: 8px; padding: 0 10px; width: auto; }
+.tx-pagination button:disabled { opacity: .45; cursor: not-allowed; }
+.tx-ellipsis { min-width: 22px; text-align: center; color: #64748b; font-weight: 900; }
+.tx-page-size { min-height: 32px; border-radius: 7px; border: 1px solid #e8edf4; background: #fff; color: #0f172a; display: flex; align-items: center; gap: 8px; padding: 0 10px; width: auto; }
+.tx-page-size select { appearance: none; border: 0; outline: 0; background: transparent; color: #0f172a; font: inherit; font-weight: 900; cursor: pointer; }
 @media (max-width: 1280px) {
   .tx-page { padding: 22px; }
   .tx-header { flex-direction: column; }
