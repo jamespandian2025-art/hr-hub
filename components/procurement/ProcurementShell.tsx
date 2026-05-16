@@ -2,230 +2,545 @@
 
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
+import { useEffect, useState } from 'react'
 import {
   ArrowLeft,
   Bell,
   ChevronDown,
   CircleHelp,
-  FileText,
   Grid3X3,
   Menu,
   Plus,
-  ReceiptText,
   Search,
-  ShoppingCart,
-  Truck,
+  X,
 } from 'lucide-react'
+import { getProcurementRouteMeta, procurementWorkspaceMenu } from '@/config/procurement-menu'
 
-const font = "var(--font-body)"
+const font = 'var(--font-body)'
 
 const sidebarColors = {
-  bg: '#000000',
+  bg: '#030303',
   surface: '#1f1f1f',
-  surfaceHover: '#1a1a1a',
+  surfaceHover: '#151515',
   border: '#242424',
   text: 'rgb(237, 237, 237)',
   muted: '#a1a1a1',
   faint: '#737373',
   icon: '#a1a1a1',
-  activeRing: 'transparent',
+  activeBg: '#dcfce7',
+  activeText: '#052e16',
+  activeIcon: '#16a34a',
 }
-
-const procurementNavItems = [
-  { label: 'Overview', href: '/procurement', icon: ShoppingCart, description: 'Purchasing snapshot and activity' },
-  { label: 'Pricebook', href: '/procurement/pricebook', icon: ReceiptText, description: 'Items, catalog, and pricing' },
-  { label: 'Purchase Requests', href: '/procurement/purchase-requests', icon: FileText, description: 'Requests waiting for review' },
-  { label: 'Purchase Orders', href: '/procurement/purchase-orders', icon: FileText, description: 'Orders and supplier commitments' },
-  { label: 'RFQs', href: '/procurement/rfqs', icon: ReceiptText, description: 'Quotations and supplier bids' },
-  { label: 'Receiving', href: '/procurement/receiving', icon: Truck, description: 'Deliveries and received items' },
-]
 
 export default function ProcurementShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname()
-  const activeMeta = procurementNavItems.find(item => pathname === item.href || pathname.startsWith(item.href + '/')) || procurementNavItems[0]
+  const activeMeta = getProcurementRouteMeta(pathname)
   const ActiveIcon = activeMeta.icon
+  const [sidebarOpen, setSidebarOpen] = useState(false)
 
-  const isActive = (href: string) => {
-    if (pathname === href) return true
-    return pathname.startsWith(href + '/')
-  }
+  useEffect(() => {
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setSidebarOpen(false)
+    }
+    window.addEventListener('keydown', closeOnEscape)
+    return () => window.removeEventListener('keydown', closeOnEscape)
+  }, [])
+
+  const isActive = (href: string) => pathname === href || pathname.startsWith(`${href}/`)
 
   return (
-    <div style={{ minHeight: '100vh', background: '#f8fafc', display: 'grid', gridTemplateColumns: '252px minmax(0, 1fr)', fontFamily: font, color: '#0f172a' }}>
+    <div className="procurement-workspace-shell" style={{ fontFamily: font }}>
       <style>{procurementShellCss}</style>
-      <aside className="procurement-sidepanel" style={{ minHeight: '100vh', height: '100vh', position: 'sticky', top: 0, alignSelf: 'start', background: sidebarColors.bg, color: sidebarColors.text, padding: '20px 0', display: 'flex', flexDirection: 'column', overflowY: 'auto', overflowX: 'hidden' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10, color: sidebarColors.text, padding: '0 14px 24px' }}>
-          <span style={{ width: 34, height: 34, borderRadius: 9, background: sidebarColors.text, color: sidebarColors.bg, display: 'grid', placeItems: 'center', fontWeight: 800, fontSize: 16 }}>P</span>
-          <span>
-            <span style={{ display: 'block', fontSize: 17, fontWeight: 800, lineHeight: 1, color: sidebarColors.text, letterSpacing: 0 }}>Procurement</span>
-            <span style={{ display: 'block', fontSize: 12, color: sidebarColors.muted, marginTop: 4, fontWeight: 500 }}>Supply workspace</span>
-          </span>
-        </div>
+      <button
+        type="button"
+        className={`procurement-mobile-backdrop${sidebarOpen ? ' is-open' : ''}`}
+        aria-label="Close procurement navigation"
+        onClick={() => setSidebarOpen(false)}
+      />
 
-        <Link href="/dashboard" className="procurement-back-link">
-          <ArrowLeft size={15} />
-          Back to WiseFlow
-        </Link>
+      <aside className={`procurement-sidepanel${sidebarOpen ? ' is-open' : ''}`}>
+        <div className="procurement-sidebar-card">
+          <div className="procurement-sidebar-brand">
+            <span className="procurement-sidebar-logo">P</span>
+            <span className="procurement-sidebar-copy">
+              <span>Procurement</span>
+              <small>Supply chain workspace</small>
+            </span>
+            <button type="button" className="procurement-sidebar-close" aria-label="Close procurement navigation" onClick={() => setSidebarOpen(false)}>
+              <X size={17} />
+            </button>
+          </div>
 
-        <nav style={{ display: 'grid', gap: 3, alignContent: 'start', flex: 1, overflowY: 'auto' }} aria-label="Procurement workspace navigation">
-          <div style={{ display: 'grid', gap: 3, alignContent: 'start' }}>
-            <div style={{ fontSize: 10, letterSpacing: '1px', color: sidebarColors.faint, fontWeight: 600, padding: '0 22px 5px', textTransform: 'uppercase', whiteSpace: 'nowrap' }}>Workspace</div>
-            {procurementNavItems.map(item => {
+          <Link href="/dashboard" className="procurement-back-link" onClick={() => setSidebarOpen(false)}>
+            <ArrowLeft size={15} />
+            Back to WiseFlow
+          </Link>
+
+          <nav className="procurement-sidebar-nav" aria-label="Procurement workspace navigation">
+            <div className="procurement-sidebar-label">Workspace</div>
+            {procurementWorkspaceMenu.map(item => {
               const Icon = item.icon
               const active = isActive(item.href)
               return (
-                <Link key={item.href} href={item.href} style={{ textDecoration: 'none' }}>
-                  <div className={`procurement-nav-row${active ? ' active' : ''}`}>
-                    <span style={{ width: 18, display: 'inline-flex', justifyContent: 'center', flexShrink: 0 }}>
-                      <Icon size={16} />
-                    </span>
-                    <span style={{ flex: 1 }}>{item.label}</span>
-                  </div>
+                <Link key={item.href} href={item.href} className={`procurement-nav-row${active ? ' active' : ''}`} onClick={() => setSidebarOpen(false)}>
+                  <Icon size={16} />
+                  <span>{item.label}</span>
                 </Link>
               )
             })}
-          </div>
-        </nav>
+          </nav>
+        </div>
       </aside>
 
-      <div style={{ minWidth: 0 }}>
-        <header style={{ height: 74, position: 'sticky', top: 0, zIndex: 30, background: 'rgba(255,255,255,0.92)', backdropFilter: 'blur(16px)', borderBottom: '1px solid #e5e7eb', display: 'grid', gridTemplateColumns: 'auto minmax(280px, 560px) auto', alignItems: 'center', gap: 18, padding: '0 28px' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 12, minWidth: 0 }}>
-            <button aria-label="Menu" style={iconButtonStyle}><Menu size={19} /></button>
-            <span style={{ width: 36, height: 36, borderRadius: 999, background: '#dcfce7', color: '#16a34a', display: 'grid', placeItems: 'center', flexShrink: 0 }}><ActiveIcon size={18} /></span>
-            <span style={{ minWidth: 0 }}>
-              <span style={{ display: 'block', fontSize: 15, fontWeight: 900, color: '#0f172a', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{activeMeta.label}</span>
-              <span style={{ display: 'block', fontSize: 12, color: '#64748b', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{activeMeta.description}</span>
+      <div className="procurement-content-column">
+        <header className="procurement-header">
+          <div className="procurement-header-title">
+            <button type="button" aria-label="Open procurement navigation" aria-expanded={sidebarOpen} className="procurement-icon-button" onClick={() => setSidebarOpen(true)}>
+              <Menu size={19} />
+            </button>
+            <span className="procurement-active-icon"><ActiveIcon size={18} /></span>
+            <span className="procurement-active-copy">
+              <span>{activeMeta.label}</span>
+              <small>{activeMeta.description}</small>
             </span>
           </div>
-          <label style={{ height: 40, borderRadius: 999, background: '#f1f5f9', display: 'flex', alignItems: 'center', gap: 10, padding: '0 16px', border: '1px solid #eef2f7' }}>
+
+          <label className="procurement-search">
             <Search size={17} color="#64748b" />
-            <input placeholder="Search anything (Ctrl K)" style={{ flex: 1, border: 0, outline: 0, background: 'transparent', fontSize: 13, color: '#0f172a' }} />
+            <input placeholder="Search procurement records..." aria-label="Search procurement records" />
           </label>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 12 }}>
-            <button aria-label="Create" style={roundButtonStyle}><Plus size={18} /></button>
-            <button aria-label="Notifications" style={{ ...roundButtonStyle, position: 'relative' }}>
+
+          <div className="procurement-header-actions">
+            <button type="button" aria-label="Create" className="procurement-round-button"><Plus size={18} /></button>
+            <button type="button" aria-label="Notifications" className="procurement-round-button notification">
               <Bell size={18} />
-              <span style={{ position: 'absolute', top: 8, right: 8, width: 8, height: 8, borderRadius: 99, background: '#22c55e', border: '2px solid #fff' }} />
+              <span />
             </button>
-            <button aria-label="Help" style={roundButtonStyle}><CircleHelp size={18} /></button>
-            <button aria-label="Apps" style={roundButtonStyle}><Grid3X3 size={18} /></button>
-            <button style={{ border: 0, background: 'transparent', display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', padding: 0 }}>
-              <span style={{ width: 36, height: 36, borderRadius: 999, background: '#f3e8ff', color: '#7c3aed', display: 'grid', placeItems: 'center', fontSize: 13, fontWeight: 800 }}>JU</span>
+            <button type="button" aria-label="Help" className="procurement-round-button"><CircleHelp size={18} /></button>
+            <button type="button" aria-label="Apps" className="procurement-round-button"><Grid3X3 size={18} /></button>
+            <button type="button" className="procurement-user-button" aria-label="User menu">
+              <span>JU</span>
               <ChevronDown size={14} color="#64748b" />
             </button>
           </div>
         </header>
+
         <main>{children}</main>
       </div>
     </div>
   )
 }
 
-const iconButtonStyle: React.CSSProperties = {
-  width: 38,
-  height: 38,
-  borderRadius: 10,
-  border: '1px solid transparent',
-  background: 'transparent',
-  color: '#334155',
-  display: 'grid',
-  placeItems: 'center',
-  cursor: 'pointer',
-}
-
-const roundButtonStyle: React.CSSProperties = {
-  width: 38,
-  height: 38,
-  borderRadius: 999,
-  border: '1px solid #eef2f7',
-  background: '#fff',
-  color: '#0f172a',
-  display: 'grid',
-  placeItems: 'center',
-  cursor: 'pointer',
-}
-
 const procurementShellCss = `
+.procurement-workspace-shell {
+  min-height: 100vh;
+  height: 100dvh;
+  overflow: hidden;
+  background: #f7f9fc;
+  color: #0f172a;
+  display: grid;
+  grid-template-columns: 260px minmax(0, 1fr);
+}
 .procurement-sidepanel {
-  background: #000000 !important;
-  color: rgb(237, 237, 237) !important;
-  border-right: 1px solid #242424;
+  min-height: 100dvh;
+  height: 100dvh;
+  position: sticky;
+  top: 0;
+  align-self: start;
+  padding: 10px 8px;
+  overflow: hidden;
 }
-.procurement-sidepanel * {
-  border-color: #242424;
+.procurement-sidebar-card {
+  height: calc(100dvh - 20px);
+  border-radius: 14px;
+  background: ${sidebarColors.bg};
+  color: ${sidebarColors.text};
+  border: 1px solid ${sidebarColors.border};
+  display: flex;
+  flex-direction: column;
+  padding: 16px 10px;
+  box-shadow: 0 18px 44px rgba(15, 23, 42, .18);
+  overflow: hidden;
 }
-.procurement-sidepanel a {
-  color: inherit;
+.procurement-sidebar-brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 0 6px 16px;
+}
+.procurement-sidebar-logo {
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  background: ${sidebarColors.text};
+  color: ${sidebarColors.bg};
+  display: grid;
+  place-items: center;
+  font-weight: 850;
+  font-size: 16px;
+  flex: 0 0 auto;
+}
+.procurement-sidebar-copy {
+  min-width: 0;
+  flex: 1;
+}
+.procurement-sidebar-copy > span {
+  display: block;
+  font-size: 16px;
+  font-weight: 700;
+  line-height: 1;
+  color: ${sidebarColors.text};
+}
+.procurement-sidebar-copy small {
+  display: block;
+  font-size: 12px;
+  color: ${sidebarColors.muted};
+  margin-top: 5px;
+  font-weight: 550;
+}
+.procurement-sidebar-close {
+  display: none;
+  width: 34px;
+  height: 34px;
+  border: 1px solid ${sidebarColors.border};
+  border-radius: 10px;
+  background: transparent;
+  color: ${sidebarColors.text};
+  place-items: center;
+  cursor: pointer;
 }
 .procurement-back-link {
-  min-height: 36px;
-  margin: 0 8px 14px;
+  min-height: 38px;
+  margin: 0 0 14px;
   padding: 0 10px;
   display: flex;
   align-items: center;
   gap: 10px;
-  border: 0;
-  border-radius: 0;
-  background: transparent;
-  color: ${sidebarColors.muted};
-  font-size: 14px;
-  font-weight: 500;
+  border: 1px solid ${sidebarColors.border};
+  border-radius: 8px;
+  background: #0b0b0b;
+  color: ${sidebarColors.text};
+  font-size: 13px;
+  font-weight: 850;
   line-height: 20px;
   text-decoration: none;
-  transition: background 150ms ease, color 150ms ease, box-shadow 150ms ease;
+  transition: background 150ms ease, transform 150ms ease;
 }
 .procurement-back-link svg {
-  color: ${sidebarColors.icon};
-  transition: color 150ms ease;
+  color: ${sidebarColors.text};
 }
 .procurement-back-link:hover {
   background: ${sidebarColors.surfaceHover};
-  color: ${sidebarColors.text};
+  transform: translateY(-1px);
 }
-.procurement-back-link:hover svg {
-  color: ${sidebarColors.text};
+.procurement-sidebar-nav {
+  display: grid;
+  gap: 4px;
+  align-content: start;
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding-right: 2px;
+}
+.procurement-sidebar-nav::-webkit-scrollbar {
+  width: 6px;
+}
+.procurement-sidebar-nav::-webkit-scrollbar-thumb {
+  background: #2a2a2a;
+  border-radius: 999px;
+}
+.procurement-sidebar-label {
+  font-size: 10px;
+  letter-spacing: 1px;
+  color: ${sidebarColors.faint};
+  font-weight: 800;
+  padding: 0 10px 6px;
+  text-transform: uppercase;
+  white-space: nowrap;
 }
 .procurement-nav-row {
-  min-height: 36px;
-  margin: 0 8px 2px;
-  padding: 8px 10px;
+  min-height: 38px;
+  padding: 0 10px;
   display: flex;
   align-items: center;
   gap: 10px;
-  border-radius: 0;
+  border-radius: 8px;
   background: transparent;
   color: ${sidebarColors.muted};
-  font-size: 14px;
-  font-weight: 500;
-  line-height: 20px;
-  transition: background 150ms ease, color 150ms ease, box-shadow 150ms ease;
+  font-size: 13px;
+  font-weight: 800;
+  line-height: 1.2;
+  text-decoration: none;
+  transition: background 150ms ease, color 150ms ease, transform 150ms ease;
 }
 .procurement-nav-row svg {
   color: ${sidebarColors.icon};
+  flex: 0 0 auto;
   transition: color 150ms ease;
+}
+.procurement-nav-row span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .procurement-nav-row:hover {
   background: ${sidebarColors.surfaceHover};
   color: ${sidebarColors.text};
+  transform: translateX(2px);
 }
 .procurement-nav-row:hover svg {
   color: ${sidebarColors.text};
 }
 .procurement-nav-row.active {
-  background: ${sidebarColors.surface};
-  color: ${sidebarColors.text};
-  box-shadow: none;
-  font-weight: 600;
+  background: ${sidebarColors.activeBg};
+  color: ${sidebarColors.activeText};
+  font-weight: 900;
 }
 .procurement-nav-row.active svg {
-  color: ${sidebarColors.text};
+  color: ${sidebarColors.activeIcon};
+}
+.procurement-content-column {
+  min-width: 0;
+  height: 100dvh;
+  overflow-y: auto;
+}
+.procurement-header {
+  height: 74px;
+  position: sticky;
+  top: 0;
+  z-index: 30;
+  background: rgba(255,255,255,0.94);
+  backdrop-filter: blur(16px);
+  border-bottom: 1px solid #e5e7eb;
+  display: grid;
+  grid-template-columns: auto minmax(260px, 560px) auto;
+  align-items: center;
+  gap: 18px;
+  padding: 0 28px;
+}
+.procurement-header-title {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+}
+.procurement-icon-button,
+.procurement-round-button {
+  width: 38px;
+  height: 38px;
+  border-radius: 10px;
+  border: 1px solid #e8edf4;
+  background: #fff;
+  color: #0f172a;
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+}
+.procurement-active-icon {
+  width: 38px;
+  height: 38px;
+  border-radius: 11px;
+  background: #ecfdf3;
+  color: #16a34a;
+  display: grid;
+  place-items: center;
+  flex: 0 0 auto;
+}
+.procurement-active-copy {
+  min-width: 0;
+}
+.procurement-active-copy > span {
+  display: block;
+  font-size: 15px;
+  font-weight: 900;
+  color: #0f172a;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.procurement-active-copy small {
+  display: block;
+  font-size: 12px;
+  color: #64748b;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.procurement-search {
+  height: 40px;
+  border-radius: 8px;
+  background: #fff;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 0 14px;
+  border: 1px solid #e8edf4;
+  box-shadow: 0 1px 2px rgba(15,23,42,0.03);
+}
+.procurement-search input {
+  flex: 1;
+  min-width: 0;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  font-size: 13px;
+  color: #0f172a;
+}
+.procurement-header-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 12px;
+}
+.procurement-round-button {
+  border-radius: 999px;
+}
+.procurement-round-button.notification {
+  position: relative;
+}
+.procurement-round-button.notification span {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  width: 8px;
+  height: 8px;
+  border-radius: 99px;
+  background: #22c55e;
+  border: 2px solid #fff;
+}
+.procurement-user-button {
+  border: 0;
+  background: transparent;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  padding: 0;
+}
+.procurement-user-button span {
+  width: 36px;
+  height: 36px;
+  border-radius: 999px;
+  background: #f3e8ff;
+  color: #7c3aed;
+  display: grid;
+  place-items: center;
+  font-size: 13px;
+  font-weight: 850;
+}
+.procurement-mobile-backdrop {
+  display: none;
+}
+@media (max-width: 1180px) {
+  .procurement-workspace-shell {
+    grid-template-columns: 84px minmax(0, 1fr);
+  }
+  .procurement-sidepanel {
+    padding: 8px;
+  }
+  .procurement-sidebar-card {
+    padding: 14px 8px;
+  }
+  .procurement-sidebar-copy,
+  .procurement-back-link,
+  .procurement-sidebar-label,
+  .procurement-nav-row span {
+    display: none;
+  }
+  .procurement-sidebar-brand {
+    justify-content: center;
+    padding: 0 0 16px;
+  }
+  .procurement-nav-row {
+    justify-content: center;
+    padding: 0;
+  }
 }
 @media (max-width: 900px) {
+  .procurement-workspace-shell {
+    display: block;
+    height: auto;
+    min-height: 100vh;
+    overflow: visible;
+  }
   .procurement-sidepanel {
-    position: relative !important;
-    height: auto !important;
-    min-height: auto !important;
+    position: fixed;
+    inset: 0 auto 0 0;
+    z-index: 120;
+    width: min(86vw, 300px);
+    padding: 10px;
+    transform: translateX(-105%);
+    transition: transform 180ms ease;
+  }
+  .procurement-sidepanel.is-open {
+    transform: translateX(0);
+  }
+  .procurement-sidebar-card {
+    height: calc(100dvh - 20px);
+  }
+  .procurement-sidebar-copy,
+  .procurement-back-link,
+  .procurement-sidebar-label,
+  .procurement-nav-row span {
+    display: block;
+  }
+  .procurement-nav-row {
+    justify-content: flex-start;
+    padding: 0 10px;
+  }
+  .procurement-sidebar-brand {
+    justify-content: flex-start;
+    padding: 0 6px 16px;
+  }
+  .procurement-sidebar-close {
+    display: grid;
+  }
+  .procurement-mobile-backdrop {
+    position: fixed;
+    inset: 0;
+    z-index: 110;
+    border: 0;
+    background: rgba(15, 23, 42, .46);
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 180ms ease;
+    display: block;
+  }
+  .procurement-mobile-backdrop.is-open {
+    opacity: 1;
+    pointer-events: auto;
+  }
+  .procurement-content-column {
+    height: auto;
+    min-height: 100vh;
+    overflow: visible;
+  }
+  .procurement-header {
+    grid-template-columns: 1fr auto;
+    height: auto;
+    min-height: 72px;
+    padding: 10px 14px;
+  }
+  .procurement-search {
+    grid-column: 1 / -1;
+    order: 3;
+  }
+  .procurement-header-actions {
+    gap: 8px;
+  }
+  .procurement-header-actions .procurement-round-button:nth-child(n+3),
+  .procurement-user-button svg {
+    display: none;
+  }
+}
+@media (max-width: 520px) {
+  .procurement-active-icon,
+  .procurement-active-copy small {
+    display: none;
+  }
+  .procurement-header-actions .procurement-round-button:first-child {
+    display: none;
   }
 }
 `
