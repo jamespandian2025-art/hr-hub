@@ -1,6 +1,6 @@
 'use client'
 
-import { FormEvent, useMemo, useState } from 'react'
+import { FormEvent, useEffect, useMemo, useRef, useState } from 'react'
 import {
   Bell,
   BriefcaseBusiness,
@@ -96,6 +96,8 @@ export default function ProjectManagementModule() {
   const [taskDraft, setTaskDraft] = useState(() => defaultTaskDraft(state))
   const [timeDraft, setTimeDraft] = useState(() => defaultTimeDraft(state))
   const [documentDraft, setDocumentDraft] = useState(() => defaultDocumentDraft(state))
+  const filterPanelRef = useRef<HTMLElement | null>(null)
+  const headerActionsRef = useRef<HTMLDivElement | null>(null)
   const stats = projectStats(filteredState)
   const budget = budgetSummary(filteredState)
   const departments = useMemo(() => ['All', ...Array.from(new Set(state.projects.map(project => project.department)))], [state.projects])
@@ -108,6 +110,21 @@ export default function ProjectManagementModule() {
     { title: 'On Hold Projects', value: String(stats.onHoldProjects), change: `${stats.onHoldProjects}`, comparison: 'needs review', icon: Timer, tone: colors.orange, negative: stats.onHoldProjects > 0 },
     { title: 'Total Budget', value: formatMoney(stats.totalBudget), change: formatMoney(budget.remaining), comparison: 'remaining', icon: WalletCards, tone: '#14b8a6' },
   ]
+
+  useEffect(() => {
+    if (!filtersOpen) return
+
+    const closeOnOutsideTap = (event: PointerEvent) => {
+      const target = event.target as Node | null
+      if (!target) return
+      if (filterPanelRef.current?.contains(target)) return
+      if (headerActionsRef.current?.contains(target)) return
+      setFiltersOpen(false)
+    }
+
+    document.addEventListener('pointerdown', closeOnOutsideTap)
+    return () => document.removeEventListener('pointerdown', closeOnOutsideTap)
+  }, [filtersOpen])
 
   const createProject = (event: FormEvent) => {
     event.preventDefault()
@@ -162,7 +179,7 @@ export default function ProjectManagementModule() {
             <h1>Project Management</h1>
             <p>Plan, track and deliver projects successfully.</p>
           </div>
-          <div className="pm-header-actions">
+          <div className="pm-header-actions" ref={headerActionsRef}>
             <button type="button" className="pm-control pm-date-control" onClick={() => setFiltersOpen(open => !open)}><CalendarDays size={15} /> {dateRangeLabel} <ChevronDown size={13} /></button>
             <label className="pm-search pm-header-search"><Search size={16} /><input value={filters.query} onChange={event => setFilters(prev => ({ ...prev, query: event.target.value }))} placeholder="Search projects, tasks, documents..." /></label>
             <button type="button" className="pm-control pm-bell-control"><Bell size={15} /></button>
@@ -172,7 +189,7 @@ export default function ProjectManagementModule() {
         </header>
 
         {filtersOpen && (
-          <section className="pm-card pm-filter-panel" aria-label="Project filters">
+          <section className="pm-card pm-filter-panel" aria-label="Project filters" ref={filterPanelRef}>
             <Field label="Date from"><input type="date" value={filters.dateFrom} onChange={event => setFilters(prev => ({ ...prev, dateFrom: event.target.value }))} /></Field>
             <Field label="Date to"><input type="date" value={filters.dateTo} onChange={event => setFilters(prev => ({ ...prev, dateTo: event.target.value }))} /></Field>
             <Field label="Status"><Select value={filters.status} options={statusOptions} onChange={value => setFilters(prev => ({ ...prev, status: value }))} /></Field>
@@ -189,18 +206,20 @@ export default function ProjectManagementModule() {
         <TabBar tabs={tabs} active={store.activeTab} onChange={store.setActiveTab} />
 
         {showCreate && (
-          <section className="pm-card pm-create">
-            <div className="pm-section-header"><h2>New Project</h2><button type="button" onClick={() => setShowCreate(false)}>Cancel</button></div>
-            <form onSubmit={createProject} className="pm-form">
+          <div className="pm-drawer-backdrop">
+          <aside className="pm-card pm-create" role="dialog" aria-modal="true" aria-labelledby="pm-create-title">
+            <div className="pm-section-header"><h2 id="pm-create-title">New Project</h2><button type="button" className="pm-drawer-close" onClick={() => setShowCreate(false)} aria-label="Close new project form">&times;</button></div>
+            <form onSubmit={createProject} className="pm-form pm-create-form">
               <Field label="Project name"><input value={draft.name} onChange={event => setDraft(prev => ({ ...prev, name: event.target.value }))} required /></Field>
               <Field label="Client"><select value={draft.clientId} onChange={event => setDraft(prev => ({ ...prev, clientId: event.target.value }))}>{state.clients.map(client => <option key={client.id} value={client.id}>{client.name}</option>)}</select></Field>
               <Field label="Department"><input value={draft.department} onChange={event => setDraft(prev => ({ ...prev, department: event.target.value }))} /></Field>
               <Field label="Due date"><input value={draft.dueDate} onChange={event => setDraft(prev => ({ ...prev, dueDate: event.target.value }))} type="date" /></Field>
               <Field label="Budget"><input value={draft.budget} onChange={event => setDraft(prev => ({ ...prev, budget: event.target.value }))} type="number" min="0" /></Field>
               <label className="pm-field pm-wide"><span>Description</span><textarea value={draft.description} onChange={event => setDraft(prev => ({ ...prev, description: event.target.value }))} rows={3} /></label>
-              <div className="pm-form-actions"><button type="submit" className="pm-primary"><Plus size={15} /> Create Project</button></div>
+              <div className="pm-form-actions pm-create-actions"><button type="button" className="pm-control" onClick={() => setShowCreate(false)}>Cancel</button><button type="submit" className="pm-primary"><Plus size={15} /> Create Project</button></div>
             </form>
-          </section>
+          </aside>
+          </div>
         )}
 
         {store.selectedProject ? (
@@ -279,13 +298,13 @@ function Overview({ state, projects, budget, onOpen, onAction, onNewProject }: {
   const segments = progressSegments(state)
   const trend = monthlyStatusTrend(state)
   return (
-    <section className="pm-overview-grid">
+    <section className="pm-overview-grid pm-dashboard-overview">
       <div className="pm-card pm-progress-card"><SectionTitle title="Project Progress Overview" /><Donut data={segments} center={String(state.projects.length)} sub="Total Projects" /></div>
       <div className="pm-card pm-trend"><SectionTitle title="Projects by Status" action="By Month" /><LineChart data={trend} /></div>
       <div className="pm-card pm-milestones"><SectionTitle title="Upcoming Milestones" action="View All" /><MilestoneList state={state} /></div>
       <div className="pm-card pm-recent"><SectionTitle title="Recent Projects" action="View All" /><ProjectTable state={state} projects={projects.slice(0, 5)} onOpen={onOpen} /></div>
-      <div className="pm-card"><SectionTitle title="Project Budget Summary" action="View Report" /><BudgetSummary budget={budget} /></div>
-      <div className="pm-card"><SectionTitle title="Quick Actions" /><QuickActions onNewProject={onNewProject} onAction={onAction} /></div>
+      <div className="pm-card pm-budget-card"><SectionTitle title="Project Budget Summary" action="View Report" /><BudgetSummary budget={budget} /></div>
+      <div className="pm-card pm-quick-card"><SectionTitle title="Quick Actions" /><QuickActions onNewProject={onNewProject} onAction={onAction} /></div>
     </section>
   )
 }
@@ -391,32 +410,45 @@ const projectManagementCss = `
 .pm-shell, .pm-workspace { max-width: 100%; overflow-x: clip; }
 .pm-workspace { min-width: 0; display: grid; gap: 22px; }
 .pm-header { display: grid; grid-template-columns: minmax(220px, 1fr) auto; gap: 16px; align-items: start; }
-.pm-title-block h1 { margin: 0; font-size: clamp(26px, 3vw, 34px); line-height: 1.1; }
-.pm-title-block p { margin: 8px 0 0; color: #23335f; }
+.pm-title-block h1 { margin: 0; font-size: 30px; line-height: 1.08; font-weight: 900; letter-spacing: 0; }
+.pm-title-block p { margin: 7px 0 0; color: #475569; font-size: 14px; font-weight: 500; }
 .pm-header-actions { display: flex; gap: 12px; justify-content: flex-end; flex-wrap: wrap; }
-.pm-control, .pm-primary, .pm-select, .pm-search { min-height: 42px; border: 1px solid #dbe3ef; border-radius: 8px; background: #fff; color: #091133; display: inline-flex; align-items: center; gap: 9px; padding: 0 14px; font-weight: 800; max-width: 100%; }
+.pm-control, .pm-primary, .pm-select, .pm-search { min-height: 38px; border: 1px solid #dbe3ef; border-radius: 8px; background: #fff; color: #091133; display: inline-flex; align-items: center; gap: 8px; padding: 0 14px; font-size: 13px; font-weight: 800; max-width: 100%; }
 .pm-primary { background: #16a34a; border-color: #16a34a; color: #fff; cursor: pointer; }
 .pm-search input { border: 0; outline: 0; min-width: min(220px, 42vw); font: inherit; max-width: 100%; }
-.pm-card { background: #fff; border: 1px solid #e6edf6; border-radius: 16px; box-shadow: 0 12px 34px rgba(9, 17, 51, .06); padding: 20px; min-width: 0; }
+.pm-card { background: #fff; border: 1px solid #e6edf6; border-radius: 10px; box-shadow: 0 12px 28px rgba(15, 23, 42, .04); padding: 20px; min-width: 0; }
 .pm-kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(210px, 100%), 1fr)); gap: 18px; margin-bottom: 0; }
 .pm-kpi { display: flex; align-items: center; gap: 18px; min-height: 112px; }
 .pm-kpi > span { width: 56px; height: 56px; border-radius: 12px; display: grid; place-items: center; flex: 0 0 auto; }
-.pm-kpi small, .pm-card small { color: #23335f; font-weight: 800; }
-.pm-kpi strong { display: block; font-size: 26px; margin-top: 8px; }
-.pm-kpi em { display: block; color: #16a34a; font-style: normal; font-size: 12px; font-weight: 800; margin-top: 8px; }
+.pm-kpi small, .pm-card small { color: #475569; font-size: 13px; font-weight: 750; }
+.pm-kpi strong { display: block; font-size: 24px; margin-top: 6px; }
+.pm-kpi em { display: block; color: #16a34a; font-style: normal; font-size: 12px; font-weight: 750; margin-top: 8px; }
 .pm-kpi em.negative { color: #ef4444; }
 .pm-tabs { display: flex; gap: 28px; border-bottom: 1px solid #dfe7f2; overflow-x: auto; margin-bottom: 20px; }
-.pm-tabs button { border: 0; border-bottom: 3px solid transparent; min-height: 48px; background: transparent; color: #091133; font-size: 13px; font-weight: 900; cursor: pointer; white-space: nowrap; }
+.pm-tabs button { border: 0; border-bottom: 2px solid transparent; min-height: 40px; background: transparent; color: #334155; font-size: 13px; font-weight: 750; cursor: pointer; white-space: nowrap; }
+.pm-tabs button.active { font-weight: 900; }
 .pm-tabs button.active { color: #16a34a; border-bottom-color: #16a34a; }
-.pm-overview-grid { display: grid; grid-template-columns: minmax(0, 1.05fr) minmax(0, 1.2fr) minmax(280px, .9fr); gap: 18px; align-items: start; }
-.pm-recent { grid-column: span 2; }
+.pm-overview-grid { display: grid; gap: 18px; align-items: start; }
+.pm-dashboard-overview {
+  grid-template-columns: minmax(0, 1.05fr) minmax(0, 1.2fr) minmax(280px, .9fr);
+  grid-template-areas:
+    "progress trend milestones"
+    "recent recent budget"
+    "recent recent quick";
+}
+.pm-progress-card { grid-area: progress; }
+.pm-trend { grid-area: trend; }
+.pm-milestones { grid-area: milestones; }
+.pm-recent { grid-area: recent; }
+.pm-budget-card { grid-area: budget; }
+.pm-quick-card { grid-area: quick; }
 .pm-section-header { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-bottom: 16px; }
-.pm-section-header h2 { margin: 0; font-size: 18px; }
+.pm-section-header h2 { margin: 0; font-size: 15px; font-weight: 900; }
 .pm-section-header button { border: 0; background: transparent; color: #2563eb; font-weight: 900; cursor: pointer; }
 .pm-donut-wrap { display: grid; grid-template-columns: minmax(160px, 220px) minmax(0, 1fr); align-items: center; gap: 20px; }
 .pm-donut { width: 200px; height: 200px; border-radius: 50%; display: grid; place-items: center; }
 .pm-donut span { width: 112px; height: 112px; border-radius: 50%; background: #fff; display: grid; place-items: center; text-align: center; align-content: center; }
-.pm-donut strong { font-size: 28px; }
+.pm-donut strong { font-size: 24px; }
 .pm-legend, .pm-list, .pm-actions, .pm-task-list, .pm-bar-list { display: grid; gap: 12px; }
 .pm-legend p { display: grid; grid-template-columns: 10px 1fr auto; gap: 10px; align-items: center; margin: 0; font-size: 13px; }
 .pm-legend i { width: 10px; height: 10px; border-radius: 999px; }
@@ -428,8 +460,8 @@ const projectManagementCss = `
 .pm-table-wrap { overflow-x: auto; }
 .pm-mobile-projects { display: none; }
 .pm-table { width: 100%; min-width: 820px; border-collapse: collapse; }
-.pm-table th { text-align: left; padding: 13px 14px; background: #f8fafc; color: #23335f; font-size: 12px; }
-.pm-table td { padding: 14px; border-top: 1px solid #edf2f8; font-size: 13px; vertical-align: middle; }
+.pm-table th { text-align: left; padding: 13px 14px; background: #f8fafc; color: #475569; font-size: 11px; font-weight: 900; }
+.pm-table td { padding: 13px 14px; border-top: 1px solid #edf2f8; font-size: 12px; vertical-align: middle; }
 .pm-avatar { width: 28px; height: 28px; border-radius: 999px; color: #fff; display: inline-grid; place-items: center; font-size: 11px; font-weight: 900; vertical-align: middle; margin-right: 6px; }
 .pm-pill { display: inline-flex; min-height: 24px; border-radius: 7px; background: #eef2ff; color: #4f46e5; padding: 0 8px; align-items: center; font-size: 11px; font-weight: 900; white-space: nowrap; }
 .tone-completed, .tone-done, .tone-approved, .tone-good { background: #dcfce7; color: #15803d; }
@@ -439,7 +471,7 @@ const projectManagementCss = `
 .pm-progress { display: block; width: 112px; height: 8px; border-radius: 999px; background: #e9edf4; overflow: hidden; }
 .pm-progress i { display: block; height: 100%; border-radius: inherit; background: #2f80ed; }
 .pm-icon-btn { width: 34px; height: 34px; border: 1px solid #dbe3ef; border-radius: 8px; background: #fff; display: grid; place-items: center; cursor: pointer; }
-.pm-filter-row { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 16px; }
+.pm-filter-row { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; margin-bottom: 16px; }
 .pm-kanban { display: grid; grid-template-columns: repeat(4, minmax(240px, 1fr)); gap: 16px; overflow-x: auto; }
 .pm-kanban-col { display: grid; align-content: start; gap: 12px; }
 .pm-task-card { border: 1px solid #e6edf6; border-radius: 14px; padding: 14px; display: grid; gap: 10px; background: #fff; cursor: grab; }
@@ -464,10 +496,22 @@ const projectManagementCss = `
 .pm-field textarea { padding: 10px 12px; resize: vertical; }
 .pm-wide { grid-column: span 3; }
 .pm-form-actions { grid-column: 1 / -1; display: flex; justify-content: flex-end; }
-.pm-filter-panel { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 14px; align-items: end; }
+.pm-filter-panel { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 14px; align-items: end; }
+.pm-filter-panel .pm-field, .pm-filter-panel .pm-form-actions { min-width: 0; }
+.pm-filter-panel .pm-form-actions { grid-column: auto; align-self: end; }
+.pm-filter-panel .pm-form-actions .pm-control { width: 100%; justify-content: center; }
 .pm-modal-backdrop { position: fixed; inset: 0; z-index: 120; background: rgba(15, 23, 42, .38); display: grid; place-items: center; padding: 20px; }
 .pm-modal { width: min(760px, 100%); max-height: min(760px, calc(100dvh - 40px)); overflow: auto; }
 .pm-modal-form { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.pm-drawer-backdrop { position: fixed; inset: 0; z-index: 115; background: rgba(15, 23, 42, .36); display: flex; justify-content: flex-end; }
+.pm-create { width: min(520px, 100%); height: 100dvh; border-radius: 0; border-top: 0; border-right: 0; border-bottom: 0; padding: 0; overflow: hidden; display: flex; flex-direction: column; }
+.pm-create .pm-section-header { margin: 0; padding: 24px 28px; border-bottom: 1px solid #e6edf6; }
+.pm-create .pm-section-header h2 { font-size: 22px; }
+.pm-drawer-close { width: 36px; height: 36px; border: 1px solid #dbe3ef; border-radius: 10px; background: #fff; color: #0f172a; font-size: 22px; line-height: 1; display: grid; place-items: center; cursor: pointer; }
+.pm-create-form { grid-template-columns: 1fr; gap: 16px; padding: 24px 28px; overflow: auto; align-content: start; }
+.pm-create .pm-wide { grid-column: auto; }
+.pm-create-actions { position: sticky; bottom: 0; display: grid; grid-template-columns: 1fr 1fr; gap: 12px; background: #fff; padding-top: 16px; }
+.pm-create-actions .pm-control, .pm-create-actions .pm-primary { width: 100%; justify-content: center; }
 .pm-check { min-height: 42px; display: flex; align-items: center; gap: 8px; font-weight: 900; color: #23335f; }
 .pm-empty { min-height: 160px; border: 1px dashed #dbe3ef; border-radius: 14px; display: grid; place-items: center; text-align: center; align-content: center; gap: 8px; color: #64748b; padding: 20px; }
 .pm-empty strong { color: #0f172a; }
@@ -477,7 +521,29 @@ const projectManagementCss = `
 .pm-detail-head h2 { margin: 0; }
 .pm-detail-head p { margin: 5px 0 0; color: #23335f; }
 .pm-detail-head > button:first-child { border: 1px solid #dbe3ef; border-radius: 8px; background: #fff; min-height: 38px; padding: 0 12px; font-weight: 900; cursor: pointer; }
-@media (max-width: 1280px) { .pm-overview-grid { grid-template-columns: 1fr; } .pm-recent { grid-column: auto; } .pm-resource-grid, .pm-doc-grid, .pm-budget-grid { grid-template-columns: 1fr 1fr; } .pm-header { grid-template-columns: 1fr; } .pm-header-actions { justify-content: flex-start; } }
+@media (max-width: 1280px) {
+  .pm-dashboard-overview {
+    grid-template-columns: minmax(0, 1fr) minmax(300px, .42fr);
+    grid-template-areas:
+      "progress milestones"
+      "trend milestones"
+      "recent budget"
+      "recent quick";
+  }
+  .pm-resource-grid, .pm-doc-grid, .pm-budget-grid { grid-template-columns: 1fr 1fr; }
+  .pm-kpis { grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 14px; }
+  .pm-kpi { gap: 12px; padding: 16px; }
+  .pm-kpi > span { width: 48px; height: 48px; }
+  .pm-kpi strong { font-size: 24px; }
+  .pm-header { grid-template-columns: minmax(300px, .8fr) minmax(520px, 1.2fr); align-items: start; }
+  .pm-header-actions { display: grid; grid-template-columns: minmax(190px, auto) minmax(260px, 1fr) 44px minmax(120px, auto); justify-content: end; }
+  .pm-new-project-button { grid-column: 4; justify-self: stretch; }
+}
+@media (max-width: 1080px) {
+  .pm-header { grid-template-columns: 1fr; }
+  .pm-header-actions { grid-template-columns: minmax(180px, auto) minmax(260px, 1fr) 44px minmax(120px, auto) minmax(150px, auto); justify-content: start; }
+  .pm-new-project-button { grid-column: auto; }
+}
 @media (max-width: 760px) {
   .pm-shell { gap: 16px; padding-bottom: calc(84px + env(safe-area-inset-bottom)); }
   .pm-workspace { gap: 16px; }
@@ -516,6 +582,8 @@ const projectManagementCss = `
   .pm-kpis::-webkit-scrollbar, .pm-tabs::-webkit-scrollbar { display: none; }
   .pm-kpi { min-width: min(280px, 82vw); min-height: 124px; scroll-snap-align: start; border-radius: 16px; }
   .pm-card { border-radius: 16px; padding: 16px; box-shadow: 0 8px 22px rgba(9, 17, 51, .055); }
+  .pm-filter-row { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }
+  .pm-filter-row .pm-select { min-height: 44px; padding: 0 8px; font-size: 12px; border-radius: 10px; }
   .pm-resource-grid, .pm-doc-grid, .pm-budget-grid, .pm-form, .pm-modal-form { grid-template-columns: 1fr; }
   .pm-tabs {
     gap: 22px;
@@ -523,9 +591,17 @@ const projectManagementCss = `
     margin-right: -16px;
     padding-left: 16px;
     padding-right: 16px;
+    border-bottom: 0;
     scrollbar-width: none;
   }
-  .pm-tabs button { min-height: 44px; font-size: 13px; }
+  .pm-tabs button {
+    min-height: 38px;
+    border: 1px solid transparent;
+    border-radius: 999px;
+    padding: 0 12px;
+    font-size: 13px;
+  }
+  .pm-tabs button.active { border-color: #bbf7d0; background: #dcfce7; color: #15803d; }
   .pm-filter-panel {
     position: fixed;
     left: 0;
@@ -539,6 +615,21 @@ const projectManagementCss = `
     padding: 18px;
     box-shadow: 0 -18px 60px rgba(15, 23, 42, .24);
   }
+  .pm-dashboard-overview {
+    grid-template-columns: 1fr;
+    grid-template-areas:
+      "progress"
+      "trend"
+      "milestones"
+      "recent"
+      "budget"
+      "quick";
+  }
+  .pm-drawer-backdrop { align-items: end; }
+  .pm-create { width: 100%; height: auto; max-height: 88dvh; border-radius: 20px 20px 0 0; }
+  .pm-create .pm-section-header { padding: 18px; }
+  .pm-create-form { padding: 18px; }
+  .pm-create-actions { grid-template-columns: 1fr; }
   .pm-donut-wrap, .pm-budget-summary, .pm-detail-head { grid-template-columns: 1fr; }
   .pm-donut { width: 180px; height: 180px; margin: auto; }
   .pm-list article { grid-template-columns: 34px 1fr; align-items: start; }
@@ -570,5 +661,6 @@ const projectManagementCss = `
 @media (max-width: 390px) {
   .pm-new-project-button { left: 16px; right: 16px; width: auto; }
   .pm-kpi { min-width: calc(100vw - 56px); }
+  .pm-create { max-height: 92dvh; }
 }
 `
