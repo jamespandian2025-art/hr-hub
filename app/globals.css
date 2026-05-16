@@ -3534,23 +3534,6 @@ html[data-theme='dark'] .accounting-shell textarea::placeholder {
   color: #111827 !important;
 }
 
-@media (max-width: 900px) {
-  .accounting-shell {
-    display: block !important;
-  }
-
-  .accounting-shell aside {
-    position: relative !important;
-    min-height: auto !important;
-  }
-
-  .accounting-shell header {
-    grid-template-columns: 1fr !important;
-    height: auto !important;
-    padding: 14px 16px !important;
-  }
-}
-
 @media (max-width: 880px) {
   .hr-workspace {
     display: block;
