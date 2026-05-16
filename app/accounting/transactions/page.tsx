@@ -1,5 +1,6 @@
 'use client'
 
+import { useEffect, useState } from 'react'
 import {
   ArrowDownCircle,
   ArrowUpCircle,
@@ -13,46 +14,12 @@ import {
   Search,
   SlidersHorizontal,
 } from 'lucide-react'
+import { emptyAccountingData, formatDate, loadAccountingData, money, subscribeAccountingData } from '@/lib/accounting/data'
 
 const font = 'var(--font-body)'
 
 type TransactionType = 'Deposit' | 'Withdrawal' | 'Transfer'
 type TransactionStatus = 'Reconciled' | 'Unreconciled'
-
-type TransactionRecord = {
-  date: string
-  description: string
-  detail: string
-  account: string
-  accountDetail: string
-  type: TransactionType
-  reference: string
-  inflow: number
-  outflow: number
-  balance: number
-  status: TransactionStatus
-  category: string
-}
-
-const transactions: TransactionRecord[] = [
-  { date: 'May 31, 2024', description: 'Payment from Acme Corp.', detail: 'INV-2024-0128', account: 'Operating Account', accountDetail: 'Metrobank •••• 1234', type: 'Deposit', reference: 'INV-2024-0128', inflow: 7500, outflow: 0, balance: 250450.75, status: 'Reconciled', category: 'Receivables' },
-  { date: 'May 31, 2024', description: 'Office Supplies Purchase', detail: 'Receipt # 98765', account: 'Operating Account', accountDetail: 'Metrobank •••• 1234', type: 'Withdrawal', reference: 'BILL-2024-0096', inflow: 0, outflow: 450, balance: 242950.75, status: 'Reconciled', category: 'Office Supplies' },
-  { date: 'May 30, 2024', description: 'Payroll Transfer', detail: 'May 2024 Payroll', account: 'Payroll Account', accountDetail: 'BDO Unibank •••• 5678', type: 'Transfer', reference: 'PAY-2024-0105', inflow: 0, outflow: 18250, balance: 85230.4, status: 'Reconciled', category: 'Payroll' },
-  { date: 'May 30, 2024', description: 'Utility Bill Payment', detail: 'May 2024', account: 'Operating Account', accountDetail: 'Metrobank •••• 1234', type: 'Withdrawal', reference: 'BILL-2024-0094', inflow: 0, outflow: 320.5, balance: 243400.75, status: 'Unreconciled', category: 'Utilities' },
-  { date: 'May 29, 2024', description: 'Client Payment - Globex', detail: 'INV-2024-0127', account: 'Operating Account', accountDetail: 'Metrobank •••• 1234', type: 'Deposit', reference: 'INV-2024-0127', inflow: 12000, outflow: 0, balance: 243721.25, status: 'Reconciled', category: 'Receivables' },
-  { date: 'May 28, 2024', description: 'Transfer to Savings', detail: 'Monthly savings', account: 'Operating Account', accountDetail: 'Metrobank •••• 1234', type: 'Transfer', reference: 'TRF-2024-0042', inflow: 0, outflow: 10000, balance: 231721.25, status: 'Reconciled', category: 'Transfer' },
-  { date: 'May 27, 2024', description: 'Internet Service', detail: 'May 2024', account: 'Operating Account', accountDetail: 'Metrobank •••• 1234', type: 'Withdrawal', reference: 'BILL-2024-0091', inflow: 0, outflow: 85, balance: 241721.25, status: 'Reconciled', category: 'Internet & Phone' },
-  { date: 'May 27, 2024', description: 'Refund from Supplier', detail: 'Overpayment refund', account: 'Operating Account', accountDetail: 'Metrobank •••• 1234', type: 'Deposit', reference: 'RFND-2024-0023', inflow: 350, outflow: 0, balance: 241806.25, status: 'Unreconciled', category: 'Other Income' },
-  { date: 'May 26, 2024', description: 'Credit Card Payment', detail: 'May 2024', account: 'Credit Card Account', accountDetail: 'BPI •••• 7890', type: 'Withdrawal', reference: 'CC-PAY-2024-0056', inflow: 0, outflow: 4500, balance: 241456.25, status: 'Reconciled', category: 'Credit Card' },
-  { date: 'May 25, 2024', description: 'Sales Receipt - Initech', detail: 'INV-2024-0124', account: 'Operating Account', accountDetail: 'Metrobank •••• 1234', type: 'Deposit', reference: 'INV-2024-0124', inflow: 3200, outflow: 0, balance: 245956.25, status: 'Reconciled', category: 'Receivables' },
-]
-
-const totalTransactions = 248
-const accountCount = new Set(transactions.map(transaction => transaction.account)).size + 2
-
-function money(value: number) {
-  return `$${value.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
-}
 
 function TransactionTypePill({ value }: { value: TransactionType }) {
   const styles: Record<TransactionType, { bg: string; color: string }> = {
@@ -82,19 +49,43 @@ function CategoryPill({ value }: { value: string }) {
 }
 
 export default function TransactionsPage() {
-  const totalInflow = transactions.reduce((sum, transaction) => sum + transaction.inflow, 0) + 222730.2
-  const totalOutflow = transactions.reduce((sum, transaction) => sum + transaction.outflow, 0) + 153715
+  const [data, setData] = useState(emptyAccountingData)
+
+  useEffect(() => {
+    const load = () => setData(loadAccountingData())
+    load()
+    return subscribeAccountingData(load)
+  }, [])
+
+  const transactions = data.transactions.map(transaction => ({
+    date: formatDate(transaction.date),
+    description: transaction.description,
+    detail: transaction.secondary,
+    account: transaction.account,
+    accountDetail: transaction.reference || '-',
+    type: transaction.type === 'Income' ? 'Deposit' as const : transaction.type === 'Expense' ? 'Withdrawal' as const : 'Transfer' as const,
+    reference: transaction.reference || transaction.id,
+    inflow: transaction.inflow,
+    outflow: transaction.outflow,
+    balance: transaction.balance,
+    status: ['Reconciled', 'Paid', 'Completed'].includes(transaction.status) ? 'Reconciled' as const : 'Unreconciled' as const,
+    category: transaction.category,
+  }))
+  const totalTransactions = transactions.length
+  const accountCount = new Set(transactions.map(transaction => transaction.account).filter(Boolean)).size
+  const totalInflow = transactions.reduce((sum, transaction) => sum + transaction.inflow, 0)
+  const totalOutflow = transactions.reduce((sum, transaction) => sum + transaction.outflow, 0)
   const netCashFlow = totalInflow - totalOutflow
-  const unreconciled = transactions.filter(transaction => transaction.status === 'Unreconciled').length + 10
+  const unreconciled = transactions.filter(transaction => transaction.status === 'Unreconciled').length
   const unreconciledValue = transactions
     .filter(transaction => transaction.status === 'Unreconciled')
-    .reduce((sum, transaction) => sum + transaction.inflow + transaction.outflow, 0) + 12044.8
+    .reduce((sum, transaction) => sum + transaction.inflow + transaction.outflow, 0)
   const metrics = [
-    { title: 'Total Transactions', value: String(totalTransactions), detail: '12.6% vs last month', icon: Landmark, tone: '#2563eb', up: true },
-    { title: 'Total Inflow', value: money(totalInflow), detail: '18.3% vs last month', icon: ArrowDownCircle, tone: '#16a34a', up: true },
-    { title: 'Total Outflow', value: money(totalOutflow), detail: '8.7% vs last month', icon: ArrowUpCircle, tone: '#ef4444', up: false },
-    { title: 'Net Cash Flow', value: money(netCashFlow), detail: '24.9% vs last month', icon: SlidersHorizontal, tone: '#7c3aed', up: true },
-    { title: 'Unreconciled', value: String(unreconciled), detail: money(unreconciledValue), icon: Banknote, tone: '#f59e0b' },
+    { title: 'Total Transactions', value: String(totalTransactions), detail: `${accountCount} account${accountCount === 1 ? '' : 's'}`, icon: Landmark, tone: '#2563eb', up: totalTransactions > 0 },
+    { title: 'Total Inflow', value: money(totalInflow, data.currency), detail: `${transactions.filter(row => row.inflow > 0).length} income records`, icon: ArrowDownCircle, tone: '#16a34a', up: totalInflow > 0 },
+    { title: 'Total Outflow', value: money(totalOutflow, data.currency), detail: `${transactions.filter(row => row.outflow > 0).length} expense records`, icon: ArrowUpCircle, tone: '#ef4444', up: false },
+    { title: 'Net Cash Flow', value: money(netCashFlow, data.currency), detail: 'Inflow minus outflow', icon: SlidersHorizontal, tone: '#7c3aed', up: netCashFlow >= 0 },
+    { title: 'Unreconciled', value: String(unreconciled), detail: money(unreconciledValue, data.currency), icon: Banknote, tone: '#f59e0b' },
   ]
 
   return (
@@ -111,7 +102,7 @@ export default function TransactionsPage() {
             <input placeholder="Search transactions, accounts, reference..." />
           </label>
           <button type="button" className="tx-toolbar-button"><Filter size={15} /> Filters</button>
-          <button type="button" className="tx-toolbar-button"><CalendarDays size={15} /> May 1 - May 31, 2024</button>
+          <button type="button" className="tx-toolbar-button"><CalendarDays size={15} /> Current records</button>
           <button type="button" className="tx-toolbar-button">Export <Download size={14} /></button>
         </div>
       </div>
@@ -149,7 +140,7 @@ export default function TransactionsPage() {
           <button type="button">All Types <ChevronDown size={14} /></button>
           <button type="button">All Status <ChevronDown size={14} /></button>
           <button type="button">All Accounts <ChevronDown size={14} /></button>
-          <button type="button"><CalendarDays size={15} /> May 1 - May 31, 2024</button>
+          <button type="button"><CalendarDays size={15} /> Current records</button>
           <button type="button"><SlidersHorizontal size={15} /> More Filters</button>
         </div>
 
@@ -170,20 +161,27 @@ export default function TransactionsPage() {
                   <td data-label="Account"><strong>{transaction.account}</strong><small>{transaction.accountDetail}</small></td>
                   <td data-label="Type"><TransactionTypePill value={transaction.type} /></td>
                   <td data-label="Reference">{transaction.reference}</td>
-                  <td data-label="Inflow" className="tx-money-in">{transaction.inflow ? money(transaction.inflow) : '-'}</td>
-                  <td data-label="Outflow" className="tx-money-out">{transaction.outflow ? money(transaction.outflow) : '-'}</td>
-                  <td data-label="Balance">{money(transaction.balance)}</td>
+                  <td data-label="Inflow" className="tx-money-in">{transaction.inflow ? money(transaction.inflow, data.currency) : '-'}</td>
+                  <td data-label="Outflow" className="tx-money-out">{transaction.outflow ? money(transaction.outflow, data.currency) : '-'}</td>
+                  <td data-label="Balance">{money(transaction.balance, data.currency)}</td>
                   <td data-label="Status"><StatusPill value={transaction.status} /></td>
                   <td data-label="Category"><CategoryPill value={transaction.category} /></td>
                   <td data-label="Actions"><button type="button" aria-label={`Actions for ${transaction.description}`} className="tx-icon-button"><MoreHorizontal size={15} /></button></td>
                 </tr>
               ))}
+              {!transactions.length && (
+                <tr>
+                  <td colSpan={12} style={{ padding: 28, textAlign: 'center', color: '#64748b', fontWeight: 800 }}>
+                    No transactions yet. Paid invoices, paid bills, expenses, payroll, and ledger imports will appear here.
+                  </td>
+                </tr>
+              )}
             </tbody>
           </table>
         </div>
 
         <div className="tx-pagination">
-          <strong>Showing 1 to {transactions.length} of {totalTransactions} transactions</strong>
+          <strong>Showing {transactions.length ? 1 : 0} to {transactions.length} of {totalTransactions} transactions</strong>
           <div>
             {['‹', '1', '2', '3', '4', '5', '...', '25', '›'].map((page, index) => (
               <button key={`${page}-${index}`} type="button" className={page === '1' ? 'is-active' : undefined}>{page}</button>

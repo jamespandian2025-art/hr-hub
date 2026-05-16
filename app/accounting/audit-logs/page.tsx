@@ -1,6 +1,7 @@
 'use client'
 
 import Link from 'next/link'
+import { useEffect, useState } from 'react'
 import {
   AlertTriangle,
   CalendarDays,
@@ -24,24 +25,12 @@ import {
   X,
 } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
+import { emptyAccountingData, formatDate, loadAccountingData, subscribeAccountingData } from '@/lib/accounting/data'
 
 const font = 'var(--font-body)'
 
-type AuditStatus = 'Success' | 'Failed'
-type AuditAction = 'Updated' | 'Created' | 'Deleted' | 'Login' | 'Access Denied' | 'Exported' | 'Login Failed'
-
-type AuditEvent = {
-  id: string
-  dateTime: string
-  user: string
-  initials: string
-  role: string
-  action: AuditAction
-  module: string
-  details: string
-  ipAddress: string
-  status: AuditStatus
-}
+type AuditStatus = string
+type AuditAction = string
 
 type Metric = {
   title: string
@@ -51,137 +40,6 @@ type Metric = {
   icon: LucideIcon
   tone: string
 }
-
-const auditSummary = {
-  totalEvents: 8753,
-  uniqueUsers: 126,
-  securityEvents: 243,
-  failedAttempts: 89,
-  dataChanges: 1245,
-}
-
-const auditEvents: AuditEvent[] = [
-  {
-    id: 'EVT-2024-05-31-043215',
-    dateTime: 'May 31, 2024 04:32 PM',
-    user: 'John User',
-    initials: 'JU',
-    role: 'Admin',
-    action: 'Updated',
-    module: 'Employees',
-    details: 'Updated employee salary for Emily Clark (EMP-1024)',
-    ipAddress: '192.168.1.45',
-    status: 'Success',
-  },
-  {
-    id: 'EVT-2024-05-31-041508',
-    dateTime: 'May 31, 2024 04:15 PM',
-    user: 'Emily Clark',
-    initials: 'EC',
-    role: 'Finance Manager',
-    action: 'Created',
-    module: 'Payments',
-    details: 'Created payment of $12,450.00 to ABC Corp.',
-    ipAddress: '192.168.1.78',
-    status: 'Success',
-  },
-  {
-    id: 'EVT-2024-05-31-035842',
-    dateTime: 'May 31, 2024 03:58 PM',
-    user: 'Michael Smith',
-    initials: 'MS',
-    role: 'Accountant',
-    action: 'Deleted',
-    module: 'Invoices',
-    details: 'Deleted invoice INV-2024-0456',
-    ipAddress: '192.168.1.66',
-    status: 'Success',
-  },
-  {
-    id: 'EVT-2024-05-31-032142',
-    dateTime: 'May 31, 2024 03:21 PM',
-    user: 'John User',
-    initials: 'JU',
-    role: 'Admin',
-    action: 'Login',
-    module: 'Authentication',
-    details: 'User logged into the system',
-    ipAddress: '192.168.1.45',
-    status: 'Success',
-  },
-  {
-    id: 'EVT-2024-05-31-024721',
-    dateTime: 'May 31, 2024 02:47 PM',
-    user: 'Emily Clark',
-    initials: 'EC',
-    role: 'Finance Manager',
-    action: 'Updated',
-    module: 'Budget',
-    details: 'Updated Marketing budget for FY 2024',
-    ipAddress: '192.168.1.78',
-    status: 'Success',
-  },
-  {
-    id: 'EVT-2024-05-31-021117',
-    dateTime: 'May 31, 2024 02:11 PM',
-    user: 'Alex Scott',
-    initials: 'AS',
-    role: 'HR Manager',
-    action: 'Access Denied',
-    module: 'Payroll Finance',
-    details: 'Attempted to access restricted payroll data',
-    ipAddress: '192.168.1.92',
-    status: 'Failed',
-  },
-  {
-    id: 'EVT-2024-05-31-013931',
-    dateTime: 'May 31, 2024 01:39 PM',
-    user: 'Robert Brown',
-    initials: 'RB',
-    role: 'Procurement Officer',
-    action: 'Created',
-    module: 'Purchase Orders',
-    details: 'Created purchase order PO-2024-0892',
-    ipAddress: '192.168.1.35',
-    status: 'Success',
-  },
-  {
-    id: 'EVT-2024-05-31-010551',
-    dateTime: 'May 31, 2024 01:05 PM',
-    user: 'John User',
-    initials: 'JU',
-    role: 'Admin',
-    action: 'Updated',
-    module: 'User Roles',
-    details: 'Updated role permissions for Finance Manager',
-    ipAddress: '192.168.1.45',
-    status: 'Success',
-  },
-  {
-    id: 'EVT-2024-05-31-124049',
-    dateTime: 'May 31, 2024 12:40 PM',
-    user: 'Michael Smith',
-    initials: 'MS',
-    role: 'Accountant',
-    action: 'Exported',
-    module: 'Reports',
-    details: 'Exported Profit & Loss report',
-    ipAddress: '192.168.1.66',
-    status: 'Success',
-  },
-  {
-    id: 'EVT-2024-05-31-121802',
-    dateTime: 'May 31, 2024 12:18 PM',
-    user: 'Alex Scott',
-    initials: 'AS',
-    role: 'HR Manager',
-    action: 'Login Failed',
-    module: 'Authentication',
-    details: 'Failed login attempt',
-    ipAddress: '203.0.113.25',
-    status: 'Failed',
-  },
-]
 
 const filters = ['All Modules', 'All Actions', 'All Users', 'All Status']
 const tabs = ['All Logs', 'User Activity', 'Data Changes', 'Security Events', 'System Events', 'Access Management']
@@ -207,13 +65,33 @@ function AuditPill({ value }: { value: AuditAction | AuditStatus }) {
 }
 
 export default function AuditLogsPage() {
+  const [data, setData] = useState(emptyAccountingData)
+
+  useEffect(() => {
+    const load = () => setData(loadAccountingData())
+    load()
+    return subscribeAccountingData(load)
+  }, [])
+
+  const auditEvents = data.auditEvents.map(event => ({ ...event, dateTime: formatDate(event.dateTime) }))
+  const uniqueUsers = new Set(auditEvents.map(event => event.user)).size
+  const securityEvents = auditEvents.filter(event => /security|access|login|password|permission/i.test(`${event.module} ${event.action} ${event.details}`)).length
+  const failedAttempts = auditEvents.filter(event => event.status === 'Failed' || /failed|denied/i.test(event.action)).length
+  const dataChanges = auditEvents.filter(event => /created|updated|deleted|change|edit/i.test(event.action)).length
+  const auditSummary = {
+    totalEvents: auditEvents.length,
+    uniqueUsers,
+    securityEvents,
+    failedAttempts,
+    dataChanges,
+  }
   const selectedLog = auditEvents[0]
   const metrics: Metric[] = [
-    { title: 'Total Events', value: formatNumber(auditSummary.totalEvents), detail: '15.7% vs Apr 1 - Apr 30, 2024', trend: 'up', icon: FileText, tone: '#2563eb' },
-    { title: 'Unique Users', value: formatNumber(auditSummary.uniqueUsers), detail: '8.2% vs Apr 1 - Apr 30, 2024', trend: 'up', icon: User, tone: '#16a34a' },
-    { title: 'Security Events', value: formatNumber(auditSummary.securityEvents), detail: '22.4% vs Apr 1 - Apr 30, 2024', trend: 'up', icon: ShieldCheck, tone: '#7c3aed' },
-    { title: 'Failed Attempts', value: formatNumber(auditSummary.failedAttempts), detail: '5.3% vs Apr 1 - Apr 30, 2024', trend: 'down', icon: AlertTriangle, tone: '#f97316' },
-    { title: 'Data Changes', value: formatNumber(auditSummary.dataChanges), detail: '11.8% vs Apr 1 - Apr 30, 2024', trend: 'up', icon: CheckCircle2, tone: '#0f766e' },
+    { title: 'Total Events', value: formatNumber(auditSummary.totalEvents), detail: 'Recorded system events', trend: 'up', icon: FileText, tone: '#2563eb' },
+    { title: 'Unique Users', value: formatNumber(auditSummary.uniqueUsers), detail: 'Actors in audit history', trend: 'up', icon: User, tone: '#16a34a' },
+    { title: 'Security Events', value: formatNumber(auditSummary.securityEvents), detail: 'Access and security records', trend: 'up', icon: ShieldCheck, tone: '#7c3aed' },
+    { title: 'Failed Attempts', value: formatNumber(auditSummary.failedAttempts), detail: 'Failed or denied actions', trend: 'down', icon: AlertTriangle, tone: '#f97316' },
+    { title: 'Data Changes', value: formatNumber(auditSummary.dataChanges), detail: 'Create, update, and delete actions', trend: 'up', icon: CheckCircle2, tone: '#0f766e' },
   ]
 
   return (
@@ -226,7 +104,7 @@ export default function AuditLogsPage() {
           <p>Track system activities and changes across the platform for security and compliance.</p>
         </div>
         <div className="audit-actions">
-          <button type="button"><CalendarDays size={15} /> May 1 - May 31, 2024</button>
+          <button type="button"><CalendarDays size={15} /> Current records</button>
           <button type="button"><Filter size={15} /> Filters</button>
           <button type="button">Export <Download size={14} /></button>
         </div>
@@ -298,12 +176,19 @@ export default function AuditLogsPage() {
                     <td data-label="Actions"><button type="button" aria-label={`More actions for ${event.id}`}><MoreHorizontal size={16} /></button></td>
                   </tr>
                 ))}
+                {!auditEvents.length && (
+                  <tr>
+                    <td colSpan={8} style={{ padding: 28, textAlign: 'center', color: '#64748b', fontWeight: 800 }}>
+                      No audit events yet. Finance, payroll, loan, allowance, and employee changes will appear here.
+                    </td>
+                  </tr>
+                )}
               </tbody>
             </table>
           </div>
 
           <div className="audit-pagination">
-            <span>Showing 1 to {auditEvents.length} of {formatNumber(auditSummary.totalEvents)} events</span>
+            <span>Showing {auditEvents.length ? 1 : 0} to {auditEvents.length} of {formatNumber(auditSummary.totalEvents)} events</span>
             <div>
               <button type="button" aria-label="Previous page"><ChevronLeft size={15} /></button>
               {[1, 2, 3].map(page => <button key={page} type="button" className={page === 1 ? 'is-active' : undefined}>{page}</button>)}
@@ -315,7 +200,7 @@ export default function AuditLogsPage() {
           </div>
         </div>
 
-        <aside className="audit-card audit-details">
+        {selectedLog ? <aside className="audit-card audit-details">
           <div className="details-title">
             <h2>Log Details</h2>
             <button type="button" aria-label="Close details"><X size={16} /></button>
@@ -329,21 +214,21 @@ export default function AuditLogsPage() {
             <div><dt><UserCircle2 size={14} /> User</dt><dd>{selectedLog.user} ({selectedLog.role})</dd></div>
             <div><dt><SlidersHorizontal size={14} /> Action</dt><dd>{selectedLog.action}</dd></div>
             <div><dt><Database size={14} /> Module</dt><dd>{selectedLog.module}</dd></div>
-            <div><dt><FileText size={14} /> Record</dt><dd>Employee: Emily Clark (EMP-1024)</dd></div>
+            <div><dt><FileText size={14} /> Record</dt><dd>{selectedLog.details}</dd></div>
             <div><dt><LockKeyhole size={14} /> IP Address</dt><dd>{selectedLog.ipAddress}</dd></div>
-            <div><dt><ShieldCheck size={14} /> Device / Browser</dt><dd>Windows 11 / Chrome 125.0.0.0</dd></div>
+            <div><dt><ShieldCheck size={14} /> Device / Browser</dt><dd>Current workspace</dd></div>
             <div><dt><CheckCircle2 size={14} /> Status</dt><dd><AuditPill value={selectedLog.status} /></dd></div>
           </dl>
           <div className="detail-note">
             <small>Details</small>
-            <p>Updated employee salary from $85,000.00 to $92,000.00</p>
+            <p>{selectedLog.details}</p>
           </div>
           <div className="changes">
             <small>Changes</small>
             <div>
-              <span>Field<strong>Salary</strong></span>
-              <span>Old Value<strong>$85,000.00</strong></span>
-              <span>New Value<strong>$92,000.00</strong></span>
+              <span>Module<strong>{selectedLog.module}</strong></span>
+              <span>Action<strong>{selectedLog.action}</strong></span>
+              <span>Status<strong>{selectedLog.status}</strong></span>
             </div>
           </div>
           <Link href="/hr/employees" className="related-link">
@@ -351,7 +236,7 @@ export default function AuditLogsPage() {
             Related Record
             <strong>View Employee <ExternalLink size={14} /></strong>
           </Link>
-        </aside>
+        </aside> : <aside className="audit-card audit-details"><div className="detail-note"><small>Log Details</small><p>No audit event selected.</p></div></aside>}
       </section>
     </div>
   )

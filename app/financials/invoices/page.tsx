@@ -1,5 +1,6 @@
 'use client'
 import { useEffect, useState } from 'react'
+import { usePathname, useRouter, useSearchParams } from 'next/navigation'
 
 const font = "var(--font-body)"
 const invoicesStorageKey = 'flowsys-invoices'
@@ -44,7 +45,15 @@ const loadInvoices = () => {
 }
 
 export default function InvoicesPage() {
+  const router = useRouter()
+  const pathname = usePathname()
+  const searchParams = useSearchParams()
+  const createRequested = searchParams.get('new') === '1'
   const [showCreate, setShowCreate] = useState(false)
+  const closeCreate = () => {
+    setShowCreate(false)
+    if (createRequested) router.replace(pathname)
+  }
   const [activeTab, setActiveTab] = useState('All')
   const [search, setSearch] = useState('')
   const [selected, setSelected] = useState<number[]>([])
@@ -61,6 +70,7 @@ export default function InvoicesPage() {
   useEffect(() => {
     window.localStorage.setItem(invoicesStorageKey, JSON.stringify(invoices))
   }, [invoices])
+
 
   const addItem = () =>
     setItems(prev => [
@@ -96,7 +106,7 @@ export default function InvoicesPage() {
     }
 
     setInvoices(prev => [...prev, newInvoice])
-    setShowCreate(false)
+    closeCreate()
     setStatus('Draft')
     setRecipient('')
     setDateCreated('2026-05-06')
@@ -152,11 +162,11 @@ export default function InvoicesPage() {
         .join(', ')
     : '#f3f4f6 0% 100%'
 
-  if (showCreate) {
+  if (showCreate || createRequested) {
     return (
       <div style={{ fontFamily: font }}>
         <div
-          onClick={() => setShowCreate(false)}
+          onClick={closeCreate}
           style={{
             display: 'inline-flex',
             alignItems: 'center',

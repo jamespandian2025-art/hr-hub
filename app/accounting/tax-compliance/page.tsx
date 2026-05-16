@@ -1,6 +1,7 @@
 'use client'
 
 import Link from 'next/link'
+import { useEffect, useState } from 'react'
 import {
   AlertTriangle,
   CalendarDays,
@@ -17,84 +18,75 @@ import {
   ShieldCheck,
   SlidersHorizontal,
 } from 'lucide-react'
+import { emptyAccountingData, formatDate, loadAccountingData, money, subscribeAccountingData, type TaxObligation as AccountingTaxObligation } from '@/lib/accounting/data'
 
 const font = 'var(--font-body)'
 
-type TaxStatus = 'Paid' | 'Partially Paid' | 'Pending' | 'Compliant' | 'Due in 10 days' | 'Overdue' | 'Filed' | 'Valid'
-
-type TaxObligation = {
-  type: string
-  period: string
-  dueDate: string
-  taxableAmount: number
-  payable: number
-  paid: number
-  status: TaxStatus
-  color: string
-}
-
-type ComplianceRecord = {
-  title: string
-  detail: string
-  date: string
-  status: TaxStatus
-}
-
-const obligations: TaxObligation[] = [
-  { type: 'Value Added Tax (VAT)', period: 'May 2024', dueDate: 'Jun 15, 2024', taxableAmount: 162250, payable: 32450, paid: 32450, status: 'Paid', color: '#16a34a' },
-  { type: 'Withholding Tax', period: 'May 2024', dueDate: 'Jun 10, 2024', taxableAmount: 93750, payable: 18750, paid: 14900, status: 'Partially Paid', color: '#2563eb' },
-  { type: 'Income Tax - Q2 Est.', period: 'Apr - Jun 2024', dueDate: 'Jun 10, 2024', taxableAmount: 125000, payable: 15600, paid: 0, status: 'Pending', color: '#7c3aed' },
-  { type: 'Payroll Tax', period: 'May 2024', dueDate: 'Jul 15, 2024', taxableAmount: 78500, payable: 7850, paid: 0, status: 'Pending', color: '#f59e0b' },
-  { type: 'Local Business Tax', period: 'Q2 2024', dueDate: 'Jun 30, 2024', taxableAmount: 45000, payable: 2800, paid: 2800, status: 'Paid', color: '#64748b' },
-  { type: 'Environmental Levy', period: 'May 2024', dueDate: 'Jun 20, 2024', taxableAmount: 12000, payable: 1200, paid: 0, status: 'Pending', color: '#94a3b8' },
-]
-
-const compliance: ComplianceRecord[] = [
-  { title: 'VAT Compliance', detail: 'Monthly VAT return', date: 'Filed on May 15, 2024', status: 'Compliant' },
-  { title: 'Withholding Tax', detail: 'Monthly withholding remittance', date: 'Filed on May 10, 2024', status: 'Compliant' },
-  { title: 'Income Tax', detail: 'Quarterly estimated payment', date: 'Due on Jun 10, 2024', status: 'Due in 10 days' },
-  { title: 'Annual Income Tax Return', detail: 'Yearly tax return filing', date: 'Due on Apr 30, 2024', status: 'Overdue' },
-]
-
-const deadlines = [
-  { month: 'JUN', day: '10', title: 'Income Tax - Q2 Estimated Payment', detail: 'Quarterly estimated tax payment', time: '10 days left' },
-  { month: 'JUN', day: '15', title: 'VAT Return - May 2024', detail: 'Monthly VAT return filing', time: '15 days left' },
-  { month: 'JUN', day: '30', title: 'Withholding Tax - May 2024', detail: 'Monthly withholding remittance', time: '30 days left' },
-  { month: 'JUL', day: '15', title: 'Payroll Tax - June 2024', detail: 'Monthly payroll tax remittance', time: '45 days left' },
-]
-
-const filings = [
-  { title: 'VAT Return - May 2024', date: 'Filed on May 15, 2024', status: 'Filed' as TaxStatus },
-  { title: 'Withholding Tax - May 2024', date: 'Filed on May 10, 2024', status: 'Filed' as TaxStatus },
-  { title: 'Payroll Tax - April 2024', date: 'Filed on May 5, 2024', status: 'Filed' as TaxStatus },
-  { title: 'Income Tax - Q1 2024', date: 'Filed on Apr 30, 2024', status: 'Filed' as TaxStatus },
-]
-
-const certificates = [
-  { title: 'BIR Tax Clearance Certificate', date: 'Issued on Feb 20, 2024', status: 'Valid' as TaxStatus },
-  { title: 'VAT Registration Certificate', date: 'Issued on Jan 15, 2024', status: 'Valid' as TaxStatus },
-]
-
-function money(value: number) {
-  return `$${value.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
-}
+type TaxStatus = string
 
 function StatusPill({ value }: { value: TaxStatus }) {
   return <span className={`tax-pill ${value.toLowerCase().replaceAll(' ', '-').replaceAll('&', 'and')}`}>{value}</span>
 }
 
 export default function TaxCompliancePage() {
-  const totalPayable = obligations.reduce((sum, item) => sum + item.payable, 0)
-  const paidThisPeriod = obligations.reduce((sum, item) => sum + item.paid, 0)
+  const [data, setData] = useState(emptyAccountingData)
+  const [todayMs] = useState(() => Date.now())
+
+  useEffect(() => {
+    const load = () => setData(loadAccountingData())
+    load()
+    return subscribeAccountingData(load)
+  }, [])
+
+  const obligations = data.taxObligations
+  const payrollTax = data.payrollRecords.reduce((sum, record) => {
+    const breakdown = record.deductionBreakdown as Record<string, unknown> | undefined
+    return sum + Number(breakdown?.tax || 0)
+  }, 0)
+  const derivedObligations: AccountingTaxObligation[] = obligations.length ? obligations : payrollTax > 0 ? [{
+    id: 'payroll-tax',
+    type: 'Payroll Withholding Tax',
+    period: 'Current payroll records',
+    dueDate: '',
+    taxableAmount: data.payrollRecords.reduce((sum, record) => sum + Number(record.gross || 0), 0),
+    payable: payrollTax,
+    paid: data.payrollRecords.filter(record => record.status === 'Paid').reduce((sum, record) => {
+      const breakdown = record.deductionBreakdown as Record<string, unknown> | undefined
+      return sum + Number(breakdown?.tax || 0)
+    }, 0),
+    status: 'Pending',
+    color: '#f59e0b',
+  }] : []
+  const compliance = derivedObligations.map(item => ({
+    title: item.type,
+    detail: item.period || 'Current records',
+    date: item.dueDate ? `Due on ${formatDate(item.dueDate)}` : 'No due date set',
+    status: item.status,
+  }))
+  const deadlines = derivedObligations.filter(item => item.dueDate).map(item => {
+    const due = new Date(item.dueDate)
+    const days = Math.ceil((due.getTime() - new Date().getTime()) / 86400000)
+    return {
+      month: due.toLocaleDateString('en-US', { month: 'short' }).toUpperCase(),
+      day: String(due.getDate()).padStart(2, '0'),
+      title: item.type,
+      detail: item.period || 'Tax obligation',
+      time: days >= 0 ? `${days} days left` : `${Math.abs(days)} days overdue`,
+    }
+  })
+  const filings = derivedObligations.filter(item => item.paid >= item.payable && item.payable > 0).map(item => ({ title: item.type, date: item.dueDate ? `Filed on ${formatDate(item.dueDate)}` : 'Filed', status: 'Filed' }))
+  const certificates: Array<{ title: string; date: string; status: TaxStatus }> = []
+  const totalPayable = derivedObligations.reduce((sum, item) => sum + item.payable, 0)
+  const paidThisPeriod = derivedObligations.reduce((sum, item) => sum + item.paid, 0)
   const pendingAmount = totalPayable - paidThisPeriod
-  const overdueAmount = compliance.filter(item => item.status === 'Overdue').reduce(sum => sum + 3850, 0)
-  const complianceScore = Math.round((compliance.filter(item => item.status === 'Compliant').length / compliance.length) * 100 + 48)
+  const overdueAmount = derivedObligations.filter(item => item.dueDate && new Date(item.dueDate).getTime() < todayMs && item.paid < item.payable).reduce((sum, item) => sum + Math.max(item.payable - item.paid, 0), 0)
+  const complianceScore = compliance.length ? Math.round((compliance.filter(item => ['Paid', 'Filed', 'Compliant'].includes(item.status)).length / compliance.length) * 100) : 0
   const metrics = [
-    { title: 'Total Tax Payable', value: money(totalPayable), detail: '12.6% vs last period', icon: FileCheck2, tone: '#16a34a', bad: true },
-    { title: 'Paid This Period', value: money(paidThisPeriod), detail: '8.4% vs last period', icon: CreditCard, tone: '#2563eb', good: true },
-    { title: 'Pending Amount', value: money(pendingAmount), detail: '0% vs last period', icon: Clock3, tone: '#f59e0b' },
-    { title: 'Overdue Amount', value: money(overdueAmount), detail: '15.2% vs last period', icon: AlertTriangle, tone: '#ef4444', bad: true },
-    { title: 'Compliance Score', value: `${complianceScore}%`, detail: '2% vs last period', icon: ShieldCheck, tone: '#7c3aed', good: true },
+    { title: 'Total Tax Payable', value: money(totalPayable, data.currency), detail: `${derivedObligations.length} obligations`, icon: FileCheck2, tone: '#16a34a', bad: true },
+    { title: 'Paid This Period', value: money(paidThisPeriod, data.currency), detail: 'From tax and payroll records', icon: CreditCard, tone: '#2563eb', good: true },
+    { title: 'Pending Amount', value: money(pendingAmount, data.currency), detail: 'Payable minus paid', icon: Clock3, tone: '#f59e0b' },
+    { title: 'Overdue Amount', value: money(overdueAmount, data.currency), detail: 'Past due unpaid amount', icon: AlertTriangle, tone: '#ef4444', bad: true },
+    { title: 'Compliance Score', value: `${complianceScore}%`, detail: 'Paid or filed obligations', icon: ShieldCheck, tone: '#7c3aed', good: true },
   ]
 
   return (
@@ -106,7 +98,7 @@ export default function TaxCompliancePage() {
           <p className="tax-subtitle">Manage tax obligations, filings, and compliance requirements.</p>
         </div>
         <div className="tax-actions">
-          <button type="button"><CalendarDays size={15} /> May 1 - May 31, 2024</button>
+          <button type="button"><CalendarDays size={15} /> Current records</button>
           <button type="button"><Filter size={15} /> Filters</button>
           <button type="button">Export <Download size={14} /></button>
         </div>
@@ -136,23 +128,23 @@ export default function TaxCompliancePage() {
         <div className="tax-card">
           <h2>Tax Liability Summary</h2>
           <div className="tax-liability">
-            <div className="tax-donut" style={{ background: `conic-gradient(${obligations.map((item, index) => {
-              const start = obligations.slice(0, index).reduce((sum, prev) => sum + (prev.payable / totalPayable) * 100, 0)
-              const end = start + (item.payable / totalPayable) * 100
+            <div className="tax-donut" style={{ background: `conic-gradient(${derivedObligations.map((item, index) => {
+              const start = derivedObligations.slice(0, index).reduce((sum, prev) => sum + (prev.payable / Math.max(totalPayable, 1)) * 100, 0)
+              const end = start + (item.payable / Math.max(totalPayable, 1)) * 100
               return `${item.color} ${start}% ${end}%`
-            }).join(', ')})` }}>
-              <span><strong>{money(totalPayable)}</strong><small>Total Payable</small></span>
+            }).join(', ') || '#e5e7eb 0% 100%'})` }}>
+              <span><strong>{money(totalPayable, data.currency)}</strong><small>Total Payable</small></span>
             </div>
             <div className="tax-liability-list">
               <div className="tax-liability-head"><span>Tax Type</span><span>Amount</span><span>% of Total</span></div>
-              {obligations.slice(0, 5).map(item => (
+              {derivedObligations.slice(0, 5).map(item => (
                 <div key={item.type}>
                   <span><i style={{ background: item.color }} />{item.type}</span>
-                  <strong>{money(item.payable)}</strong>
-                  <strong>{((item.payable / totalPayable) * 100).toFixed(1)}%</strong>
+                  <strong>{money(item.payable, data.currency)}</strong>
+                  <strong>{((item.payable / Math.max(totalPayable, 1)) * 100).toFixed(1)}%</strong>
                 </div>
               ))}
-              <div className="tax-liability-total"><span>Total</span><strong>{money(totalPayable)}</strong><strong>100%</strong></div>
+              <div className="tax-liability-total"><span>Total</span><strong>{money(totalPayable, data.currency)}</strong><strong>100%</strong></div>
             </div>
           </div>
         </div>
@@ -191,21 +183,21 @@ export default function TaxCompliancePage() {
             <label><Search size={15} color="#64748b" /><input placeholder="Search tax obligations..." /></label>
             <button type="button">All Tax Types <ChevronDown size={14} /></button>
             <button type="button">All Status <ChevronDown size={14} /></button>
-            <button type="button"><CalendarDays size={15} /> May 1 - May 31, 2024</button>
+            <button type="button"><CalendarDays size={15} /> Current records</button>
             <button type="button"><SlidersHorizontal size={15} /> More Filters</button>
           </div>
           <div className="tax-table-wrap">
             <table className="tax-table">
               <thead><tr>{['Tax Type', 'Period', 'Due Date', 'Taxable Amount', 'Tax Payable', 'Paid Amount', 'Status', 'Actions'].map(col => <th key={col}>{col}</th>)}</tr></thead>
               <tbody>
-                {obligations.map(item => (
+                {derivedObligations.map(item => (
                   <tr key={item.type}>
                     <td data-label="Tax Type">{item.type}</td>
                     <td data-label="Period">{item.period}</td>
                     <td data-label="Due Date">{item.dueDate}</td>
-                    <td data-label="Taxable Amount">{money(item.taxableAmount)}</td>
-                    <td data-label="Tax Payable">{money(item.payable)}</td>
-                    <td data-label="Paid Amount">{money(item.paid)}</td>
+                    <td data-label="Taxable Amount">{money(item.taxableAmount, data.currency)}</td>
+                    <td data-label="Tax Payable">{money(item.payable, data.currency)}</td>
+                    <td data-label="Paid Amount">{money(item.paid, data.currency)}</td>
                     <td data-label="Status"><StatusPill value={item.status} /></td>
                     <td data-label="Actions"><button type="button" className="tax-icon-button"><MoreHorizontal size={15} /></button></td>
                   </tr>
@@ -213,7 +205,7 @@ export default function TaxCompliancePage() {
               </tbody>
             </table>
           </div>
-          <div className="tax-pagination"><strong>Showing 1 to {obligations.length} of {obligations.length} obligations</strong><div><button>‹</button><button className="is-active">1</button><button>›</button><button>10 / page <ChevronDown size={14} /></button></div></div>
+          <div className="tax-pagination"><strong>Showing {derivedObligations.length ? 1 : 0} to {derivedObligations.length} of {derivedObligations.length} obligations</strong><div><button>‹</button><button className="is-active">1</button><button>›</button><button>10 / page <ChevronDown size={14} /></button></div></div>
         </div>
 
         <div className="tax-side-stack">

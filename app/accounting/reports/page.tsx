@@ -1,6 +1,7 @@
 'use client'
 
 import Link from 'next/link'
+import { useEffect, useMemo, useState } from 'react'
 import {
   ArrowUp,
   Banknote,
@@ -20,6 +21,7 @@ import {
   WalletCards,
 } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
+import { emptyAccountingData, expenseBreakdown, loadAccountingData, money, monthlySeries, subscribeAccountingData } from '@/lib/accounting/data'
 
 const font = 'var(--font-body)'
 
@@ -44,31 +46,6 @@ type ScheduledReport = {
   active: boolean
 }
 
-const financialSummary = {
-  revenue: 2450000,
-  expenses: 1485750.25,
-  cashBalance: 1245300.5,
-  currentAr: 742850,
-  currentAp: 358400.75,
-}
-
-const monthlyReports = [
-  { label: "Dec '23", revenue: 292000, expenses: 245000, profit: 130000 },
-  { label: "Jan '24", revenue: 398000, expenses: 286000, profit: 112000 },
-  { label: "Feb '24", revenue: 352000, expenses: 258000, profit: 160000 },
-  { label: "Mar '24", revenue: 386000, expenses: 306000, profit: 163000 },
-  { label: "Apr '24", revenue: 342000, expenses: 252000, profit: 151000 },
-  { label: "May '24", revenue: 462000, expenses: 305000, profit: 228000 },
-]
-
-const expenseCategories = [
-  { name: 'Operating Expenses', value: 631943.86, color: '#16a34a' },
-  { name: 'Payroll Expenses', value: 426321.35, color: '#2563eb' },
-  { name: 'Administrative', value: 217250.8, color: '#7c3aed' },
-  { name: 'Sales & Marketing', value: 137067.34, color: '#f59e0b' },
-  { name: 'Others', value: 73167.9, color: '#64748b' },
-]
-
 const reportCategories: ReportCategory[] = [
   { name: 'Financial Statements', description: 'Balance Sheet, P&L, Cash Flow', icon: FileText, tone: '#16a34a' },
   { name: 'Management Reports', description: 'KPIs, Financial Summary, Trends', icon: FileBarChart, tone: '#0f172a' },
@@ -81,31 +58,11 @@ const reportCategories: ReportCategory[] = [
   { name: 'Custom Reports', description: 'Tailored reports and analytics', icon: Clock3, tone: '#7c3aed' },
 ]
 
-const generatedReports: GeneratedReport[] = [
-  { name: 'Profit & Loss Statement - May 2024', category: 'Financial Statements', generatedBy: 'John User', generatedOn: 'May 31, 2024 09:15 AM', format: 'PDF' },
-  { name: 'Balance Sheet - May 2024', category: 'Financial Statements', generatedBy: 'John User', generatedOn: 'May 31, 2024 09:15 AM', format: 'PDF' },
-  { name: 'Cash Flow Statement - May 2024', category: 'Financial Statements', generatedBy: 'John User', generatedOn: 'May 31, 2024 09:14 AM', format: 'XLSX' },
-  { name: 'Sales Summary - May 2024', category: 'Sales Reports', generatedBy: 'Emily Clark', generatedOn: 'May 31, 2024 08:45 AM', format: 'XLSX' },
-  { name: 'AP Aging Summary - May 2024', category: 'Purchasing Reports', generatedBy: 'Emily Clark', generatedOn: 'May 31, 2024 08:30 AM', format: 'PDF' },
-  { name: 'Payroll Summary - May 2024', category: 'Payroll Reports', generatedBy: 'John User', generatedOn: 'May 31, 2024 08:10 AM', format: 'PDF' },
-]
-
-const scheduledReports: ScheduledReport[] = [
-  { title: 'Daily Cash Summary', cadence: 'Every day at 08:00 AM', active: true },
-  { title: 'Weekly Financial Summary', cadence: 'Every Monday at 09:00 AM', active: true },
-  { title: 'Monthly P&L Report', cadence: '1st of every month at 09:00 AM', active: true },
-  { title: 'Quarterly Tax Summary', cadence: 'Every quarter on day 1 at 10:00 AM', active: true },
-]
-
 const quickActions = [
   { title: 'Create Custom Report', body: 'Build a report from scratch', icon: FileBarChart },
   { title: 'Report Designer', body: 'Design advanced custom reports', icon: Clock3 },
   { title: 'Import Report Definition', body: 'Import from template or file', icon: Download },
 ]
-
-function money(value: number) {
-  return `$${value.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
-}
 
 function FormatPill({ value }: { value: GeneratedReport['format'] }) {
   return <span className={value === 'PDF' ? 'reports-format pdf' : 'reports-format xlsx'}>{value}</span>
@@ -116,19 +73,45 @@ function StatusPill() {
 }
 
 export default function ReportsPage() {
+  const [data, setData] = useState(emptyAccountingData)
+
+  useEffect(() => {
+    const load = () => setData(loadAccountingData())
+    load()
+    return subscribeAccountingData(load)
+  }, [])
+
+  const financialSummary = {
+    revenue: data.transactions.filter(row => row.type === 'Income').reduce((sum, row) => sum + row.amount, 0),
+    expenses: data.transactions.filter(row => row.type === 'Expense').reduce((sum, row) => sum + row.amount, 0),
+    cashBalance: data.bankAccounts.reduce((sum, account) => sum + account.balance, 0),
+    currentAr: data.invoices.reduce((sum, invoice) => sum + invoice.balanceDue, 0),
+    currentAp: data.bills.reduce((sum, bill) => sum + bill.balanceDue, 0),
+  }
+  const monthlyReports = useMemo(() => monthlySeries(data.transactions), [data.transactions])
+  const expenseCategories = useMemo(() => expenseBreakdown(data.transactions), [data.transactions])
+  const generatedReports: GeneratedReport[] = data.transactions.length || data.invoices.length || data.bills.length || data.payrollRecords.length
+    ? [
+      { name: 'Profit & Loss Statement', category: 'Financial Statements', generatedBy: data.companyName, generatedOn: 'Available now', format: 'PDF' },
+      { name: 'Cash Flow Statement', category: 'Financial Statements', generatedBy: data.companyName, generatedOn: 'Available now', format: 'XLSX' },
+      { name: 'AR/AP Aging Summary', category: 'Management Reports', generatedBy: data.companyName, generatedOn: 'Available now', format: 'PDF' },
+    ]
+    : []
+  const scheduledReports: ScheduledReport[] = []
   const netProfit = financialSummary.revenue - financialSummary.expenses
   const metrics = [
-    { title: 'Total Revenue', value: money(financialSummary.revenue), detail: '18.6% vs Apr 1 - Apr 30, 2024', icon: ArrowUp, tone: '#16a34a', up: true },
-    { title: 'Total Expenses', value: money(financialSummary.expenses), detail: '9.4% vs Apr 1 - Apr 30, 2024', icon: ShoppingCart, tone: '#ef4444', up: false },
-    { title: 'Net Profit', value: money(netProfit), detail: '28.7% vs Apr 1 - Apr 30, 2024', icon: Banknote, tone: '#2563eb', up: true },
-    { title: 'Cash Balance', value: money(financialSummary.cashBalance), detail: '12.3% vs Apr 1 - Apr 30, 2024', icon: SlidersHorizontal, tone: '#7c3aed', up: true },
-    { title: 'Current AR', value: money(financialSummary.currentAr), detail: '8.2% vs Apr 1 - Apr 30, 2024', icon: Clock3, tone: '#f59e0b', up: true },
-    { title: 'Current AP', value: money(financialSummary.currentAp), detail: '4.5% vs Apr 1 - Apr 30, 2024', icon: FileText, tone: '#0f766e', up: false },
+    { title: 'Total Revenue', value: money(financialSummary.revenue, data.currency), detail: `${data.invoices.length} invoice records`, icon: ArrowUp, tone: '#16a34a', up: financialSummary.revenue > 0 },
+    { title: 'Total Expenses', value: money(financialSummary.expenses, data.currency), detail: `${data.bills.length + data.expenses.length + data.payrollRecords.length} cost records`, icon: ShoppingCart, tone: '#ef4444', up: false },
+    { title: 'Net Profit', value: money(netProfit, data.currency), detail: 'Revenue minus expenses', icon: Banknote, tone: '#2563eb', up: netProfit >= 0 },
+    { title: 'Cash Balance', value: money(financialSummary.cashBalance, data.currency), detail: `${data.bankAccounts.length} bank accounts`, icon: SlidersHorizontal, tone: '#7c3aed', up: financialSummary.cashBalance > 0 },
+    { title: 'Current AR', value: money(financialSummary.currentAr, data.currency), detail: 'Open receivables', icon: Clock3, tone: '#f59e0b', up: financialSummary.currentAr > 0 },
+    { title: 'Current AP', value: money(financialSummary.currentAp, data.currency), detail: 'Open payables', icon: FileText, tone: '#0f766e', up: false },
   ]
   const totalExpense = expenseCategories.reduce((sum, item) => sum + item.value, 0)
+  const maxMonthlyValue = Math.max(1, ...monthlyReports.flatMap(month => [month.revenue, month.expenses]))
   const donut = expenseCategories.reduce<{ cursor: number; segments: string[] }>((acc, item) => {
     const start = acc.cursor
-    const end = start + (item.value / totalExpense) * 100
+    const end = start + (item.value / Math.max(totalExpense, 1)) * 100
     return {
       cursor: end,
       segments: [...acc.segments, `${item.color} ${start}% ${end}%`],
@@ -144,7 +127,7 @@ export default function ReportsPage() {
           <p className="reports-subtitle">Generate, view and export insightful reports to help you make better decisions.</p>
         </div>
         <div className="reports-actions">
-          <button type="button"><CalendarDays size={15} /> May 1 - May 31, 2024</button>
+          <button type="button"><CalendarDays size={15} /> Current records</button>
           <button type="button"><Filter size={15} /> Filters</button>
           <button type="button">Export <ChevronDown size={14} /></button>
         </div>
@@ -202,8 +185,8 @@ export default function ReportsPage() {
                   {monthlyReports.map(month => (
                     <div key={month.label} className="reports-month">
                       <div>
-                        <i className="profit-line" style={{ bottom: `${(month.revenue / 500000) * 100}%` }} />
-                        <i className="expense-line" style={{ bottom: `${(month.expenses / 500000) * 100}%` }} />
+                        <i className="profit-line" style={{ bottom: `${(month.revenue / maxMonthlyValue) * 100}%` }} />
+                        <i className="expense-line" style={{ bottom: `${(month.expenses / maxMonthlyValue) * 100}%` }} />
                         <span style={{ height: `${(month.profit / 260000) * 100}%` }} />
                       </div>
                       <small>{month.label}</small>
@@ -218,12 +201,13 @@ export default function ReportsPage() {
               <h2>Expense by Category</h2>
               <div className="reports-expense-breakdown">
                 <div className="reports-donut" style={{ background: `conic-gradient(${donut})` }}>
-                  <span><strong>{money(totalExpense)}</strong><small>Total Expenses</small></span>
+                  <span><strong>{money(totalExpense, data.currency)}</strong><small>Total Expenses</small></span>
                 </div>
                 <div className="reports-expense-list">
                   {expenseCategories.map(item => (
-                    <p key={item.name}><span style={{ background: item.color }} /> {item.name} <strong>{((item.value / totalExpense) * 100).toFixed(1)}% ({money(item.value)})</strong></p>
+                    <p key={item.name}><span style={{ background: item.color }} /> {item.name} <strong>{((item.value / Math.max(totalExpense, 1)) * 100).toFixed(1)}% ({money(item.value, data.currency)})</strong></p>
                   ))}
+                  {!expenseCategories.length && <p>No expense records yet.</p>}
                 </div>
               </div>
               <Link href="/accounting/reports" className="reports-full-link">View Full Report</Link>
@@ -250,7 +234,7 @@ export default function ReportsPage() {
                   </tbody>
                 </table>
               </div>
-              <div className="reports-pagination"><strong>Showing 1 to {generatedReports.length} of 12 reports</strong><div>{['‹', '1', '2', '3', '...', '12', '›'].map((p, i) => <button key={`${p}-${i}`} className={p === '1' ? 'is-active' : undefined}>{p}</button>)}<button>6 / page <ChevronDown size={14} /></button></div></div>
+              <div className="reports-pagination"><strong>Showing {generatedReports.length ? 1 : 0} to {generatedReports.length} of {generatedReports.length} reports</strong><div>{['‹', '1', '›'].map((p, i) => <button key={`${p}-${i}`} className={p === '1' ? 'is-active' : undefined}>{p}</button>)}<button>{Math.max(generatedReports.length, 1)} / page <ChevronDown size={14} /></button></div></div>
             </div>
 
             <aside className="reports-side-stack">

@@ -1,6 +1,7 @@
 'use client'
 
 import Link from 'next/link'
+import { useEffect, useMemo, useState } from 'react'
 import {
   ArrowDownLeft,
   ArrowUpRight,
@@ -19,67 +20,9 @@ import {
   SlidersHorizontal,
 } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
+import { emptyAccountingData, formatDate, loadAccountingData, monthlySeries, money, subscribeAccountingData } from '@/lib/accounting/data'
 
 const font = 'var(--font-body)'
-
-type BankAccountRecord = {
-  name: string
-  type: string
-  number: string
-  bank: string
-  currency: 'USD' | 'EUR'
-  balance: number
-  status: 'Active' | 'Inactive'
-  color: string
-}
-
-type BankTransactionRecord = {
-  date: string
-  description: string
-  account: string
-  type: 'Payment Received' | 'Expense' | 'Transfer' | 'Bill Payment'
-  reference: string
-  inflow: number
-  outflow: number
-  balance: number
-  status: 'Matched' | 'Pending'
-}
-
-const bankAccounts: BankAccountRecord[] = [
-  { name: 'Operating Account', type: 'Checking', number: '4242', bank: 'Chase Bank', currency: 'USD', balance: 542350.2, status: 'Active', color: '#2563eb' },
-  { name: 'Payroll Account', type: 'Checking', number: '5678', bank: 'Wells Fargo', currency: 'USD', balance: 128750.4, status: 'Active', color: '#dc2626' },
-  { name: 'Savings Account', type: 'Savings', number: '9012', bank: 'TD Bank', currency: 'USD', balance: 250000, status: 'Active', color: '#16a34a' },
-  { name: 'PayPal Business', type: 'PayPal', number: '3456', bank: 'PayPal', currency: 'USD', balance: 45230.75, status: 'Active', color: '#0ea5e9' },
-  { name: 'USD Account', type: 'Foreign Currency', number: '7865', bank: 'Citibank', currency: 'USD', balance: 192456.54, status: 'Active', color: '#0f172a' },
-  { name: 'EUR Account', type: 'Foreign Currency', number: '1357', bank: 'HSBC', currency: 'EUR', balance: 74562.35, status: 'Active', color: '#7c3aed' },
-]
-
-const bankTransactions: BankTransactionRecord[] = [
-  { date: 'May 31, 2024', description: 'Payment from Acme Corp.', account: 'Operating Account', type: 'Payment Received', reference: 'INV-2024-0128', inflow: 7500, outflow: 0, balance: 542350.2, status: 'Matched' },
-  { date: 'May 31, 2024', description: 'Office Supplies', account: 'Operating Account', type: 'Expense', reference: 'EXP-2024-0567', inflow: 0, outflow: 120.5, balance: 534850.2, status: 'Matched' },
-  { date: 'May 30, 2024', description: 'Transfer to Payroll', account: 'Payroll Account', type: 'Transfer', reference: 'TRF-2024-0045', inflow: 0, outflow: 25000, balance: 128750.4, status: 'Matched' },
-  { date: 'May 29, 2024', description: 'Utility Payment', account: 'Operating Account', type: 'Bill Payment', reference: 'BILL-2024-0092', inflow: 0, outflow: 880.75, balance: 559850.7, status: 'Matched' },
-  { date: 'May 29, 2024', description: 'Payment from Globex Inc.', account: 'Operating Account', type: 'Payment Received', reference: 'INV-2024-0127', inflow: 12000, outflow: 0, balance: 560831.45, status: 'Matched' },
-]
-
-const cashFlow = [
-  { day: 'May 1', inflow: 22000, outflow: 4800 },
-  { day: 'May 5', inflow: 36500, outflow: 13200 },
-  { day: 'May 8', inflow: 36750, outflow: 16600 },
-  { day: 'May 12', inflow: 36800, outflow: 13250 },
-  { day: 'May 15', inflow: 44200, outflow: 20500 },
-  { day: 'May 18', inflow: 48250, outflow: 16650 },
-  { day: 'May 22', inflow: 44500, outflow: 21000 },
-  { day: 'May 25', inflow: 51800, outflow: 28200 },
-  { day: 'May 29', inflow: 48200, outflow: 24500 },
-]
-
-const feeds = ['Chase Bank', 'Wells Fargo', 'TD Bank', 'PayPal', 'HSBC']
-
-function money(value: number, currency = 'USD') {
-  const prefix = currency === 'EUR' ? 'EUR ' : '$'
-  return `${prefix}${value.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
-}
 
 function areaPath(points: number[][]) {
   if (!points.length) return ''
@@ -89,24 +32,46 @@ function areaPath(points: number[][]) {
   return `M ${line} L ${last[0]},230 L ${first[0]},230 Z`
 }
 
-function StatusPill({ value }: { value: BankAccountRecord['status'] | BankTransactionRecord['status'] }) {
+function StatusPill({ value }: { value: string }) {
   return <span className="banking-status-pill">{value}</span>
 }
 
 export default function BankingPage() {
+  const [data, setData] = useState(emptyAccountingData)
+
+  useEffect(() => {
+    const load = () => setData(loadAccountingData())
+    load()
+    return subscribeAccountingData(load)
+  }, [])
+
+  const bankAccounts = data.bankAccounts
+  const bankTransactions = data.transactions.map(transaction => ({
+    date: formatDate(transaction.date),
+    description: transaction.description,
+    account: transaction.account,
+    type: transaction.type === 'Income' ? 'Payment Received' as const : transaction.type === 'Expense' ? 'Expense' as const : 'Transfer' as const,
+    reference: transaction.reference || transaction.id,
+    inflow: transaction.inflow,
+    outflow: transaction.outflow,
+    balance: transaction.balance,
+    status: ['Reconciled', 'Paid', 'Completed'].includes(transaction.status) ? 'Matched' as const : 'Pending' as const,
+  }))
+  const cashFlow = useMemo(() => monthlySeries(data.transactions).map(month => ({ day: month.label, inflow: month.revenue, outflow: month.expenses })), [data.transactions])
+  const feeds = bankAccounts.map(account => account.bank).filter(Boolean)
   const totalBalance = bankAccounts.reduce((sum, account) => sum + account.balance, 0)
   const visibleInflow = bankTransactions.reduce((sum, transaction) => sum + transaction.inflow, 0)
   const visibleOutflow = bankTransactions.reduce((sum, transaction) => sum + transaction.outflow, 0)
-  const monthlyInflow = visibleInflow + 226280.5
-  const monthlyOutflow = visibleOutflow + 161428.25
-  const toReconcile = bankTransactions.length * 25
-  const overduePayments = feeds.length + 3
+  const monthlyInflow = visibleInflow
+  const monthlyOutflow = visibleOutflow
+  const toReconcile = bankTransactions.filter(transaction => transaction.status === 'Pending').length
+  const overduePayments = data.bills.filter(bill => bill.balanceDue > 0).length
   const metrics = [
-    { title: 'Total Balance', value: money(totalBalance), detail: '12.5% vs last month', icon: Landmark, tone: '#16a34a', up: true },
-    { title: 'Inflow (This Month)', value: money(monthlyInflow), detail: '18.3% vs last month', icon: ArrowDownLeft, tone: '#2563eb', up: true },
-    { title: 'Outflow (This Month)', value: money(monthlyOutflow), detail: '9.7% vs last month', icon: ArrowUpRight, tone: '#f97316', up: true },
-    { title: 'To Reconcile', value: String(toReconcile), detail: money(34250.75), icon: ReceiptText, tone: '#7c3aed' },
-    { title: 'Overdue Payments', value: String(overduePayments), detail: money(16450), icon: Clock3, tone: '#ef4444' },
+    { title: 'Total Balance', value: money(totalBalance, data.currency), detail: `${bankAccounts.length} connected account${bankAccounts.length === 1 ? '' : 's'}`, icon: Landmark, tone: '#16a34a', up: totalBalance > 0 },
+    { title: 'Inflow', value: money(monthlyInflow, data.currency), detail: `${bankTransactions.filter(row => row.inflow > 0).length} deposits`, icon: ArrowDownLeft, tone: '#2563eb', up: monthlyInflow > 0 },
+    { title: 'Outflow', value: money(monthlyOutflow, data.currency), detail: `${bankTransactions.filter(row => row.outflow > 0).length} withdrawals`, icon: ArrowUpRight, tone: '#f97316', up: false },
+    { title: 'To Reconcile', value: String(toReconcile), detail: money(bankTransactions.filter(row => row.status === 'Pending').reduce((sum, row) => sum + row.inflow + row.outflow, 0), data.currency), icon: ReceiptText, tone: '#7c3aed' },
+    { title: 'Open Payments', value: String(overduePayments), detail: money(data.bills.reduce((sum, bill) => sum + bill.balanceDue, 0), data.currency), icon: Clock3, tone: '#ef4444' },
   ]
   const quickActions: Array<{ label: string; icon: LucideIcon }> = [
     { label: 'Make a Payment', icon: CreditCard },
@@ -157,7 +122,7 @@ export default function BankingPage() {
         <div className="banking-card banking-accounts-panel">
           <div className="banking-panel-header">
             <h2>Bank Accounts</h2>
-            <strong>Total Balance: <span>{money(totalBalance)}</span></strong>
+            <strong>Total Balance: <span>{money(totalBalance, data.currency)}</span></strong>
           </div>
           <div className="banking-table-wrap">
             <table className="banking-table banking-accounts-table">
@@ -225,7 +190,7 @@ export default function BankingPage() {
             <Link href="/accounting/transactions">View All Transactions</Link>
           </div>
           <div className="banking-filter-row">
-            {['All Accounts', 'All Types', 'All Status', 'May 1 - May 31, 2024'].map(label => <button key={label} type="button">{label} <ChevronDown size={14} /></button>)}
+            {['All Accounts', 'All Types', 'All Status', 'Current records'].map(label => <button key={label} type="button">{label} <ChevronDown size={14} /></button>)}
           </div>
           <div className="banking-table-wrap">
             <table className="banking-table banking-transactions-table">
@@ -240,16 +205,16 @@ export default function BankingPage() {
                     <td data-label="Account">{transaction.account}</td>
                     <td data-label="Type">{transaction.type}</td>
                     <td data-label="Reference">{transaction.reference}</td>
-                    <td data-label="Inflow">{transaction.inflow ? money(transaction.inflow) : '-'}</td>
-                    <td data-label="Outflow">{transaction.outflow ? money(transaction.outflow) : '-'}</td>
-                    <td data-label="Balance">{money(transaction.balance)}</td>
+                    <td data-label="Inflow">{transaction.inflow ? money(transaction.inflow, data.currency) : '-'}</td>
+                    <td data-label="Outflow">{transaction.outflow ? money(transaction.outflow, data.currency) : '-'}</td>
+                    <td data-label="Balance">{money(transaction.balance, data.currency)}</td>
                     <td data-label="Status"><StatusPill value={transaction.status} /></td>
                   </tr>
                 ))}
               </tbody>
             </table>
           </div>
-          <strong className="banking-showing">Showing 1 to {bankTransactions.length} of {toReconcile} transactions</strong>
+          <strong className="banking-showing">Showing {bankTransactions.length ? 1 : 0} to {bankTransactions.length} of {bankTransactions.length} transactions</strong>
         </div>
 
         <div className="banking-card">

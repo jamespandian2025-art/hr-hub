@@ -79,6 +79,14 @@ export const accountingNavItems = [
   { label: 'Audit Logs', href: '/accounting/audit-logs', icon: FileClock, description: 'Controls and accounting history' },
 ]
 
+const newAccountingActions = [
+  { label: 'Invoice', description: 'Create a client invoice', href: '/accounting/invoices?new=1', icon: FileText },
+  { label: 'Bill or Expense', description: 'Record a vendor bill', href: '/accounting/bills?new=1', icon: ReceiptText },
+  { label: 'Budget', description: 'Create a project budget', href: '/accounting/budgeting?new=1', icon: PieChart },
+  { label: 'Bank Account', description: 'Open banking setup', href: '/accounting/banking', icon: Landmark },
+  { label: 'Payroll Run', description: 'Open HR payroll', href: '/hr/payroll', icon: BadgeDollarSign },
+]
+
 export function getAccountingRouteMeta(pathname: string) {
   return accountingNavItems.find(item => pathname === item.href || pathname.startsWith(item.href + '/')) || accountingNavItems[0]
 }
@@ -89,6 +97,7 @@ export default function AccountingShell({ children }: { children: React.ReactNod
   const activeMeta = getAccountingRouteMeta(pathname)
   const ActiveIcon = activeMeta.icon
   const [notificationsOpen, setNotificationsOpen] = useState(false)
+  const [newMenuOpen, setNewMenuOpen] = useState(false)
   const [loanRequests, setLoanRequests] = useState<LoanRequest[]>([])
   const [allowanceRequests, setAllowanceRequests] = useState<AllowanceRequest[]>([])
   const [outboundNotifications, setOutboundNotifications] = useState<FinanceOutboundNotification[]>([])
@@ -227,7 +236,7 @@ export default function AccountingShell({ children }: { children: React.ReactNod
             <input placeholder="Search transactions, invoices, bills..." style={{ flex: 1, border: 0, outline: 0, background: 'transparent', fontSize: 13, color: '#0f172a' }} />
           </label>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 10 }}>
-            <button type="button" style={dateButtonStyle}><CalendarDays size={15} /> May 1 - May 31, 2024</button>
+            <button type="button" style={dateButtonStyle}><CalendarDays size={15} /> Current records</button>
             <button type="button" aria-label="Notifications" onClick={() => setNotificationsOpen(open => !open)} style={{ ...roundButtonStyle, position: 'relative' }}>
               <Bell size={18} />
               {notificationBadgeCount > 0 && (
@@ -274,7 +283,45 @@ export default function AccountingShell({ children }: { children: React.ReactNod
                 </button>
               </div>
             )}
-            <button type="button" style={primaryButtonStyle}><Plus size={16} /> New <ChevronDown size={13} /></button>
+            <div style={{ position: 'relative' }}>
+              <button
+                type="button"
+                onClick={() => {
+                  setNotificationsOpen(false)
+                  setNewMenuOpen(open => !open)
+                }}
+                aria-expanded={newMenuOpen}
+                aria-haspopup="menu"
+                style={primaryButtonStyle}
+              >
+                <Plus size={16} /> New <ChevronDown size={13} />
+              </button>
+              {newMenuOpen && (
+                <div role="menu" style={newMenuStyle}>
+                  {newAccountingActions.map(action => {
+                    const Icon = action.icon
+                    return (
+                      <button
+                        key={action.href}
+                        type="button"
+                        role="menuitem"
+                        onClick={() => {
+                          setNewMenuOpen(false)
+                          router.push(action.href)
+                        }}
+                        style={newMenuItemStyle}
+                      >
+                        <span style={newMenuIconStyle}><Icon size={16} /></span>
+                        <span>
+                          <strong>{action.label}</strong>
+                          <small>{action.description}</small>
+                        </span>
+                      </button>
+                    )
+                  })}
+                </div>
+              )}
+            </div>
           </div>
         </header>
         <main>{children}</main>
@@ -357,6 +404,46 @@ const primaryButtonStyle: React.CSSProperties = {
   fontSize: 12.5,
   fontWeight: 900,
   cursor: 'pointer',
+}
+
+const newMenuStyle: React.CSSProperties = {
+  position: 'absolute',
+  right: 0,
+  top: 48,
+  width: 260,
+  background: '#fff',
+  border: '1px solid #e8edf4',
+  borderRadius: 8,
+  boxShadow: '0 18px 45px rgba(15,23,42,0.14)',
+  padding: 8,
+  zIndex: 90,
+  display: 'grid',
+  gap: 4,
+}
+
+const newMenuItemStyle: React.CSSProperties = {
+  width: '100%',
+  border: 0,
+  background: 'transparent',
+  color: '#0f172a',
+  display: 'grid',
+  gridTemplateColumns: '34px minmax(0, 1fr)',
+  alignItems: 'center',
+  gap: 10,
+  padding: '9px 10px',
+  borderRadius: 7,
+  textAlign: 'left',
+  cursor: 'pointer',
+}
+
+const newMenuIconStyle: React.CSSProperties = {
+  width: 34,
+  height: 34,
+  borderRadius: 8,
+  background: '#ecfdf3',
+  color: '#16a34a',
+  display: 'grid',
+  placeItems: 'center',
 }
 
 const smallIconButtonStyle: React.CSSProperties = {

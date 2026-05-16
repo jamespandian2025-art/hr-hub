@@ -1,5 +1,6 @@
 'use client'
 import { useEffect, useState } from 'react'
+import { usePathname, useRouter, useSearchParams } from 'next/navigation'
 import { PieChart, Pie, Cell, ResponsiveContainer } from 'recharts'
 import ClientChart from '../../../components/ClientChart'
 import jsPDF from 'jspdf'
@@ -64,7 +65,15 @@ const loadProjects = () => {
 }
 
 export default function BudgetPage() {
+  const router = useRouter()
+  const pathname = usePathname()
+  const searchParams = useSearchParams()
+  const createRequested = searchParams.get('new') === '1'
   const [showCreate, setShowCreate] = useState(false)
+  const closeCreate = () => {
+    setShowCreate(false)
+    if (createRequested) router.replace(pathname)
+  }
   const [showImportModal, setShowImportModal] = useState(false)
   const [activeTab, setActiveTab] = useState('All')
   const [search, setSearch] = useState('')
@@ -84,6 +93,7 @@ export default function BudgetPage() {
     window.localStorage.setItem(budgetsStorageKey, JSON.stringify(budgets))
   }, [budgets])
 
+
   const addBudgetItem = () => setBudgetItems(prev => [...prev, { id: prev.length + 1, name: '', remarks: '', amount: 0 }])
   const removeBudgetItem = (id: number) => setBudgetItems(prev => prev.filter(i => i.id !== id))
   const updateBudgetItem = (id: number, field: Exclude<keyof BudgetItem, 'id'>, value: string | number) => setBudgetItems(prev => prev.map(i => i.id === id ? { ...i, [field]: value } : i))
@@ -102,7 +112,7 @@ export default function BudgetPage() {
       total,
     }
     setBudgets(prev => [...prev, newBudget])
-    setShowCreate(false)
+    closeCreate()
     setProject('')
     setName('')
     setDate('2026-05-06')
@@ -184,10 +194,10 @@ export default function BudgetPage() {
     { name: 'Rejected', value: budgets.filter(b => b.status === 'REJECTED').reduce((s, b) => s + b.total, 0) || 0, color: '#ef4444' },
   ]
 
-  if (showCreate) {
+  if (showCreate || createRequested) {
     return (
       <div style={{ fontFamily: font }}>
-        <div onClick={() => setShowCreate(false)} style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', fontSize: '14px', color: '#374151', fontWeight: 600, marginBottom: '20px', cursor: 'pointer' }}>
+        <div onClick={closeCreate} style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', fontSize: '14px', color: '#374151', fontWeight: 600, marginBottom: '20px', cursor: 'pointer' }}>
           ? Back
         </div>
         <div style={{ fontSize: '24px', fontWeight: 600, color: '#111827', marginBottom: '6px' }}>Create Budget</div>

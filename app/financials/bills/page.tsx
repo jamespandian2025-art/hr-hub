@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import { usePathname, useRouter, useSearchParams } from 'next/navigation'
 
 const font = "var(--font-body)"
 const billsStorageKey = 'flowsys-bills'
@@ -50,7 +51,15 @@ const formatDate = (value: string) =>
     : '-'
 
 export default function BillsPage() {
+  const router = useRouter()
+  const pathname = usePathname()
+  const searchParams = useSearchParams()
+  const createRequested = searchParams.get('new') === '1'
   const [showCreate, setShowCreate] = useState(false)
+  const closeCreate = () => {
+    setShowCreate(false)
+    if (createRequested) router.replace(pathname)
+  }
   const [activeTab, setActiveTab] = useState('All')
   const [search, setSearch] = useState('')
   const [selected, setSelected] = useState<number[]>([])
@@ -72,6 +81,7 @@ export default function BillsPage() {
   useEffect(() => {
     window.localStorage.setItem(billsStorageKey, JSON.stringify(bills))
   }, [bills])
+
 
   const resetForm = () => {
     setName('')
@@ -101,7 +111,7 @@ export default function BillsPage() {
     }
 
     setBills(prev => (editingId ? prev.map(bill => (bill.id === editingId ? nextBill : bill)) : [...prev, nextBill]))
-    setShowCreate(false)
+    closeCreate()
     resetForm()
   }
 
@@ -175,11 +185,11 @@ export default function BillsPage() {
         .join(', ')
     : '#f3f4f6 0% 100%'
 
-  if (showCreate) {
+  if (showCreate || createRequested) {
     return (
       <div style={{ fontFamily: font }}>
         <div
-          onClick={() => setShowCreate(false)}
+          onClick={closeCreate}
           style={{
             display: 'inline-flex',
             alignItems: 'center',
@@ -446,7 +456,7 @@ export default function BillsPage() {
           <button
             onClick={() => {
               resetForm()
-              setShowCreate(false)
+              closeCreate()
             }}
             style={{
               padding: '12px 22px',
