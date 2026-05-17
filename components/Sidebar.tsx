@@ -95,13 +95,6 @@ const navSections: NavSection[] = [
         icon: ShoppingCart,
         newTab: true,
         match: ['/procurement'],
-        children: [
-          { label: 'Pricebook',         href: '/procurement/pricebook', newTab: true },
-          { label: 'Purchase Requests', href: '/procurement/purchase-requests', newTab: true },
-          { label: 'Purchase Orders',   href: '/procurement/purchase-orders', newTab: true },
-          { label: 'RFQs',              href: '/procurement/rfqs', newTab: true },
-          { label: 'Receiving',         href: '/procurement/receiving', newTab: true },
-        ],
       },
       {
         label: 'Supplier Database',

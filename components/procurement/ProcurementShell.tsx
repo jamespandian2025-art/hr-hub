@@ -5,12 +5,7 @@ import { usePathname } from 'next/navigation'
 import { useEffect, useState } from 'react'
 import {
   ArrowLeft,
-  Bell,
-  ChevronDown,
-  CircleHelp,
-  Grid3X3,
   Menu,
-  Plus,
   Search,
   X,
 } from 'lucide-react'
@@ -58,8 +53,8 @@ export default function ProcurementShell({ children }: { children: React.ReactNo
         onClick={() => setSidebarOpen(false)}
       />
 
-      <aside className={`procurement-sidepanel${sidebarOpen ? ' is-open' : ''}`}>
-        <div className="procurement-sidebar-card">
+      <aside className={`procurement-sidepanel${sidebarOpen ? ' is-open' : ''}`} style={{ background: '#000000' }}>
+        <div className="procurement-sidebar-card" style={{ background: sidebarColors.bg, color: sidebarColors.text, borderColor: sidebarColors.border }}>
           <div className="procurement-sidebar-brand">
             <span className="procurement-sidebar-logo">P</span>
             <span className="procurement-sidebar-copy">
@@ -109,20 +104,6 @@ export default function ProcurementShell({ children }: { children: React.ReactNo
             <Search size={17} color="#64748b" />
             <input placeholder="Search procurement records..." aria-label="Search procurement records" />
           </label>
-
-          <div className="procurement-header-actions">
-            <button type="button" aria-label="Create" className="procurement-round-button"><Plus size={18} /></button>
-            <button type="button" aria-label="Notifications" className="procurement-round-button notification">
-              <Bell size={18} />
-              <span />
-            </button>
-            <button type="button" aria-label="Help" className="procurement-round-button"><CircleHelp size={18} /></button>
-            <button type="button" aria-label="Apps" className="procurement-round-button"><Grid3X3 size={18} /></button>
-            <button type="button" className="procurement-user-button" aria-label="User menu">
-              <span>JU</span>
-              <ChevronDown size={14} color="#64748b" />
-            </button>
-          </div>
         </header>
 
         <main>{children}</main>
@@ -147,19 +128,20 @@ const procurementShellCss = `
   position: sticky;
   top: 0;
   align-self: start;
-  padding: 10px 8px;
+  padding: 0;
   overflow: hidden;
+  background: #000000 !important;
 }
 .procurement-sidebar-card {
-  height: calc(100dvh - 20px);
-  border-radius: 14px;
-  background: ${sidebarColors.bg};
-  color: ${sidebarColors.text};
-  border: 1px solid ${sidebarColors.border};
+  height: 100dvh;
+  border-radius: 0;
+  background: ${sidebarColors.bg} !important;
+  color: ${sidebarColors.text} !important;
+  border: 0 !important;
   display: flex;
   flex-direction: column;
-  padding: 16px 10px;
-  box-shadow: 0 18px 44px rgba(15, 23, 42, .18);
+  padding: 18px 14px;
+  box-shadow: none;
   overflow: hidden;
 }
 .procurement-sidebar-brand {
@@ -314,9 +296,9 @@ const procurementShellCss = `
   backdrop-filter: blur(16px);
   border-bottom: 1px solid #e5e7eb;
   display: grid;
-  grid-template-columns: auto minmax(260px, 560px) auto;
+  grid-template-columns: minmax(220px, auto) minmax(260px, 560px);
   align-items: center;
-  gap: 18px;
+  gap: 28px;
   padding: 0 28px;
 }
 .procurement-header-title {
@@ -325,8 +307,7 @@ const procurementShellCss = `
   gap: 12px;
   min-width: 0;
 }
-.procurement-icon-button,
-.procurement-round-button {
+.procurement-icon-button {
   width: 38px;
   height: 38px;
   border-radius: 10px;
@@ -369,6 +350,8 @@ const procurementShellCss = `
 }
 .procurement-search {
   height: 40px;
+  width: 100%;
+  justify-self: center;
   border-radius: 8px;
   background: #fff;
   display: flex;
@@ -387,48 +370,6 @@ const procurementShellCss = `
   font-size: 13px;
   color: #0f172a;
 }
-.procurement-header-actions {
-  display: flex;
-  align-items: center;
-  justify-content: flex-end;
-  gap: 12px;
-}
-.procurement-round-button {
-  border-radius: 999px;
-}
-.procurement-round-button.notification {
-  position: relative;
-}
-.procurement-round-button.notification span {
-  position: absolute;
-  top: 8px;
-  right: 8px;
-  width: 8px;
-  height: 8px;
-  border-radius: 99px;
-  background: #22c55e;
-  border: 2px solid #fff;
-}
-.procurement-user-button {
-  border: 0;
-  background: transparent;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  cursor: pointer;
-  padding: 0;
-}
-.procurement-user-button span {
-  width: 36px;
-  height: 36px;
-  border-radius: 999px;
-  background: #f3e8ff;
-  color: #7c3aed;
-  display: grid;
-  place-items: center;
-  font-size: 13px;
-  font-weight: 850;
-}
 .procurement-mobile-backdrop {
   display: none;
 }
@@ -437,10 +378,10 @@ const procurementShellCss = `
     grid-template-columns: 84px minmax(0, 1fr);
   }
   .procurement-sidepanel {
-    padding: 8px;
+    padding: 0;
   }
   .procurement-sidebar-card {
-    padding: 14px 8px;
+    padding: 18px 8px;
   }
   .procurement-sidebar-copy,
   .procurement-back-link,
@@ -469,7 +410,7 @@ const procurementShellCss = `
     inset: 0 auto 0 0;
     z-index: 120;
     width: min(86vw, 300px);
-    padding: 10px;
+    padding: 0;
     transform: translateX(-105%);
     transition: transform 180ms ease;
   }
@@ -477,7 +418,8 @@ const procurementShellCss = `
     transform: translateX(0);
   }
   .procurement-sidebar-card {
-    height: calc(100dvh - 20px);
+    height: 100dvh;
+    padding: 20px 14px;
   }
   .procurement-sidebar-copy,
   .procurement-back-link,
@@ -517,29 +459,19 @@ const procurementShellCss = `
     overflow: visible;
   }
   .procurement-header {
-    grid-template-columns: 1fr auto;
+    grid-template-columns: 1fr;
     height: auto;
     min-height: 72px;
     padding: 10px 14px;
   }
   .procurement-search {
-    grid-column: 1 / -1;
-    order: 3;
-  }
-  .procurement-header-actions {
-    gap: 8px;
-  }
-  .procurement-header-actions .procurement-round-button:nth-child(n+3),
-  .procurement-user-button svg {
-    display: none;
+    grid-column: auto;
+    justify-self: stretch;
   }
 }
 @media (max-width: 520px) {
   .procurement-active-icon,
   .procurement-active-copy small {
-    display: none;
-  }
-  .procurement-header-actions .procurement-round-button:first-child {
     display: none;
   }
 }

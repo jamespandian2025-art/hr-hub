@@ -459,9 +459,27 @@ const projectManagementCss = `
 .pm-kpi strong { display: block; font-size: 24px; margin-top: 6px; }
 .pm-kpi em { display: block; color: #16a34a; font-style: normal; font-size: 12px; font-weight: 750; margin-top: 8px; }
 .pm-kpi em.negative { color: #ef4444; }
-.pm-tabs { display: flex; gap: 28px; border-bottom: 1px solid #dfe7f2; overflow-x: auto; margin-bottom: 20px; }
-.pm-tabs button { border: 0; border-bottom: 2px solid transparent; min-height: 40px; background: transparent; color: #334155; font-size: 13px; font-weight: 750; cursor: pointer; white-space: nowrap; }
-.pm-tabs button.active { color: #111827; border-bottom-color: #111827; font-weight: 900; }
+.pm-tabs { display: flex; gap: 28px; align-items: flex-end; border-bottom: 1px solid #dfe7f2; overflow-x: auto; margin-bottom: 20px; }
+.pm-tabs button {
+  min-height: 40px;
+  padding: 0 0 10px;
+  border: 0 !important;
+  border-bottom: 2px solid transparent !important;
+  border-radius: 0 !important;
+  background: transparent !important;
+  box-shadow: none !important;
+  color: #334155;
+  font-size: 13px;
+  font-weight: 750;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.pm-tabs button.active,
+.pm-tabs button[aria-selected="true"] {
+  color: #111827 !important;
+  border-bottom-color: #111827 !important;
+  font-weight: 900;
+}
 .pm-overview-grid { display: grid; gap: 18px; align-items: start; }
 .pm-dashboard-overview {
   grid-template-columns: minmax(0, 1.05fr) minmax(0, 1.2fr) minmax(280px, .9fr);
@@ -633,18 +651,23 @@ const projectManagementCss = `
     margin-right: -16px;
     padding-left: 16px;
     padding-right: 16px;
-    border-bottom: 0;
+    border-bottom: 1px solid #dfe7f2;
     scrollbar-width: none;
   }
   .pm-tabs button {
     min-height: 40px;
-    border: 0;
-    border-bottom: 2px solid transparent;
-    border-radius: 0;
-    padding: 0;
+    border: 0 !important;
+    border-bottom: 2px solid transparent !important;
+    border-radius: 0 !important;
+    padding: 0 0 10px;
     font-size: 13px;
   }
-  .pm-tabs button.active { background: transparent; color: #111827; border-bottom-color: #111827; }
+  .pm-tabs button.active,
+  .pm-tabs button[aria-selected="true"] {
+    background: transparent !important;
+    color: #111827 !important;
+    border-bottom-color: #111827 !important;
+  }
   .pm-filter-panel {
     position: fixed;
     left: 0;

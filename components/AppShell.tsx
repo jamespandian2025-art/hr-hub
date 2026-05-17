@@ -48,6 +48,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   const isFinancialWorkspace = pathname === '/financial' || pathname.startsWith('/financials') || pathname === '/accounting' || pathname.startsWith('/accounting/')
   const isEmployeePortal = pathname === '/employee' || pathname.startsWith('/employee/')
   const isProcurementWorkspace = pathname === '/procurement' || pathname.startsWith('/procurement/')
+  const isSupplierDatabaseWorkspace = pathname === '/supplier-database' || pathname.startsWith('/supplier-database/')
   const isWorkspacePage =
     pathname === '/tasks' ||
     pathname.startsWith('/tasks/') ||
@@ -128,6 +129,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   if (isHrWorkspace) return <>{children}</>
   if (isEmployeePortal) return <>{children}</>
   if (isProcurementWorkspace) return <>{children}</>
+  if (isSupplierDatabaseWorkspace) return <>{children}</>
   if (pathname === '/accounting' || pathname.startsWith('/accounting/')) return <>{children}</>
 
   const sidebarWidth = sidebarCollapsed ? 60 : 252

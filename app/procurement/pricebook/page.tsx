@@ -21,6 +21,7 @@ import {
   UploadCloud,
   X,
 } from 'lucide-react'
+import { companyChangeEvent, companyScopedKey, getActiveCompany } from '@/lib/tenant/company'
 
 const storageKey = 'flowsys-pricebook-items'
 const font = 'var(--font-body)'
@@ -30,6 +31,7 @@ type ItemType = 'Material' | 'Labor' | 'Equipment' | 'Service' | 'Other'
 
 type PricebookItem = {
   id: number
+  companyId?: string
   name: string
   sku: string
   category: string
@@ -63,153 +65,6 @@ type NewItemForm = {
   image: string
 }
 
-const seedItems: PricebookItem[] = [
-  {
-    id: 1,
-    name: 'Cement Ordinary Portland',
-    sku: 'MAT-0001',
-    category: 'Construction Materials',
-    itemType: 'Material',
-    unit: '20 pcs',
-    cost: 2000,
-    markup: 5,
-    price: 2100,
-    vendor: 'BuildWell Supplies',
-    notes: 'High quality cement for construction use',
-    status: 'Active',
-    stockOnHand: 120,
-    minimumOrder: 20,
-    leadTime: '3 - 5 days',
-    paymentTerms: '30 Days',
-  },
-  {
-    id: 2,
-    name: 'Steel Rebar 16mm',
-    sku: 'MAT-0002',
-    category: 'Construction Materials',
-    itemType: 'Material',
-    unit: '100 pcs',
-    cost: 85,
-    markup: 8,
-    price: 91.8,
-    vendor: 'SteelCorp Industries',
-    notes: 'Deformed steel bar',
-    status: 'Active',
-    stockOnHand: 400,
-    minimumOrder: 100,
-    leadTime: '5 - 7 days',
-    paymentTerms: '30 Days',
-  },
-  {
-    id: 3,
-    name: 'Paint Latex White',
-    sku: 'MAT-0003',
-    category: 'Finishing Materials',
-    itemType: 'Material',
-    unit: '4 L',
-    cost: 450,
-    markup: 10,
-    price: 495,
-    vendor: 'ColorPlus Inc.',
-    notes: 'Premium quality',
-    status: 'Active',
-    stockOnHand: 64,
-    minimumOrder: 12,
-    leadTime: '2 - 4 days',
-    paymentTerms: 'COD',
-  },
-  {
-    id: 4,
-    name: 'Plywood 12mm',
-    sku: 'MAT-0004',
-    category: 'Wood & Boards',
-    itemType: 'Material',
-    unit: '10 pcs',
-    cost: 750,
-    markup: 6,
-    price: 795,
-    vendor: 'WoodWorks Trading',
-    notes: 'Marine plywood',
-    status: 'Low Stock',
-    stockOnHand: 6,
-    minimumOrder: 10,
-    leadTime: '4 - 6 days',
-    paymentTerms: '15 Days',
-  },
-  {
-    id: 5,
-    name: 'THHN Wire 3.5mm',
-    sku: 'ELEC-0001',
-    category: 'Electrical Materials',
-    itemType: 'Material',
-    unit: '100 m',
-    cost: 15,
-    markup: 7,
-    price: 16.05,
-    vendor: 'ElectroHub Supply',
-    notes: 'Electrical wire',
-    status: 'Active',
-    stockOnHand: 240,
-    minimumOrder: 100,
-    leadTime: '2 - 3 days',
-    paymentTerms: '30 Days',
-  },
-  {
-    id: 6,
-    name: 'PVC Pipe 2"',
-    sku: 'PLUMB-0001',
-    category: 'Plumbing Materials',
-    itemType: 'Material',
-    unit: '6 m',
-    cost: 120,
-    markup: 10,
-    price: 132,
-    vendor: 'PipeLine Depot',
-    notes: 'Schedule 40',
-    status: 'Active',
-    stockOnHand: 90,
-    minimumOrder: 20,
-    leadTime: '2 - 4 days',
-    paymentTerms: '30 Days',
-  },
-  {
-    id: 7,
-    name: 'Self Drilling Screw #8',
-    sku: 'HDW-0001',
-    category: 'Hardware',
-    itemType: 'Material',
-    unit: '50 pcs',
-    cost: 2.5,
-    markup: 15,
-    price: 2.88,
-    vendor: 'BuildWell Supplies',
-    notes: 'Metal to metal screw',
-    status: 'Active',
-    stockOnHand: 650,
-    minimumOrder: 50,
-    leadTime: '1 - 2 days',
-    paymentTerms: 'COD',
-  },
-  {
-    id: 8,
-    name: 'Sand (Washed)',
-    sku: 'MAT-0005',
-    category: 'Construction Materials',
-    itemType: 'Material',
-    unit: '1 m3',
-    cost: 1200,
-    markup: 10,
-    price: 1320,
-    vendor: 'QuarryPro Aggregates',
-    notes: 'Construction sand',
-    status: 'Out of Stock',
-    stockOnHand: 0,
-    minimumOrder: 1,
-    leadTime: '1 - 3 days',
-    paymentTerms: 'COD',
-  },
-]
-
 const emptyForm: NewItemForm = {
   name: '',
   sku: '',
@@ -225,29 +80,30 @@ const emptyForm: NewItemForm = {
   image: '',
 }
 
-function loadInitialItems() {
-  if (typeof window === 'undefined') return seedItems
+function loadInitialItems(companyId = '') {
+  if (typeof window === 'undefined') return []
 
   try {
-    const stored = window.localStorage.getItem(storageKey)
-    if (!stored) return seedItems
-
-    const parsed = JSON.parse(stored)
-    if (!Array.isArray(parsed) || !parsed.length) return []
-
-    return parsed.map((item, index) => normalizeStoredItem(item, index))
+    const scopedKey = companyId ? companyScopedKey(storageKey, companyId) : storageKey
+    const scoped = parseItems(window.localStorage.getItem(scopedKey))
+    const global = parseItems(window.localStorage.getItem(storageKey))
+    const rows = scoped.length ? [...scoped, ...global] : global
+    return uniqueItems(rows)
+      .filter(item => !companyId || !item.companyId || item.companyId === companyId)
+      .map((item, index) => normalizeStoredItem(item, index, companyId))
   } catch {
-    return seedItems
+    return []
   }
 }
 
-function normalizeStoredItem(item: Partial<PricebookItem> & Record<string, unknown>, index: number): PricebookItem {
+function normalizeStoredItem(item: Partial<PricebookItem> & Record<string, unknown>, index: number, companyId = ''): PricebookItem {
   const cost = numberFrom(item.cost)
   const markup = numberFrom(item.markup)
   const price = numberFrom(item.price) || Number((cost + cost * (markup / 100)).toFixed(2))
 
   return {
     id: numberFrom(item.id) || index + 1,
+    companyId: textFrom(item.companyId, companyId),
     name: textFrom(item.name, 'Untitled item'),
     sku: textFrom(item.sku, `ITEM-${String(index + 1).padStart(4, '0')}`),
     category: textFrom(item.category, 'Uncategorized'),
@@ -267,9 +123,38 @@ function normalizeStoredItem(item: Partial<PricebookItem> & Record<string, unkno
   }
 }
 
+function parseItems(value: string | null) {
+  if (!value) return [] as Array<Partial<PricebookItem> & Record<string, unknown>>
+  try {
+    const parsed = JSON.parse(value) as unknown
+    return Array.isArray(parsed) ? parsed as Array<Partial<PricebookItem> & Record<string, unknown>> : []
+  } catch {
+    return []
+  }
+}
+
+function uniqueItems(rows: Array<Partial<PricebookItem> & Record<string, unknown>>) {
+  const seen = new Set<string>()
+  return rows.filter((row, index) => {
+    const id = textFrom(row.id, '') || textFrom(row.sku, '') || `${textFrom(row.name, 'item')}-${index}`
+    if (seen.has(id)) return false
+    seen.add(id)
+    return true
+  })
+}
+
+function persistItems(items: PricebookItem[], companyId: string) {
+  if (typeof window === 'undefined') return
+  const serialized = JSON.stringify(items)
+  window.localStorage.setItem(storageKey, serialized)
+  if (companyId) window.localStorage.setItem(companyScopedKey(storageKey, companyId), serialized)
+}
+
 export default function ProcurementPricebookPage() {
   const fileInputRef = useRef<HTMLInputElement>(null)
-  const [items, setItems] = useState<PricebookItem[]>(loadInitialItems)
+  const [companyId, setCompanyId] = useState('')
+  const [items, setItems] = useState<PricebookItem[]>([])
+  const [loaded, setLoaded] = useState(false)
   const [selectedId, setSelectedId] = useState<number | null>(null)
   const [activeTab, setActiveTab] = useState<ItemStatus | 'All'>('All')
   const [search, setSearch] = useState('')
@@ -282,9 +167,25 @@ export default function ProcurementPricebookPage() {
   const [formError, setFormError] = useState('')
 
   useEffect(() => {
-    if (!items.length) return
-    window.localStorage.setItem(storageKey, JSON.stringify(items))
-  }, [items])
+    const load = () => {
+      const activeCompanyId = getActiveCompany()?.id || ''
+      setCompanyId(activeCompanyId)
+      setItems(loadInitialItems(activeCompanyId))
+      setLoaded(true)
+    }
+    load()
+    window.addEventListener(companyChangeEvent, load)
+    window.addEventListener('storage', load)
+    return () => {
+      window.removeEventListener(companyChangeEvent, load)
+      window.removeEventListener('storage', load)
+    }
+  }, [])
+
+  useEffect(() => {
+    if (!loaded) return
+    persistItems(items, companyId)
+  }, [companyId, items, loaded])
 
   const categories = useMemo(() => ['All', ...Array.from(new Set(items.map(item => item.category))).sort()], [items])
 
@@ -368,6 +269,7 @@ export default function ProcurementPricebookPage() {
 
     const nextItem: PricebookItem = {
       id: items.reduce((max, item) => Math.max(max, item.id), 0) + 1,
+      companyId,
       name: form.name.trim(),
       sku: form.sku.trim(),
       category: form.category.trim(),
@@ -388,14 +290,14 @@ export default function ProcurementPricebookPage() {
 
     const nextItems = [nextItem, ...items]
     try {
-      window.localStorage.setItem(storageKey, JSON.stringify(nextItems))
+      persistItems(nextItems, companyId)
       setItems(nextItems)
       setSelectedId(nextItem.id)
       setDrawerOpen(false)
     } catch {
       const withoutImage = { ...nextItem, image: '' }
       const fallbackItems = [withoutImage, ...items]
-      window.localStorage.setItem(storageKey, JSON.stringify(fallbackItems))
+      persistItems(fallbackItems, companyId)
       setItems(fallbackItems)
       setSelectedId(withoutImage.id)
       setDrawerOpen(false)
@@ -566,7 +468,7 @@ export default function ProcurementPricebookPage() {
             </div>
 
             <button onClick={() => fileInputRef.current?.click()} style={uploadBoxStyle}>
-              {form.image ? <img src={form.image} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: 10 }} /> : <><UploadCloud size={28} /><span>Upload item image</span><small>PNG, JPG or WebP (max. 2MB)</small></>}
+              {form.image ? <img src={form.image} alt="Item preview" style={uploadPreviewImageStyle} /> : <><UploadCloud size={28} /><span>Upload item image</span><small>PNG, JPG or WebP (max. 2MB)</small></>}
             </button>
             <input ref={fileInputRef} type="file" accept="image/png,image/jpeg,image/webp" onChange={handleImageUpload} style={{ display: 'none' }} />
 
@@ -740,7 +642,8 @@ const addMenuStyle: CSSProperties = { position: 'absolute', right: 0, top: 48, w
 const addMenuItemStyle: CSSProperties = { width: '100%', border: 0, background: '#fff', padding: '12px 14px', display: 'flex', alignItems: 'center', gap: 9, color: '#0f172a', fontSize: 13, fontWeight: 750, cursor: 'pointer', textAlign: 'left' }
 const drawerOverlayStyle: CSSProperties = { position: 'fixed', inset: 0, background: 'rgba(15,23,42,0.35)', backdropFilter: 'blur(2px)', zIndex: 80, display: 'flex', justifyContent: 'flex-end' }
 const drawerStyle: CSSProperties = { width: 'min(460px, 100vw)', height: '100vh', overflowY: 'auto', background: '#fff', padding: 28, boxShadow: '-24px 0 60px rgba(15,23,42,0.24)' }
-const uploadBoxStyle: CSSProperties = { width: '100%', height: 132, border: '1px dashed #cbd5e1', borderRadius: 12, background: '#fff', color: '#64748b', display: 'grid', placeItems: 'center', gap: 7, marginBottom: 20, cursor: 'pointer', fontSize: 13, fontWeight: 800 }
+const uploadBoxStyle: CSSProperties = { width: '100%', height: 132, minHeight: 132, border: '1px dashed #cbd5e1', borderRadius: 12, background: '#f8fafc', color: '#64748b', display: 'grid', placeItems: 'center', gap: 7, marginBottom: 20, cursor: 'pointer', fontSize: 13, fontWeight: 800, padding: 0, overflow: 'hidden', position: 'relative', lineHeight: 1.2, boxSizing: 'border-box' }
+const uploadPreviewImageStyle: CSSProperties = { display: 'block', width: '100%', height: '100%', maxWidth: '100%', maxHeight: '100%', objectFit: 'contain', objectPosition: 'center', borderRadius: 11, pointerEvents: 'none' }
 const fieldStyle: CSSProperties = { minHeight: 40, width: '100%', border: '1px solid #e2e8f0', borderRadius: 9, background: '#fff', color: '#0f172a', outline: 0, padding: '0 12px', fontSize: 13 }
 const errorStyle: CSSProperties = { margin: '0 0 16px', border: '1px solid #fecaca', background: '#fef2f2', color: '#dc2626', borderRadius: 9, padding: '10px 12px', fontSize: 13, fontWeight: 800 }
 const tabCountStyle: CSSProperties = { color: '#94a3b8', fontSize: 12, marginLeft: 4 }

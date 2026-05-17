@@ -11,6 +11,7 @@ import {
   FilePlus2,
   FileText,
   Filter,
+  GitCompareArrows,
   MoreHorizontal,
   PackagePlus,
   PieChart,
@@ -20,6 +21,8 @@ import {
   Upload,
   UsersRound,
 } from 'lucide-react'
+import { companyChangeEvent, companyScopedKey, getActiveCompany } from '@/lib/tenant/company'
+import { procurementGuideNotes, procurementLifecycleSteps, type ProcurementLifecycleKey } from '@/config/procurement-workflow'
 
 const font = "var(--font-body)"
 const suppliersKey = 'flowsys-suppliers'
@@ -31,18 +34,23 @@ const receivingKey = 'flowsys-procurement-receiving'
 
 type SupplierRecord = {
   id?: string | number
+  companyId?: string
   name?: string
   status?: string
+  rating?: number | string
+  deliveryRating?: number | string
 }
 
 type PricebookRecord = {
   id?: string | number
+  companyId?: string
   name?: string
   status?: string
 }
 
 type PurchaseOrderRecord = {
   id?: string | number
+  companyId?: string
   poNumber?: string
   supplier?: string
   supplierName?: string
@@ -57,6 +65,7 @@ type PurchaseOrderRecord = {
 
 type PurchaseRequestRecord = {
   id?: string | number
+  companyId?: string
   requestNo?: string
   requester?: string
   status?: string
@@ -69,15 +78,21 @@ type PurchaseRequestRecord = {
 
 type RfqRecord = {
   id?: string | number
+  companyId?: string
   status?: string
   expiresAt?: string
   validUntil?: string
+  quotations?: number | string
+  supplierNames?: string[]
+  suppliersInvited?: number | string
 }
 
 type ReceivingRecord = {
   id?: string | number
+  companyId?: string
   status?: string
   leadTimeDays?: number | string
+  receivedPercent?: number | string
 }
 
 type ProcurementState = {
@@ -104,22 +119,25 @@ export default function ProcurementOverviewPage() {
 
   useEffect(() => {
     const loadData = () => {
+      const activeCompanyId = getActiveCompany()?.id || ''
       setData({
-        suppliers: readStored<SupplierRecord>(suppliersKey),
-        pricebook: readStored<PricebookRecord>(pricebookKey),
-        purchaseOrders: readStored<PurchaseOrderRecord>(purchaseOrdersKey),
-        purchaseRequests: readStored<PurchaseRequestRecord>(purchaseRequestsKey),
-        rfqs: readStored<RfqRecord>(rfqsKey),
-        receiving: readStored<ReceivingRecord>(receivingKey),
+        suppliers: readStored<SupplierRecord>(suppliersKey, activeCompanyId),
+        pricebook: readStored<PricebookRecord>(pricebookKey, activeCompanyId),
+        purchaseOrders: readStored<PurchaseOrderRecord>(purchaseOrdersKey, activeCompanyId),
+        purchaseRequests: readStored<PurchaseRequestRecord>(purchaseRequestsKey, activeCompanyId),
+        rfqs: readStored<RfqRecord>(rfqsKey, activeCompanyId),
+        receiving: readStored<ReceivingRecord>(receivingKey, activeCompanyId),
       })
     }
 
     loadData()
     window.addEventListener('storage', loadData)
     window.addEventListener('focus', loadData)
+    window.addEventListener(companyChangeEvent, loadData)
     return () => {
       window.removeEventListener('storage', loadData)
       window.removeEventListener('focus', loadData)
+      window.removeEventListener(companyChangeEvent, loadData)
     }
   }, [])
 
@@ -136,8 +154,17 @@ export default function ProcurementOverviewPage() {
     const overdueDeliveries = data.receiving.filter(item => item.status?.toLowerCase().includes('overdue')).length
     const priceChanges = data.pricebook.filter(item => item.status?.toLowerCase().includes('price')).length
     const expiringQuotations = data.rfqs.filter(rfq => isExpiringSoon(rfq.expiresAt || rfq.validUntil)).length
+    const awardedRfqs = data.rfqs.filter(rfq => (rfq.status || '').toLowerCase().includes('award')).length
+    const comparisonReady = data.rfqs.filter(rfq => {
+      const status = (rfq.status || '').toLowerCase()
+      return status.includes('evaluation') || numberValue(rfq.quotations) > 0 || numberValue(rfq.suppliersInvited) > 1 || (rfq.supplierNames || []).length > 1
+    }).length
+    const inventoryUpdates = data.receiving.filter(item => {
+      const status = (item.status || '').toLowerCase()
+      return status.includes('received') || status.includes('complete') || numberValue(item.receivedPercent) >= 100
+    }).length
 
-    return { totalSpend, pendingRequests, activeSuppliers, avgLeadTime, lowStockItems, overdueDeliveries, priceChanges, expiringQuotations }
+    return { totalSpend, pendingRequests, activeSuppliers, avgLeadTime, lowStockItems, overdueDeliveries, priceChanges, expiringQuotations, awardedRfqs, comparisonReady, inventoryUpdates }
   }, [data])
 
   const topSuppliers = useMemo(() => {
@@ -154,9 +181,19 @@ export default function ProcurementOverviewPage() {
   const hasPurchaseRequests = data.purchaseRequests.length > 0
   const hasSpend = stats.totalSpend > 0
   const hasSuppliersBySpend = topSuppliers.length > 0
+  const lifecycleCounts = useMemo<Record<ProcurementLifecycleKey, number>>(() => ({
+    purchaseRequests: data.purchaseRequests.length,
+    rfqs: data.rfqs.length,
+    supplierComparison: stats.comparisonReady,
+    awardedSuppliers: stats.awardedRfqs,
+    purchaseOrders: data.purchaseOrders.length,
+    receiving: data.receiving.length,
+    warehouseInventory: stats.inventoryUpdates,
+  }), [data.purchaseOrders.length, data.purchaseRequests.length, data.receiving.length, data.rfqs.length, stats.awardedRfqs, stats.comparisonReady, stats.inventoryUpdates])
 
   return (
     <div style={{ padding: '28px 28px 42px', fontFamily: font }}>
+      <style>{overviewCss}</style>
       <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 18, marginBottom: 24 }}>
         <div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, color: '#64748b', fontSize: 13, marginBottom: 8 }}>
@@ -170,7 +207,7 @@ export default function ProcurementOverviewPage() {
             </span>
             <div>
               <h1 style={{ margin: 0, fontSize: 28, lineHeight: 1.15, color: '#0f172a', letterSpacing: '-0.02em' }}>Procurement Overview</h1>
-              <p style={{ margin: '8px 0 0', color: '#64748b', fontSize: 14 }}>Monitor purchasing performance, track orders, and manage supplier relationships.</p>
+              <p style={{ margin: '8px 0 0', color: '#64748b', fontSize: 14 }}>Command center for purchase requests, RFQs, supplier comparison, purchase orders, receiving, and procurement analytics.</p>
             </div>
           </div>
         </div>
@@ -181,7 +218,7 @@ export default function ProcurementOverviewPage() {
         </div>
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, minmax(150px, 1fr)) 280px', gap: 16, alignItems: 'stretch' }}>
+      <div className="procurement-overview-metrics">
         <MetricCard title="Total Spend" value={formatCurrency(stats.totalSpend)} empty={stats.totalSpend === 0} icon={ReceiptText} tone="green" />
         <MetricCard title="Purchase Orders" value={String(data.purchaseOrders.length)} empty={data.purchaseOrders.length === 0} icon={FileText} tone="blue" />
         <MetricCard title="Pending Requests" value={String(stats.pendingRequests)} empty={stats.pendingRequests === 0} icon={FilePlus2} tone="purple" />
@@ -192,9 +229,16 @@ export default function ProcurementOverviewPage() {
         </SideCard>
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) 280px', gap: 16, marginTop: 16 }}>
+      <Panel title="Enterprise Procurement Lifecycle" action={<Link href="/procurement/vendor-comparison" style={viewAllStyle}>Open supplier comparison</Link>}>
+        <LifecycleFlow counts={lifecycleCounts} />
+        <div className="procurement-guide-notes" aria-label="Procurement guide notes">
+          {procurementGuideNotes.map(note => <span key={note}>{note}</span>)}
+        </div>
+      </Panel>
+
+      <div className="procurement-overview-grid">
         <div style={{ display: 'grid', gap: 16 }}>
-          <div style={{ display: 'grid', gridTemplateColumns: '1.15fr 1fr 1fr', gap: 16 }}>
+          <div className="procurement-overview-chart-grid">
             <Panel title="Spend Overview" action={<button type="button" style={smallSelectStyle}>Monthly</button>}>
               {hasSpend ? (
                 <MiniSummary label="Total Spend" value={formatCurrency(stats.totalSpend)} href="/procurement/purchase-orders" link="View full report" />
@@ -203,7 +247,7 @@ export default function ProcurementOverviewPage() {
               )}
             </Panel>
             <Panel title="Spend by Category">
-              <EmptyState icon={PieChart} title="No category data yet" body="Category breakdown will appear here once you have spend data." action="View all categories" href="/resources/pricebook" />
+              <EmptyState icon={PieChart} title="No category data yet" body="Category breakdown will appear here once you have spend data." action="View all categories" href="/procurement/pricebook" />
             </Panel>
             <Panel title="PO Status">
               {hasPurchaseOrders ? (
@@ -214,7 +258,7 @@ export default function ProcurementOverviewPage() {
             </Panel>
           </div>
 
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
+          <div className="procurement-overview-two-col">
             <Panel title="Recent Purchase Orders" action={<Link href="/procurement/purchase-orders" style={viewAllStyle}>View all</Link>}>
               {hasPurchaseOrders ? <OrderList orders={data.purchaseOrders.slice(0, 5)} /> : <EmptyState icon={FileText} title="No purchase orders yet" body="Your recent purchase orders will appear here." compact />}
             </Panel>
@@ -224,10 +268,10 @@ export default function ProcurementOverviewPage() {
           </div>
 
           <Panel title="Alerts & Insights">
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: 14 }}>
+            <div className="procurement-insight-grid">
               <InsightCard icon={AlertTriangle} title="Low Stock Items" value={`${stats.lowStockItems} items`} body={stats.lowStockItems ? 'Needs attention' : 'No items to reorder'} href="/resources/inventory" link="View items" tone="orange" />
               <InsightCard icon={Truck} title="Overdue Deliveries" value={`${stats.overdueDeliveries} orders`} body={stats.overdueDeliveries ? 'Require attention' : 'No overdue deliveries'} href="/procurement/receiving" link="View orders" tone="purple" />
-              <InsightCard icon={BarChart3} title="Price Changes" value={`${stats.priceChanges} items`} body={stats.priceChanges ? 'Updated recently' : 'No price changes'} href="/resources/pricebook" link="View changes" tone="green" />
+              <InsightCard icon={BarChart3} title="Price Changes" value={`${stats.priceChanges} items`} body={stats.priceChanges ? 'Updated recently' : 'No price changes'} href="/procurement/pricebook" link="View changes" tone="green" />
               <InsightCard icon={Clock3} title="Expiring Quotations" value={`${stats.expiringQuotations} quotes`} body={stats.expiringQuotations ? 'Expiring soon' : 'No expiring quotes'} href="/procurement/rfqs" link="View quotes" tone="slate" />
             </div>
           </Panel>
@@ -239,9 +283,10 @@ export default function ProcurementOverviewPage() {
               <QuickAction href="/procurement/purchase-requests" icon={FilePlus2} label="New Purchase Request" />
               <QuickAction href="/procurement/purchase-orders" icon={FileText} label="New Purchase Order" />
               <QuickAction href="/procurement/rfqs" icon={ReceiptText} label="New RFQ / Quotation" />
-              <QuickAction href="/resources/pricebook" icon={PackagePlus} label="Add New Item" />
+              <QuickAction href="/procurement/pricebook" icon={PackagePlus} label="Add New Item" />
               <QuickAction href="/supplier-database" icon={UsersRound} label="Add New Supplier" />
-              <QuickAction href="/resources/pricebook" icon={Upload} label="Import Items" />
+              <QuickAction href="/procurement/pricebook" icon={Upload} label="Import Items" />
+              <QuickAction href="/procurement/vendor-comparison" icon={GitCompareArrows} label="Compare Suppliers" />
             </div>
           </SideCard>
 
@@ -261,6 +306,25 @@ export default function ProcurementOverviewPage() {
           </SideCard>
         </div>
       </div>
+    </div>
+  )
+}
+
+function LifecycleFlow({ counts }: { counts: Record<ProcurementLifecycleKey, number> }) {
+  return (
+    <div className="procurement-lifecycle">
+      {procurementLifecycleSteps.map((step, index) => {
+        const Icon = step.icon
+        return (
+          <Link key={step.key} href={step.href} className="procurement-lifecycle-step">
+            <span className="procurement-lifecycle-index">{index + 1}</span>
+            <span className="procurement-lifecycle-icon"><Icon size={18} /></span>
+            <strong>{step.label}</strong>
+            <small>{step.description}</small>
+            <b>{counts[step.key]} records</b>
+          </Link>
+        )
+      })}
     </div>
   )
 }
@@ -419,14 +483,38 @@ type IconProps = {
   color?: string
 }
 
-function readStored<T>(key: string): T[] {
+function readStored<T extends { id?: string | number; companyId?: string }>(key: string, companyId: string): T[] {
   if (typeof window === 'undefined') return []
   try {
-    const value = JSON.parse(window.localStorage.getItem(key) || '[]') as unknown
-    return Array.isArray(value) ? (value as T[]) : []
+    const scopedKey = companyId ? companyScopedKey(key, companyId) : key
+    const scoped = parseRows<T>(window.localStorage.getItem(scopedKey))
+    const global = parseRows<T>(window.localStorage.getItem(key))
+    const rows = scoped.length ? [...scoped, ...global] : global
+    const unique = uniqueRows(rows)
+    return unique.filter(row => !companyId || !row.companyId || row.companyId === companyId)
   } catch {
     return []
   }
+}
+
+function parseRows<T>(value: string | null): T[] {
+  if (!value) return []
+  try {
+    const parsed = JSON.parse(value) as unknown
+    return Array.isArray(parsed) ? parsed as T[] : []
+  } catch {
+    return []
+  }
+}
+
+function uniqueRows<T extends { id?: string | number }>(rows: T[]) {
+  const seen = new Set<string>()
+  return rows.filter((row, index) => {
+    const id = row.id ? String(row.id) : `row-${index}`
+    if (seen.has(id)) return false
+    seen.add(id)
+    return true
+  })
 }
 
 function currentMonthRangeLabel() {
@@ -555,3 +643,140 @@ const emptyActionStyle: React.CSSProperties = {
   alignItems: 'center',
   gap: 6,
 }
+
+const overviewCss = `
+.procurement-overview-metrics {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(150px, 1fr)) 280px;
+  gap: 16px;
+  align-items: stretch;
+}
+.procurement-overview-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 280px;
+  gap: 16px;
+  margin-top: 16px;
+}
+.procurement-overview-chart-grid {
+  display: grid;
+  grid-template-columns: 1.15fr 1fr 1fr;
+  gap: 16px;
+}
+.procurement-overview-two-col,
+.procurement-insight-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+}
+.procurement-insight-grid {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 14px;
+}
+.procurement-lifecycle {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(120px, 1fr));
+  gap: 10px;
+}
+.procurement-lifecycle-step {
+  position: relative;
+  min-height: 172px;
+  border: 1px solid #e8edf4;
+  border-radius: 14px;
+  background: #fbfdff;
+  color: #0f172a;
+  text-decoration: none;
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.procurement-lifecycle-step::after {
+  content: "";
+  position: absolute;
+  top: 28px;
+  right: -11px;
+  width: 12px;
+  height: 2px;
+  background: #cbd5e1;
+}
+.procurement-lifecycle-step:last-child::after {
+  display: none;
+}
+.procurement-lifecycle-index {
+  width: 24px;
+  height: 24px;
+  border-radius: 999px;
+  background: #dcfce7;
+  color: #16a34a;
+  display: inline-grid;
+  place-items: center;
+  font-size: 11px;
+  font-weight: 950;
+}
+.procurement-lifecycle-icon {
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  background: #f0fdf4;
+  color: #16a34a;
+  display: grid;
+  place-items: center;
+}
+.procurement-lifecycle strong {
+  font-size: 13px;
+  font-weight: 950;
+}
+.procurement-lifecycle small {
+  color: #64748b;
+  font-size: 11px;
+  line-height: 1.35;
+}
+.procurement-lifecycle b {
+  margin-top: auto;
+  color: #0f172a;
+  font-size: 12px;
+}
+.procurement-guide-notes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 14px;
+}
+.procurement-guide-notes span {
+  border: 1px solid #bbf7d0;
+  background: #f0fdf4;
+  color: #166534;
+  border-radius: 999px;
+  padding: 7px 10px;
+  font-size: 11px;
+  font-weight: 850;
+}
+@media (max-width: 1400px) {
+  .procurement-overview-metrics {
+    grid-template-columns: repeat(3, minmax(180px, 1fr));
+  }
+  .procurement-lifecycle {
+    grid-template-columns: repeat(4, minmax(150px, 1fr));
+  }
+  .procurement-lifecycle-step::after {
+    display: none;
+  }
+}
+@media (max-width: 1120px) {
+  .procurement-overview-grid,
+  .procurement-overview-chart-grid {
+    grid-template-columns: 1fr;
+  }
+  .procurement-insight-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+@media (max-width: 760px) {
+  .procurement-overview-metrics,
+  .procurement-overview-two-col,
+  .procurement-insight-grid,
+  .procurement-lifecycle {
+    grid-template-columns: 1fr;
+  }
+}
+`

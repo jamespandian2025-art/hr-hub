@@ -446,7 +446,7 @@ export default function AccountingShell({ children }: { children: React.ReactNod
               {accountMenuOpen && (
                 <div role="menu" style={accountMenuStyle}>
                   <div style={accountMenuHeaderStyle}>
-                    <strong>{displayName}</strong>
+                    <strong style={accountMenuNameStyle} title={displayName}>{displayName}</strong>
                     <small>{account.role || account.company || 'Finance workspace'}</small>
                   </div>
                   <button type="button" role="menuitem" style={accountMenuItemStyle} onClick={() => { setAccountMenuOpen(false); router.push('/settings/company') }}>Company settings</button>
@@ -556,6 +556,7 @@ const accountMenuStyle: React.CSSProperties = {
   right: 0,
   top: 48,
   width: 240,
+  maxWidth: 'calc(100vw - 24px)',
   background: '#fff',
   border: '1px solid #e8edf4',
   borderRadius: 8,
@@ -564,6 +565,7 @@ const accountMenuStyle: React.CSSProperties = {
   zIndex: 90,
   display: 'grid',
   gap: 4,
+  overflow: 'hidden',
 }
 
 const accountMenuHeaderStyle: React.CSSProperties = {
@@ -573,6 +575,15 @@ const accountMenuHeaderStyle: React.CSSProperties = {
   display: 'grid',
   gap: 4,
   color: '#0f172a',
+  minWidth: 0,
+}
+
+const accountMenuNameStyle: React.CSSProperties = {
+  display: 'block',
+  maxWidth: '100%',
+  overflow: 'hidden',
+  textOverflow: 'ellipsis',
+  whiteSpace: 'nowrap',
 }
 
 const accountMenuItemStyle: React.CSSProperties = {
