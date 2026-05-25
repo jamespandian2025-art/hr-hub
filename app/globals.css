@@ -1391,6 +1391,7 @@ h1,
   width: 100%;
   overflow-y: auto;
   overflow-x: hidden;
+  padding-inline: max(0px, calc((100% - var(--wf-content-max)) / 2));
 }
 
 .hr-mobile-backdrop,
