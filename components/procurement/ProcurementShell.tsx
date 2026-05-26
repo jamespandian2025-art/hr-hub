@@ -9,6 +9,7 @@ import {
   Search,
   X,
 } from 'lucide-react'
+import CompanySwitcher from '@/components/CompanySwitcher'
 import { getProcurementRouteMeta, procurementWorkspaceMenu } from '@/config/procurement-menu'
 
 const font = 'var(--font-body)'
@@ -104,6 +105,8 @@ export default function ProcurementShell({ children }: { children: React.ReactNo
             <Search size={17} color="#64748b" />
             <input placeholder="Search procurement records..." aria-label="Search procurement records" />
           </label>
+
+          <CompanySwitcher className="procurement-company-switcher" />
         </header>
 
         <main>{children}</main>
@@ -286,6 +289,7 @@ const procurementShellCss = `
   min-width: 0;
   height: 100dvh;
   overflow-y: auto;
+  padding-inline: max(0px, calc((100% - var(--wf-content-max)) / 2));
 }
 .procurement-header {
   height: 74px;
@@ -296,7 +300,7 @@ const procurementShellCss = `
   backdrop-filter: blur(16px);
   border-bottom: 1px solid #e5e7eb;
   display: grid;
-  grid-template-columns: minmax(220px, auto) minmax(260px, 560px);
+  grid-template-columns: minmax(220px, auto) minmax(260px, 560px) minmax(190px, max-content);
   align-items: center;
   gap: 28px;
   padding: 0 28px;

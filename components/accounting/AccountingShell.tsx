@@ -27,6 +27,8 @@ import {
 import { loadStored } from '@/app/employee/employeeData'
 import { AllowanceRequest, allowanceRequestKey, outboundNotificationsKey } from '@/app/hr/enterpriseData'
 import { LoanRequest, loanApprovalState, loanDisplayName, loanRequestKey, money as loanMoney } from '@/app/hr/loan-requests/loanData'
+import CompanySwitcher from '@/components/CompanySwitcher'
+import { useTheme } from '@/components/ThemeProvider'
 import { listHrRecords } from '@/lib/hrms/client'
 
 const font = 'var(--font-body)'
@@ -102,6 +104,7 @@ export function getAccountingRouteMeta(pathname: string) {
 export default function AccountingShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname()
   const router = useRouter()
+  const { resolvedTheme } = useTheme()
   const activeMeta = getAccountingRouteMeta(pathname)
   const ActiveIcon = activeMeta.icon
   const [notificationsOpen, setNotificationsOpen] = useState(false)
@@ -222,14 +225,15 @@ export default function AccountingShell({ children }: { children: React.ReactNod
   const notificationBadgeCount = accountingNotifications.length
   const displayName = account.fullName || account.name || account.email || 'Finance User'
   const avatarText = displayName.split(/\s+/).filter(Boolean).map(part => part[0]).join('').slice(0, 2).toUpperCase() || 'FP'
+  const isDarkTheme = resolvedTheme === 'dark'
   const shellStyle: React.CSSProperties = {
     minHeight: '100vh',
     height: '100dvh',
     overflow: 'hidden',
-    background: '#f7f9fc',
+    background: isDarkTheme ? '#101010' : 'var(--acc-bg, #f7f9fc)',
     display: 'grid',
     fontFamily: font,
-    color: '#111827',
+    color: isDarkTheme ? '#fafafa' : 'var(--acc-text, #111827)',
   }
   const sidebarStyle: React.CSSProperties = {
     minHeight: '100vh',
@@ -258,7 +262,7 @@ export default function AccountingShell({ children }: { children: React.ReactNod
   }
 
   return (
-    <div className="accounting-shell" style={shellStyle}>
+    <div className={`accounting-shell${isDarkTheme ? ' accounting-theme-dark' : ' accounting-theme-light'}`} style={shellStyle}>
       <style>{accountingShellCss}</style>
       <button
         type="button"
@@ -321,11 +325,12 @@ export default function AccountingShell({ children }: { children: React.ReactNod
               <span style={{ display: 'block', fontSize: 12, color: '#64748b', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{activeMeta.description}</span>
             </span>
           </div>
-          <label className="accounting-header-search" style={{ height: 40, borderRadius: 8, background: '#fff', display: 'flex', alignItems: 'center', gap: 10, padding: '0 14px', border: '1px solid #e8edf4', boxShadow: '0 1px 2px rgba(15,23,42,0.03)' }}>
-            <Search size={16} color="#64748b" />
-            <input placeholder="Search Finance" aria-label="Search Finance" style={{ flex: 1, border: 0, outline: 0, background: 'transparent', fontSize: 13, color: '#0f172a' }} />
+          <label className="accounting-header-search" style={{ height: 40, borderRadius: 8, background: 'var(--acc-input, #fff)', display: 'flex', alignItems: 'center', gap: 10, padding: '0 14px', border: '1px solid var(--acc-input-border, #e8edf4)', boxShadow: 'none' }}>
+            <Search size={16} color="currentColor" />
+            <input placeholder="Search Finance" aria-label="Search Finance" style={{ flex: 1, border: 0, outline: 0, background: 'transparent', fontSize: 13, color: 'var(--acc-text, #0f172a)' }} />
           </label>
           <div className="accounting-header-actions" style={headerActionsStyle}>
+            <CompanySwitcher compact />
             <button type="button" aria-label="Notifications" onClick={() => { setNewMenuOpen(false); setAccountMenuOpen(false); setNotificationsOpen(open => !open) }} style={{ ...roundButtonStyle, position: 'relative' }}>
               <Bell size={18} />
               {notificationBadgeCount > 0 && (
@@ -374,6 +379,7 @@ export default function AccountingShell({ children }: { children: React.ReactNod
             )}
             <button
               type="button"
+              className="accounting-new-record-button"
               onClick={() => {
                 setNotificationsOpen(false)
                 setAccountMenuOpen(false)
@@ -457,7 +463,10 @@ export default function AccountingShell({ children }: { children: React.ReactNod
             </div>
           </div>
         </header>
-        <main className="accounting-scroll-content">{children}</main>
+        <main className="accounting-scroll-content" style={{ background: isDarkTheme ? '#101010' : 'var(--acc-bg, #f8fafc)', color: isDarkTheme ? '#fafafa' : 'var(--acc-text, #0f172a)' }}>
+          {children}
+          <style>{accountingThemeOverrideCss}</style>
+        </main>
       </div>
     </div>
   )
@@ -498,8 +507,8 @@ const iconButtonStyle: React.CSSProperties = {
 }
 
 const roundButtonStyle: React.CSSProperties = {
-  width: 38,
-  height: 38,
+  width: 40,
+  height: 40,
   borderRadius: 10,
   border: '1px solid #e8edf4',
   background: '#fff',
@@ -507,26 +516,31 @@ const roundButtonStyle: React.CSSProperties = {
   display: 'grid',
   placeItems: 'center',
   cursor: 'pointer',
+  flex: '0 0 auto',
+  boxShadow: '0 1px 2px rgba(15,23,42,0.04)',
 }
 
 const employeeButtonStyle: React.CSSProperties = {
-  minHeight: 38,
+  minHeight: 40,
   borderRadius: 999,
   border: '1px solid #16a34a',
   background: '#16a34a',
-  color: '#00140a',
+  color: '#fff',
   display: 'flex',
   alignItems: 'center',
+  justifyContent: 'center',
   gap: 8,
-  padding: '0 18px',
+  padding: '0 20px',
   fontSize: 12.5,
   fontWeight: 950,
   cursor: 'pointer',
+  flex: '0 0 auto',
+  boxShadow: '0 1px 2px rgba(22,163,74,0.18)',
 }
 
 const plusButtonStyle: React.CSSProperties = {
-  width: 38,
-  height: 38,
+  width: 40,
+  height: 40,
   borderRadius: 999,
   border: '1px solid #d7dde6',
   background: '#fff',
@@ -534,6 +548,8 @@ const plusButtonStyle: React.CSSProperties = {
   display: 'grid',
   placeItems: 'center',
   cursor: 'pointer',
+  flex: '0 0 auto',
+  boxShadow: '0 1px 2px rgba(15,23,42,0.04)',
 }
 
 const avatarButtonStyle: React.CSSProperties = {
@@ -542,13 +558,15 @@ const avatarButtonStyle: React.CSSProperties = {
   borderRadius: 999,
   border: '1px solid #d7dde6',
   background: '#22c55e',
-  color: '#04130a',
+  color: '#fff',
   display: 'grid',
   placeItems: 'center',
   fontSize: 13,
   fontWeight: 950,
   cursor: 'pointer',
   overflow: 'hidden',
+  flex: '0 0 auto',
+  boxShadow: '0 1px 2px rgba(34,197,94,0.18)',
 }
 
 const accountMenuStyle: React.CSSProperties = {
@@ -757,6 +775,17 @@ const notificationFooterStyle: React.CSSProperties = {
 
 const accountingShellCss = `
 .accounting-shell {
+  --acc-bg: #f8fafc;
+  --acc-surface: #ffffff;
+  --acc-surface-raised: #ffffff;
+  --acc-hover: #f1f5f9;
+  --acc-border: #d8dee6;
+  --acc-border-soft: #e8edf4;
+  --acc-input: #ffffff;
+  --acc-input-border: #cbd5e1;
+  --acc-text: #0f172a;
+  --acc-muted: #475569;
+  --acc-placeholder: #64748b;
   display: grid !important;
   grid-template-columns: minmax(0, 1fr) !important;
   height: 100vh;
@@ -853,17 +882,34 @@ const accountingShellCss = `
 .accounting-header-actions {
   width: 100%;
   display: grid !important;
-  grid-template-columns: 44px minmax(0, 1fr) 44px 44px;
+  grid-template-columns: 44px 44px minmax(0, 1fr) 44px 44px;
   align-items: center !important;
   justify-content: stretch !important;
   gap: 8px !important;
 }
+.accounting-header-actions > div {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
 .accounting-header-actions > button,
 .accounting-header-actions > div > button {
   min-height: 44px !important;
+  padding: 0 !important;
 }
-.accounting-header-actions > button:nth-child(2) {
+.accounting-header-actions > button:not(.accounting-new-record-button),
+.accounting-header-actions > div > button {
+  width: 44px !important;
+  height: 44px !important;
+  min-width: 44px !important;
+  max-width: 44px !important;
+  aspect-ratio: 1 / 1;
+}
+.accounting-header-actions > .accounting-new-record-button {
   width: 100% !important;
+  min-height: 44px !important;
+  height: 44px !important;
+  padding: 0 18px !important;
   justify-content: center !important;
   overflow: hidden;
   white-space: nowrap;
@@ -879,7 +925,9 @@ const accountingShellCss = `
   overflow-x: hidden !important;
   overscroll-behavior: contain;
   -webkit-overflow-scrolling: touch;
-  background: #ffffff;
+  background: var(--acc-bg) !important;
+  color: var(--acc-text) !important;
+  padding-inline: max(0px, calc((100% - var(--wf-content-max)) / 2));
 }
 .accounting-scroll-content :where(img, svg, canvas, video) {
   max-width: 100%;
@@ -976,8 +1024,9 @@ const accountingShellCss = `
     z-index: 80 !important;
     height: 76px !important;
     min-height: 76px;
-    grid-template-columns: auto minmax(280px, 520px) auto !important;
+    grid-template-columns: minmax(210px, .9fr) minmax(260px, 520px) max-content !important;
     align-items: center !important;
+    justify-content: space-between !important;
     gap: 18px !important;
     padding: 0 28px !important;
   }
@@ -994,6 +1043,8 @@ const accountingShellCss = `
   .accounting-header-search {
     width: auto;
     min-height: 40px;
+    max-width: 520px;
+    justify-self: center;
   }
 
   .accounting-header-actions {
@@ -1002,16 +1053,33 @@ const accountingShellCss = `
     grid-template-columns: none;
     align-items: center !important;
     justify-content: flex-end !important;
-    gap: 10px !important;
+    justify-self: end;
+    gap: 8px !important;
+    height: 40px;
+    white-space: nowrap;
   }
 
   .accounting-header-actions > button,
   .accounting-header-actions > div > button {
-    min-height: 44px !important;
+    min-height: 40px !important;
+    height: 40px !important;
+    padding: 0 !important;
   }
 
-  .accounting-header-actions > button:nth-child(2) {
+  .accounting-header-actions > button:not(.accounting-new-record-button),
+  .accounting-header-actions > div > button {
+    width: 40px !important;
+    height: 40px !important;
+    min-width: 40px !important;
+    max-width: 40px !important;
+    min-height: 40px !important;
+  }
+
+  .accounting-header-actions > .accounting-new-record-button {
     width: auto !important;
+    min-height: 40px !important;
+    height: 40px !important;
+    padding: 0 20px !important;
     justify-content: center;
     overflow: visible;
     white-space: nowrap;
@@ -1064,5 +1132,520 @@ const accountingShellCss = `
   .accounting-header-actions {
     grid-template-columns: 44px minmax(0, 1fr) 44px 42px;
   }
+}
+
+html[data-theme='dark'] .accounting-shell {
+  --acc-bg: #050505;
+  --acc-surface: #101010;
+  --acc-surface-raised: #151515;
+  --acc-hover: #1c1c1f;
+  --acc-border: #333333;
+  --acc-border-soft: #242424;
+  --acc-input: #121212;
+  --acc-input-border: #3a3a3a;
+  --acc-text: #fafafa;
+  --acc-muted: #c7c7cf;
+  --acc-placeholder: #9ca3af;
+  --acc-sidebar: #000000;
+  --acc-sidebar-hover: #171717;
+  --acc-sidebar-active: #222225;
+  --acc-positive: #86efac;
+  --acc-warning: #fbbf24;
+  --acc-danger: #fca5a5;
+}
+
+html[data-theme='light'] .accounting-shell {
+  --acc-bg: #f8fafc;
+  --acc-surface: #ffffff;
+  --acc-surface-raised: #ffffff;
+  --acc-hover: #f1f5f9;
+  --acc-border: #d8dee6;
+  --acc-border-soft: #e8edf4;
+  --acc-input: #ffffff;
+  --acc-input-border: #cbd5e1;
+  --acc-text: #0f172a;
+  --acc-muted: #475569;
+  --acc-placeholder: #64748b;
+  --acc-sidebar: #000000;
+  --acc-sidebar-hover: #171717;
+  --acc-sidebar-active: #202020;
+  --acc-positive: #15803d;
+  --acc-warning: #b45309;
+  --acc-danger: #b91c1c;
+}
+
+html[data-theme] .accounting-shell,
+html[data-theme] .accounting-content-column,
+html[data-theme] .accounting-scroll-content,
+html[data-theme] .accounting-scroll-content > *,
+html[data-theme] .accounting-overview-page,
+html[data-theme] .live-accounting-page,
+html[data-theme] .invoices-page,
+html[data-theme] .banking-page,
+html[data-theme] .tx-page,
+html[data-theme] .budget-page,
+html[data-theme] .payroll-page,
+html[data-theme] .tax-page,
+html[data-theme] .reports-page,
+html[data-theme] .audit-page {
+  background: var(--acc-bg) !important;
+  color: var(--acc-text) !important;
+}
+
+html[data-theme] .accounting-sticky-header {
+  background: color-mix(in srgb, var(--acc-bg) 94%, transparent) !important;
+  border-bottom: 1px solid var(--acc-border) !important;
+  color: var(--acc-text) !important;
+  box-shadow: none !important;
+}
+
+html[data-theme] .accounting-header-title > span:first-of-type {
+  background: color-mix(in srgb, var(--acc-positive) 14%, var(--acc-surface)) !important;
+  color: var(--acc-positive) !important;
+}
+
+html[data-theme] .accounting-header-title > span:last-of-type > span:first-child,
+html[data-theme] .accounting-header-title strong,
+html[data-theme] .accounting-sticky-header strong {
+  color: var(--acc-text) !important;
+}
+
+html[data-theme] .accounting-header-title > span:last-of-type > span:last-child,
+html[data-theme] .accounting-sticky-header small {
+  color: var(--acc-muted) !important;
+}
+
+html[data-theme] .accounting-header-search,
+html[data-theme] .accounting-header-actions button,
+html[data-theme] .accounting-header-actions > div > button {
+  background: var(--acc-input) !important;
+  border-color: var(--acc-input-border) !important;
+  color: var(--acc-text) !important;
+  box-shadow: none !important;
+}
+
+html[data-theme] .accounting-header-search input {
+  background: transparent !important;
+  color: var(--acc-text) !important;
+}
+
+html[data-theme] .accounting-header-search input::placeholder {
+  color: var(--acc-placeholder) !important;
+  opacity: 1 !important;
+}
+
+html[data-theme] .accounting-header-search svg,
+html[data-theme] .accounting-header-actions svg {
+  color: var(--acc-muted) !important;
+  stroke: currentColor !important;
+}
+
+html[data-theme] .accounting-new-record-button,
+html[data-theme] .accounting-scroll-content button.primary,
+html[data-theme] .accounting-scroll-content a.primary,
+html[data-theme] .accounting-scroll-content [class*='primary-button'] {
+  background: var(--acc-text) !important;
+  border-color: var(--acc-text) !important;
+  color: var(--acc-bg) !important;
+}
+
+html[data-theme] .accounting-sidebar {
+  background: var(--acc-sidebar) !important;
+  border-color: var(--acc-border) !important;
+  color: #fafafa !important;
+}
+
+html[data-theme] .accounting-nav-row {
+  color: #d4d4d8 !important;
+  background: transparent !important;
+}
+
+html[data-theme] .accounting-nav-row svg {
+  color: currentColor !important;
+  stroke: currentColor !important;
+}
+
+html[data-theme] .accounting-nav-row:hover,
+html[data-theme] .accounting-nav-row.active {
+  background: var(--acc-sidebar-hover) !important;
+  color: #ffffff !important;
+}
+
+html[data-theme] .accounting-nav-row.active {
+  background: var(--acc-sidebar-active) !important;
+  box-shadow: inset 2px 0 0 #ffffff !important;
+}
+
+html[data-theme] .accounting-scroll-content h1,
+html[data-theme] .accounting-scroll-content h2,
+html[data-theme] .accounting-scroll-content h3,
+html[data-theme] .accounting-scroll-content h4,
+html[data-theme] .accounting-scroll-content strong,
+html[data-theme] .accounting-scroll-content b,
+html[data-theme] .accounting-scroll-content td strong,
+html[data-theme] .accounting-scroll-content [class*='value'],
+html[data-theme] .accounting-scroll-content [class*='heading'] {
+  color: var(--acc-text) !important;
+}
+
+html[data-theme] .accounting-scroll-content p,
+html[data-theme] .accounting-scroll-content small,
+html[data-theme] .accounting-scroll-content label,
+html[data-theme] .accounting-scroll-content th,
+html[data-theme] .accounting-scroll-content td small,
+html[data-theme] .accounting-scroll-content [class*='subtitle'],
+html[data-theme] .accounting-scroll-content [class*='detail'],
+html[data-theme] .accounting-scroll-content [class*='label'],
+html[data-theme] .accounting-scroll-content [class*='eyebrow'],
+html[data-theme] .accounting-scroll-content [class*='empty'] {
+  color: var(--acc-muted) !important;
+}
+
+html[data-theme] .accounting-scroll-content :is(
+  .accounting-card,
+  .live-card,
+  .invoices-card,
+  .banking-card,
+  .tx-card,
+  .tx-table-card,
+  .budget-card,
+  .payroll-card,
+  .tax-card,
+  .reports-card,
+  .audit-card,
+  .budget-filter-panel,
+  .budget-create-panel,
+  .invoices-create-panel,
+  .banking-modal,
+  .live-bill-sheet,
+  .tx-create-sheet,
+  .audit-filter-panel,
+  .audit-row-menu,
+  .tx-row-menu
+) {
+  background: var(--acc-surface) !important;
+  border-color: var(--acc-border) !important;
+  color: var(--acc-text) !important;
+  box-shadow: none !important;
+}
+
+html[data-theme] .accounting-scroll-content :is(
+  .accounting-table-wrap,
+  .live-table-wrap,
+  .invoices-table-wrap,
+  .banking-table-wrap,
+  .tx-table-wrap,
+  .budget-table-wrap,
+  .payroll-table-wrap,
+  .tax-table-wrap,
+  .reports-table-wrap,
+  .audit-table-wrap
+) {
+  background: var(--acc-surface) !important;
+  border-color: var(--acc-border) !important;
+  color: var(--acc-text) !important;
+}
+
+html[data-theme] .accounting-scroll-content table,
+html[data-theme] .accounting-scroll-content thead,
+html[data-theme] .accounting-scroll-content tbody,
+html[data-theme] .accounting-scroll-content tr,
+html[data-theme] .accounting-scroll-content th,
+html[data-theme] .accounting-scroll-content td {
+  border-color: var(--acc-border) !important;
+}
+
+html[data-theme] .accounting-scroll-content thead,
+html[data-theme] .accounting-scroll-content th {
+  background: var(--acc-hover) !important;
+  color: var(--acc-muted) !important;
+}
+
+html[data-theme] .accounting-scroll-content td {
+  background: transparent !important;
+  color: var(--acc-text) !important;
+}
+
+html[data-theme] .accounting-scroll-content tbody tr:hover,
+html[data-theme] .accounting-scroll-content tbody tr:hover td,
+html[data-theme] .accounting-scroll-content [class*='row']:hover {
+  background: color-mix(in srgb, var(--acc-text) 6%, transparent) !important;
+}
+
+html[data-theme] .accounting-scroll-content :is(input, select, textarea),
+html[data-theme] .accounting-scroll-content :is(.live-card-head label, .invoices-search, .banking-search, .tx-search, .budget-search, .audit-search, .audit-select, .tx-select-button, .tx-account-select label, .budget-filter-panel select, .budget-filter-panel button) {
+  background: var(--acc-input) !important;
+  border-color: var(--acc-input-border) !important;
+  color: var(--acc-text) !important;
+  box-shadow: none !important;
+}
+
+html[data-theme] .accounting-scroll-content :is(input, select, textarea)::placeholder {
+  color: var(--acc-placeholder) !important;
+  opacity: 1 !important;
+}
+
+html[data-theme] .accounting-scroll-content :is(button, a[class*='button'], [class*='toolbar-button'], [class*='icon-button'], [class*='link-button'], [class*='row-actions'] button, [class*='actions'] button) {
+  border-color: var(--acc-border) !important;
+  color: var(--acc-text) !important;
+  box-shadow: none !important;
+}
+
+html[data-theme] .accounting-scroll-content :is(button, a[class*='button'], [class*='toolbar-button'], [class*='icon-button'], [class*='link-button'], [class*='row-actions'] button, [class*='actions'] button):hover {
+  background: var(--acc-hover) !important;
+  color: var(--acc-text) !important;
+}
+
+html[data-theme] .accounting-scroll-content :is(.accounting-pill, [class*='pill'], [class*='status'], [class*='tag'], [class*='badge']) {
+  background: var(--acc-hover) !important;
+  border-color: var(--acc-border) !important;
+  color: var(--acc-text) !important;
+}
+
+html[data-theme] .accounting-scroll-content :is(.amount-negative, .tx-money-out, .budget-negative, .audit-metric em.down) {
+  color: var(--acc-danger) !important;
+}
+
+html[data-theme] .accounting-scroll-content :is(.amount-positive, .tx-money-in, .budget-positive, .audit-metric em.up, .accounting-metric-delta) {
+  color: var(--acc-positive) !important;
+}
+
+html[data-theme] .accounting-scroll-content :is(.accounting-empty, .empty, .invoices-empty, .banking-empty, .banking-feed-empty, .budget-empty, .audit-details-empty, .reports-empty-note, .reports-empty-chart) {
+  background: var(--acc-surface) !important;
+  border-color: var(--acc-border) !important;
+  color: var(--acc-muted) !important;
+}
+
+html[data-theme] .accounting-scroll-content svg {
+  color: currentColor;
+  stroke: currentColor;
+}
+
+html[data-theme] .accounting-scroll-content svg text,
+html[data-theme] .accounting-scroll-content .recharts-cartesian-axis-tick text,
+html[data-theme] .accounting-scroll-content .recharts-legend-item-text,
+html[data-theme] .accounting-scroll-content .recharts-text {
+  fill: var(--acc-muted) !important;
+  color: var(--acc-muted) !important;
+}
+
+html[data-theme] .accounting-scroll-content .recharts-cartesian-grid line,
+html[data-theme] .accounting-scroll-content svg [stroke='#e5e7eb'],
+html[data-theme] .accounting-scroll-content svg [stroke='#E5E7EB'],
+html[data-theme] .accounting-scroll-content svg [stroke='#eef2f7'],
+html[data-theme] .accounting-scroll-content svg [stroke='#EEF2F7'] {
+  stroke: var(--acc-border) !important;
+}
+`
+
+const accountingThemeOverrideCss = `
+html .accounting-shell.accounting-theme-dark {
+  --acc-bg: #101010;
+  --acc-surface: #101010;
+  --acc-surface-raised: #101010;
+  --acc-hover: #181818;
+  --acc-border: #333333;
+  --acc-border-soft: #242424;
+  --acc-input: #101010;
+  --acc-input-border: #3a3a3a;
+  --acc-text: #fafafa;
+  --acc-muted: #c7c7cf;
+  --acc-placeholder: #9ca3af;
+  background: #101010 !important;
+  background-color: #101010 !important;
+  color: #fafafa !important;
+}
+
+html .accounting-shell.accounting-theme-dark .accounting-content-column,
+html .accounting-shell.accounting-theme-dark .accounting-scroll-content,
+html .accounting-shell.accounting-theme-dark .accounting-scroll-content > *,
+html .accounting-shell.accounting-theme-dark .accounting-overview-page,
+html .accounting-shell.accounting-theme-dark .live-accounting-page,
+html .accounting-shell.accounting-theme-dark .invoices-page,
+html .accounting-shell.accounting-theme-dark .banking-page,
+html .accounting-shell.accounting-theme-dark .tx-page,
+html .accounting-shell.accounting-theme-dark .budget-page,
+html .accounting-shell.accounting-theme-dark .payroll-page,
+html .accounting-shell.accounting-theme-dark .tax-page,
+html .accounting-shell.accounting-theme-dark .reports-page,
+html .accounting-shell.accounting-theme-dark .audit-page,
+html .accounting-shell.accounting-theme-dark .accounting-scroll-content [class$='-page'],
+html .accounting-shell.accounting-theme-dark .accounting-scroll-content [class*='-page '] {
+  background: #101010 !important;
+  background-color: #101010 !important;
+  color: var(--acc-text) !important;
+}
+
+html .accounting-shell.accounting-theme-dark .accounting-scroll-content :is(
+  .accounting-card,
+  .live-card,
+  .invoices-card,
+  .banking-card,
+  .tx-card,
+  .tx-table-card,
+  .budget-card,
+  .payroll-card,
+  .tax-card,
+  .reports-card,
+  .audit-card,
+  .accounting-table-wrap,
+  .live-table-wrap,
+  .invoices-table-wrap,
+  .banking-table-wrap,
+  .tx-table-wrap,
+  .budget-table-wrap,
+  .payroll-table-wrap,
+  .tax-table-wrap,
+  .reports-table-wrap,
+  .audit-table-wrap,
+  .budget-filter-panel,
+  .budget-create-panel,
+  .invoices-create-panel,
+  .banking-modal,
+  .live-bill-sheet,
+  .tx-create-sheet,
+  .audit-filter-panel,
+  .audit-row-menu,
+  .tx-row-menu,
+  .status-summary,
+  .quick-actions
+) {
+  background: #101010 !important;
+  background-color: #101010 !important;
+  border-color: var(--acc-border) !important;
+  color: var(--acc-text) !important;
+  box-shadow: none !important;
+}
+
+html .accounting-shell.accounting-theme-dark .accounting-scroll-content [style*='background: #fff' i],
+html .accounting-shell.accounting-theme-dark .accounting-scroll-content [style*='background:#fff' i],
+html .accounting-shell.accounting-theme-dark .accounting-scroll-content [style*='background: white' i],
+html .accounting-shell.accounting-theme-dark .accounting-scroll-content [style*='background: #ffffff' i],
+html .accounting-shell.accounting-theme-dark .accounting-scroll-content [style*='background:#ffffff' i],
+html .accounting-shell.accounting-theme-dark .accounting-scroll-content [style*='background: rgb(255, 255, 255)' i],
+html .accounting-shell.accounting-theme-dark .accounting-scroll-content [style*='background: #f8fafc' i],
+html .accounting-shell.accounting-theme-dark .accounting-scroll-content [style*='background: #f1f5f9' i],
+html .accounting-shell.accounting-theme-dark .accounting-scroll-content [style*='background: #f4f4f5' i] {
+  background: #101010 !important;
+  background-color: #101010 !important;
+  border-color: var(--acc-border) !important;
+  color: var(--acc-text) !important;
+}
+
+html[data-theme='dark'] .accounting-shell {
+  --acc-bg: #101010;
+  --acc-surface: #101010;
+  --acc-surface-raised: #101010;
+  --acc-hover: #181818;
+  --acc-border: #333333;
+  --acc-border-soft: #242424;
+  --acc-input: #101010;
+  --acc-input-border: #3a3a3a;
+  --acc-text: #fafafa;
+  --acc-muted: #c7c7cf;
+  --acc-placeholder: #9ca3af;
+}
+
+html[data-theme='dark'] body:has(.accounting-shell),
+html[data-theme='dark'] body:has(.accounting-shell) #__next,
+html[data-theme='dark'] body:has(.accounting-shell) main,
+html[data-theme='dark'] body:has(.accounting-shell) .accounting-shell {
+  background: #101010 !important;
+  background-color: #101010 !important;
+}
+
+html[data-theme='dark'] .accounting-content-column,
+html[data-theme='dark'] .accounting-scroll-content,
+html[data-theme='dark'] .accounting-scroll-content > *,
+html[data-theme='dark'] .accounting-overview-page,
+html[data-theme='dark'] .live-accounting-page,
+html[data-theme='dark'] .invoices-page,
+html[data-theme='dark'] .banking-page,
+html[data-theme='dark'] .tx-page,
+html[data-theme='dark'] .budget-page,
+html[data-theme='dark'] .payroll-page,
+html[data-theme='dark'] .tax-page,
+html[data-theme='dark'] .reports-page,
+html[data-theme='dark'] .audit-page,
+html[data-theme='dark'] .accounting-scroll-content [class$='-page'],
+html[data-theme='dark'] .accounting-scroll-content [class*='-page '] {
+  background: #101010 !important;
+  background-color: #101010 !important;
+  color: var(--acc-text) !important;
+}
+
+html[data-theme='dark'] .accounting-scroll-content :is(
+  .accounting-card,
+  .live-card,
+  .invoices-card,
+  .banking-card,
+  .tx-card,
+  .tx-table-card,
+  .budget-card,
+  .payroll-card,
+  .tax-card,
+  .reports-card,
+  .audit-card,
+  .accounting-table-wrap,
+  .live-table-wrap,
+  .invoices-table-wrap,
+  .banking-table-wrap,
+  .tx-table-wrap,
+  .budget-table-wrap,
+  .payroll-table-wrap,
+  .tax-table-wrap,
+  .reports-table-wrap,
+  .audit-table-wrap,
+  .budget-filter-panel,
+  .budget-create-panel,
+  .invoices-create-panel,
+  .banking-modal,
+  .live-bill-sheet,
+  .tx-create-sheet,
+  .audit-filter-panel,
+  .audit-row-menu,
+  .tx-row-menu,
+  .status-summary,
+  .quick-actions
+) {
+  background: #101010 !important;
+  background-color: #101010 !important;
+  border-color: var(--acc-border) !important;
+  color: var(--acc-text) !important;
+  box-shadow: none !important;
+}
+
+html[data-theme='dark'] .accounting-scroll-content [style*='background: #fff' i],
+html[data-theme='dark'] .accounting-scroll-content [style*='background:#fff' i],
+html[data-theme='dark'] .accounting-scroll-content [style*='background: white' i],
+html[data-theme='dark'] .accounting-scroll-content [style*='background: #ffffff' i],
+html[data-theme='dark'] .accounting-scroll-content [style*='background:#ffffff' i],
+html[data-theme='dark'] .accounting-scroll-content [style*='background: rgb(255, 255, 255)' i],
+html[data-theme='dark'] .accounting-scroll-content [style*='background: #f8fafc' i],
+html[data-theme='dark'] .accounting-scroll-content [style*='background: #f1f5f9' i],
+html[data-theme='dark'] .accounting-scroll-content [style*='background: #f4f4f5' i] {
+  background: #101010 !important;
+  background-color: #101010 !important;
+  border-color: var(--acc-border) !important;
+  color: var(--acc-text) !important;
+}
+
+html[data-theme='dark'] .accounting-scroll-content thead,
+html[data-theme='dark'] .accounting-scroll-content th {
+  background: #181818 !important;
+  background-color: #181818 !important;
+  color: var(--acc-muted) !important;
+  border-color: var(--acc-border) !important;
+}
+
+html[data-theme='dark'] .accounting-scroll-content td {
+  background: #101010 !important;
+  background-color: #101010 !important;
+  color: var(--acc-text) !important;
+  border-color: var(--acc-border) !important;
+}
+
+html[data-theme='dark'] .accounting-scroll-content :is(input, select, textarea, button, a[class*='button']) {
+  border-color: var(--acc-input-border) !important;
 }
 `

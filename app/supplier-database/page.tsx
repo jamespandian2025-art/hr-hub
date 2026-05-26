@@ -23,6 +23,8 @@ import {
   UsersRound,
   X,
 } from 'lucide-react'
+import CompanySwitcher from '@/components/CompanySwitcher'
+import StateFeedback from '@/components/StateFeedback'
 import { companyChangeEvent, companyScopedKey, getActiveCompany } from '@/lib/tenant/company'
 
 const font = 'var(--font-body)'
@@ -290,6 +292,7 @@ export default function SupplierDatabasePage() {
             <Search size={17} />
             <input value={search} onChange={event => setSearch(event.target.value)} placeholder="Search suppliers..." aria-label="Search suppliers" />
           </label>
+          <CompanySwitcher className="supplier-company-switcher" />
           <button type="button" className="supplier-primary" onClick={() => setShowCreate(true)}><Plus size={16} /> New Supplier</button>
         </header>
 
@@ -548,11 +551,13 @@ function SettingPill({ label }: { label: string }) {
 
 function EmptyState({ title, body, compact = false }: { title: string; body: string; compact?: boolean }) {
   return (
-    <div className={`supplier-empty${compact ? ' compact' : ''}`}>
-      <PackageSearch size={compact ? 26 : 40} />
-      <strong>{title}</strong>
-      <p>{body}</p>
-    </div>
+    <StateFeedback
+      className={`supplier-empty${compact ? ' compact' : ''}`}
+      size={compact ? 'compact' : 'section'}
+      icon={<PackageSearch size={compact ? 26 : 40} />}
+      title={title}
+      message={body}
+    />
   )
 }
 
@@ -846,11 +851,11 @@ const supplierCss = `
   min-width: 0;
   height: 100dvh;
   overflow-y: auto;
-  padding: 28px;
+  padding: 28px max(28px, calc((100% - var(--wf-content-max)) / 2));
 }
 .supplier-header {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(220px, 420px) auto;
+  grid-template-columns: minmax(0, 1fr) minmax(220px, 420px) minmax(190px, max-content) auto;
   gap: 14px;
   align-items: center;
   margin-bottom: 22px;
