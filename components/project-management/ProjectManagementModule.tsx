@@ -480,7 +480,10 @@ export default function ProjectManagementModule({ initialTab }: { initialTab?: P
     store.setSelectedProjectId(null)
     store.setActiveTab(nextTab)
     const nextPath = tabToPath[nextTab]
-    if (nextPath && nextPath !== pathname) router.push(nextPath)
+    // Update the URL without a full route navigation so the tab content swaps
+    // instantly (client-side) instead of remounting the module. pushState is
+    // synced with usePathname/useSearchParams by the Next.js App Router.
+    if (nextPath && nextPath !== pathname) window.history.pushState(null, '', nextPath)
   }
   const closeProjectDetail = () => {
     store.setSelectedProjectId(null)
@@ -535,7 +538,10 @@ export default function ProjectManagementModule({ initialTab }: { initialTab?: P
   }, [])
 
   useEffect(() => {
-    const nextTab = initialTab || pathToTab[pathname] || viewToTab[searchParams.get('view') || 'overview']
+    // Prefer the live pathname (kept in sync by pushState) over the static
+    // initialTab prop, so a client-side tab switch isn't reverted to the
+    // tab the route was first rendered with.
+    const nextTab = pathToTab[pathname] || viewToTab[searchParams.get('view') || 'overview'] || initialTab
     if (nextTab && nextTab !== activeTab) setActiveTab(nextTab)
   }, [activeTab, initialTab, pathname, searchParams, setActiveTab])
 
@@ -5872,12 +5878,14 @@ body .app-shell .main-content .pm-shell {
   min-width: 0;
   min-height: calc(100vh - 48px);
   margin: 0 !important;
-  padding: 16px 24px 28px;
+  padding: 22px clamp(16px, 2.5vw, 48px) 28px;
   align-content: start;
   gap: 18px;
 }
 body .app-shell .main-content .pm-workspace {
   width: 100%;
+  max-width: var(--wf-content-max, 1440px);
+  margin-inline: auto;
   min-width: 0;
   align-content: start;
   gap: 18px;
