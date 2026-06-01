@@ -96,7 +96,6 @@ export default function AccountingSectionPage({ params }: { params: Promise<{ se
 
   const totalDebit = rows.reduce((sum, row) => sum + row.debit, 0)
   const totalCredit = rows.reduce((sum, row) => sum + row.credit, 0)
-  const Icon = navMeta.icon || BookOpenCheck
   const createHref = section === 'accounting' ? '/accounting/transactions' : `/accounting/${section}?new=1`
   const isBillFormOpen = section === 'bills' && (showBillForm || createRequested)
   const isExpenseFormOpen = section === 'expenses' && (showExpenseForm || createRequested)
@@ -206,7 +205,6 @@ export default function AccountingSectionPage({ params }: { params: Promise<{ se
       <style>{css}</style>
       <header className="live-header">
         <div className="live-title">
-          <span><Icon size={21} /></span>
           <div>
             <div className="crumb"><Link href="/accounting">Accounting</Link><span>/</span><strong>{navMeta.label}</strong></div>
             <h1>{navMeta.label}</h1>
@@ -409,7 +407,7 @@ const css = `
 html[data-theme='light'] .accounting-scroll-content > .live-accounting-page,
 html[data-theme='light'] .live-accounting-page{background:transparent!important;background-color:transparent!important}
 .live-header{display:flex;justify-content:space-between;gap:18px;margin-bottom:18px;background:transparent!important;background-color:transparent!important;border:0!important;box-shadow:none!important}
-.live-title{display:flex;gap:14px;align-items:flex-start}.live-title>span{width:42px;height:42px;border-radius:10px;background:#ecfdf3;color:#16a34a;display:grid;place-items:center}
+.live-title{display:block;min-width:0}
 .crumb{display:flex;gap:8px;color:#64748b;font-size:12px;font-weight:850}.crumb a{color:#64748b;text-decoration:none}.crumb strong{color:#0f172a}
 h1{margin:6px 0 0;font-size:28px;line-height:1.12}p{margin:7px 0 0;color:#64748b;font-size:13px}.live-actions{display:flex;gap:10px;align-items:center}
 button,.live-actions a{border:1px solid #e8edf4;background:#fff;color:#0f172a;border-radius:8px;min-height:38px;padding:0 12px;font-size:12.5px;font-weight:850;display:inline-flex;align-items:center;gap:8px;text-decoration:none}.live-actions .primary{min-width:132px;justify-content:center;background:#16a34a!important;border-color:#16a34a!important;color:#fff!important;font-weight:950}

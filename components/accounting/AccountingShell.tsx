@@ -280,21 +280,21 @@ export default function AccountingShell({ children }: { children: React.ReactNod
         onClick={() => setMobileSidebarOpen(false)}
       />
       <aside className={`accounting-sidebar${mobileSidebarOpen ? ' is-open' : ''}`} style={sidebarStyle}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '0 6px 4px' }}>
-          <span style={{ width: 36, height: 36, borderRadius: 10, background: '#0f172a', color: '#fff', display: 'grid', placeItems: 'center', fontWeight: 700, fontSize: 16 }}>W</span>
-          <span>
+        <div className="accounting-brand" style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '0 6px 4px' }}>
+          <span className="accounting-brand-mark" style={{ width: 36, height: 36, borderRadius: 10, background: '#0f172a', color: '#fff', display: 'grid', placeItems: 'center', fontWeight: 700, fontSize: 16 }}>W</span>
+          <span className="accounting-brand-copy">
             <span style={{ display: 'block', fontSize: 16, fontWeight: 600, lineHeight: 1, color: '#0f172a' }}>Accounting</span>
             <span style={{ display: 'block', fontSize: 12, color: '#64748b', marginTop: 4, fontWeight: 500 }}>Finance workspace</span>
           </span>
         </div>
 
-        <Link href="/dashboard" style={backLinkStyle} onClick={() => setMobileSidebarOpen(false)}>
+        <Link href="/dashboard" className="accounting-back-link" style={backLinkStyle} onClick={() => setMobileSidebarOpen(false)}>
           <ArrowLeft size={15} />
           Back to WiseFlow
         </Link>
 
         <nav className="accounting-sidebar-nav" style={{ display: 'grid', gap: 3, alignContent: 'start', flex: 1, overflowY: 'auto', paddingRight: 0 }} aria-label="Accounting workspace navigation">
-          <div style={{ fontSize: 11, color: '#64748b', fontWeight: 500, padding: '0 10px 6px', textTransform: 'uppercase' }}>Workspace</div>
+          <div className="accounting-nav-section-label" style={{ fontSize: 11, color: '#64748b', fontWeight: 500, padding: '0 10px 6px', textTransform: 'uppercase' }}>Workspace</div>
           {accountingNavItems.map(item => {
             const Icon = item.icon
             const active = activeMeta.href === item.href
@@ -328,7 +328,7 @@ export default function AccountingShell({ children }: { children: React.ReactNod
             >
               <Menu size={19} />
             </button>
-            <span style={{ width: 38, height: 38, borderRadius: 11, background: '#ecfdf3', color: '#16a34a', display: 'grid', placeItems: 'center', flexShrink: 0 }}><ActiveIcon size={19} /></span>
+            <span className="accounting-route-icon" style={{ width: 38, height: 38, borderRadius: 11, background: '#ecfdf3', color: '#16a34a', display: 'grid', placeItems: 'center', flexShrink: 0 }}><ActiveIcon size={19} /></span>
             <span style={{ minWidth: 0 }}>
               <span style={{ display: 'block', fontSize: 15, fontWeight: 900, color: '#0f172a', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{activeMeta.label}</span>
               <span style={{ display: 'block', fontSize: 12, color: '#64748b', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{activeMeta.description}</span>
@@ -2589,5 +2589,541 @@ html[data-theme='dark'] .accounting-shell .accounting-scroll-content :is(thead, 
 /* Subtle lift so cards read as elevated, not painted-on */
 html[data-theme='dark'] .accounting-shell .accounting-scroll-content :is(.accounting-card, .live-card, .invoices-card, .banking-card, .tx-card, .tx-table-card, .budget-card, .payroll-card, .tax-card, .reports-card, .audit-card) {
   box-shadow: 0 1px 0 rgba(255, 255, 255, 0.03), 0 8px 24px rgba(0, 0, 0, 0.45) !important;
+}
+
+/* ============================================================
+   WISEFLOW ACCOUNTING MODULE REFRESH
+   Final light-theme layer matching the newer Dashboard, Clients,
+   and Sales operational workspace treatment.
+   ============================================================ */
+html[data-theme='light'] .accounting-shell {
+  --acc-bg: #f3f4f6;
+  --acc-surface: #ffffff;
+  --acc-surface-raised: #f8fafc;
+  --acc-hover: #f8fafc;
+  --acc-border: #dbe2ea;
+  --acc-border-soft: #e5e7eb;
+  --acc-input: #ffffff;
+  --acc-input-border: #d8dee7;
+  --acc-text: #0f172a;
+  --acc-muted: #64748b;
+  --acc-positive: #16a34a;
+  --acc-blue: #2563eb;
+  --acc-hero: #d5f6e5;
+}
+
+html[data-theme='light'] .accounting-shell .accounting-sidebar {
+  background: #ffffff !important;
+  border-right: 1px solid #e5e7eb !important;
+  padding: 18px 12px !important;
+}
+
+html[data-theme='light'] .accounting-shell .accounting-brand {
+  min-height: 48px;
+  border-bottom: 1px solid #eef2f7;
+  padding-bottom: 14px !important;
+  margin-bottom: 2px;
+}
+
+html[data-theme='light'] .accounting-shell .accounting-brand-mark {
+  background: linear-gradient(135deg, #22c55e 0%, #16a34a 100%) !important;
+  border-radius: 8px !important;
+  box-shadow: 0 10px 20px rgba(22, 163, 74, .18);
+}
+
+html[data-theme='light'] .accounting-shell .accounting-brand-copy span:first-child {
+  font-weight: 760 !important;
+  letter-spacing: 0 !important;
+}
+
+html[data-theme='light'] .accounting-shell .accounting-back-link {
+  min-height: 36px !important;
+  border-radius: 8px !important;
+  background: #f8fafc !important;
+  border-color: #e5e7eb !important;
+  color: #334155 !important;
+  font-size: 12.5px !important;
+  font-weight: 650 !important;
+}
+
+html[data-theme='light'] .accounting-shell .accounting-nav-section-label {
+  color: #94a3b8 !important;
+  font-size: 10.5px !important;
+  font-weight: 800 !important;
+  letter-spacing: .08em !important;
+}
+
+html[data-theme='light'] .accounting-shell .accounting-nav-row {
+  position: relative;
+  min-height: 38px !important;
+  border-radius: 8px !important;
+  padding: 0 10px 0 12px !important;
+  color: #475569 !important;
+  font-size: 13px !important;
+  font-weight: 650 !important;
+}
+
+html[data-theme='light'] .accounting-shell .accounting-nav-row::before {
+  content: '';
+  position: absolute;
+  inset: 7px auto 7px 0;
+  width: 3px;
+  border-radius: 999px;
+  background: transparent;
+}
+
+html[data-theme='light'] .accounting-shell .accounting-nav-row:hover {
+  background: #f1f5f9 !important;
+  color: #0f172a !important;
+}
+
+html[data-theme='light'] .accounting-shell .accounting-nav-row.active {
+  background: #ecfdf3 !important;
+  color: #14532d !important;
+  font-weight: 760 !important;
+}
+
+html[data-theme='light'] .accounting-shell .accounting-nav-row.active::before {
+  background: #22c55e;
+}
+
+html[data-theme='light'] .accounting-shell .accounting-nav-row.active svg {
+  color: #16a34a !important;
+}
+
+html[data-theme='light'] .accounting-shell .accounting-sticky-header {
+  height: 68px !important;
+  min-height: 68px !important;
+  background: rgba(255, 255, 255, .94) !important;
+  border-bottom: 1px solid #e5e7eb !important;
+  backdrop-filter: blur(18px) saturate(170%);
+  -webkit-backdrop-filter: blur(18px) saturate(170%);
+}
+
+html[data-theme='light'] .accounting-shell .accounting-route-icon {
+  width: 36px !important;
+  height: 36px !important;
+  border-radius: 8px !important;
+  background: #ecfdf3 !important;
+  color: #16a34a !important;
+  border: 1px solid #bbf7d0;
+}
+
+html[data-theme='light'] .accounting-shell .accounting-header-search,
+html[data-theme='light'] .accounting-shell .accounting-header-actions > button,
+html[data-theme='light'] .accounting-shell .accounting-header-actions > div > button:not(.accounting-new-record-button) {
+  border-radius: 8px !important;
+  background: #ffffff !important;
+  border-color: #dbe2ea !important;
+  color: #0f172a !important;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, .04) !important;
+}
+
+html[data-theme='light'] .accounting-shell .accounting-new-record-button {
+  border-radius: 8px !important;
+  background: #22c55e !important;
+  border-color: #22c55e !important;
+  color: #ffffff !important;
+  box-shadow: 0 12px 24px rgba(34, 197, 94, .16) !important;
+}
+
+html[data-theme='light'] .accounting-shell .accounting-new-record-button:hover {
+  background: #16a34a !important;
+  border-color: #16a34a !important;
+  color: #ffffff !important;
+}
+
+html[data-theme='light'] .accounting-shell .accounting-scroll-content > :is(
+  .accounting-overview-page,
+  .live-accounting-page,
+  .invoices-page,
+  .banking-page,
+  .tx-page,
+  .budget-page,
+  .payroll-page,
+  .tax-page,
+  .reports-page,
+  .audit-page,
+  .withholding-page
+) {
+  --accounting-dashboard-inline-space: clamp(24px, 4.8vw, 72px);
+  --accounting-dashboard-max-width: 1640px;
+  width: 100% !important;
+  max-width: none !important;
+  margin: 0 !important;
+  padding: 28px var(--accounting-dashboard-inline-space) 36px !important;
+  color: #0f172a !important;
+  background:
+    linear-gradient(180deg, var(--acc-hero) 0, var(--acc-hero) 214px, #f3f4f6 214px, #f3f4f6 100%) !important;
+}
+
+html[data-theme='light'] .accounting-shell .accounting-scroll-content > .accounting-overview-page {
+  padding: 0 0 36px !important;
+}
+
+html[data-theme='light'] .accounting-shell .accounting-dashboard-hero {
+  width: 100% !important;
+  max-width: none !important;
+  margin: 0 !important;
+  padding: 30px 0 46px !important;
+  background: linear-gradient(180deg, var(--acc-hero) 0%, var(--acc-hero) 64%, #f3f4f6 100%) !important;
+}
+
+html[data-theme='light'] .accounting-shell .accounting-dashboard-inner,
+html[data-theme='light'] .accounting-shell .accounting-dashboard-content {
+  width: min(var(--accounting-dashboard-max-width), calc(100% - var(--accounting-dashboard-inline-space))) !important;
+  max-width: none !important;
+}
+
+html[data-theme='light'] .accounting-shell .accounting-dashboard-content {
+  padding-top: 0 !important;
+}
+
+html[data-theme='light'] .accounting-shell .accounting-scroll-content :is(
+  .accounting-hero-header,
+  .live-header,
+  .invoices-header,
+  .banking-header,
+  .tx-header,
+  .budget-header,
+  .payroll-header,
+  .tax-header,
+  .reports-header,
+  .audit-header,
+  .withholding-header
+) {
+  color: #0f172a !important;
+  background: transparent !important;
+  border: 0 !important;
+  box-shadow: none !important;
+}
+
+html[data-theme='light'] .accounting-shell .accounting-scroll-content :is(
+  .accounting-hero-copy h1,
+  .live-header h1,
+  .invoices-title,
+  .banking-title,
+  .tx-title,
+  .budget-title,
+  .payroll-title,
+  .tax-title,
+  .reports-title,
+  .audit-header h1,
+  .withholding-header h1
+) {
+  color: #0f172a !important;
+  font-size: clamp(26px, 2.2vw, 34px) !important;
+  line-height: 1.08 !important;
+  font-weight: 760 !important;
+}
+
+html[data-theme='light'] .accounting-shell .accounting-scroll-content :is(
+  .accounting-hero-copy p,
+  .live-header p,
+  .invoices-subtitle,
+  .banking-subtitle,
+  .tx-subtitle,
+  .budget-subtitle,
+  .payroll-subtitle,
+  .tax-subtitle,
+  .reports-subtitle,
+  .audit-header p,
+  .withholding-header p
+) {
+  max-width: 760px;
+  color: #334155 !important;
+  font-size: 14px !important;
+  line-height: 1.5 !important;
+  opacity: .94;
+}
+
+html[data-theme='light'] .accounting-shell .accounting-scroll-content :is(
+  .accounting-hero-actions,
+  .live-actions,
+  .invoices-header-actions,
+  .banking-header-actions,
+  .tx-header-actions,
+  .budget-header-actions,
+  .payroll-actions,
+  .tax-actions,
+  .reports-actions,
+  .audit-actions,
+  .withholding-actions
+) > :is(button, a),
+html[data-theme='light'] .accounting-shell .accounting-scroll-content :is(
+  .accounting-hero-action,
+  .live-actions button,
+  .live-actions a,
+  .invoices-header-actions button,
+  .banking-header-actions button,
+  .tx-header-actions button,
+  .budget-header-actions button,
+  .payroll-actions button,
+  .payroll-actions a,
+  .tax-actions button,
+  .tax-actions a,
+  .reports-actions button,
+  .audit-actions button,
+  .withholding-actions button
+) {
+  min-height: 40px !important;
+  border-radius: 6px !important;
+  background: rgba(255, 255, 255, .78) !important;
+  border-color: rgba(255, 255, 255, .94) !important;
+  color: #0f172a !important;
+  box-shadow: none !important;
+}
+
+html[data-theme='light'] .accounting-shell .accounting-scroll-content :is(
+  .accounting-hero-action.is-primary,
+  .live-actions .primary,
+  .invoices-primary-button,
+  .banking-primary-button,
+  .tx-primary-button,
+  .budget-primary-button,
+  .payroll-actions .is-primary,
+  .request-actions .approve,
+  .tax-actions a[href*='withholding'],
+  .withholding-export
+) {
+  background: #22c55e !important;
+  border-color: #22c55e !important;
+  color: #ffffff !important;
+}
+
+html[data-theme='light'] .accounting-shell .accounting-scroll-content :is(
+  .accounting-metrics,
+  .live-metrics,
+  .invoices-metrics,
+  .banking-metrics,
+  .tx-metrics,
+  .budget-metrics,
+  .payroll-metrics,
+  .tax-metrics,
+  .reports-metrics,
+  .audit-metrics,
+  .withholding-metrics
+) {
+  gap: 16px !important;
+}
+
+html[data-theme='light'] .accounting-shell .accounting-scroll-content :is(
+  .accounting-metric-card,
+  .live-metric,
+  .invoices-metric-card,
+  .banking-metric-card,
+  .tx-metric-card,
+  .budget-metric-card,
+  .payroll-metric-card,
+  .tax-metric-card,
+  .reports-metric-card,
+  .audit-metric,
+  .withholding-metric
+) {
+  position: relative;
+  overflow: hidden;
+  min-height: 112px !important;
+  border: 1px solid rgba(255, 255, 255, .92) !important;
+  border-radius: 8px !important;
+  background:
+    linear-gradient(135deg, rgba(255, 255, 255, .94), rgba(255, 255, 255, .62) 48%, rgba(255, 255, 255, .86)) !important;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 1),
+    inset 0 -1px 0 rgba(255, 255, 255, .46),
+    0 18px 42px rgba(15, 23, 42, .08) !important;
+  backdrop-filter: blur(20px) saturate(190%);
+  -webkit-backdrop-filter: blur(20px) saturate(190%);
+}
+
+html[data-theme='light'] .accounting-shell .accounting-scroll-content :is(
+  .accounting-metric-card,
+  .live-metric,
+  .invoices-metric-card,
+  .banking-metric-card,
+  .tx-metric-card,
+  .budget-metric-card,
+  .payroll-metric-card,
+  .tax-metric-card,
+  .reports-metric-card,
+  .audit-metric,
+  .withholding-metric
+)::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background:
+    linear-gradient(115deg, rgba(255, 255, 255, .92) 0%, rgba(255, 255, 255, .28) 34%, transparent 60%),
+    radial-gradient(circle at 12% 0%, rgba(255, 255, 255, .78), transparent 38%);
+  opacity: .88;
+}
+
+html[data-theme='light'] .accounting-shell .accounting-scroll-content :is(
+  .accounting-metric-card,
+  .live-metric,
+  .invoices-metric-card,
+  .banking-metric-card,
+  .tx-metric-card,
+  .budget-metric-card,
+  .payroll-metric-card,
+  .tax-metric-card,
+  .reports-metric-card,
+  .audit-metric,
+  .withholding-metric
+) > * {
+  position: relative;
+  z-index: 1;
+}
+
+html[data-theme='light'] .accounting-shell .accounting-scroll-content :is(
+  .accounting-metric-icon,
+  .live-metric > span:first-child,
+  .invoices-metric-icon,
+  .banking-metric-icon,
+  .tx-metric-icon,
+  .budget-metric-icon,
+  .payroll-metric-icon,
+  .tax-metric-icon,
+  .reports-metric-icon,
+  .audit-metric > span:first-child,
+  .withholding-metric-icon
+) {
+  background: rgba(255, 255, 255, .66) !important;
+  border-color: rgba(255, 255, 255, .94) !important;
+}
+
+html[data-theme='light'] .accounting-shell .accounting-scroll-content :is(
+  .accounting-card,
+  .live-card,
+  .invoices-card,
+  .banking-card,
+  .tx-card,
+  .tx-table-card,
+  .budget-card,
+  .payroll-card,
+  .tax-card,
+  .reports-card,
+  .audit-card,
+  .withholding-card,
+  .accounting-table-wrap,
+  .live-table-wrap,
+  .invoices-table-wrap,
+  .banking-table-wrap,
+  .tx-table-wrap,
+  .budget-table-wrap,
+  .payroll-table-wrap,
+  .tax-table-wrap,
+  .reports-table-wrap,
+  .audit-table-wrap
+) {
+  border: 1px solid #dbe2ea !important;
+  border-radius: 8px !important;
+  background: #ffffff !important;
+  color: #0f172a !important;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, .04) !important;
+}
+
+html[data-theme='light'] .accounting-shell .accounting-scroll-content :is(table) {
+  border-collapse: collapse !important;
+}
+
+html[data-theme='light'] .accounting-shell .accounting-scroll-content :is(th) {
+  height: 42px !important;
+  padding: 0 12px !important;
+  background: #f8fafc !important;
+  color: #475569 !important;
+  font-size: 11.5px !important;
+  font-weight: 760 !important;
+  letter-spacing: 0 !important;
+}
+
+html[data-theme='light'] .accounting-shell .accounting-scroll-content :is(td) {
+  background: #ffffff !important;
+  border-top: 1px solid #eef2f7 !important;
+}
+
+html[data-theme='light'] .accounting-shell .accounting-scroll-content :is(
+  .invoices-tabs,
+  .banking-tabs,
+  .tx-tabs,
+  .budget-tabs,
+  .payroll-tabs,
+  .tax-tabs,
+  .reports-tabs,
+  .audit-tabs
+) {
+  overflow-x: auto !important;
+  scrollbar-width: thin;
+}
+
+@media (min-width: 901px) {
+  html[data-theme='light'] .accounting-shell {
+    grid-template-columns: 268px minmax(0, 1fr) !important;
+  }
+
+  html[data-theme='light'] .accounting-shell .accounting-content-column {
+    grid-template-rows: 68px minmax(0, 1fr) !important;
+  }
+
+  html[data-theme='light'] .accounting-shell .accounting-sticky-header {
+    grid-template-columns: minmax(230px, .82fr) minmax(280px, 520px) max-content !important;
+    padding: 0 24px !important;
+  }
+}
+
+@media (max-width: 960px) {
+  html[data-theme='light'] .accounting-shell .accounting-scroll-content > :is(
+    .accounting-overview-page,
+    .live-accounting-page,
+    .invoices-page,
+    .banking-page,
+    .tx-page,
+    .budget-page,
+    .payroll-page,
+    .tax-page,
+    .reports-page,
+    .audit-page,
+    .withholding-page
+  ) {
+    --accounting-dashboard-inline-space: 24px;
+    padding: 24px var(--accounting-dashboard-inline-space) 32px !important;
+    background:
+      linear-gradient(180deg, var(--acc-hero) 0, var(--acc-hero) 300px, #f3f4f6 300px, #f3f4f6 100%) !important;
+  }
+
+  html[data-theme='light'] .accounting-shell .accounting-scroll-content > .accounting-overview-page {
+    padding: 0 0 32px !important;
+  }
+
+  html[data-theme='light'] .accounting-shell .accounting-dashboard-hero {
+    padding: 26px 0 42px !important;
+  }
+}
+
+@media (max-width: 640px) {
+  html[data-theme='light'] .accounting-shell .accounting-scroll-content > :is(
+    .accounting-overview-page,
+    .live-accounting-page,
+    .invoices-page,
+    .banking-page,
+    .tx-page,
+    .budget-page,
+    .payroll-page,
+    .tax-page,
+    .reports-page,
+    .audit-page,
+    .withholding-page
+  ) {
+    --accounting-dashboard-inline-space: 18px;
+    padding: 20px var(--accounting-dashboard-inline-space) 28px !important;
+  }
+
+  html[data-theme='light'] .accounting-shell .accounting-scroll-content > .accounting-overview-page {
+    padding: 0 0 28px !important;
+  }
+
+  html[data-theme='light'] .accounting-shell .accounting-dashboard-hero {
+    padding: 22px 0 38px !important;
+  }
 }
 `
