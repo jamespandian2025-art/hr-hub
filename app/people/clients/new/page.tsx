@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import { Camera, ChevronDown, CreditCard, FileText, Save, Trash2, UserPlus, UsersRound } from 'lucide-react'
 import type { ChangeEvent, FormEvent, ReactNode } from 'react'
 import { useEffect, useMemo, useState } from 'react'
+import { uploadFileObject } from '@/lib/uploads/client'
 import { addAccountManagerRecord, buildEmptyClient, loadAccountManagers, loadClients, saveClient, slugify, type ClientType } from '../clientData'
 
 const font = 'var(--font-body)'
@@ -18,6 +19,7 @@ const clientTypes: ClientType[] = ['Commercial', 'Residential']
 const residentialPropertyTypes = ['Single-family home', 'Condominium', 'Townhouse', 'Apartment', 'Vacation home', 'Other']
 const residentialProjectInterests = ['New home build', 'Renovation', 'Interior fit-out', 'Repair / maintenance', 'Consultation', 'Other']
 const contactMethods = ['Email', 'Phone call', 'SMS', 'Viber', 'WhatsApp']
+const maxClientPhotoBytes = 2 * 1024 * 1024
 
 const emptyForm = {
   clientType: 'Commercial' as ClientType,
@@ -67,6 +69,7 @@ export default function AddClientPage() {
   const [manualManagerError, setManualManagerError] = useState('')
   const [showValidationErrors, setShowValidationErrors] = useState(false)
   const [saving, setSaving] = useState(false)
+  const [photoUploading, setPhotoUploading] = useState(false)
 
   useEffect(() => {
     let active = true
@@ -143,7 +146,7 @@ export default function AddClientPage() {
     }
   }
 
-  const handlePhotoUpload = (event: ChangeEvent<HTMLInputElement>) => {
+  const handlePhotoUpload = async (event: ChangeEvent<HTMLInputElement>) => {
     const file = event.currentTarget.files?.[0]
     event.currentTarget.value = ''
     if (!file) return
@@ -153,21 +156,30 @@ export default function AddClientPage() {
       return
     }
 
-    if (file.size > 2 * 1024 * 1024) {
+    if (file.size > maxClientPhotoBytes) {
       setError('Client photo or logo must be 2MB or smaller.')
       return
     }
 
-    const reader = new FileReader()
-    reader.onload = () => {
-      if (typeof reader.result === 'string') update('photo', reader.result)
+    setError('')
+    setPhotoUploading(true)
+    try {
+      const uploaded = await uploadFileObject(file, 'client-photos')
+      update('photo', uploaded.url)
+    } catch (error) {
+      setError(photoUploadErrorMessage(error))
+    } finally {
+      setPhotoUploading(false)
     }
-    reader.onerror = () => setError('Could not read that image. Please try another file.')
-    reader.readAsDataURL(file)
   }
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
+
+    if (photoUploading) {
+      setError('Please wait for the client photo upload to finish, then save again.')
+      return
+    }
 
     let formToSave = form
     if (!formToSave.accountManager && !accountManagers.length && manualManagerName.trim()) {
@@ -241,8 +253,8 @@ export default function AddClientPage() {
       } else {
         router.push(`/people/clients/${result.client.id}`)
       }
-    } catch {
-      setError('The client could not be saved. Please try again with less data.')
+    } catch (error) {
+      setError(clientSaveErrorMessage(error))
     } finally {
       setSaving(false)
     }
@@ -258,14 +270,14 @@ export default function AddClientPage() {
         </div>
         <div style={{ display: 'flex', gap: 10 }}>
           <Link href="/people/clients" style={secondaryLink}>Cancel</Link>
-          <button type="submit" disabled={saving} style={{ ...primaryButton, opacity: saving ? .7 : 1 }}><Save size={16} /> {saving ? 'Saving...' : 'Save Client'}</button>
+          <button type="submit" disabled={saving || photoUploading} style={{ ...primaryButton, opacity: saving || photoUploading ? .7 : 1 }}><Save size={16} /> {saving ? 'Saving...' : 'Save Client'}</button>
         </div>
       </div>
 
       {visibleError ? <div role="alert" aria-live="assertive" style={errorBox}>{visibleError}</div> : null}
 
       <Section title="Client Information" icon={<UsersRound size={18} />}>
-        <ClientPhotoField photo={form.photo} name={form.name} onUpload={handlePhotoUpload} onRemove={() => update('photo', '')} />
+        <ClientPhotoField photo={form.photo} name={form.name} uploading={photoUploading} onUpload={handlePhotoUpload} onRemove={() => update('photo', '')} />
         <div style={clientTypeFieldWrap}>
           <SelectField
             label="Client Type"
@@ -342,7 +354,7 @@ function Section({ title, icon, children }: { title: string; icon: ReactNode; ch
   )
 }
 
-function ClientPhotoField({ photo, name, onUpload, onRemove }: { photo: string; name: string; onUpload: (event: ChangeEvent<HTMLInputElement>) => void; onRemove: () => void }) {
+function ClientPhotoField({ photo, name, uploading, onUpload, onRemove }: { photo: string; name: string; uploading: boolean; onUpload: (event: ChangeEvent<HTMLInputElement>) => void | Promise<void>; onRemove: () => void }) {
   return (
     <div style={photoFieldWrap}>
       <div style={photoPreview(photo)}>
@@ -352,12 +364,12 @@ function ClientPhotoField({ photo, name, onUpload, onRemove }: { photo: string; 
         <span style={labelStyle}>Client logo or photo</span>
         <small style={helpStyle}>Upload a logo for commercial clients or a profile photo for residential clients.</small>
         <div style={photoActions}>
-          <label style={photoUploadButton}>
-            <Camera size={15} /> Upload image
-            <input type="file" accept="image/*" hidden onChange={onUpload} />
+          <label style={{ ...photoUploadButton, opacity: uploading ? .72 : 1, cursor: uploading ? 'progress' : 'pointer' }}>
+            <Camera size={15} /> {uploading ? 'Uploading...' : 'Upload image'}
+            <input type="file" accept="image/*" hidden disabled={uploading} onChange={onUpload} />
           </label>
           {photo ? (
-            <button type="button" style={photoRemoveButton} onClick={onRemove}>
+            <button type="button" disabled={uploading} style={{ ...photoRemoveButton, opacity: uploading ? .65 : 1, cursor: uploading ? 'not-allowed' : 'pointer' }} onClick={onRemove}>
               <Trash2 size={14} /> Remove
             </button>
           ) : null}
@@ -535,6 +547,20 @@ function focusFirstMissingField(field: RequiredFieldKey) {
     wrapper?.scrollIntoView({ behavior: 'smooth', block: 'center' })
     control?.focus({ preventScroll: true })
   })
+}
+
+function errorDetail(error: unknown) {
+  return error instanceof Error ? error.message.trim() : ''
+}
+
+function photoUploadErrorMessage(error: unknown) {
+  const detail = errorDetail(error)
+  return detail ? `Could not upload this client photo. ${detail}` : 'Could not upload this client photo. Please try another image.'
+}
+
+function clientSaveErrorMessage(error: unknown) {
+  const detail = errorDetail(error)
+  return detail ? `The client could not be saved. ${detail}` : 'The client could not be saved. Please check the form and try again.'
 }
 
 function getPhotoInitials(name: string) {
