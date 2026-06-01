@@ -32,6 +32,8 @@ import {
 } from '@/lib/tenant/company'
 
 const devDemoAdminEmail = 'wiseflow.demo@gmail.com'
+const signupEmailCooldownKey = 'wiseflow-signup-email-cooldowns'
+const signupEmailCooldownMs = 60_000
 
 type SupabaseSignupUser = {
   id: string
@@ -80,6 +82,41 @@ function authProviderForSupabaseUser(user: SupabaseSignupUser): AuthProvider {
 
 function signupEmailRedirectTo() {
   return typeof window === 'undefined' ? undefined : `${window.location.origin}/login`
+}
+
+function signupEmailCooldownMessage(waitMs?: number) {
+  if (!waitMs) {
+    return 'Supabase is temporarily limiting confirmation emails. Wait before trying again; if the hourly email limit was reached, use Sign up with Gmail or try again later.'
+  }
+
+  const waitSeconds = Math.max(1, Math.ceil(waitMs / 1000))
+  return `Supabase is temporarily limiting confirmation emails. Try again in about ${waitSeconds} seconds. If it still shows this, use Sign up with Gmail or try again later.`
+}
+
+function isSupabaseEmailRateLimit(error: unknown) {
+  return error instanceof Error && /rate limit|too many|over email send rate/i.test(error.message)
+}
+
+function readSignupEmailCooldown(email: string) {
+  if (typeof window === 'undefined') return 0
+  try {
+    const cooldowns = JSON.parse(window.localStorage.getItem(signupEmailCooldownKey) || '{}') as Record<string, number>
+    const until = Number(cooldowns[email] || 0)
+    return Number.isFinite(until) ? until : 0
+  } catch {
+    return 0
+  }
+}
+
+function saveSignupEmailCooldown(email: string, waitMs = signupEmailCooldownMs) {
+  if (typeof window === 'undefined') return
+  try {
+    const cooldowns = JSON.parse(window.localStorage.getItem(signupEmailCooldownKey) || '{}') as Record<string, number>
+    cooldowns[email] = Date.now() + waitMs
+    window.localStorage.setItem(signupEmailCooldownKey, JSON.stringify(cooldowns))
+  } catch {
+    // Cooldown storage is only a UX guard; Supabase remains the source of truth.
+  }
 }
 
 export default function SignupPage() {
@@ -298,6 +335,12 @@ export default function SignupPage() {
       return
     }
 
+    const cooldownUntil = readSignupEmailCooldown(trimmedEmail)
+    if (cooldownUntil > Date.now()) {
+      setError(signupEmailCooldownMessage(cooldownUntil - Date.now()))
+      return
+    }
+
     try {
       const supabase = getSupabaseBrowserClient()
       if (supabase && hasSupabaseConfig()) {
@@ -316,11 +359,17 @@ export default function SignupPage() {
         })
 
         if (signupError) {
-          setError(signupError.message || 'Supabase could not create this account.')
+          if (isSupabaseEmailRateLimit(signupError)) {
+            saveSignupEmailCooldown(trimmedEmail)
+            setError(signupEmailCooldownMessage())
+          } else {
+            setError(signupError.message || 'Supabase could not create this account.')
+          }
           return
         }
 
         if (!data.session) {
+          saveSignupEmailCooldown(trimmedEmail)
           setError('Supabase sent a confirmation email. Open it, then log in to finish workspace setup.')
           return
         }
