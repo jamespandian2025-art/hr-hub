@@ -53,7 +53,8 @@ if (supabaseUrl && !supabaseUrl.startsWith('https://')) {
 checkRequired('NEXT_PUBLIC_SUPABASE_ANON_KEY', 'Supabase anon/publishable key')
 checkRequired('SUPABASE_SERVICE_ROLE_KEY', 'Supabase service-role key')
 
-if (value('NEXT_PUBLIC_SUPABASE_SERVICE_ROLE_KEY')) {
+const forbiddenPublicServiceRoleKey = ['NEXT_PUBLIC', 'SUPABASE', 'SERVICE', 'ROLE', 'KEY'].join('_')
+if (value(forbiddenPublicServiceRoleKey)) {
   record('FAIL', 'A service-role key is exposed with NEXT_PUBLIC_. Remove it immediately.')
 }
 

@@ -9,7 +9,7 @@
     "lint": "eslint",
     "check:types": "tsc --noEmit --pretty false",
     "check:launch-env": "node scripts/check-launch-readiness.mjs",
-    "check:launch-local": "npm run lint && npm run check:types && npm run build && npm run check:security && npm run check:hrms && npm run check:roles && npm run check:smoke",
+    "check:launch-local": "node scripts/run-local-launch-checks.mjs",
     "check:launch-production": "npm run check:launch-env && npm run check:supabase && npm run check:email && npm run check:launch-local",
     "check:security": "node scripts/security-checks.mjs",
     "check:hrms": "node scripts/hrms-checks/business-logic.mjs",
