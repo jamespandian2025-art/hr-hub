@@ -4,7 +4,7 @@ import { fileURLToPath } from 'node:url'
 const port = Number(process.env.SMOKE_PORT || 3100)
 const baseUrl = `http://127.0.0.1:${port}`
 const nextBin = fileURLToPath(new URL('../node_modules/next/dist/bin/next', import.meta.url))
-const publicRoutes = ['/', '/why-wiseflow', '/login', '/signup', '/account-recovery', '/employee/login']
+const publicRoutes = ['/', '/why-wiseflow', '/privacy', '/terms', '/refund-policy', '/security', '/login', '/signup', '/account-recovery', '/employee/login']
 const protectedRoutes = ['/dashboard', '/accounting', '/accounting/invoices', '/hr/employees', '/employee/dashboard', '/people/clients', '/project-management', '/warehouse', '/workflows/my-workflows']
 const failures = []
 

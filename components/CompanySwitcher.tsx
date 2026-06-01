@@ -10,7 +10,7 @@ import {
   findPendingCompanyInvitation,
   getActiveCompany,
   getCurrentActor,
-  loadCompanies,
+  loadAccessibleCompanies,
   setActiveCompanyId,
 } from '@/lib/tenant/company'
 
@@ -33,7 +33,7 @@ export default function CompanySwitcher({ variant = 'light', compact = false, cl
       const pendingInvite = actor.email ? findPendingCompanyInvitation(actor.email) : null
       if (pendingInvite && actor.email) acceptCompanyInvitation(actor.email, actor.fullName || actor.name)
       ensureDefaultCompany(actor)
-      setCompanies(loadCompanies())
+      setCompanies(loadAccessibleCompanies(actor))
       setActiveCompany(getActiveCompany())
     }
     const id = window.setTimeout(refresh, 0)
@@ -66,7 +66,7 @@ export default function CompanySwitcher({ variant = 'light', compact = false, cl
     const company = setActiveCompanyId(companyId)
     if (!company) return
     setActiveCompany(company)
-    setCompanies(loadCompanies())
+    setCompanies(loadAccessibleCompanies())
     setOpen(false)
     if (company.id !== previousCompanyId) window.setTimeout(() => window.location.reload(), 80)
   }

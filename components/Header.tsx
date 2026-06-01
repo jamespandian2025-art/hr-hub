@@ -13,7 +13,7 @@ import {
   ensureDefaultCompany,
   getActiveCompany,
   inviteCompanyMember,
-  loadCompanies,
+  loadAccessibleCompanies,
   removeCompanyMember,
   rolePermissions,
   setActiveCompanyId,
@@ -383,7 +383,7 @@ export default function Header({ onMenuClick, compactWorkspace = false }: Header
     const id = window.setTimeout(() => {
       const loadedAccount = loadAccount()
       const selectedCompany = ensureDefaultCompany(loadedAccount)
-      const allCompanies = loadCompanies()
+      const allCompanies = loadAccessibleCompanies(loadedAccount)
       accountSaveReady.current = true
       setAccount({ ...loadedAccount, company: selectedCompany.name, companyId: selectedCompany.id } as AccountState)
       setCompanies(allCompanies)
@@ -403,7 +403,7 @@ export default function Header({ onMenuClick, compactWorkspace = false }: Header
     const refreshCompanies = () => {
       const loadedAccount = loadAccount()
       const selectedCompany = getActiveCompany() || ensureDefaultCompany(loadedAccount)
-      const allCompanies = loadCompanies()
+      const allCompanies = loadAccessibleCompanies(loadedAccount)
       setCompanies(allCompanies)
       setActiveCompany(selectedCompany)
       setAccount({ ...loadedAccount, company: selectedCompany.name, companyId: selectedCompany.id } as AccountState)
@@ -533,7 +533,7 @@ export default function Header({ onMenuClick, compactWorkspace = false }: Header
     const trimmed = companyName.trim()
     if (!trimmed) return
     const company = createTenantCompany(trimmed, { type: companyType.trim() || 'Operating Company' })
-    setCompanies(loadCompanies())
+    setCompanies(loadAccessibleCompanies())
     setActiveCompany(company)
     setAccount(previous => ({ ...previous, company: company.name, companyId: company.id } as AccountState))
     setCompanyName('')
@@ -548,7 +548,7 @@ export default function Header({ onMenuClick, compactWorkspace = false }: Header
       return
     }
     setActiveCompany(company)
-    setCompanies(loadCompanies())
+    setCompanies(loadAccessibleCompanies())
     setAccount(previous => ({ ...previous, company: company.name, companyId: company.id } as AccountState))
     setNotice(`Switched to ${company.name}.`)
   }
@@ -558,7 +558,7 @@ export default function Header({ onMenuClick, compactWorkspace = false }: Header
     const company = updateCompanySettings(activeCompany.id, companySettingsDraft)
     if (!company) return
     setActiveCompany(company)
-    setCompanies(loadCompanies())
+    setCompanies(loadAccessibleCompanies())
     setAccount(previous => ({ ...previous, company: company.name, companyId: company.id } as AccountState))
     setNotice('Company settings saved.')
   }
@@ -596,7 +596,7 @@ export default function Header({ onMenuClick, compactWorkspace = false }: Header
       if (activeCompany) {
         inviteCompanyMember(activeCompany.id, trimmed, inviteRole)
         setActiveCompany(ensureDefaultCompany(account))
-        setCompanies(loadCompanies())
+        setCompanies(loadAccessibleCompanies())
       }
       setAccount(previous => ({
         ...previous,
@@ -630,7 +630,7 @@ export default function Header({ onMenuClick, compactWorkspace = false }: Header
     if (!activeCompany) return
     removeCompanyMember(activeCompany.id, memberId)
     setActiveCompany(ensureDefaultCompany(account))
-    setCompanies(loadCompanies())
+    setCompanies(loadAccessibleCompanies())
   }
 
   const latestRequests = [...changeOrders].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()).slice(0, 8)

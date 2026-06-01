@@ -7,7 +7,7 @@ import {
   type CompanyRole,
   companyChangeEvent,
   inviteCompanyMember,
-  loadCompanies,
+  loadAccessibleCompanies,
   rolePermissions,
   setActiveCompanyId,
   updateCompanySettings,
@@ -26,7 +26,7 @@ export default function CompanySettingsPage() {
 
   const refresh = useCallback(() => {
     const company = getActiveCompany()
-    setCompanies(loadCompanies())
+    setCompanies(loadAccessibleCompanies())
     setActiveCompany(company)
     if (company) {
       setDraft({

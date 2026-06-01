@@ -1,6 +1,6 @@
 # Launch Readiness Checklist
 
-Last scan: 2026-05-28
+Last scan: 2026-06-02
 
 ## Current Readiness
 
@@ -11,7 +11,7 @@ Last scan: 2026-05-28
 ## Scan Evidence
 
 - Repository inventory: 280 files scanned.
-- App surface: 143 generated app routes in production build.
+- App surface: 145 generated app routes in production build.
 - API surface: ai/assistant, auth/session, auth/invitations, auth/login-attempts, tenant/bootstrap, admin/backups, business records, HR records, HR credentials, employee portal login, uploads, monitoring, health.
 - Persistence scan: `localStorage` appears in 70 files; `sessionStorage` appears in 5 files.
 - Production build: `npm run build` passed.
@@ -22,10 +22,10 @@ Last scan: 2026-05-28
 - Manual browser QA: `npm run check:manual-qa` passed 48 of 48 desktop/tablet/mobile route checks; evidence is in `docs/manual-browser-qa.md`.
 - Automated smoke tests: `npm run check:smoke` passed route/auth redirects plus Accounting invoice creation, client invoice reflection, employee portal login, payroll details modal, project status dropdown, and AI assistant local-guidance flows; evidence is in `docs/automated-smoke-tests.md`.
 - Monitoring smoke: `npm run check:monitoring` passed locally for `/api/health`, `/login`, and `/dashboard` uptime checks.
-- Dependency audit: `npm audit --omit=dev --audit-level=moderate` reports 2 moderate PostCSS issues through Next.js; this is tracked in `docs/security-advisories.md`.
+- Dependency audit: `npm audit --omit=dev --audit-level=moderate` reports 0 vulnerabilities.
 - Route smoke: `npm run check:route-smoke` starts the built app and verifies public/protected routes.
 - Production smoke on port 3100:
-  - Public routes returned 200: `/`, `/why-wiseflow`, `/login`, `/signup`, `/account-recovery`, `/employee/login`.
+  - Public routes returned 200: `/`, `/why-wiseflow`, `/privacy`, `/terms`, `/refund-policy`, `/security`, `/login`, `/signup`, `/account-recovery`, `/employee/login`.
   - Protected routes redirected to login with 307: `/dashboard`, `/accounting`, `/accounting/invoices`, `/hr/employees`, `/employee/dashboard`, `/people/clients`, `/project-management`, `/warehouse`, `/workflows/my-workflows`.
 
 ## P0 - Must Fix Before Real Launch

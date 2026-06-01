@@ -1,3 +1,17 @@
+import { existsSync, readFileSync } from 'node:fs'
+
+for (const file of ['.env.production.local', '.env.local', '.env']) {
+  if (!existsSync(file)) continue
+  const lines = readFileSync(file, 'utf8').split(/\r?\n/)
+  for (const line of lines) {
+    const trimmed = line.trim()
+    if (!trimmed || trimmed.startsWith('#') || !trimmed.includes('=')) continue
+    const [key, ...valueParts] = trimmed.split('=')
+    if (!key || process.env[key]) continue
+    process.env[key] = valueParts.join('=').replace(/^['"]|['"]$/g, '')
+  }
+}
+
 const provider = process.env.RESEND_API_KEY
   ? 'resend'
   : process.env.BREVO_API_KEY || process.env.SENDINBLUE_API_KEY

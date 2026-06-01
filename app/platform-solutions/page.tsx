@@ -15,7 +15,7 @@ export default function PlatformSolutionsPage() {
         <Link href="/" className={styles.brand}><span className={styles.brandMark}>W</span><span>WiseFlow</span></Link>
         <div className={styles.simpleNavActions}>
           <Link href="/login" className={styles.textButton}>Login</Link>
-          <Link href="/signup" className={styles.navButton}>Start free <ArrowRight size={17} /></Link>
+          <Link href="/signup" className={styles.navButton}>Request access <ArrowRight size={17} /></Link>
         </div>
       </nav>
       <section className={styles.marketingHero}>

@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { ChangeEvent, ClipboardEvent, DragEvent, ReactNode } from 'react'
 import {
   AlignLeft,
@@ -24,7 +24,7 @@ import {
   Heading1,
   Heading2,
   Highlighter,
-  Image,
+  Image as ImageIcon,
   Italic,
   Layers,
   Link,
@@ -230,8 +230,6 @@ interface TaskDraft {
 }
 
 const statusOrder: TaskStatus[] = ['Open', 'In Progress', 'Completed']
-const statuses: Array<'All' | TaskStatus> = ['All', ...statusOrder]
-
 const priorityColors: Record<TaskPriority, string> = {
   Urgent: '#ef4444', High: '#f59e0b', Normal: '#3b82f6', Low: '#6b7280',
 }
@@ -518,15 +516,6 @@ export default function TasksPage() {
     }
   }, [tasks])
 
-  const groupedTasks = useMemo(() => {
-    const groups = [
-      { title: 'Project Work', color: '#22c55e', tasks: filteredTasks.filter(task => task.source !== 'Change Order') },
-      { title: 'Client Requests', color: '#4ade80', tasks: filteredTasks.filter(task => task.source === 'Change Order') },
-    ].filter(group => group.tasks.length > 0)
-
-    return groups.length ? groups : [{ title: 'All Tasks', color: '#22c55e', tasks: filteredTasks }]
-  }, [filteredTasks])
-
   const reminderGroups = useMemo(() => {
     const groups = ['Overdue', 'Today', 'This Week', 'Upcoming', 'Completed']
     return groups
@@ -542,7 +531,7 @@ export default function TasksPage() {
     return getProjectStages(project)
   }, [projectFilter, projectById])
 
-  const stageForTask = (task: AssignedTask, stages: WorkflowStage[]) => {
+  const stageForTask = useCallback((task: AssignedTask, stages: WorkflowStage[]) => {
     if (task.stageId) {
       const assignedStage = stages.find(stage => stage.id === task.stageId)
       if (assignedStage) return assignedStage
@@ -550,7 +539,7 @@ export default function TasksPage() {
     if (task.status === 'Completed') return stages.find(stage => stage.type === 'done') || stages[0]
     if (task.status === 'In Progress') return stages.find(stage => stage.name === 'In Progress') || stages.find(stage => stage.type === 'normal') || stages[0]
     return stages.find(stage => stage.type === 'normal' && !stage.id.startsWith('wf-')) || stages.find(stage => stage.type === 'normal') || stages[0]
-  }
+  }, [])
 
   const activeStageMove = useMemo(() => {
     if (!stageMoveRequest) return null
@@ -567,7 +556,7 @@ export default function TasksPage() {
       targetStage,
       stages,
     }
-  }, [projectById, stageMoveRequest, tasks])
+  }, [projectById, stageForTask, stageMoveRequest, tasks])
 
   // Only count user-created stages (default stages have ids prefixed with 'wf-')
   const hasCustomStages = currentProjectStages.some(s => s.type === 'normal' && !s.id.startsWith('wf-'))
@@ -591,10 +580,10 @@ export default function TasksPage() {
   const terminalBoardCols = boardColumns.filter(c => c.stage.type !== 'normal')
 
   /** Block job creation in any view when the selected workflow has no custom stages */
-  const guardAddTask = (cb: () => void) => {
+  const guardAddTask = useCallback((cb: () => void) => {
     if (projectFilter !== 'All' && !hasCustomStages) { setShowNoStageError(true); return }
     cb()
-  }
+  }, [hasCustomStages, projectFilter])
 
   const updateTaskStatus = (taskId: number, nextStatus: TaskStatus) => {
     setTasks(previous => previous.map(task => task.id === taskId ? { ...task, status: nextStatus } : task))
@@ -661,11 +650,6 @@ export default function TasksPage() {
     const updated = projects.map(p => p.id === projectFilter ? { ...p, stages: updatedStages } : p)
     setProjects(updated)
     window.localStorage.setItem(projectsStorageKey, JSON.stringify(updated))
-  }
-
-  const updateTaskStage = (taskId: number, stage: WorkflowStage) => {
-    const nextStatus: TaskStatus = stage.type === 'done' ? 'Completed' : stage.type === 'failed' ? 'Completed' : 'In Progress'
-    setTasks(prev => prev.map(t => t.id === taskId ? { ...t, stageId: stage.id, status: nextStatus } : t))
   }
 
   const swapWorkflowStages = (sourceStageId: string, targetStageId: string) => {
@@ -753,7 +737,7 @@ export default function TasksPage() {
     setTasks(prev => prev.map(task => task.stageId === stage.id ? { ...task, stageId: undefined, status: 'Open' } : task))
   }
 
-  const openTaskForm = (task?: AssignedTask, defaultStatus: TaskStatus = 'Open', defaultProjectId?: number, defaultStageId?: string) => {
+  const openTaskForm = useCallback((task?: AssignedTask, defaultStatus: TaskStatus = 'Open', defaultProjectId?: number, defaultStageId?: string) => {
     if (task) {
       setEditingTaskId(task.id)
       setTaskDraft({
@@ -782,7 +766,7 @@ export default function TasksPage() {
       })
     }
     setTaskFormOpen(true)
-  }
+  }, [account.fullName, account.name, assignees, newTaskTitle, projectFilter, projects])
 
   const saveTaskDraft = () => {
     const title = taskDraft.title.trim()
@@ -824,7 +808,7 @@ export default function TasksPage() {
     setTaskFormOpen(false)
   }
 
-  const quickAddTask = () => {
+  const quickAddTask = useCallback(() => {
     const title = newTaskTitle.trim()
     if (!title) {
       openTaskForm()
@@ -850,9 +834,9 @@ export default function TasksPage() {
       },
     ])
     setNewTaskTitle('')
-  }
+  }, [account.fullName, account.name, assignees, currentProjectStages, newTaskTitle, openTaskForm, projectFilter, projects])
 
-  const openNextStageMove = () => {
+  const openNextStageMove = useCallback(() => {
     const task = filteredTasks.find(item => item.status !== 'Completed') || tasks.find(item => item.status !== 'Completed')
     if (!task) {
       window.alert('No movable job found.')
@@ -870,7 +854,7 @@ export default function TasksPage() {
     }
 
     setStageMoveRequest({ taskId: task.id, targetStageId: targetStage.id })
-  }
+  }, [filteredTasks, projectById, stageForTask, tasks])
 
   useEffect(() => {
     const handleSearch = (event: Event) => {
@@ -1307,7 +1291,7 @@ export default function TasksPage() {
                       {/* Cards */}
                       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 8, padding: '10px', minHeight: 260 }}>
                         {stageTasks.map(task => (
-                          <TaskCard key={task.id} task={task} project={projectById.get(task.projectId)} onOpen={() => setSelectedTaskId(task.id)} onDragStart={event => handleTaskDragStart(event, task.id)} onComplete={() => updateTaskStatus(task.id, task.status === 'Completed' ? 'Open' : 'Completed')} onEdit={() => openTaskForm(task)} onDelete={() => deleteTask(task.id)} />
+                          <TaskCard key={task.id} task={task} onOpen={() => setSelectedTaskId(task.id)} onDragStart={event => handleTaskDragStart(event, task.id)} onComplete={() => updateTaskStatus(task.id, task.status === 'Completed' ? 'Open' : 'Completed')} onEdit={() => openTaskForm(task)} onDelete={() => deleteTask(task.id)} />
                         ))}
                         <button onClick={() => guardAddTask(() => openTaskForm(undefined, 'Open', projectFilter !== 'All' ? projectFilter : undefined, stage.id))} style={{ border: '1px dashed #2a2a2a', background: 'transparent', color: '#444', borderRadius: 9, padding: '10px', fontSize: 13, cursor: 'pointer', transition: 'border-color 0.12s, color 0.12s' }} onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.borderColor = '#444'; (e.currentTarget as HTMLButtonElement).style.color = '#aaa' }} onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.borderColor = '#2a2a2a'; (e.currentTarget as HTMLButtonElement).style.color = '#444' }}>+ Add job</button>
                       </div>
@@ -1358,7 +1342,7 @@ export default function TasksPage() {
                       </div>
                       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 8, padding: '10px', minHeight: 260 }}>
                         {stageTasks.map(task => (
-                          <TaskCard key={task.id} task={task} project={projectById.get(task.projectId)} onOpen={() => setSelectedTaskId(task.id)} onDragStart={event => handleTaskDragStart(event, task.id)} onComplete={() => updateTaskStatus(task.id, task.status === 'Completed' ? 'Open' : 'Completed')} onEdit={() => openTaskForm(task)} onDelete={() => deleteTask(task.id)} />
+                          <TaskCard key={task.id} task={task} onOpen={() => setSelectedTaskId(task.id)} onDragStart={event => handleTaskDragStart(event, task.id)} onComplete={() => updateTaskStatus(task.id, task.status === 'Completed' ? 'Open' : 'Completed')} onEdit={() => openTaskForm(task)} onDelete={() => deleteTask(task.id)} />
                         ))}
                         <button onClick={() => guardAddTask(() => openTaskForm(undefined, 'Open', projectFilter !== 'All' ? projectFilter : undefined, stage.id))} style={{ border: '1px dashed #2a2a2a', background: 'transparent', color: '#444', borderRadius: 9, padding: '10px', fontSize: 13, cursor: 'pointer', transition: 'border-color 0.12s, color 0.12s' }} onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.borderColor = '#444'; (e.currentTarget as HTMLButtonElement).style.color = '#aaa' }} onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.borderColor = '#2a2a2a'; (e.currentTarget as HTMLButtonElement).style.color = '#444' }}>+ Add job</button>
                       </div>
@@ -1386,7 +1370,7 @@ export default function TasksPage() {
               <div style={{ padding: '24px 28px' }}><EmptyState /></div>
             ) : viewMode === 'Grid' ? (
               <div style={{ padding: '16px 28px', display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: 14 }}>
-                {filteredTasks.map(task => <TaskCard key={task.id} task={task} project={projectById.get(task.projectId)} onOpen={() => setSelectedTaskId(task.id)} onDragStart={event => handleTaskDragStart(event, task.id)} onComplete={() => updateTaskStatus(task.id, task.status === 'Completed' ? 'Open' : 'Completed')} onEdit={() => openTaskForm(task)} onDelete={() => deleteTask(task.id)} />)}
+                {filteredTasks.map(task => <TaskCard key={task.id} task={task} onOpen={() => setSelectedTaskId(task.id)} onDragStart={event => handleTaskDragStart(event, task.id)} onComplete={() => updateTaskStatus(task.id, task.status === 'Completed' ? 'Open' : 'Completed')} onEdit={() => openTaskForm(task)} onDelete={() => deleteTask(task.id)} />)}
               </div>
             ) : viewMode === 'Reminders' && isMyJobsContentView ? (
               <DarkMyJobsContent
@@ -1401,13 +1385,12 @@ export default function TasksPage() {
             ) : viewMode === 'Reminders' ? (
               <div style={{ padding: '0 28px' }}>
                 <RemindersListView
-                  groups={reminderGroups}
-                  onOpen={setSelectedTaskId}
-                  onStatus={updateTaskStatus}
-                  onDelete={deleteTask}
-                  onAdd={() => guardAddTask(() => openTaskForm())}
-                  onTaskUpdate={updateTask}
-                />
+                groups={reminderGroups}
+                onOpen={setSelectedTaskId}
+                onStatus={updateTaskStatus}
+                onDelete={deleteTask}
+                onAdd={() => guardAddTask(() => openTaskForm())}
+              />
               </div>
             ) : (
               <ReworkListView
@@ -1416,7 +1399,6 @@ export default function TasksPage() {
                 onOpen={setSelectedTaskId}
                 onDelete={deleteTask}
                 onStatus={updateTaskStatus}
-                onTaskUpdate={updateTask}
                 onAdd={() => guardAddTask(() => openTaskForm())}
               />
             ))}
@@ -1942,7 +1924,7 @@ function GuidelineEditor({
         <RichTextToolbarButton icon={<Quote size={13} />}        title="Blockquote" action={() => exec('formatBlock', 'BLOCKQUOTE')} />
         <RichTextToolbarButton icon={<Code size={13} />}         title="Code block" action={() => exec('formatBlock', 'PRE')} />
         <RichTextToolbarButton icon={<Link size={13} />}         title="Insert link"  action={insertLink} />
-        <RichTextToolbarButton icon={<Image size={13} />}        title="Insert image" action={insertImage} />
+        <RichTextToolbarButton icon={<ImageIcon size={13} />}    title="Insert image" action={insertImage} />
 
         <RichTextToolbarSeparator />
 
@@ -2012,7 +1994,12 @@ function SidebarGroups({
   const [confirmDeleteId, setConfirmDeleteId] = useState<number | null>(null)
 
   const toggle = (dept: string) =>
-    setCollapsedDepts(prev => { const n = new Set(prev); n.has(dept) ? n.delete(dept) : n.add(dept); return n })
+    setCollapsedDepts(prev => {
+      const next = new Set(prev)
+      if (next.has(dept)) next.delete(dept)
+      else next.add(dept)
+      return next
+    })
 
   const grouped = useMemo(() => {
     const map = new Map<string, ProjectRecord[]>()
@@ -2572,7 +2559,8 @@ function WorkflowsView({
   const toggleGroup = (dept: string) =>
     setCollapsedGroups(prev => {
       const next = new Set(prev)
-      next.has(dept) ? next.delete(dept) : next.add(dept)
+      if (next.has(dept)) next.delete(dept)
+      else next.add(dept)
       return next
     })
 
@@ -2949,25 +2937,6 @@ function CreateWorkflowModal({
   )
 }
 
-function SideItem({ label, count, active = false, onClick }: { label: string; count: number; active?: boolean; onClick?: () => void }) {
-  return (
-    <button onClick={onClick} style={{ ...sideButtonStyle, background: active ? '#282828' : 'transparent', color: active ? '#ffffff' : '#b3b3b3' }}>
-      <Circle size={13} />
-      <span>{label}</span>
-      <span style={{ marginLeft: 'auto', color: active ? '#4ade80' : '#b3b3b3', fontSize: 11, fontWeight: 700 }}>{count}</span>
-    </button>
-  )
-}
-
-function ViewTab({ label, icon, active, onClick }: { label: string; icon: ReactNode; active: boolean; onClick: () => void }) {
-  return (
-    <button onClick={onClick} style={{ ...viewButtonStyle, color: active ? '#4ade80' : '#b3b3b3', borderBottomColor: active ? '#4ade80' : 'transparent' }}>
-      {icon}
-      {label}
-    </button>
-  )
-}
-
 const reminderGroupMeta: Record<string, { dot: string; label: string }> = {
   Overdue:    { dot: '#ef4444', label: 'Overdue' },
   Today:      { dot: '#22c55e', label: 'Today' },
@@ -2977,18 +2946,22 @@ const reminderGroupMeta: Record<string, { dot: string; label: string }> = {
 }
 
 function RemindersListView({
-  groups, onOpen, onStatus, onDelete, onAdd, onTaskUpdate,
+  groups, onOpen, onStatus, onDelete, onAdd,
 }: {
   groups: Array<{ title: string; tasks: AssignedTask[] }>
   onOpen: (id: number) => void
   onStatus: (id: number, status: TaskStatus) => void
   onDelete: (id: number) => void
   onAdd: () => void
-  onTaskUpdate: (id: number, updates: Partial<AssignedTask>) => void
 }) {
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set())
   const toggle = (title: string) =>
-    setCollapsed(prev => { const n = new Set(prev); n.has(title) ? n.delete(title) : n.add(title); return n })
+    setCollapsed(prev => {
+      const next = new Set(prev)
+      if (next.has(title)) next.delete(title)
+      else next.add(title)
+      return next
+    })
 
   if (groups.length === 0) return <EmptyState />
 
@@ -3445,6 +3418,7 @@ const simpleMyJobsButtonStyle = {
   cursor: 'pointer',
 }
 
+/* eslint-disable @typescript-eslint/no-unused-vars -- Legacy task table view is inactive for the launch layout but kept for a later view switch. */
 function TaskTable({ title, color, tasks, projectById, comments, onOpen, onStatus, onDelete, onAdd, onTaskUpdate, people, customColumns, onColumnAdd, onColumnRemove }: {
   title: string
   color: string
@@ -3751,6 +3725,7 @@ function TaskTable({ title, color, tasks, projectById, comments, onOpen, onStatu
     </section>
   )
 }
+/* eslint-enable @typescript-eslint/no-unused-vars */
 
 function ReworkListView({
   tasks,
@@ -3758,7 +3733,6 @@ function ReworkListView({
   onOpen,
   onDelete,
   onStatus,
-  onTaskUpdate,
   onAdd,
 }: {
   tasks: AssignedTask[]
@@ -3766,12 +3740,16 @@ function ReworkListView({
   onOpen: (id: number) => void
   onDelete: (id: number) => void
   onStatus: (id: number, status: TaskStatus) => void
-  onTaskUpdate: (id: number, updates: Partial<AssignedTask>) => void
   onAdd: () => void
 }) {
   const [collapsed, setCollapsed] = useState<Set<number | 'none'>>(new Set())
   const toggle = (key: number | 'none') =>
-    setCollapsed(prev => { const n = new Set(prev); n.has(key) ? n.delete(key) : n.add(key); return n })
+    setCollapsed(prev => {
+      const next = new Set(prev)
+      if (next.has(key)) next.delete(key)
+      else next.add(key)
+      return next
+    })
 
   if (tasks.length === 0) return <EmptyState />
 
@@ -3931,6 +3909,7 @@ function ReworkListView({
   )
 }
 
+/* eslint-disable @typescript-eslint/no-unused-vars -- Legacy ClickUp-style task view is inactive for the launch layout but kept for a later view switch. */
 function ClickUpListView({
   tasks, projects, projectById, comments, onOpen, onDelete, onTaskUpdate, onStatus, onAdd, people, customColumns, onColumnAdd, onColumnRemove,
 }: {
@@ -3954,10 +3933,20 @@ function ClickUpListView({
   const [cellDraft, setCellDraft] = useState('')
 
   const toggleProject = (id: number) =>
-    setCollapsedProjects(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n })
+    setCollapsedProjects(prev => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
 
   const toggleStatus = (key: string) =>
-    setCollapsedStatuses(prev => { const n = new Set(prev); n.has(key) ? n.delete(key) : n.add(key); return n })
+    setCollapsedStatuses(prev => {
+      const next = new Set(prev)
+      if (next.has(key)) next.delete(key)
+      else next.add(key)
+      return next
+    })
 
   const commitCell = (taskId: number, col: string, value: string) => {
     if (col === 'name') onTaskUpdate(taskId, { title: value })
@@ -4133,6 +4122,7 @@ function ClickUpListView({
     </div>
   )
 }
+/* eslint-enable @typescript-eslint/no-unused-vars */
 
 const SUGGESTED_FIELDS: Array<{ icon: string; label: string; type: ColumnFieldType }> = [
   { icon: 'PHP', label: 'Budget Allocation', type: 'money' },
@@ -4207,9 +4197,8 @@ function FieldsExistingTab({ customColumns, onRemove }: { customColumns: CustomC
   )
 }
 
-function TaskCard({ task, project, onOpen, onDragStart, onComplete, onEdit, onDelete }: {
+function TaskCard({ task, onOpen, onDragStart, onComplete, onEdit, onDelete }: {
   task: AssignedTask
-  project?: ProjectRecord
   onOpen: () => void
   onDragStart: (event: DragEvent<HTMLElement>) => void
   onComplete: () => void
@@ -4953,6 +4942,7 @@ function TaskDetailModal(props: {
                   <div key={file.id} style={{ position: 'relative', border: '1px solid #2a2a2a', borderRadius: 8, overflow: 'hidden', background: '#1f1f1f' }}>
                     {file.type.startsWith('image/') ? (
                       <a href={file.dataUrl} target="_blank" rel="noreferrer">
+                        {/* eslint-disable-next-line @next/next/no-img-element -- Local data URL preview from user upload, not a page/LCP image. */}
                         <img src={file.dataUrl} alt={file.name} style={{ width: '100%', height: 80, objectFit: 'cover', display: 'block' }} />
                       </a>
                     ) : (
@@ -5004,6 +4994,7 @@ function TaskDetailModal(props: {
                         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2,1fr)', gap: 5, marginTop: 7 }}>
                           {comment.attachments.map(file => (
                             <a key={file.id} href={file.dataUrl} target="_blank" rel="noreferrer" style={{ display: 'block', borderRadius: 6, overflow: 'hidden' }}>
+                              {/* eslint-disable-next-line @next/next/no-img-element -- Local data URL preview from user upload, not a page/LCP image. */}
                               <img src={file.dataUrl} alt={file.name} style={{ width: '100%', height: 56, objectFit: 'cover', display: 'block' }} />
                             </a>
                           ))}
@@ -5033,6 +5024,7 @@ function TaskDetailModal(props: {
                   {props.attachments.map(file => (
                     <div key={file.id} style={{ position: 'relative', width: 56, height: 56, borderRadius: 6, overflow: 'hidden', border: '1px solid #2a2a2a', flexShrink: 0 }}>
                       {file.type.startsWith('image/') ? (
+                        /* eslint-disable-next-line @next/next/no-img-element -- Local data URL preview from user upload, not a page/LCP image. */
                         <img src={file.dataUrl} alt={file.name} style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
                       ) : (
                         <div style={{ width: '100%', height: '100%', background: '#242424', display: 'grid', placeItems: 'center' }}><Paperclip size={18} color="#555" /></div>
@@ -5199,35 +5191,13 @@ function TaskFormModal({ draft, editing, projects, assignees, onChange, onSave, 
   )
 }
 
-function DetailItem({ label, value }: { label: string; value: string }) {
-  return <div><div style={smallLabelStyle}>{label}</div><div style={{ color: '#f5f5f5', fontSize: 14, fontWeight: 700, marginTop: 5 }}>{value}</div></div>
-}
-
-function Pill({ color, children }: { color: string; children: ReactNode }) {
-  return <span style={{ display: 'inline-flex', color, background: '#282828', borderRadius: 999, padding: '4px 8px', fontSize: 11, fontWeight: 700, marginTop: 6 }}>{children}</span>
-}
-
 function Avatar({ name, size = 24 }: { name: string; size?: number }) {
   return <span style={{ width: size, height: size, borderRadius: '50%', background: '#22c55e', color: '#191414', display: 'inline-grid', placeItems: 'center', fontSize: Math.floor(size * 0.46), fontWeight: 800, flexShrink: 0 }}>{(name || '?').charAt(0).toUpperCase()}</span>
 }
 
-const sideSectionStyle = { color: '#b3b3b3', fontSize: 11, fontWeight: 800, textTransform: 'uppercase', letterSpacing: 1, padding: '0 8px 8px' } as const
 const sidebarSectionTitleStyle = { color: '#555', fontSize: 10, fontWeight: 900, letterSpacing: 1.1, textTransform: 'uppercase', padding: '7px 10px 8px' } as const
-const sideButtonStyle = { width: '100%', border: 'none', borderRadius: 8, background: 'transparent', color: '#b3b3b3', minHeight: 34, padding: '0 9px', display: 'flex', alignItems: 'center', gap: 9, fontSize: 13, fontWeight: 700, fontFamily: font, cursor: 'pointer', textAlign: 'left' } as const
-const iconButtonStyle = { width: 34, height: 34, border: '1px solid #535353', borderRadius: 10, background: '#121212', color: '#f5f5f5', display: 'grid', placeItems: 'center', cursor: 'pointer' } as const
-const viewButtonStyle = { display: 'inline-flex', alignItems: 'center', gap: 7, border: 'none', borderBottom: '3px solid transparent', background: 'transparent', padding: '11px 9px 12px', color: '#b3b3b3', fontSize: 13, fontWeight: 700, fontFamily: font, cursor: 'pointer', whiteSpace: 'nowrap' } as const
-const chipButtonStyle = { display: 'inline-flex', alignItems: 'center', gap: 6, border: '1px solid #282828', borderRadius: 999, background: '#121212', color: '#f5f5f5', minHeight: 32, padding: '0 11px', fontSize: 12, fontWeight: 700, fontFamily: font, cursor: 'pointer', whiteSpace: 'nowrap' } as const
-const darkSelectStyle = { border: '1px solid #282828', borderRadius: 999, background: '#121212', color: '#f5f5f5', minHeight: 32, padding: '0 11px', fontSize: 12, fontWeight: 700, fontFamily: font, outline: 'none' } as const
 const newTaskInputStyle = { width: 180, minHeight: 32, border: '1px solid #282828', borderRadius: 999, background: '#121212', color: '#f5f5f5', padding: '0 12px', fontSize: 12, fontWeight: 700, fontFamily: font, outline: 'none' } as const
-const formInputStyle = { width: '100%', minHeight: 40, border: '1px solid #535353', borderRadius: 10, background: '#121212', color: '#f5f5f5', padding: '0 12px', fontSize: 13, fontWeight: 700, fontFamily: font, outline: 'none' } as const
-const greenButtonStyle = { border: 'none', borderRadius: 999, minHeight: 32, padding: '0 13px', background: '#22c55e', color: '#191414', fontSize: 12, fontWeight: 800, fontFamily: font, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 6 } as const
 const tableCellStyle = { padding: '9px 12px', borderRight: '1px solid #282828', display: 'flex', alignItems: 'center', minWidth: 0, fontSize: 12, fontWeight: 700 } as const
-const detailGridStyle = { display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 12 } as const
-const smallLabelStyle = { color: '#b3b3b3', fontSize: 12, fontWeight: 700 } as const
-const descriptionBoxStyle = { marginTop: 16, padding: 14, borderRadius: 12, background: '#191414', border: '1px solid #282828' } as const
-const emptyBoxStyle = { border: '1px dashed #535353', borderRadius: 12, padding: 22, color: '#b3b3b3', fontSize: 13, fontWeight: 700, textAlign: 'center' } as const
-const textareaStyle = { width: '100%', minHeight: 116, border: '1px solid #535353', borderRadius: 12, background: '#191414', color: '#f5f5f5', fontSize: 13, fontWeight: 600, padding: 12, fontFamily: font, outline: 'none', resize: 'vertical' } as const
-const uploadButtonStyle = { display: 'inline-flex', alignItems: 'center', gap: 7, border: '1px solid #535353', borderRadius: 10, padding: '9px 12px', color: '#f5f5f5', fontSize: 12, fontWeight: 700, cursor: 'pointer', background: '#121212' } as const
 const cuIconBtn = { width: 28, height: 28, border: '1px solid #2a2a2a', borderRadius: 7, background: 'transparent', color: '#888', display: 'grid', placeItems: 'center', cursor: 'pointer' } as const
 const cuDashedBtn = { display: 'inline-flex', alignItems: 'center', gap: 6, border: '1px solid #2d2d2d', borderRadius: 7, background: 'transparent', color: '#666', padding: '8px 14px', fontSize: 13, cursor: 'pointer', fontFamily: font } as const
 const cuSecondaryBtn = { width: 26, height: 26, border: '1px solid #2a2a2a', borderRadius: 6, background: 'transparent', color: '#666', display: 'grid', placeItems: 'center', cursor: 'pointer', fontSize: 13 } as const

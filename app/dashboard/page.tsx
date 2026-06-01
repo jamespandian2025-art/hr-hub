@@ -17,34 +17,73 @@ import {
   Line, LineChart, Pie, PieChart,
   ReferenceLine, ResponsiveContainer, Tooltip, XAxis, YAxis,
 } from 'recharts'
+import { listBusinessRecords, replaceBusinessCollection } from '@/lib/business/client'
+import type { BusinessCollection } from '@/lib/business/collections'
+import { loadAccountingData, refreshAccountingData } from '@/lib/accounting/data'
+import { loadWarehouseState, refreshWarehouseState } from '@/lib/warehouse/store'
+import { companyChangeEvent, companyScopedKey, getActiveCompany } from '@/lib/tenant/company'
 
 const font = "var(--font-body)"
 const display = "var(--font-body)"
 
 // --- Types ------------------------------------------------------------------
 
+type DashboardId = string | number
+type StoredRow = Record<string, unknown>
+
 interface ProjectRecord {
-  id: number; name?: string; title?: string
+  id: DashboardId; name?: string; title?: string
   projectCost?: number; paidAmount?: number; unpaidAmount?: number
   materialCost?: number; laborCost?: number; overheadProfit?: number; generalExpense?: number
-  status?: string; startDate?: string; endDate?: string; createdAt?: string
+  status?: string; health?: string; startDate?: string; endDate?: string; createdAt?: string
+  source?: 'project-management' | 'legacy'
 }
 interface TaskRecord {
-  id: number; title?: string; projectId?: number; stageId?: string
-  status?: string; dueDate?: string; createdAt?: string; assignee?: string
+  id: DashboardId; title?: string; projectId?: DashboardId; stageId?: string
+  status?: string; dueDate?: string; createdAt?: string; assignee?: string; source?: 'assigned-tasks' | 'project-management' | 'workflow'
 }
-interface ClientRecord  { id: number; name?: string; createdAt?: string }
-interface SupplierRecord { id: number; name?: string; createdAt?: string }
+interface ClientRecord  { id: DashboardId; name?: string; createdAt?: string }
+interface SupplierRecord { id: DashboardId; name?: string; createdAt?: string }
 interface OpportunityRecord {
-  id: number; name?: string; quotation?: number; approvedBudget?: number; estimatedCost?: number
-  status?: string; startDate?: string; createdAt?: string
+  id: DashboardId; name?: string; quotation?: number; approvedBudget?: number; estimatedCost?: number
+  status?: string; startDate?: string; createdAt?: string; source?: string
 }
-interface BillRecord { id: number; name?: string; associated?: string; amount?: number; status?: string; date?: string; createdAt?: string }
-interface BasicRecord { id: number; amount?: number; total?: number; status?: string; date?: string; createdAt?: string; dueDate?: string }
+interface InvoiceRecord {
+  id: DashboardId; customer?: string; amount?: number; paid?: number; balanceDue?: number
+  status?: string; issueDate?: string; dueDate?: string; createdAt?: string
+}
+interface BillRecord {
+  id: DashboardId; name?: string; associated?: string; amount?: number; paid?: number; balanceDue?: number
+  status?: string; date?: string; createdAt?: string; type?: string
+}
+interface BasicRecord {
+  id: DashboardId; name?: string; amount?: number; total?: number; status?: string; date?: string; createdAt?: string; dueDate?: string
+  stock?: number; minLevel?: number
+}
+interface EmployeeRecord { id: DashboardId; name?: string; fullName?: string; status?: string; createdAt?: string }
+interface ProcurementRecord { id: DashboardId; name?: string; status?: string; amount?: number; date?: string; createdAt?: string }
 interface AccountRecord { name?: string; email?: string; company?: string; theme?: string; role?: string }
 interface ActivityItem {
   id: string; type: 'project' | 'task' | 'client' | 'payment' | 'opportunity' | 'supplier'
   description: string; subtext: string; date: Date
+}
+
+type ProjectManagementDashboardState = {
+  companyId?: string
+  clients?: Array<{ id?: DashboardId; name?: string }>
+  members?: Array<{ id?: DashboardId; name?: string; fullName?: string }>
+  projects?: Array<StoredRow>
+  tasks?: Array<StoredRow>
+  activities?: Array<StoredRow>
+}
+
+type SalesWorkspaceDashboardData = {
+  leads?: StoredRow[]
+  opportunities?: StoredRow[]
+  proposals?: StoredRow[]
+  contracts?: StoredRow[]
+  billings?: StoredRow[]
+  clients?: StoredRow[]
 }
 
 // --- Helpers ----------------------------------------------------------------
@@ -97,6 +136,296 @@ function forecastTrend(actual: number, forecast: number, inverse = false) {
 }
 function greeting() { const h = new Date().getHours(); return h < 12 ? 'Good morning' : h < 17 ? 'Good afternoon' : 'Good evening' }
 
+const projectStateKey = 'wiseflow-project-management-state'
+const salesWorkspaceKey = 'wiseflow-sales-workspace'
+const legacyProjectKey = 'flowsys-projects'
+const assignedTasksKey = 'flowsys-assigned-tasks'
+const demoProjectIds = new Set(['prj-001', 'prj-002', 'prj-003', 'prj-004', 'prj-005', 'prj-006'])
+const demoTaskIds = new Set(['tsk-001', 'tsk-002', 'tsk-003', 'tsk-004', 'tsk-005', 'tsk-006'])
+const procurementCollections: BusinessCollection[] = [
+  'procurement-purchase-requests',
+  'procurement-purchase-orders',
+  'procurement-rfqs',
+  'procurement-quotations',
+  'procurement-receiving',
+]
+const procurementKeys = [
+  'flowsys-procurement-purchase-requests',
+  'flowsys-procurement-purchase-orders',
+  'flowsys-procurement-rfqs',
+  'flowsys-procurement-quotations',
+  'flowsys-procurement-receiving',
+]
+
+function isRecord(value: unknown): value is StoredRow {
+  return Boolean(value && typeof value === 'object' && !Array.isArray(value))
+}
+
+function textOf(row: StoredRow, keys: string[], fallback = '') {
+  for (const key of keys) {
+    const value = row[key]
+    if (typeof value === 'string' && value.trim()) return value.trim()
+    if (typeof value === 'number' && Number.isFinite(value)) return String(value)
+  }
+  return fallback
+}
+
+function numberOf(row: StoredRow, keys: string[], fallback = 0) {
+  for (const key of keys) {
+    const value = row[key]
+    if (typeof value === 'number' && Number.isFinite(value)) return value
+    if (typeof value === 'string') {
+      const parsed = Number(value.replace(/[^0-9.-]+/g, ''))
+      if (Number.isFinite(parsed)) return parsed
+    }
+  }
+  return fallback
+}
+
+function arrayOfRecords(value: unknown) {
+  return Array.isArray(value) ? value.filter(isRecord) : []
+}
+
+function uniqueByDashboardId<T extends { id: DashboardId }>(rows: T[]) {
+  const seen = new Set<string>()
+  return rows.filter((row, index) => {
+    const key = String(row.id || `row-${index}`)
+    if (seen.has(key)) return false
+    seen.add(key)
+    return true
+  })
+}
+
+function loadStoredRows<T>(key: string, companyId = getActiveCompany()?.id) {
+  const rows: T[] = []
+  const scopedKey = companyId ? companyScopedKey(key, companyId) : ''
+  for (const storageKey of [scopedKey, key].filter(Boolean)) {
+    const value = loadStored<T[]>(storageKey, [])
+    if (Array.isArray(value)) rows.push(...value)
+  }
+  return rows
+}
+
+async function safeListBusinessRecords<T extends object>(collection: BusinessCollection) {
+  return listBusinessRecords<T>(collection).catch(() => [] as T[])
+}
+
+function normalizeProjectState(value: unknown, companyId: string): ProjectManagementDashboardState | null {
+  if (!isRecord(value)) return null
+  const state = value as ProjectManagementDashboardState
+  const projects = arrayOfRecords(state.projects).filter(project => !demoProjectIds.has(String(project.id || '')) && !project.archivedAt)
+  const tasks = arrayOfRecords(state.tasks).filter(task => !demoTaskIds.has(String(task.id || '')) && !task.archivedAt)
+  const members = arrayOfRecords(state.members).map(member => ({
+    id: textOf(member, ['id', 'userId', 'employeeId']),
+    name: textOf(member, ['name', 'fullName', 'displayName']),
+  }))
+  return {
+    ...state,
+    companyId: state.companyId || companyId,
+    projects,
+    tasks,
+    members,
+    activities: arrayOfRecords(state.activities),
+  }
+}
+
+async function loadProjectDashboardState(companyId: string) {
+  const serverRows = await safeListBusinessRecords<ProjectManagementDashboardState>('project-management-state')
+  const serverState = serverRows.map(row => normalizeProjectState(row, companyId)).find(Boolean)
+  if (serverState) return serverState
+
+  const storedState = loadStored<ProjectManagementDashboardState | null>(projectStateKey, null)
+    || loadStored<ProjectManagementDashboardState | null>(companyScopedKey(projectStateKey, companyId), null)
+  return normalizeProjectState(storedState, companyId)
+}
+
+function mapProjectManagementProject(row: StoredRow, index: number): ProjectRecord {
+  const budget = numberOf(row, ['budget', 'projectCost', 'amount', 'total'])
+  const spent = numberOf(row, ['spent', 'actual', 'materialCost'])
+  const committed = numberOf(row, ['committed', 'unpaidAmount', 'balanceDue'])
+  return {
+    id: textOf(row, ['id'], `project-${index + 1}`),
+    name: textOf(row, ['name', 'title'], `Project ${index + 1}`),
+    projectCost: budget,
+    paidAmount: numberOf(row, ['paidAmount', 'paid'], 0),
+    unpaidAmount: committed,
+    materialCost: spent,
+    laborCost: numberOf(row, ['laborCost']),
+    overheadProfit: numberOf(row, ['overheadProfit']),
+    generalExpense: numberOf(row, ['generalExpense']),
+    status: textOf(row, ['status'], 'In Progress'),
+    health: textOf(row, ['health'], ''),
+    startDate: textOf(row, ['startDate', 'createdAt', 'date']),
+    endDate: textOf(row, ['dueDate', 'endDate']),
+    createdAt: textOf(row, ['createdAt', 'updatedAt', 'startDate']),
+    source: 'project-management',
+  }
+}
+
+function mapLegacyProject(row: StoredRow, index: number): ProjectRecord {
+  const projectCost = numberOf(row, ['projectCost', 'budget', 'amount', 'total'])
+  return {
+    id: textOf(row, ['id', 'projectId'], `legacy-project-${index + 1}`),
+    name: textOf(row, ['name', 'title', 'projectName'], `Project ${index + 1}`),
+    projectCost,
+    paidAmount: numberOf(row, ['paidAmount', 'paid', 'paidRevenue']),
+    unpaidAmount: numberOf(row, ['unpaidAmount', 'balanceDue', 'committed'], Math.max(projectCost - numberOf(row, ['paidAmount', 'paid', 'paidRevenue']), 0)),
+    materialCost: numberOf(row, ['materialCost', 'directCost', 'spent']),
+    laborCost: numberOf(row, ['laborCost']),
+    overheadProfit: numberOf(row, ['overheadProfit', 'overhead']),
+    generalExpense: numberOf(row, ['generalExpense', 'expense']),
+    status: textOf(row, ['status'], 'In Progress'),
+    health: textOf(row, ['health'], ''),
+    startDate: textOf(row, ['startDate', 'date', 'createdAt']),
+    endDate: textOf(row, ['endDate', 'dueDate']),
+    createdAt: textOf(row, ['createdAt', 'startDate', 'date']),
+    source: 'legacy',
+  }
+}
+
+function mapProjectManagementTask(row: StoredRow, state: ProjectManagementDashboardState): TaskRecord {
+  const assigneeId = textOf(row, ['assigneeId', 'ownerId', 'employeeId'])
+  const member = (state.members || []).find(item => String(item.id || '') === assigneeId)
+  const status = textOf(row, ['status'], 'Open')
+  return {
+    id: textOf(row, ['id'], `task-${Date.now()}`),
+    title: textOf(row, ['title', 'name'], 'Untitled task'),
+    projectId: textOf(row, ['projectId']),
+    status: status === 'Done' ? 'Completed' : status,
+    dueDate: textOf(row, ['dueDate', 'date']),
+    createdAt: textOf(row, ['createdAt', 'updatedAt', 'startDate', 'dueDate']),
+    assignee: member?.name || assigneeId || textOf(row, ['assignee', 'owner']),
+    stageId: textOf(row, ['stageId', 'status']),
+    source: 'project-management',
+  }
+}
+
+function mapAssignedTask(row: StoredRow, index: number): TaskRecord {
+  return {
+    id: textOf(row, ['id', 'taskId'], `assigned-task-${index + 1}`),
+    title: textOf(row, ['title', 'name', 'description'], `Task ${index + 1}`),
+    projectId: textOf(row, ['projectId']),
+    status: textOf(row, ['status'], 'Open'),
+    dueDate: textOf(row, ['dueDate', 'date']),
+    createdAt: textOf(row, ['createdAt', 'startDate', 'dueDate']),
+    assignee: textOf(row, ['assignee', 'owner', 'assignedTo']),
+    stageId: textOf(row, ['stageId']),
+    source: 'assigned-tasks',
+  }
+}
+
+function mapClient(row: StoredRow, index: number): ClientRecord {
+  return {
+    id: textOf(row, ['id', 'clientId', 'customerId'], `client-${index + 1}`),
+    name: textOf(row, ['name', 'company', 'companyName', 'clientName', 'customer'], `Client ${index + 1}`),
+    createdAt: textOf(row, ['createdAt', 'lastContact', 'lastInteraction']),
+  }
+}
+
+function mapSupplier(row: StoredRow, index: number): SupplierRecord {
+  return {
+    id: textOf(row, ['id', 'supplierId', 'vendorId'], `supplier-${index + 1}`),
+    name: textOf(row, ['name', 'supplier', 'vendor', 'companyName'], `Supplier ${index + 1}`),
+    createdAt: textOf(row, ['createdAt', 'date']),
+  }
+}
+
+function mapOpportunity(row: StoredRow, index: number, source = 'Sales'): OpportunityRecord {
+  const value = numberOf(row, ['quotation', 'approvedBudget', 'estimatedContractValue', 'contractValue', 'amount', 'total', 'estimatedBudget'])
+  return {
+    id: textOf(row, ['id', 'opportunityId', 'leadId'], `${source.toLowerCase()}-${index + 1}`),
+    name: textOf(row, ['name', 'projectName', 'title', 'leadName'], `Opportunity ${index + 1}`),
+    quotation: numberOf(row, ['quotation', 'estimatedContractValue', 'contractValue', 'amount', 'total'], value),
+    approvedBudget: numberOf(row, ['approvedBudget', 'budget'], 0),
+    estimatedCost: numberOf(row, ['estimatedCost', 'estimatedBudget'], value),
+    status: textOf(row, ['stage', 'status'], 'Lead'),
+    startDate: textOf(row, ['expectedCloseDate', 'closeDate', 'startDate', 'createdDate', 'date']),
+    createdAt: textOf(row, ['createdAt', 'createdDate', 'expectedCloseDate', 'date']),
+    source: textOf(row, ['source'], source),
+  }
+}
+
+function salesWorkspaceRows(workspace: SalesWorkspaceDashboardData | null): OpportunityRecord[] {
+  if (!workspace) return []
+  return [
+    ...arrayOfRecords(workspace.leads).map((row, index) => mapOpportunity({ ...row, status: textOf(row, ['status'], 'Lead') }, index, 'Lead')),
+    ...arrayOfRecords(workspace.opportunities).map((row, index) => mapOpportunity(row, index, 'Sales')),
+    ...arrayOfRecords(workspace.proposals).map((row, index) => mapOpportunity({ ...row, stage: textOf(row, ['status'], 'Proposal'), estimatedContractValue: numberOf(row, ['total']) }, index, 'Proposal')),
+    ...arrayOfRecords(workspace.contracts).map((row, index) => mapOpportunity({ ...row, stage: textOf(row, ['status'], 'Awarded'), estimatedContractValue: numberOf(row, ['contractAmount']) }, index, 'Contract')),
+    ...arrayOfRecords(workspace.billings).map((row, index) => mapOpportunity({ ...row, name: textOf(row, ['project', 'milestone']), stage: textOf(row, ['status'], 'Billing'), estimatedContractValue: numberOf(row, ['amount']) }, index, 'Billing')),
+  ]
+}
+
+function mapInvoice(row: StoredRow, index: number): InvoiceRecord {
+  const amount = numberOf(row, ['amount', 'total', 'balance'])
+  const paid = numberOf(row, ['paid', 'paidAmount'], ['paid', 'completed'].includes(norm(textOf(row, ['status']))) ? amount : 0)
+  return {
+    id: textOf(row, ['id', 'invoiceNo', 'invoiceNumber', 'number'], `invoice-${index + 1}`),
+    customer: textOf(row, ['customer', 'recipient', 'client', 'company']),
+    amount,
+    paid,
+    balanceDue: numberOf(row, ['balanceDue', 'balance'], Math.max(amount - paid, 0)),
+    status: textOf(row, ['status'], 'Draft'),
+    issueDate: textOf(row, ['issueDate', 'dateCreated', 'date', 'createdAt']),
+    dueDate: textOf(row, ['dueDate']),
+    createdAt: textOf(row, ['createdAt', 'issueDate', 'dateCreated', 'date']),
+  }
+}
+
+function mapBill(row: StoredRow, index: number, type = 'Bill'): BillRecord {
+  const amount = numberOf(row, ['amount', 'total', 'cost'])
+  const paid = numberOf(row, ['paid', 'paidAmount'], ['paid', 'completed', 'recorded'].includes(norm(textOf(row, ['status']))) ? amount : 0)
+  return {
+    id: textOf(row, ['id', 'billNo', 'billNumber', 'reference'], `${type.toLowerCase()}-${index + 1}`),
+    name: textOf(row, ['name', 'description', 'merchant', 'vendor'], `${type} ${index + 1}`),
+    associated: textOf(row, ['associated', 'project', 'category']),
+    amount,
+    paid,
+    balanceDue: numberOf(row, ['balanceDue', 'balance'], Math.max(amount - paid, 0)),
+    status: textOf(row, ['status'], type === 'Expense' ? 'Recorded' : 'Unpaid'),
+    date: textOf(row, ['date', 'billDate', 'issueDate', 'expenseDate', 'createdAt']),
+    createdAt: textOf(row, ['createdAt', 'date', 'expenseDate']),
+    type,
+  }
+}
+
+function mapBudget(row: StoredRow, index: number): BasicRecord {
+  return {
+    id: textOf(row, ['id'], `budget-${index + 1}`),
+    name: textOf(row, ['name', 'title'], `Budget ${index + 1}`),
+    amount: numberOf(row, ['amount', 'total', 'budget']),
+    total: numberOf(row, ['total', 'budget', 'amount']),
+    status: textOf(row, ['status'], 'Draft'),
+    date: textOf(row, ['date', 'createdAt']),
+    createdAt: textOf(row, ['createdAt', 'date']),
+  }
+}
+
+function mapWarehouseAlert(row: StoredRow, index: number): BasicRecord {
+  return {
+    id: textOf(row, ['id', 'sku'], `inventory-${index + 1}`),
+    name: textOf(row, ['name', 'itemName', 'sku'], `Inventory item ${index + 1}`),
+    amount: numberOf(row, ['stock', 'quantity', 'amount']),
+    total: numberOf(row, ['stock', 'quantity', 'amount']),
+    status: textOf(row, ['status'], ''),
+    date: textOf(row, ['updatedAt', 'createdAt']),
+    createdAt: textOf(row, ['createdAt']),
+    stock: numberOf(row, ['stock', 'quantity']),
+    minLevel: numberOf(row, ['minLevel', 'minimumStock', 'reorderPoint']),
+  }
+}
+
+function mapProcurement(row: StoredRow, index: number): ProcurementRecord {
+  return {
+    id: textOf(row, ['id', 'requestNo', 'poNumber', 'rfqNo', 'quotationNo', 'receiptNo'], `procurement-${index + 1}`),
+    name: textOf(row, ['title', 'name', 'requestNo', 'poNumber', 'rfqNo', 'quotationNo', 'supplier'], `Procurement ${index + 1}`),
+    status: textOf(row, ['status'], 'Pending'),
+    amount: numberOf(row, ['amount', 'total', 'grandTotal', 'estimatedAmount']),
+    date: textOf(row, ['date', 'createdAt', 'dueDate']),
+    createdAt: textOf(row, ['createdAt', 'date']),
+  }
+}
+
 // --- Dashboard --------------------------------------------------------------
 
 export default function Dashboard() {
@@ -134,22 +463,150 @@ export default function Dashboard() {
   const [suppliers, setSuppliers]   = useState<SupplierRecord[]>([])
   const [warehouses, setWarehouses] = useState<BasicRecord[]>([])
   const [opps, setOpps]             = useState<OpportunityRecord[]>([])
+  const [invoices, setInvoices]     = useState<InvoiceRecord[]>([])
   const [bills, setBills]           = useState<BillRecord[]>([])
   const [budgets, setBudgets]       = useState<BasicRecord[]>([])
+  const [employees, setEmployees]   = useState<EmployeeRecord[]>([])
+  const [procurement, setProcurement] = useState<ProcurementRecord[]>([])
+  const [projectDashboardState, setProjectDashboardState] = useState<ProjectManagementDashboardState | null>(null)
 
   useEffect(() => {
-    const id = window.setTimeout(() => {
+    let cancelled = false
+
+    const hydrate = async () => {
+      const companyId = getActiveCompany()?.id || ''
       setAccount(loadStored('flowsys-account', {}))
-      setProjects(loadStored('flowsys-projects', []))
-      setTasks(loadStored('flowsys-assigned-tasks', []))
-      setClients(loadStored('flowsys-clients', []))
-      setSuppliers(loadStored('flowsys-suppliers', []))
-      setWarehouses(loadStored('flowsys-warehouses', []))
-      setOpps(loadStored('flowsys-opportunities', []))
-      setBills(loadStored('flowsys-bills', []))
-      setBudgets(loadStored('flowsys-budgets', []))
-    }, 0)
-    return () => window.clearTimeout(id)
+
+      const projectStatePromise = loadProjectDashboardState(companyId)
+      const accountingPromise = refreshAccountingData().catch(() => loadAccountingData())
+      const warehousePromise = refreshWarehouseState().catch(() => loadWarehouseState())
+      const [
+        projectState,
+        accounting,
+        warehouse,
+        legacyProjects,
+        serverLegacyProjects,
+        assignedTasks,
+        serverAssignedTasks,
+        workflowTodos,
+        serverClients,
+        serverSuppliers,
+        legacyOpportunities,
+        serverOpportunities,
+        salesWorkspaceRowsFromServer,
+        procurementServerGroups,
+      ] = await Promise.all([
+        projectStatePromise,
+        accountingPromise,
+        warehousePromise,
+        Promise.resolve(loadStoredRows<StoredRow>(legacyProjectKey, companyId)),
+        safeListBusinessRecords<StoredRow>('project-legacy-records'),
+        Promise.resolve(loadStoredRows<StoredRow>(assignedTasksKey, companyId)),
+        safeListBusinessRecords<StoredRow>('assigned-tasks'),
+        safeListBusinessRecords<StoredRow>('workflow-todos'),
+        safeListBusinessRecords<StoredRow>('clients'),
+        safeListBusinessRecords<StoredRow>('suppliers'),
+        Promise.resolve(loadStoredRows<StoredRow>('flowsys-opportunities', companyId)),
+        safeListBusinessRecords<StoredRow>('opportunities'),
+        safeListBusinessRecords<SalesWorkspaceDashboardData>('sales-workspace'),
+        Promise.all(procurementCollections.map(collection => safeListBusinessRecords<StoredRow>(collection))),
+      ])
+
+      const storedSalesWorkspace = loadStored<SalesWorkspaceDashboardData | null>(salesWorkspaceKey, null)
+        || loadStored<SalesWorkspaceDashboardData | null>(companyScopedKey(salesWorkspaceKey, companyId), null)
+      const activeProjectState = projectState || { companyId, projects: [], tasks: [], members: [], activities: [] }
+      const projectRows = [
+        ...(activeProjectState.projects || []).map(mapProjectManagementProject),
+        ...serverLegacyProjects.map(mapLegacyProject),
+        ...legacyProjects.map(mapLegacyProject),
+      ]
+      const taskRows = [
+        ...(activeProjectState.tasks || []).map(task => mapProjectManagementTask(task, activeProjectState)),
+        ...serverAssignedTasks.map(mapAssignedTask),
+        ...assignedTasks.map(mapAssignedTask),
+        ...workflowTodos.map((task, index) => ({ ...mapAssignedTask(task, index), source: 'workflow' as const })),
+      ]
+      const clientRows = [
+        ...serverClients.map(mapClient),
+        ...loadStoredRows<StoredRow>('flowsys-clients', companyId).map(mapClient),
+      ]
+      const supplierRows = [
+        ...serverSuppliers.map(mapSupplier),
+        ...loadStoredRows<StoredRow>('flowsys-suppliers', companyId).map(mapSupplier),
+      ]
+      const opportunityRows = [
+        ...salesWorkspaceRows(storedSalesWorkspace),
+        ...salesWorkspaceRowsFromServer.flatMap(row => salesWorkspaceRows(row)),
+        ...serverOpportunities.map((row, index) => mapOpportunity(row, index, 'Opportunity')),
+        ...legacyOpportunities.map((row, index) => mapOpportunity(row, index, 'Legacy')),
+      ]
+
+      const invoiceRows = accounting.invoices.map((invoice, index) => mapInvoice(invoice as unknown as StoredRow, index))
+      const billRows = [
+        ...accounting.bills.map((bill, index) => mapBill(bill as unknown as StoredRow, index, 'Bill')),
+        ...accounting.expenses.map((expense, index) => mapBill(expense, index, 'Expense')),
+        ...loadStoredRows<StoredRow>('flowsys-bills', companyId).map((bill, index) => mapBill(bill, index, 'Bill')),
+        ...loadStoredRows<StoredRow>('flowsys-expenses', companyId).map((expense, index) => mapBill(expense, index, 'Expense')),
+      ]
+      const budgetRows = [
+        ...accounting.budgets.map((budget, index) => mapBudget(budget as unknown as StoredRow, index)),
+        ...loadStoredRows<StoredRow>('flowsys-budgets', companyId).map(mapBudget),
+      ]
+      const warehouseInventory = [
+        ...warehouse.inventory.map(item => item as unknown as StoredRow),
+        ...loadStoredRows<StoredRow>('flowsys-warehouses', companyId),
+      ]
+      const warehouseAlerts = warehouseInventory
+        .map(mapWarehouseAlert)
+        .filter(item => {
+          if (item.minLevel && item.stock !== undefined) return item.stock <= item.minLevel
+          return ['low stock', 'reorder', 'critical'].some(status => norm(item.status).includes(status))
+        })
+      const employeeRows = loadStoredRows<StoredRow>('flowsys-hr-employees', companyId).map((row, index): EmployeeRecord => ({
+        id: textOf(row, ['id', 'employeeId', 'userId'], `employee-${index + 1}`),
+        name: textOf(row, ['name', 'fullName', 'displayName']),
+        fullName: textOf(row, ['fullName', 'name', 'displayName']),
+        status: textOf(row, ['status'], 'Active'),
+        createdAt: textOf(row, ['createdAt', 'hireDate']),
+      }))
+      const procurementRows = [
+        ...procurementServerGroups.flat().map(mapProcurement),
+        ...procurementKeys.flatMap(key => loadStoredRows<StoredRow>(key, companyId)).map(mapProcurement),
+      ]
+
+      if (cancelled) return
+      setProjectDashboardState(projectState)
+      setProjects(uniqueByDashboardId(projectRows))
+      setTasks(uniqueByDashboardId(taskRows))
+      setClients(uniqueByDashboardId(clientRows))
+      setSuppliers(uniqueByDashboardId(supplierRows))
+      setOpps(uniqueByDashboardId(opportunityRows))
+      setInvoices(uniqueByDashboardId(invoiceRows))
+      setBills(uniqueByDashboardId(billRows))
+      setBudgets(uniqueByDashboardId(budgetRows))
+      setWarehouses(uniqueByDashboardId(warehouseAlerts))
+      setEmployees(uniqueByDashboardId(employeeRows))
+      setProcurement(uniqueByDashboardId(procurementRows))
+    }
+
+    const refresh = () => { void hydrate() }
+    refresh()
+    window.addEventListener('storage', refresh)
+    window.addEventListener(companyChangeEvent, refresh)
+    window.addEventListener('wiseflow-project-management-refresh', refresh)
+    window.addEventListener('wiseflow-accounting-refresh', refresh)
+    window.addEventListener('wiseflow:warehouse-data-changed', refresh)
+    window.addEventListener('wiseflow:finance-requests-changed', refresh)
+
+    return () => {
+      cancelled = true
+      window.removeEventListener('storage', refresh)
+      window.removeEventListener(companyChangeEvent, refresh)
+      window.removeEventListener('wiseflow-project-management-refresh', refresh)
+      window.removeEventListener('wiseflow-accounting-refresh', refresh)
+      window.removeEventListener('wiseflow:warehouse-data-changed', refresh)
+      window.removeEventListener('wiseflow:finance-requests-changed', refresh)
+    }
   }, [])
 
   // Close New / Date dropdowns on outside click
@@ -165,7 +622,9 @@ export default function Dashboard() {
   // -- Analytics -------------------------------------------------------------
   const stats = useMemo(() => {
     const projectCost = projects.reduce((s, p) => s + (p.projectCost || 0), 0)
-    const revenue   = projects.reduce((s, p) => s + (p.paidAmount || 0), 0)
+    const projectRevenue = projects.reduce((s, p) => s + (p.paidAmount || 0), 0)
+    const invoiceRevenue = invoices.reduce((s, invoice) => s + (invoice.paid || 0), 0)
+    const revenue   = invoiceRevenue + projectRevenue
     const material  = projects.reduce((s, p) => s + (p.materialCost || 0), 0)
     const labor     = projects.reduce((s, p) => s + (p.laborCost || 0), 0)
     const overhead  = projects.reduce((s, p) => s + (p.overheadProfit || 0), 0)
@@ -177,7 +636,7 @@ export default function Dashboard() {
     const openTasks = tasks.filter(t => norm(t.status) !== 'completed').length
     const overdue   = tasks.filter(t => { const d = parseDate(t.dueDate); return d && d < today && norm(t.status) !== 'completed' }).length
     return { projectCost, revenue, expenses, profit, pipeline, openTasks, overdue }
-  }, [projects, tasks, opps, bills])
+  }, [projects, tasks, opps, bills, invoices])
 
   const analyticsForecasts = useMemo(() => {
     const projectCost = stats.projectCost || stats.revenue
@@ -203,11 +662,11 @@ export default function Dashboard() {
       estimatedCost: estimatedCost || approvedBudget || quotation,
       revenue: stats.projectCost || stats.revenue,
       netProfit: profitForecast || stats.profit,
-      outstanding: bills.reduce((s, b) => s + (b.amount || 0), 0) || 0,
+      outstanding: invoices.reduce((s, invoice) => s + (invoice.balanceDue || 0), 0) || bills.reduce((s, b) => s + (b.balanceDue || b.amount || 0), 0) || 0,
       budget: budgets.reduce((s, b) => s + (b.total || b.amount || 0), 0),
       quotationDelta: quotation - approvedBudget,
     }
-  }, [bills, budgets, opps, projects, stats])
+  }, [bills, budgets, opps, projects, stats, invoices])
 
   // -- Project perf paid/unpaid for subtitle ---------------------------------
   const perfPaid   = useMemo(() => projects.reduce((s, p) => s + (p.paidAmount || 0), 0), [projects])
@@ -218,6 +677,7 @@ export default function Dashboard() {
     const today = new Date()
     const allDates = [
       ...projects.map(p => parseDate(p.createdAt || p.startDate)),
+      ...invoices.map(i => parseDate(i.createdAt || i.issueDate || i.dueDate)),
       ...bills.map(b => parseDate(b.date || b.createdAt)),
     ].filter(Boolean) as Date[]
     const minDate = allDates.length ? new Date(Math.min(...allDates.map(d => d.getTime()))) : addMonths(today, -3)
@@ -234,6 +694,13 @@ export default function Dashboard() {
       const exp  = (p.materialCost || 0) + (p.laborCost || 0) + (p.overheadProfit || 0) + (p.generalExpense || 0)
       b.project += cost; b.expenses += exp; b.profit = Math.max(b.project - b.expenses, 0); b.projectCount += 1
     })
+    invoices.forEach(inv => {
+      const b = buckets.get(monthKey(parseDate(inv.createdAt || inv.issueDate || inv.dueDate) || today))
+      if (b) {
+        b.project += inv.paid || 0
+        b.profit = Math.max(b.project - b.expenses, 0)
+      }
+    })
     opps.forEach(o => { const b = buckets.get(monthKey(parseDate(o.createdAt || o.startDate) || today)); if (b) b.pipeline += (o.quotation || o.approvedBudget || 0) })
     bills.forEach(bl => { const b = buckets.get(monthKey(parseDate(bl.date || bl.createdAt) || today)); if (b) { b.expenses += (bl.amount || 0); b.profit = Math.max(b.project - b.expenses, 0) } })
 
@@ -241,14 +708,14 @@ export default function Dashboard() {
     const prv = buckets.get(monthKey(addMonths(today, -1)))
     const data = Array.from(buckets.values())
     return { data, cur, prv }
-  }, [projects, opps, bills])
+  }, [projects, opps, bills, invoices])
 
   // -- Derived donuts --------------------------------------------------------
   const perfData = useMemo(() => {
     const paid  = projects.filter(p => (p.paidAmount || 0) >= (p.projectCost || 1) && (p.projectCost || 0) > 0).length
     const unpaid= projects.filter(p => (p.unpaidAmount || 0) > 0 && !(p.paidAmount)).length
-    const inProg= projects.filter(p => ['ongoing', 'in progress'].includes(norm(p.status))).length
-    const onHold= projects.filter(p => ['pending', 'on hold'].includes(norm(p.status))).length
+    const inProg= projects.filter(p => ['active', 'ongoing', 'in progress', 'review'].includes(norm(p.status))).length
+    const onHold= projects.filter(p => ['planning', 'pending', 'on hold'].includes(norm(p.status))).length
     const canc  = projects.filter(p => norm(p.status) === 'cancelled').length
     return [
       { name: 'Paid',        value: paid,   color: '#22c55e' },
@@ -261,9 +728,9 @@ export default function Dashboard() {
 
   const healthData = useMemo(() => {
     const today = new Date()
-    const onTrack = projects.filter(p => { const e = parseDate(p.endDate); return (norm(p.status) === 'ongoing' || norm(p.status) === 'completed') && (!e || e >= today) }).length
-    const atRisk  = projects.filter(p => norm(p.status).includes('issue')).length
-    const delayed = projects.filter(p => { const e = parseDate(p.endDate); return e && e < today && norm(p.status) !== 'completed' }).length
+    const onTrack = projects.filter(p => { const e = parseDate(p.endDate); return ['active', 'ongoing', 'in progress', 'completed'].includes(norm(p.status)) && norm(p.health) !== 'at risk' && norm(p.health) !== 'delayed' && (!e || e >= today || norm(p.status) === 'completed') }).length
+    const atRisk  = projects.filter(p => norm(p.health) === 'at risk' || norm(p.status).includes('issue') || norm(p.status) === 'blocked').length
+    const delayed = projects.filter(p => { const e = parseDate(p.endDate); return norm(p.health) === 'delayed' || Boolean(e && e < today && norm(p.status) !== 'completed') }).length
     return [
       { name: 'On Track', value: onTrack, color: '#22c55e' },
       { name: 'At Risk',  value: atRisk,  color: '#f59e0b' },
@@ -277,10 +744,12 @@ export default function Dashboard() {
     projects.forEach(p => { const d = parseDate(p.createdAt); if (d) items.push({ id: `p${p.id}`, type: 'project', description: `Project "${p.name || p.title || 'Untitled'}" created`, subtext: 'Project Management', date: d }) })
     tasks.forEach(t => { const d = parseDate(t.createdAt); if (d) items.push({ id: `t${t.id}`, type: 'task', description: `Task "${t.title || 'Untitled'}" created`, subtext: t.assignee ? `By ${t.assignee}` : 'Tasks', date: d }) })
     clients.forEach(c => { const d = parseDate(c.createdAt); if (d) items.push({ id: `c${c.id}`, type: 'client', description: `Client "${c.name || 'Unknown'}" added`, subtext: 'Client Database', date: d }) })
+    suppliers.forEach(s => { const d = parseDate(s.createdAt); if (d) items.push({ id: `s${s.id}`, type: 'supplier', description: `Supplier "${s.name || 'Unknown'}" added`, subtext: 'Supplier Database', date: d }) })
+    invoices.filter(i => (i.paid || 0) > 0).forEach(i => { const d = parseDate(i.createdAt || i.issueDate); if (d) items.push({ id: `i${i.id}`, type: 'payment', description: `Invoice paid${i.customer ? ` by ${i.customer}` : ''}`, subtext: money(i.paid || 0), date: d }) })
     bills.filter(b => norm(b.status) === 'paid').forEach(b => { const d = parseDate(b.date || b.createdAt); if (d) items.push({ id: `b${b.id}`, type: 'payment', description: `Payment received${b.associated ? ` for ${b.associated}` : ''}`, subtext: money(b.amount || 0), date: d }) })
     opps.forEach(o => { const d = parseDate(o.createdAt || o.startDate); if (d) items.push({ id: `o${o.id}`, type: 'opportunity', description: `Quote "${o.name || 'Untitled'}" added`, subtext: 'Sales', date: d }) })
     return items.sort((a, b) => b.date.getTime() - a.date.getTime()).slice(0, 6)
-  }, [projects, tasks, clients, bills, opps])
+  }, [projects, tasks, clients, suppliers, invoices, bills, opps])
 
   // -- Upcoming tasks --------------------------------------------------------
   const upcoming = useMemo(() => {
@@ -314,6 +783,7 @@ export default function Dashboard() {
     const allDates = [
       ...projects.map(p => parseDate(p.createdAt || p.startDate)),
       ...tasks.map(t => parseDate(t.createdAt || t.dueDate)),
+      ...invoices.map(i => parseDate(i.createdAt || i.issueDate || i.dueDate)),
       ...bills.map(b => parseDate(b.date || b.createdAt)),
       ...opps.map(o => parseDate(o.createdAt || o.startDate)),
     ].filter(Boolean) as Date[]
@@ -323,7 +793,7 @@ export default function Dashboard() {
     const fmt = (d: Date) => d.toLocaleDateString('en-PH', { month: 'short', day: '2-digit', year: 'numeric' })
     if (min.toDateString() === max.toDateString()) return fmt(min)
     return `${fmt(min)} – ${fmt(max)}`
-  }, [projects, tasks, bills, opps])
+  }, [projects, tasks, invoices, bills, opps])
 
   // -- Sparkline data --------------------------------------------------------
   const sparklines = useMemo(() => ({
@@ -340,12 +810,12 @@ export default function Dashboard() {
   // -- Sales tab data --------------------------------------------------------
   const salesData = useMemo(() => {
     const leads       = opps.filter(o => norm(o.status) === 'lead').length
-    const closed      = opps.filter(o => ['won','closed','won / closed'].includes(norm(o.status))).length
+    const closed      = opps.filter(o => ['won','closed','won / closed','awarded','paid','completed'].includes(norm(o.status))).length
     const conversion  = opps.length ? Math.round((closed / opps.length) * 100) : 0
     const target      = budgets.reduce((s, b) => s + (b.total || b.amount || 0), 0)
-    const stageOrder  = ['lead','qualified','proposal','negotiation','won']
+    const stageOrder  = ['lead','site visit','proposal','negotiation','awarded']
     const stageColors: Record<string, string> = {
-      lead: '#3b82f6', qualified: '#22c55e', proposal: '#f59e0b', negotiation: '#f97316', won: '#ef4444',
+      lead: '#3b82f6', 'site visit': '#06b6d4', proposal: '#f59e0b', negotiation: '#f97316', awarded: '#22c55e',
     }
     const pipeline = stageOrder.map(s => ({
       stage: s.charAt(0).toUpperCase() + s.slice(1),
@@ -372,12 +842,13 @@ export default function Dashboard() {
 
   // -- Financials tab data ---------------------------------------------------
   const finTabData = useMemo(() => {
-    const outstanding    = bills.filter(b => ['unpaid','pending','overdue'].includes(norm(b.status)))
-    const outstandingAmt = outstanding.reduce((s, b) => s + (b.amount || 0), 0)
+    const outstandingInvoices = invoices.filter(i => (i.balanceDue || 0) > 0 || ['unpaid','pending','overdue','sent','partially paid'].includes(norm(i.status)))
+    const outstandingBills    = bills.filter(b => ['unpaid','pending','overdue'].includes(norm(b.status)))
+    const outstandingAmt = outstandingInvoices.reduce((s, invoice) => s + (invoice.balanceDue || 0), 0)
     const cashFlow       = stats.revenue - stats.expenses
     const totalBudget    = budgets.reduce((s, b) => s + (b.total || b.amount || 0), 0)
     const budgetUsage    = totalBudget ? Math.min(100, Math.round((stats.expenses / totalBudget) * 100)) : 0
-    const recentInvoices = [...bills].sort((a, b) => new Date(b.date || b.createdAt || 0).getTime() - new Date(a.date || a.createdAt || 0).getTime()).slice(0, 5)
+    const recentInvoices = [...invoices].sort((a, b) => new Date(b.issueDate || b.createdAt || 0).getTime() - new Date(a.issueDate || a.createdAt || 0).getTime()).slice(0, 5)
     const opsVal   = projects.reduce((s, p) => s + (p.overheadProfit || 0) + (p.generalExpense || 0), 0)
     const projVal  = projects.reduce((s, p) => s + (p.materialCost || 0) + (p.laborCost || 0), 0)
     const billsVal = bills.reduce((s, b) => s + (b.amount || 0), 0)
@@ -385,17 +856,18 @@ export default function Dashboard() {
       { name: 'Operations', color: '#22c55e', value: opsVal  },
       { name: 'Projects',   color: '#3b82f6', value: projVal },
       { name: 'Marketing',  color: '#f59e0b', value: 0 },
-      { name: 'HR & Admin', color: '#ec4899', value: 0 },
+      { name: 'HR & Admin', color: '#ec4899', value: employees.length },
       { name: 'IT & Software', color: '#8b5cf6', value: 0 },
       { name: 'Others',     color: '#9ca3af', value: billsVal },
     ]
     const alerts: { level: 'error'|'warning'|'info'; title: string; msg: string }[] = []
-    if (outstanding.length > 0) alerts.push({ level: 'error',   title: 'Overdue Invoices',  msg: `You have ${outstanding.length} overdue invoice${outstanding.length > 1 ? 's' : ''}.` })
+    if (outstandingInvoices.length > 0) alerts.push({ level: 'error',   title: 'Outstanding Invoices',  msg: `You have ${outstandingInvoices.length} invoice${outstandingInvoices.length > 1 ? 's' : ''} with balances due.` })
+    if (outstandingBills.length > 0) alerts.push({ level: 'warning', title: 'Open Bills', msg: `${outstandingBills.length} bill${outstandingBills.length > 1 ? 's' : ''} still need review or payment.` })
     if (cashFlow < 0)           alerts.push({ level: 'warning', title: 'Low Cash Balance',   msg: 'Your cash balance is below the threshold.' })
     if (budgetUsage > 80)       alerts.push({ level: 'warning', title: 'Budget Alert',        msg: `${budgetUsage}% of budget used for this year.` })
     if (!alerts.length)         alerts.push({ level: 'info',    title: 'All Clear',           msg: 'No financial alerts at this time.' })
     return { outstandingAmt, cashFlow, budgetUsage, totalBudget, recentInvoices, budgetAlloc, alerts }
-  }, [bills, stats, budgets, projects])
+  }, [invoices, bills, stats, budgets, projects, employees])
 
   // -- Operations tab data ---------------------------------------------------
   const opsData = useMemo(() => {
@@ -460,25 +932,48 @@ export default function Dashboard() {
     return { revenue: stats.revenue, expenses: stats.expenses, profit: stats.profit } // All Time
   }, [finPeriod, timeline, stats])
 
-  // Task complete toggle (writes to localStorage + updates state)
-  const completeTask = useCallback((id: number) => {
+  // Task complete toggle (writes to the source store + updates state)
+  const completeTask = useCallback((id: DashboardId) => {
     setTasks(prev => {
       const updated = prev.map(t => t.id === id ? { ...t, status: 'Completed' } : t)
-      try { window.localStorage.setItem('flowsys-assigned-tasks', JSON.stringify(updated)) } catch { /* ignore */ }
+      const completed = updated.find(t => t.id === id)
+      if (completed?.source === 'project-management' && projectDashboardState) {
+        const nextProjectState: ProjectManagementDashboardState = {
+          ...projectDashboardState,
+          tasks: (projectDashboardState.tasks || []).map(task => String(task.id || '') === String(id) ? { ...task, status: 'Done', updatedAt: new Date().toISOString() } : task),
+        }
+        setProjectDashboardState(nextProjectState)
+        try {
+          window.localStorage.setItem(projectStateKey, JSON.stringify(nextProjectState))
+          const companyId = getActiveCompany()?.id || nextProjectState.companyId || ''
+          if (companyId) window.localStorage.setItem(companyScopedKey(projectStateKey, companyId), JSON.stringify(nextProjectState))
+          void replaceBusinessCollection('project-management-state', [{ id: 'project-management-state', ...nextProjectState }], companyId).catch(() => undefined)
+          window.dispatchEvent(new Event('wiseflow-project-management-refresh'))
+        } catch { /* ignore */ }
+      } else {
+        try {
+          const companyId = getActiveCompany()?.id || ''
+          const assignedRows = loadStoredRows<StoredRow>(assignedTasksKey, companyId).map(row => String(textOf(row, ['id', 'taskId'])) === String(id) ? { ...row, status: 'Completed' } : row)
+          window.localStorage.setItem(assignedTasksKey, JSON.stringify(assignedRows))
+          void replaceBusinessCollection('assigned-tasks', assignedRows).catch(() => undefined)
+        } catch { /* ignore */ }
+      }
       return updated
     })
-  }, [])
+  }, [projectDashboardState])
 
   // -- Module cards ----------------------------------------------------------
+  const activeProcurementCount = procurement.filter(row => !['completed', 'closed', 'cancelled', 'rejected'].includes(norm(row.status))).length
+  const activeEmployeeCount = employees.filter(employee => norm(employee.status) !== 'inactive').length
   const modules: { title: string; href: string; icon: ComponentType<{ size?: number }>; color: string; stat: number; label: string }[] = [
     { title: 'Client Database',       href: '/client-database',    icon: UsersRound,    color: '#06b6d4', stat: clients.length,   label: 'client records' },
     { title: 'Sales',                 href: '/sales',              icon: BadgeDollarSign,color: '#f59e0b', stat: opps.length,     label: 'opportunities' },
     { title: 'Project Management',    href: '/project-management', icon: FolderKanban,  color: '#8b5cf6', stat: projects.length,  label: 'projects' },
-    { title: 'Financial',             href: '/financial',          icon: HandCoins,     color: '#ef4444', stat: bills.length + budgets.length, label: 'records' },
-    { title: 'HR',                    href: '/hr',                 icon: Building2,     color: '#ec4899', stat: 0,                label: 'team members' },
-    { title: 'Procurement',           href: '/procurement',        icon: ShoppingCart,  color: '#f97316', stat: 0,                label: 'purchase orders' },
+    { title: 'Financial',             href: '/financial',          icon: HandCoins,     color: '#ef4444', stat: invoices.length + bills.length + budgets.length, label: 'records' },
+    { title: 'HR',                    href: '/hr',                 icon: Building2,     color: '#ec4899', stat: activeEmployeeCount, label: 'team members' },
+    { title: 'Procurement',           href: '/procurement',        icon: ShoppingCart,  color: '#f97316', stat: activeProcurementCount, label: 'active requests' },
     { title: 'Supplier Database',     href: '/supplier-database',  icon: Package,       color: '#6366f1', stat: suppliers.length, label: 'suppliers' },
-    { title: 'Warehouse / Inventory', href: '/warehouse-inventory',icon: Warehouse,     color: '#0ea5e9', stat: warehouses.length,label: 'warehouses' },
+    { title: 'Warehouse / Inventory', href: '/warehouse-inventory',icon: Warehouse,     color: '#0ea5e9', stat: warehouses.length,label: 'inventory alerts' },
     { title: 'Workflows',             href: '/tasks',              icon: ClipboardList, color: '#22c55e', stat: tasks.filter(t => norm(t.status) !== 'completed').length, label: 'active workflows' },
     { title: 'To Do',                 href: '/to-do',              icon: Boxes,         color: '#64748b', stat: tasks.filter(t => norm(t.status) === 'open').length, label: 'open tasks' },
   ]
@@ -568,7 +1063,7 @@ export default function Dashboard() {
       <div className="kpi-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: 16, marginBottom: 0 }}>
         {tab === 'Projects' && <>
           <KpiCard label="Total Projects" value={String(projects.length)} t={trends.neutral}  icon={CalendarDays}    iconColor="#22c55e" sparkData={sparklines.projects} />
-          <KpiCard label="Project Cost"   value={money(stats.revenue)}    t={forecastTrend(stats.revenue, analyticsForecasts.projectCost)} icon={BadgeDollarSign} iconColor="#3b82f6" sparkData={sparklines.revenue} forecast={analyticsForecasts.projectCost} />
+          <KpiCard label="Project Cost"   value={money(stats.projectCost)} t={forecastTrend(stats.projectCost, analyticsForecasts.projectCost)} icon={BadgeDollarSign} iconColor="#3b82f6" sparkData={sparklines.revenue} forecast={analyticsForecasts.projectCost} />
           <KpiCard label="Expenses"       value={money(stats.expenses)}   t={forecastTrend(stats.expenses, analyticsForecasts.expenses, true)} icon={Receipt} iconColor="#f97316" sparkData={sparklines.expenses} forecast={analyticsForecasts.expenses} neg />
           <KpiCard label="Profit Margin"  value={money(stats.profit)}     t={forecastTrend(stats.profit, analyticsForecasts.profit)} icon={TrendingUp} iconColor="#8b5cf6" sparkData={sparklines.profit} forecast={analyticsForecasts.profit} />
         </>}
@@ -806,7 +1301,7 @@ export default function Dashboard() {
           { title: 'Client Database', href: '/client-database', icon: UsersRound,      color: '#3b82f6', stat: clients.length, label: 'clients' },
           { title: 'Opportunities',   href: '/sales',           icon: BadgeDollarSign, color: '#f59e0b', stat: salesData.closed, label: 'closed deals' },
           { title: 'Quotations',      href: '/sales',           icon: FileText,        color: '#8b5cf6', stat: opps.filter(o=>norm(o.status)==='proposal').length, label: 'proposals' },
-          { title: 'Reports',         href: '/financial',       icon: HandCoins,       color: '#ef4444', stat: bills.length,   label: 'invoices' },
+          { title: 'Reports',         href: '/financial',       icon: HandCoins,       color: '#ef4444', stat: invoices.length, label: 'invoices' },
         ]} />
       </>}
 
@@ -908,9 +1403,9 @@ export default function Dashboard() {
                   return (
                     <div key={inv.id} style={{ display: 'grid', gridTemplateColumns: 'auto 1fr auto auto auto', gap: '3px 8px', padding: '7px 0', borderTop: '1px solid #f3f4f6', alignItems: 'center' }}>
                       <span style={{ fontSize: 12, color: '#6b7280', whiteSpace: 'nowrap' }}>#{String(inv.id).padStart(4,'0')}</span>
-                      <span style={{ fontSize: 12, color: '#374151', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{inv.associated || inv.name || `Client ${i+1}`}</span>
+                      <span style={{ fontSize: 12, color: '#374151', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{inv.customer || `Client ${i+1}`}</span>
                       <span style={{ fontSize: 12, fontWeight: 600, color: '#111827', whiteSpace: 'nowrap' }}>{money(inv.amount||0)}</span>
-                      <span style={{ fontSize: 11, color: '#6b7280', whiteSpace: 'nowrap' }}>{inv.date ? new Date(`${inv.date}T00:00:00`).toLocaleDateString('en-PH', { month: 'short', day: 'numeric', year: 'numeric' }) : '—'}</span>
+                      <span style={{ fontSize: 11, color: '#6b7280', whiteSpace: 'nowrap' }}>{(inv.dueDate || inv.issueDate) ? new Date(`${inv.dueDate || inv.issueDate}T00:00:00`).toLocaleDateString('en-PH', { month: 'short', day: 'numeric', year: 'numeric' }) : '—'}</span>
                       <span style={{ fontSize: 10, fontWeight: 700, padding: '2px 7px', borderRadius: 99, background: sc.bg, color: sc.text, whiteSpace: 'nowrap' }}>{inv.status || 'Pending'}</span>
                     </div>
                   )
@@ -965,10 +1460,10 @@ export default function Dashboard() {
         </div>
 
         <TabModules title="Financial modules" subtitle="Quick access to the financial areas." modules={[
-          { title: 'Financial Overview', href: '/financial',          icon: HandCoins,       color: '#22c55e', stat: bills.length + budgets.length, label: 'records' },
-          { title: 'Invoices',           href: '/financial',          icon: FileText,        color: '#3b82f6', stat: bills.filter(b=>norm(b.status)==='paid').length, label: 'paid' },
+          { title: 'Financial Overview', href: '/financial',          icon: HandCoins,       color: '#22c55e', stat: invoices.length + bills.length + budgets.length, label: 'records' },
+          { title: 'Invoices',           href: '/financial',          icon: FileText,        color: '#3b82f6', stat: invoices.filter(i=>(i.paid || 0) > 0 || norm(i.status)==='paid').length, label: 'paid' },
           { title: 'Expenses',           href: '/financial',          icon: Receipt,         color: '#f97316', stat: bills.length, label: 'expense records' },
-          { title: 'Payments',           href: '/financial',          icon: ShoppingBag,     color: '#8b5cf6', stat: bills.filter(b=>norm(b.status)==='paid').length, label: 'payments' },
+          { title: 'Payments',           href: '/financial',          icon: ShoppingBag,     color: '#8b5cf6', stat: invoices.filter(i=>(i.paid || 0) > 0).length, label: 'payments' },
           { title: 'Reports',            href: '/financial',          icon: TrendingUp,      color: '#ef4444', stat: budgets.length, label: 'budgets' },
         ]} />
       </>}
@@ -1042,7 +1537,26 @@ export default function Dashboard() {
         {/* Row 2: Procurement Status | Inventory Alerts | Upcoming Tasks */}
         <div className="data-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 18, marginBottom: 32 }}>
           <ChartCard title="Procurement Status" sub="" filter={procFilter} filterOptions={['All Requests','Approved','Pending','In Review']} onFilterChange={setProcFilter}>
-            <EmptyBox msg="No procurement records" sub="Procurement requests will appear here." />
+            {procurement.length === 0 ? <EmptyBox msg="No procurement records" sub="Procurement requests will appear here." /> : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 4 }}>
+                {procurement
+                  .filter(row => procFilter === 'All Requests' || norm(row.status) === norm(procFilter))
+                  .slice(0, 5)
+                  .map(row => {
+                    const sc = statusBadgeColor(norm(row.status || ''))
+                    return (
+                      <div key={row.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 0', borderTop: '1px solid #f3f4f6' }}>
+                        <ShoppingCart size={14} color="#f59e0b" />
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{ fontSize: 12, fontWeight: 600, color: '#111827', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{row.name || row.id}</div>
+                          <div style={{ fontSize: 11, color: '#9ca3af' }}>{row.amount ? money(row.amount) : 'Procurement record'}</div>
+                        </div>
+                        <span style={{ fontSize: 10, fontWeight: 700, padding: '2px 7px', borderRadius: 99, background: sc.bg, color: sc.text, whiteSpace: 'nowrap' }}>{row.status || 'Pending'}</span>
+                      </div>
+                    )
+                  })}
+              </div>
+            )}
             <Link href="/procurement" style={{ fontSize: 12, color: '#22c55e', fontWeight: 500, textDecoration: 'none', display: 'block', marginTop: 4 }}>View all procurement →</Link>
           </ChartCard>
 
@@ -1055,10 +1569,10 @@ export default function Dashboard() {
                       <Warehouse size={13} color="#ef4444" />
                     </div>
                     <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ fontSize: 12, fontWeight: 500, color: '#111827', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>Warehouse {i + 1}</div>
-                      <div style={{ fontSize: 11, color: '#9ca3af' }}>Location #{wh.id}</div>
+                      <div style={{ fontSize: 12, fontWeight: 500, color: '#111827', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{wh.name || `Inventory ${i + 1}`}</div>
+                      <div style={{ fontSize: 11, color: '#9ca3af' }}>Minimum {wh.minLevel ?? 0}</div>
                     </div>
-                    <span style={{ fontSize: 11, fontWeight: 600, color: '#ef4444', whiteSpace: 'nowrap' }}>{wh.total ?? wh.amount ?? 0} units</span>
+                    <span style={{ fontSize: 11, fontWeight: 600, color: '#ef4444', whiteSpace: 'nowrap' }}>{wh.stock ?? wh.total ?? wh.amount ?? 0} units</span>
                   </div>
                 ))}
                 <Link href="/warehouse-inventory" style={{ fontSize: 12, color: '#22c55e', fontWeight: 500, textDecoration: 'none', marginTop: 2 }}>View all inventory →</Link>
@@ -1087,10 +1601,10 @@ export default function Dashboard() {
 
         <TabModules title="Operations modules" subtitle="Quick access to key operations areas." modules={[
           { title: 'Workflows',   href: '/tasks',              icon: Zap,          color: '#22c55e', stat: opsData.active,        label: 'active workflows' },
-          { title: 'Procurement', href: '/procurement',        icon: ShoppingCart, color: '#f59e0b', stat: 0,                     label: 'active requests' },
-          { title: 'Warehouse',   href: '/warehouse-inventory',icon: Warehouse,    color: '#0ea5e9', stat: warehouses.length,      label: 'locations' },
+          { title: 'Procurement', href: '/procurement',        icon: ShoppingCart, color: '#f59e0b', stat: activeProcurementCount, label: 'active requests' },
+          { title: 'Warehouse',   href: '/warehouse-inventory',icon: Warehouse,    color: '#0ea5e9', stat: warehouses.length,      label: 'inventory alerts' },
           { title: 'Tasks',       href: '/tasks',              icon: ClipboardList,color: '#8b5cf6', stat: opsData.openT,          label: 'open tasks' },
-          { title: 'Team Workload',href: '/hr',                icon: UsersRound,   color: '#ef4444', stat: Array.from(new Set(tasks.map(t=>t.assignee).filter(Boolean))).length, label: 'team members' },
+          { title: 'Team Workload',href: '/hr',                icon: UsersRound,   color: '#ef4444', stat: activeEmployeeCount || Array.from(new Set(tasks.map(t=>t.assignee).filter(Boolean))).length, label: 'team members' },
         ]} />
       </>}
       </section>
@@ -1318,8 +1832,10 @@ function stageBadgeColor(status: string): { bg: string; text: string } {
   switch (status) {
     case 'lead':        return { bg: '#eff6ff', text: '#1d4ed8' }
     case 'qualified':   return { bg: '#f0fdf4', text: '#166534' }
+    case 'site visit':  return { bg: '#ecfeff', text: '#0e7490' }
     case 'proposal':    return { bg: '#fffbeb', text: '#92400e' }
     case 'negotiation': return { bg: '#fff7ed', text: '#9a3412' }
+    case 'awarded':
     case 'won':         return { bg: '#dcfce7', text: '#15803d' }
     case 'closed':
     case 'won / closed':return { bg: '#f1f5f9', text: '#475569' }
@@ -1330,7 +1846,13 @@ function stageBadgeColor(status: string): { bg: string; text: string } {
 function statusBadgeColor(status: string): { bg: string; text: string } {
   switch (status) {
     case 'paid':     return { bg: '#dcfce7', text: '#15803d' }
+    case 'approved':
+    case 'completed':return { bg: '#dcfce7', text: '#15803d' }
+    case 'sent':
+    case 'draft':
+    case 'in review':
     case 'pending':  return { bg: '#fffbeb', text: '#92400e' }
+    case 'partially paid':
     case 'unpaid':   return { bg: '#fff7ed', text: '#9a3412' }
     case 'overdue':  return { bg: '#fef2f2', text: '#991b1b' }
     default:         return { bg: '#f3f4f6', text: '#6b7280' }

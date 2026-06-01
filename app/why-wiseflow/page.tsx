@@ -5,7 +5,7 @@ import styles from '../page.module.css'
 const cards = [
   ['One operating system', 'Replace scattered spreadsheets and disconnected tools with one workspace for people, money, purchasing, stock, and work.'],
   ['Built for adoption', 'Start with the daily workflows teams already understand, then add approvals, reporting, portals, and automation as the company matures.'],
-  ['Subscription-ready', 'Package the entire system with a 14-day trial, monthly pricing, yearly pricing, and clear plan levels for different team sizes.'],
+  ['Beta-ready launch', 'Offer guided access with manual billing first, then add online checkout when payment processing is approved.'],
 ]
 
 export default function WhyWiseFlowPage() {
@@ -15,7 +15,7 @@ export default function WhyWiseFlowPage() {
         <Link href="/" className={styles.brand}><span className={styles.brandMark}>W</span><span>WiseFlow</span></Link>
         <div className={styles.simpleNavActions}>
           <Link href="/login" className={styles.textButton}>Login</Link>
-          <Link href="/signup" className={styles.navButton}>Start free <ArrowRight size={17} /></Link>
+          <Link href="/signup" className={styles.navButton}>Request access <ArrowRight size={17} /></Link>
         </div>
       </nav>
       <section className={styles.marketingHero}>

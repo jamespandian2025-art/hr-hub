@@ -25,7 +25,7 @@ const customerLogos = ['Northline', 'ApexBuild', 'FieldCore', 'UrbanGrid', 'Prim
 const stats = [
   { value: '9+', label: 'connected workspaces' },
   { value: '40+', label: 'daily operations covered' },
-  { value: '14', label: 'days free trial' },
+  { value: '14', label: 'day beta trial' },
   { value: '24/7', label: 'business visibility' },
 ]
 
@@ -83,14 +83,14 @@ const plans = [
     monthly: '$89',
     yearly: '$890 yearly',
     text: 'For smaller teams that need one professional system fast.',
-    features: ['Up to 12 users', 'All core modules', '14-day free trial', 'Email support'],
+    features: ['Up to 12 users', 'All core modules', '14-day beta trial', 'Manual billing during beta'],
   },
   {
     name: 'Business',
     monthly: '$179',
     yearly: '$1,790 yearly',
     text: 'For growing companies coordinating multiple departments.',
-    features: ['Up to 40 users', 'Advanced approvals', 'Company setup support', 'Priority support'],
+    features: ['Up to 40 users', 'Advanced approvals', 'Company setup support', 'Manual billing during beta'],
     featured: true,
   },
   {
@@ -98,7 +98,7 @@ const plans = [
     monthly: '$349',
     yearly: '$3,490 yearly',
     text: 'For larger operations that need stronger controls and onboarding.',
-    features: ['Unlimited users', 'Role-based access', 'Dedicated onboarding', 'Workflow customization'],
+    features: ['Unlimited users', 'Role-based access', 'Dedicated onboarding', 'Custom launch agreement'],
   },
 ]
 
@@ -146,7 +146,7 @@ const industryItems = [
 const resourceItems = [
   ['Implementation Guide', 'How to roll out WiseFlow across departments'],
   ['Operations Playbook', 'Best practices for workflows, approvals, and records'],
-  ['Pricing Brief', 'Monthly, yearly, and trial details for sales conversations'],
+  ['Pricing Brief', 'Monthly, yearly, beta trial, and manual billing details'],
   ['Product Updates', 'Latest improvements across modules and portals'],
   ['Security Notes', 'Permissions, session handling, and audit visibility'],
   ['Help Center', 'Setup guidance for admins and teams'],
@@ -282,7 +282,7 @@ export default function Home() {
         <div className={styles.navActions}>
           <Link href="/login" className={styles.textButton}>Login</Link>
           <Link href="/signup" className={styles.navButton}>
-            Start free
+            Request access
             <ArrowRight size={17} aria-hidden="true" />
           </Link>
         </div>
@@ -350,7 +350,7 @@ export default function Home() {
       </section>
 
       <section className={styles.logoBand} aria-label="Example customer types">
-        <span>Trusted by teams that run complex daily operations</span>
+          <span>Built for teams that run complex daily operations</span>
         <div>
           {customerLogos.map(logo => (
             <strong key={logo}>{logo}</strong>
@@ -403,7 +403,7 @@ export default function Home() {
               warehouse, projects, datasets, client records, and internal work.
             </p>
             <Link href="/signup" className={styles.inlineCta}>
-              Start the trial
+              Request beta access
               <ArrowRight size={17} aria-hidden="true" />
             </Link>
           </div>
@@ -426,9 +426,9 @@ export default function Home() {
 
       <section id="pricing" className={styles.pricingSection}>
         <div className={styles.sectionIntro}>
-          <span className={styles.eyebrow}>Simple pricing</span>
-          <h2>Monthly, yearly, and a 14-day free trial.</h2>
-          <p>Every plan includes the full system. Choose by team size and support level.</p>
+          <span className={styles.eyebrow}>Closed beta pricing</span>
+          <h2>Monthly, yearly, and a guided 14-day beta trial.</h2>
+          <p>Every plan includes the full system. Online checkout is not active yet, so beta billing is handled manually after setup review.</p>
         </div>
         <div className={styles.pricingGrid}>
           {plans.map(plan => (
@@ -450,7 +450,7 @@ export default function Home() {
                 ))}
               </ul>
               <Link href="/signup" className={plan.featured ? styles.primaryButton : styles.planButton}>
-                Start free trial
+                Request beta access
               </Link>
             </article>
           ))}
@@ -460,23 +460,31 @@ export default function Home() {
       <section id="trial" className={styles.ctaSection}>
         <div>
           <Layers3 size={28} aria-hidden="true" />
-          <h2>Launch the full WiseFlow system as a subscription.</h2>
+          <h2>Start WiseFlow with guided beta onboarding.</h2>
           <p>
             Give customers two weeks to test the real product, then move them into the monthly
-            or annual plan that matches their operation.
+            or annual plan that matches their operation once billing is confirmed.
           </p>
         </div>
         <Link href="/signup" className={styles.primaryButton}>
-          Start 14-day free trial
+          Request beta access
           <ArrowRight size={19} aria-hidden="true" />
         </Link>
       </section>
 
       <footer className={styles.footer}>
-        <span>WiseFlow</span>
+        <div className={styles.footerBrand}>
+          <span>WiseFlow</span>
+          <div>
+            <BriefcaseBusiness size={16} aria-hidden="true" />
+            <span>Professional business management system</span>
+          </div>
+        </div>
         <div>
-          <BriefcaseBusiness size={16} aria-hidden="true" />
-          <span>Professional business management system</span>
+          <Link href="/privacy">Privacy</Link>
+          <Link href="/terms">Terms</Link>
+          <Link href="/refund-policy">Refunds</Link>
+          <Link href="/security">Security</Link>
         </div>
       </footer>
     </main>

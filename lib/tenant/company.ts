@@ -128,6 +128,12 @@ export function loadCompanies(): CompanyRecord[] {
   }
 }
 
+export function loadAccessibleCompanies(accountSnapshot?: AccountSnapshot): CompanyRecord[] {
+  const actor = { ...getCurrentActor(), ...accountSnapshot }
+  const actorEmail = actor.email || 'owner@wiseflow.local'
+  return loadCompanies().filter(company => isCompanyMember(company, actorEmail))
+}
+
 export function saveCompanies(companies: CompanyRecord[]) {
   if (typeof window === 'undefined') return
   window.localStorage.setItem(companiesKey, JSON.stringify(companies))
@@ -168,9 +174,10 @@ export function ensureDefaultCompany(accountSnapshot?: AccountSnapshot): Company
 export function getActiveCompany(): CompanyRecord | null {
   if (typeof window === 'undefined') return null
   const actor = getCurrentActor()
+  const actorEmail = actor.email || 'owner@wiseflow.local'
   const companies = loadCompanies()
   const activeId = getStoredActiveCompanyId() || actor.companyId
-  const active = companies.find(company => company.id === activeId && isCompanyMember(company, actor.email))
+  const active = companies.find(company => company.id === activeId && isCompanyMember(company, actorEmail))
   return active || ensureDefaultCompany(actor)
 }
 
@@ -189,31 +196,14 @@ export function createCompany(name: string, options: Partial<Pick<CompanyRecord,
 
 export function setActiveCompanyId(companyId: string) {
   const actor = getCurrentActor()
+  const actorEmail = actor.email || 'owner@wiseflow.local'
   const companies = loadCompanies()
   const target = companies.find(item => item.id === companyId)
   if (!target) return null
+  if (!isCompanyMember(target, actorEmail)) return null
 
   const previousId = getStoredActiveCompanyId()
-
-  // If the actor isn't a member of this workspace yet, auto-enroll them.
-  // The UI lists every known company and labels non-member entries "Continue",
-  // which signals "join + switch." Without this step, clicking Continue is a
-  // no-op because both setActiveCompanyId and getActiveCompany re-check
-  // membership and bounce the actor back to their default workspace.
-  let company = target
-  if (actor.email && !isCompanyMember(target, actor.email)) {
-    const joinedMember: CompanyMember = {
-      id: `mem-${Date.now()}`,
-      email: actor.email.toLowerCase(),
-      name: actor.fullName || actor.name,
-      role: 'Admin',
-      permissions: allPermissions,
-      status: 'Active',
-      joinedAt: new Date().toISOString(),
-    }
-    company = { ...target, members: [...target.members, joinedMember] }
-    saveCompanies(companies.map(item => item.id === companyId ? company : item))
-  }
+  const company = target
 
   persistActiveCompany(company)
 
@@ -341,8 +331,9 @@ export function removeCompanyMember(companyId: string, memberId: string) {
 }
 
 export function isCompanyMember(company: CompanyRecord, email?: string) {
-  if (!email) return true
-  return company.members.some(member => member.email.toLowerCase() === email.toLowerCase())
+  const normalizedEmail = email?.trim().toLowerCase()
+  if (!normalizedEmail) return false
+  return company.members.some(member => member.status === 'Active' && member.email.toLowerCase() === normalizedEmail)
 }
 
 export function canAccessCompany(companyId: string, email?: string) {

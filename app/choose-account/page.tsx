@@ -9,7 +9,7 @@ import {
   companyChangeEvent,
   ensureDefaultCompany,
   getActiveCompany,
-  loadCompanies,
+  loadAccessibleCompanies,
   setActiveCompanyId,
   type CompanyRecord,
 } from '@/lib/tenant/company'
@@ -173,7 +173,7 @@ function readChooseAccountState(): ChooseAccountState {
   return {
     account,
     activeCompanyId: getActiveCompany()?.id || active.id,
-    companies: loadCompanies(),
+    companies: loadAccessibleCompanies(account),
   }
 }
 

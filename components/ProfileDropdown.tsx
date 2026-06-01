@@ -1,7 +1,7 @@
 'use client'
 import { useEffect, useState } from 'react'
 import { Check } from 'lucide-react'
-import { type CompanyRecord, companyChangeEvent, getActiveCompany, loadCompanies, setActiveCompanyId } from '@/lib/tenant/company'
+import { type CompanyRecord, companyChangeEvent, getActiveCompany, loadAccessibleCompanies, setActiveCompanyId } from '@/lib/tenant/company'
 
 const font = "var(--font-body)"
 
@@ -11,7 +11,7 @@ export default function ProfileDropdown() {
 
   useEffect(() => {
     const refresh = () => {
-      setCompanies(loadCompanies())
+      setCompanies(loadAccessibleCompanies())
       setActiveCompany(getActiveCompany())
     }
     const id = window.setTimeout(refresh, 0)
@@ -28,7 +28,7 @@ export default function ProfileDropdown() {
     const company = setActiveCompanyId(companyId)
     if (!company) return
     setActiveCompany(company)
-    setCompanies(loadCompanies())
+    setCompanies(loadAccessibleCompanies())
   }
 
   return (
