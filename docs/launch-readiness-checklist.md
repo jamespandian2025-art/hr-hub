@@ -11,7 +11,7 @@ Last scan: 2026-06-02
 ## Scan Evidence
 
 - Repository inventory: 280 files scanned.
-- App surface: 145 generated app routes in production build.
+- App surface: 146 generated app routes in production build.
 - API surface: ai/assistant, auth/session, auth/invitations, auth/login-attempts, tenant/bootstrap, admin/backups, business records, HR records, HR credentials, employee portal login, uploads, monitoring, health.
 - Persistence scan: `localStorage` appears in 70 files; `sessionStorage` appears in 5 files.
 - Production build: `npm run build` passed.

@@ -95,16 +95,58 @@ async function ensureDataDir() {
   await mkdir(dataDir, { recursive: true })
 }
 
+// Salvage the first complete top-level JSON array from malformed content (e.g.
+// trailing bytes left by a legacy non-atomic write). Respects strings/escapes.
+function salvageLeadingJsonArray<T>(raw: string): T[] | null {
+  let depth = 0
+  let inStr = false
+  let esc = false
+  let start = -1
+  for (let i = 0; i < raw.length; i++) {
+    const ch = raw[i]
+    if (inStr) {
+      if (esc) esc = false
+      else if (ch === '\\') esc = true
+      else if (ch === '"') inStr = false
+      continue
+    }
+    if (ch === '"') { inStr = true; continue }
+    if (ch === '[') { if (depth === 0 && start < 0) start = i; depth++ }
+    else if (ch === ']') {
+      depth--
+      if (depth === 0 && start >= 0) {
+        try {
+          const parsed = JSON.parse(raw.slice(start, i + 1))
+          return Array.isArray(parsed) ? (parsed as T[]) : null
+        } catch {
+          return null
+        }
+      }
+    }
+  }
+  return null
+}
+
 async function readJsonArray<T>(file: string): Promise<T[]> {
   await ensureDataDir()
+  let raw: string
   try {
-    const raw = await readFile(file, 'utf8')
-    const parsed = JSON.parse(raw)
-    return Array.isArray(parsed) ? parsed as T[] : []
+    raw = await readFile(file, 'utf8')
   } catch (error) {
     const code = typeof error === 'object' && error && 'code' in error ? String(error.code) : ''
     if (code === 'ENOENT') return []
     throw error
+  }
+  try {
+    const parsed = JSON.parse(raw)
+    return Array.isArray(parsed) ? parsed as T[] : []
+  } catch {
+    // The file is malformed. Salvage the first complete array so a single
+    // corrupt byte sequence cannot permanently block reads and writes; the next
+    // write re-persists the cleaned array via the atomic temp+rename path.
+    const salvaged = salvageLeadingJsonArray<T>(raw)
+    if (salvaged) return salvaged
+    throw new Error('Stored HR records file is corrupted and could not be recovered.')
   }
 }
 

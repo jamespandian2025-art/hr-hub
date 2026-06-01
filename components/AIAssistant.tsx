@@ -71,6 +71,23 @@ function compactMessages(messages: AssistantMessage[]) {
   return [welcomeMessage, ...cleaned.filter(message => message.id !== welcomeMessage.id).slice(-24)]
 }
 
+function localAssistantReply(content: string, pathname: string) {
+  const latest = content.toLowerCase()
+  if (/invoice|bill to|billing|payment|receivable/.test(latest) || pathname.includes('/accounting')) {
+    return 'For invoices, start in Accounting > Invoices. Choose the client from the Customer dropdown, confirm the auto-filled email and Bill to details, add item lines with the right unit, then set the status before saving. After saving, the invoice should appear under that client record in the client database.'
+  }
+  if (/client|customer|contact/.test(latest) || pathname.includes('/people/clients')) {
+    return 'For client work, open People > Client Database, select the client, then use the tabs for overview, invoices, contracts, activities, notes, documents, contacts, and history.'
+  }
+  if (/payroll|payslip|salary|deduction/.test(latest) || pathname.includes('/hr/payroll')) {
+    return 'For payroll, open HR > Payroll, select a payroll cycle, then click an employee payslip row to review gross pay, deductions, net pay, pay period, pay date, and status.'
+  }
+  if (/project|task|status|priority|budget/.test(latest) || pathname.includes('/project-management')) {
+    return 'For projects, use Project Management > Projects to update status, priority, budget, dates, and progress. Status and priority dropdowns should use the colored pill style.'
+  }
+  return 'I can help with WiseFlow workflows, page navigation, and next steps. Ask me about invoices, clients, projects, payroll, HR, warehouse, procurement, or accounting and I will keep the answer focused.'
+}
+
 export default function AIAssistant() {
   const pathname = usePathname()
   const [open, setOpen] = useState(false)
@@ -178,7 +195,7 @@ export default function AIAssistant() {
         role: 'assistant',
         content: error instanceof Error && /Authentication required/i.test(error.message)
           ? 'Please sign in again so I can help from inside your WiseFlow workspace.'
-          : 'I could not reach the assistant service. Try again in a moment, or ask me a shorter workflow question.',
+          : localAssistantReply(trimmed, pathname),
         createdAt: new Date().toISOString(),
       }
       setProvider('local')

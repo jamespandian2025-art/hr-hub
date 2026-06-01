@@ -9,6 +9,11 @@ export type HrCollection =
   | 'payroll-records'
   | 'audit-logs'
   | 'notifications'
+  | 'teams'
+  | 'departments'
+  | 'documents'
+  | 'performance'
+  | 'hr-settings'
 
 export type HrAction = 'read' | 'create' | 'update' | 'delete'
 
@@ -57,6 +62,36 @@ const collectionAccess: Record<HrCollection, Partial<Record<HrAction, HrRoleBuck
     create: ['admin', 'finance', 'hr'],
     update: ['admin', 'finance', 'hr', 'manager', 'employee'],
     delete: ['admin'],
+  },
+  teams: {
+    read: ['admin', 'hr', 'finance', 'manager', 'employee'],
+    create: ['admin', 'hr'],
+    update: ['admin', 'hr'],
+    delete: ['admin', 'hr'],
+  },
+  departments: {
+    read: ['admin', 'hr', 'finance', 'manager', 'employee'],
+    create: ['admin', 'hr'],
+    update: ['admin', 'hr'],
+    delete: ['admin', 'hr'],
+  },
+  documents: {
+    read: ['admin', 'hr', 'manager', 'employee'],
+    create: ['admin', 'hr'],
+    update: ['admin', 'hr'],
+    delete: ['admin', 'hr'],
+  },
+  performance: {
+    read: ['admin', 'hr', 'manager', 'employee'],
+    create: ['admin', 'hr', 'manager'],
+    update: ['admin', 'hr', 'manager'],
+    delete: ['admin', 'hr'],
+  },
+  'hr-settings': {
+    read: ['admin', 'hr'],
+    create: ['admin', 'hr'],
+    update: ['admin', 'hr'],
+    delete: ['admin', 'hr'],
   },
 }
 

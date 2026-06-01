@@ -52,3 +52,16 @@ export async function updateHrRecord<T>(collection: HrCollection, id: string, pa
   const payload = await parseResponse<{ ok: true; record: T }>(response)
   return payload.record
 }
+
+export async function deleteHrRecord<T = Record<string, unknown>>(collection: HrCollection, id: string) {
+  // The DELETE route requires an explicit confirmation token of `DELETE <id>`,
+  // passed via header (matches the server contract in the [id] route).
+  const response = await fetch(`/api/hr/records/${collection}/${encodeURIComponent(id)}?confirm=${encodeURIComponent(`DELETE ${id}`)}`, {
+    method: 'DELETE',
+    headers: activeCompanyHeaders(withCsrfHeaders({
+      'x-wiseflow-confirm-delete': `DELETE ${id}`,
+    })),
+  })
+  const payload = await parseResponse<{ ok: true; deleted: T }>(response)
+  return payload.deleted
+}
