@@ -1,7 +1,15 @@
 'use client'
 
+// Install the company-scoped localStorage shim as early as possible —
+// importing this side-effect-only module here means every page and
+// component rendered under AppShell reads/writes data through the
+// active company's namespace automatically.
+import '@/lib/tenant/storageScope'
+
 import { useEffect, useState } from 'react'
 import { usePathname, useRouter } from 'next/navigation'
+import AIAssistant from './AIAssistant'
+import ClientMonitoring from './ClientMonitoring'
 import Header from './Header'
 import Sidebar from './Sidebar'
 
@@ -42,18 +50,35 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   const [authChecked, setAuthChecked] = useState(false)
   const pathname = usePathname()
   const router = useRouter()
-  const isAuthPage = pathname === '/login' || pathname === '/signup' || pathname === '/onboarding' || pathname === '/employee/login'
+  const isPublicPage = pathname === '/'
+    || pathname === '/why-wiseflow'
+    || pathname === '/platform-solutions'
+    || pathname === '/industries'
+    || pathname === '/resource-center'
+  const isAuthPage = pathname === '/login' || pathname === '/account-recovery' || pathname === '/signup' || pathname === '/onboarding' || pathname === '/choose-account' || pathname === '/employee/login'
   const isClientPortal = pathname.startsWith('/client-portal')
   const isHrWorkspace = pathname === '/hr' || pathname.startsWith('/hr/')
-  const isFinancialWorkspace = pathname === '/financial' || pathname.startsWith('/financials') || pathname === '/accounting' || pathname.startsWith('/accounting/')
+  const isFinancialWorkspace = pathname === '/financial'
+    || pathname.startsWith('/financials')
+    || pathname === '/accounting'
+    || pathname.startsWith('/accounting/')
+    || pathname === '/hr/payroll'
+    || pathname.startsWith('/hr/payroll/')
+    || pathname === '/hr/loan-requests'
+    || pathname.startsWith('/hr/loan-requests/')
   const isEmployeePortal = pathname === '/employee' || pathname.startsWith('/employee/')
   const isProcurementWorkspace = pathname === '/procurement' || pathname.startsWith('/procurement/')
   const isSupplierDatabaseWorkspace = pathname === '/supplier-database' || pathname.startsWith('/supplier-database/')
+  const isWarehouseWorkspace = pathname === '/warehouse' || pathname.startsWith('/warehouse/')
+  const isWorkflowsWorkspace = pathname === '/workflows' || pathname.startsWith('/workflows/')
+  const isDatasetsWorkspace = pathname === '/datasets' || pathname.startsWith('/datasets/')
   const isWorkspacePage =
     pathname === '/tasks' ||
     pathname.startsWith('/tasks/') ||
     pathname === '/to-do' ||
-    pathname.startsWith('/workflows/')
+    pathname === '/project-management' ||
+    pathname.startsWith('/project-management/')
+  const isApplicationsPage = false
 
   useEffect(() => {
     const id = window.setTimeout(() => {
@@ -87,7 +112,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     let timer: number | undefined
-    if (isAuthPage) return
+    if (isPublicPage || isAuthPage) return
     try {
       const accountRaw = window.localStorage.getItem(accountKey)
       const sessionRaw = window.localStorage.getItem(sessionKey)
@@ -98,7 +123,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
       const account = accountRaw ? (JSON.parse(accountRaw) as { role?: string }) : {}
       const session = sessionRaw ? (JSON.parse(sessionRaw) as { role?: string }) : {}
       const role = session.role || account.role
-      if (role === 'Employee' && !isEmployeePortal) {
+      if ((role === 'Employee' || role === 'Team Manager') && !isEmployeePortal) {
         router.replace('/employee/dashboard')
         return
       }
@@ -121,21 +146,26 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
     return () => {
       if (timer) window.clearTimeout(timer)
     }
-  }, [isAuthPage, isClientPortal, isEmployeePortal, isFinancialWorkspace, isHrWorkspace, router])
+  }, [isPublicPage, isAuthPage, isClientPortal, isEmployeePortal, isFinancialWorkspace, isHrWorkspace, router])
 
+  if (isPublicPage) return <>{children}</>
   if (isAuthPage) return <>{children}</>
   if (!authChecked) return null
-  if (isClientPortal) return <main className="client-portal-shell">{children}</main>
-  if (isHrWorkspace) return <>{children}</>
-  if (isEmployeePortal) return <>{children}</>
-  if (isProcurementWorkspace) return <>{children}</>
-  if (isSupplierDatabaseWorkspace) return <>{children}</>
-  if (pathname === '/accounting' || pathname.startsWith('/accounting/')) return <>{children}</>
+  const assistant = <><ClientMonitoring /><AIAssistant /></>
+  if (isClientPortal) return <><main className="client-portal-shell">{children}</main>{assistant}</>
+  if (isHrWorkspace) return <>{children}{assistant}</>
+  if (isEmployeePortal) return <>{children}{assistant}</>
+  if (isProcurementWorkspace) return <>{children}{assistant}</>
+  if (isSupplierDatabaseWorkspace) return <>{children}{assistant}</>
+  if (isWarehouseWorkspace) return <>{children}{assistant}</>
+  if (isWorkflowsWorkspace) return <>{children}{assistant}</>
+  if (isDatasetsWorkspace) return <>{children}{assistant}</>
+  if (pathname === '/accounting' || pathname.startsWith('/accounting/')) return <>{children}{assistant}</>
 
   const sidebarWidth = sidebarCollapsed ? 60 : 252
 
   return (
-    <div className="app-shell" style={{ display: 'flex', minHeight: '100vh', width: '100%' }}>
+    <div className={isApplicationsPage ? 'app-shell applications-shell' : 'app-shell'} style={{ display: 'flex', minHeight: '100vh', width: '100%', background: isApplicationsPage ? '#000' : undefined }}>
       {/* Desktop sidebar wrapper — width drives the layout push */}
       <div
         className="desktop-sidebar"
@@ -156,20 +186,25 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
         <Sidebar collapsed={sidebarCollapsed} onToggle={toggleSidebar} />
       </div>
 
-      <div
-        className={mobileNavOpen ? 'mobile-nav-backdrop is-open' : 'mobile-nav-backdrop'}
-        onClick={() => setMobileNavOpen(false)}
-      />
+      {mobileNavOpen && (
+        <>
+          <div
+            className="mobile-nav-backdrop is-open"
+            onClick={() => setMobileNavOpen(false)}
+          />
 
-      <div className={mobileNavOpen ? 'mobile-nav-drawer is-open' : 'mobile-nav-drawer'}>
-        <Sidebar collapsed={false} onToggle={() => {}} />
-      </div>
+          <div className="mobile-nav-drawer is-open">
+            <Sidebar collapsed={false} onToggle={() => {}} />
+          </div>
+        </>
+      )}
 
       {/* Main content — flex: 1 so it fills whatever space the sidebar leaves */}
-      <div className="app-main" style={{ flex: 1, minWidth: 0, transition: 'margin-left 0.22s ease', position: 'relative' }}>
+      <div className={isApplicationsPage ? 'app-main applications-main' : 'app-main'} style={{ flex: 1, minWidth: 0, transition: 'margin-left 0.22s ease', position: 'relative', background: isApplicationsPage ? '#000' : undefined }}>
         <Header onMenuClick={() => setMobileNavOpen(true)} compactWorkspace />
-        <main className={isWorkspacePage ? 'main-content workspace-content' : 'main-content'}>{children}</main>
+        <main className={isApplicationsPage ? 'main-content applications-content' : (isWorkspacePage ? 'main-content workspace-content' : 'main-content')} style={isApplicationsPage ? { background: '#000', padding: 0 } : undefined}>{children}</main>
       </div>
+      {assistant}
     </div>
   )
 }

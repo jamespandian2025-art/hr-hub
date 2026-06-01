@@ -1,15 +1,17 @@
 'use client'
 
-import { useEffect, useRef, useState } from 'react'
+import { type KeyboardEvent, useEffect, useMemo, useRef, useState } from 'react'
 import { usePathname, useRouter } from 'next/navigation'
-import ThemeSwitcher from './ThemeSwitcher'
 import { logoutUser } from '@/lib/auth/logout'
+import { withCsrfHeaders } from '@/lib/security/csrfClient'
+import { type GlobalSearchResult, searchGlobalRecords } from '@/lib/search/globalSearch'
 import {
   type CompanyRecord,
   type CompanyRole,
   companyChangeEvent,
   createCompany as createTenantCompany,
   ensureDefaultCompany,
+  getActiveCompany,
   inviteCompanyMember,
   loadCompanies,
   removeCompanyMember,
@@ -19,13 +21,10 @@ import {
 } from '@/lib/tenant/company'
 import {
   BadgeDollarSign,
-  BarChart3,
   Bell,
-  BookOpen,
   Bot,
   Boxes,
   Building2,
-  CalendarCheck,
   CalendarDays,
   Check,
   CheckCircle2,
@@ -37,28 +36,22 @@ import {
   CircleGauge,
   ClipboardCheck,
   ClipboardList,
-  FileSignature,
   FileText,
   FolderKanban,
   HandCoins,
   LayoutDashboard,
   LogOut,
   Mail,
-  MailCheck,
   Menu,
   MessageCircle,
-  Moon,
   PackageSearch,
   Plus,
   Search,
   Settings,
   ShoppingCart,
   SlidersHorizontal,
-  Sun,
   Trash2,
-  UserCircle,
   UsersRound,
-  Warehouse,
   X,
 } from 'lucide-react'
 
@@ -68,6 +61,22 @@ type HeaderProps = {
 }
 
 type Panel = 'company' | 'invitations' | 'settings' | 'companySettings' | 'preferences' | 'logout' | null
+type ReminderFilter = 'all' | 'important' | 'today' | 'late'
+
+const inviteRoleOptions: CompanyRole[] = [
+  'Member',
+  'Employee',
+  'Team Manager',
+  'Project Manager',
+  'HR',
+  'Finance',
+  'Sales',
+  'Warehouse',
+  'Procurement',
+  'Support',
+  'Client',
+  'Admin',
+]
 
 interface AccountState {
   company: string
@@ -145,6 +154,35 @@ interface AllowanceRequestNotification {
   createdAt: string
 }
 
+interface LeaveRequestNotification {
+  id: string
+  employeeId?: string
+  employeeName?: string
+  leaveType: string
+  days: number
+  status: string
+  approvalStep?: string
+  hrApprovalStatus?: string
+  createdAt: string
+  updatedAt?: string
+}
+
+type HeaderNotificationItem = {
+  id: number | string
+  title: string
+  lines: string[]
+  time: string
+  date: string
+  age: string
+  target: string
+  mentioned?: boolean
+  priority?: boolean
+  type?: string
+  detail?: string
+  tone?: string
+  sortTime?: string
+}
+
 interface ReminderTask {
   id: number
   projectId: number
@@ -177,16 +215,39 @@ const changeOrdersKey = 'flowsys-change-orders'
 const projectsKey = 'flowsys-projects'
 const tasksKey = 'flowsys-assigned-tasks'
 const outboundNotificationsKey = 'flowsys-outbound-notifications'
+const leaveRequestsKey = 'flowsys-hr-leave-requests'
 const loanRequestsKey = 'flowsys-hr-loan-requests'
 const allowanceRequestsKey = 'flowsys-hr-allowance-requests'
+const readNotificationsKey = 'wiseflow-read-notifications'
 const initialAccount: AccountState = {
   company: 'Livewise Construction',
   email: 'livewiseofficial@gmail.com',
-  theme: 'WiseFlow Light',
+  theme: 'Bright',
   density: 'Comfortable',
   emailNotifications: true,
   desktopNotifications: false,
   invitations: [{ id: 1, email: 'projectmanager@example.com', role: 'Project Manager', status: 'Pending' }],
+}
+
+function normalizeThemePreference(preference?: string) {
+  const normalized = preference?.toLowerCase() ?? ''
+  if (normalized === 'system' || normalized.includes('system')) return 'System'
+  return normalized === 'dark' || normalized.includes('dark') ? 'Dark' : 'Bright'
+}
+
+function normalizeNotificationStatus(value?: string) {
+  const clean = String(value || 'Pending').trim()
+  return clean ? clean.charAt(0).toUpperCase() + clean.slice(1).toLowerCase() : 'Pending'
+}
+
+function notificationTone(status: string) {
+  switch (status.toLowerCase()) {
+    case 'approved': return '#34a853'
+    case 'rejected': return '#ea4335'
+    case 'cancelled': return '#64748b'
+    case 'canceled': return '#64748b'
+    default: return '#1a73e8'
+  }
 }
 
 const loadAccount = () => {
@@ -194,7 +255,9 @@ const loadAccount = () => {
 
   try {
     const stored = window.localStorage.getItem(storageKey)
-    return stored ? ({ ...initialAccount, ...JSON.parse(stored) } as AccountState) : initialAccount
+    if (!stored) return initialAccount
+    const parsed = JSON.parse(stored) as Partial<AccountState>
+    return { ...initialAccount, ...parsed, theme: normalizeThemePreference(parsed.theme) } as AccountState
   } catch {
     return initialAccount
   }
@@ -230,6 +293,7 @@ const PAGE_META: { match: string; label: string; icon: React.ComponentType<{ siz
   { match: '/resources/pricebook', label: 'Pricebook',        icon: ShoppingCart    },
   { match: '/supplier-database',  label: 'Supplier Database',icon: PackageSearch   },
   { match: '/resources/suppliers',label: 'Supplier Database',icon: PackageSearch   },
+  { match: '/warehouse',          label: 'Warehouse',        icon: Boxes           },
   { match: '/warehouse-inventory',label: 'Warehouse',        icon: Boxes           },
   { match: '/resources/inventory',label: 'Warehouse',        icon: Boxes           },
   { match: '/resources',          label: 'Docs',             icon: FileText        },
@@ -251,6 +315,8 @@ export default function Header({ onMenuClick, compactWorkspace = false }: Header
   const router = useRouter()
   const pathname = usePathname()
   const [globalSearch, setGlobalSearch] = useState('')
+  const [globalSearchOpen, setGlobalSearchOpen] = useState(false)
+  const [searchVersion, setSearchVersion] = useState(0)
   const [open, setOpen] = useState(false)
   const [panel, setPanel] = useState<Panel>(null)
   const [account, setAccount] = useState<AccountState>(initialAccount)
@@ -258,18 +324,20 @@ export default function Header({ onMenuClick, compactWorkspace = false }: Header
   const [projects, setProjects] = useState<ProjectRecord[]>([])
   const [tasks, setTasks] = useState<ReminderTask[]>([])
   const [outboundNotifications, setOutboundNotifications] = useState<OutboundNotification[]>([])
+  const [leaveRequests, setLeaveRequests] = useState<LeaveRequestNotification[]>([])
   const [loanRequests, setLoanRequests] = useState<LoanRequestNotification[]>([])
   const [allowanceRequests, setAllowanceRequests] = useState<AllowanceRequestNotification[]>([])
+  const [readNotificationIds, setReadNotificationIds] = useState<string[]>([])
   const [notificationsOpen, setNotificationsOpen] = useState(false)
-  const [notificationFilter, setNotificationFilter] = useState<'all' | 'mentioned' | 'priority'>('all')
+  const [helpOpen, setHelpOpen] = useState(false)
   const [remindersOpen, setRemindersOpen] = useState(false)
   const [createReminderOpen, setCreateReminderOpen] = useState(false)
   const [workflowSettingsOpen, setWorkflowSettingsOpen] = useState(false)
-  const [createMenuOpen, setCreateMenuOpen] = useState(false)
+  const [, setCreateMenuOpen] = useState(false)
   const [roleSearch, setRoleSearch] = useState('')
   const [operationRoles, setOperationRoles] = useState<string[]>([])
   const [reminderWeekStart, setReminderWeekStart] = useState(() => startOfWeek(new Date()))
-  const [reminderFilter, setReminderFilter] = useState<'all' | 'important'>('all')
+  const [reminderFilter, setReminderFilter] = useState<ReminderFilter>('all')
   const [reminderDraft, setReminderDraft] = useState<ReminderDraft>(() => ({
     title: '',
     content: '',
@@ -279,8 +347,7 @@ export default function Header({ onMenuClick, compactWorkspace = false }: Header
     sticky: false,
     markedDone: false,
   }))
-  const [toolsOpen, setToolsOpen] = useState(false)
-  const [toolsSearch, setToolsSearch] = useState('')
+  const [, setToolsOpen] = useState(false)
   const [companyName, setCompanyName] = useState('')
   const [companyType, setCompanyType] = useState('Operating Company')
   const [companies, setCompanies] = useState<CompanyRecord[]>([])
@@ -298,8 +365,18 @@ export default function Header({ onMenuClick, compactWorkspace = false }: Header
   const [notice, setNotice] = useState('')
   const [nowMs] = useState(() => Date.now())
   const ref = useRef<HTMLDivElement>(null)
+  const searchRef = useRef<HTMLDivElement>(null)
+  const searchInputRef = useRef<HTMLInputElement>(null)
   // Guards the save-effect from firing on the initial render before localStorage is loaded
   const accountSaveReady = useRef(false)
+  const globalSearchIndexToken = `${activeCompany?.id || ''}:${searchVersion}`
+  const globalSearchResults = useMemo(
+    () => {
+      void globalSearchIndexToken
+      return searchGlobalRecords(globalSearch, 10)
+    },
+    [globalSearch, globalSearchIndexToken],
+  )
 
   // Load stored account after mount to avoid SSR/client hydration mismatch
   useEffect(() => {
@@ -307,6 +384,7 @@ export default function Header({ onMenuClick, compactWorkspace = false }: Header
       const loadedAccount = loadAccount()
       const selectedCompany = ensureDefaultCompany(loadedAccount)
       const allCompanies = loadCompanies()
+      accountSaveReady.current = true
       setAccount({ ...loadedAccount, company: selectedCompany.name, companyId: selectedCompany.id } as AccountState)
       setCompanies(allCompanies)
       setActiveCompany(selectedCompany)
@@ -323,10 +401,12 @@ export default function Header({ onMenuClick, compactWorkspace = false }: Header
 
   useEffect(() => {
     const refreshCompanies = () => {
-      const selectedCompany = ensureDefaultCompany(account)
-      setCompanies(loadCompanies())
+      const loadedAccount = loadAccount()
+      const selectedCompany = getActiveCompany() || ensureDefaultCompany(loadedAccount)
+      const allCompanies = loadCompanies()
+      setCompanies(allCompanies)
       setActiveCompany(selectedCompany)
-      setAccount(previous => ({ ...previous, company: selectedCompany.name, companyId: selectedCompany.id } as AccountState))
+      setAccount({ ...loadedAccount, company: selectedCompany.name, companyId: selectedCompany.id } as AccountState)
       setCompanySettingsDraft({
         name: selectedCompany.name,
         type: selectedCompany.type,
@@ -342,20 +422,49 @@ export default function Header({ onMenuClick, compactWorkspace = false }: Header
       window.removeEventListener(companyChangeEvent, refreshCompanies)
       window.removeEventListener('storage', refreshCompanies)
     }
-  }, [account.email])
+  }, [])
 
   useEffect(() => {
     const handleClick = (event: MouseEvent) => {
-      if (ref.current && !ref.current.contains(event.target as Node)) {
+      const target = event.target as Node
+      if (ref.current && !ref.current.contains(target) && !searchRef.current?.contains(target)) {
         setOpen(false)
         setNotificationsOpen(false)
+        setHelpOpen(false)
         setRemindersOpen(false)
         setToolsOpen(false)
         setCreateMenuOpen(false)
+        setGlobalSearchOpen(false)
       }
     }
     document.addEventListener('mousedown', handleClick)
     return () => document.removeEventListener('mousedown', handleClick)
+  }, [])
+
+  useEffect(() => {
+    const bumpSearchIndex = () => setSearchVersion(version => version + 1)
+    window.addEventListener(companyChangeEvent, bumpSearchIndex)
+    window.addEventListener('storage', bumpSearchIndex)
+    window.addEventListener('wiseflow-project-management-refresh', bumpSearchIndex)
+    window.addEventListener('wiseflow:warehouse-data-changed', bumpSearchIndex)
+    return () => {
+      window.removeEventListener(companyChangeEvent, bumpSearchIndex)
+      window.removeEventListener('storage', bumpSearchIndex)
+      window.removeEventListener('wiseflow-project-management-refresh', bumpSearchIndex)
+      window.removeEventListener('wiseflow:warehouse-data-changed', bumpSearchIndex)
+    }
+  }, [])
+
+  useEffect(() => {
+    const focusGlobalSearch = (event: globalThis.KeyboardEvent) => {
+      if (!(event.ctrlKey || event.metaKey) || event.key.toLowerCase() !== 'k') return
+      event.preventDefault()
+      searchInputRef.current?.focus()
+      setGlobalSearchOpen(true)
+    }
+
+    window.addEventListener('keydown', focusGlobalSearch)
+    return () => window.removeEventListener('keydown', focusGlobalSearch)
   }, [])
 
   useEffect(() => {
@@ -365,15 +474,19 @@ export default function Header({ onMenuClick, compactWorkspace = false }: Header
         setProjects(JSON.parse(window.localStorage.getItem(projectsKey) || '[]') as ProjectRecord[])
         setTasks(JSON.parse(window.localStorage.getItem(tasksKey) || '[]') as ReminderTask[])
         setOutboundNotifications(JSON.parse(window.localStorage.getItem(outboundNotificationsKey) || '[]') as OutboundNotification[])
+        setLeaveRequests(JSON.parse(window.localStorage.getItem(leaveRequestsKey) || '[]') as LeaveRequestNotification[])
         setLoanRequests(JSON.parse(window.localStorage.getItem(loanRequestsKey) || '[]') as LoanRequestNotification[])
         setAllowanceRequests(JSON.parse(window.localStorage.getItem(allowanceRequestsKey) || '[]') as AllowanceRequestNotification[])
+        setReadNotificationIds(JSON.parse(window.localStorage.getItem(readNotificationsKey) || '[]') as string[])
       } catch {
         setChangeOrders([])
         setProjects([])
         setTasks([])
         setOutboundNotifications([])
+        setLeaveRequests([])
         setLoanRequests([])
         setAllowanceRequests([])
+        setReadNotificationIds([])
       }
     }
 
@@ -389,22 +502,11 @@ export default function Header({ onMenuClick, compactWorkspace = false }: Header
   }, [])
 
   useEffect(() => {
-    // Skip the very first run (initialAccount); only save after localStorage has been loaded
-    if (!accountSaveReady.current) { accountSaveReady.current = true; return }
+    // Save only after the persisted account has been loaded. React Strict Mode
+    // runs effects twice in development, so a single "skip first run" guard can
+    // still write the default account over the real session.
+    if (!accountSaveReady.current) return
     window.localStorage.setItem(storageKey, JSON.stringify(account))
-    const THEME_MAP: Record<string, string> = {
-      'Light': 'light', 'Dark': 'light',
-      'WiseFlow Light': 'light', 'WiseFlow Dark': 'light',
-      'Vercel Dark': 'light',
-      'Google Blue': 'light', 'Google Green': 'light', 'Graphite Pro': 'light',
-    }
-    const savedPreference = account.theme
-    const preference = savedPreference && THEME_MAP[savedPreference] ? savedPreference : 'WiseFlow Light'
-    const mapped = THEME_MAP[preference]
-    const theme = mapped || (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light')
-    document.documentElement.dataset.theme = theme
-    document.documentElement.dataset.themePreference = preference
-    window.dispatchEvent(new Event('flowsys-theme-change'))
   }, [account])
 
   const openPanel = (nextPanel: Panel) => {
@@ -477,14 +579,14 @@ export default function Header({ onMenuClick, compactWorkspace = false }: Header
     try {
       const response = await fetch('/api/auth/invitations', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: withCsrfHeaders({ 'Content-Type': 'application/json' }),
         body: JSON.stringify({
           email: trimmed,
           role: inviteRole,
           invitedBy: account.fullName || account.name || account.email || 'HR HUB Admin',
         }),
       })
-      const result = await response.json() as { ok?: boolean; error?: string }
+      const result = await response.json() as { ok?: boolean; error?: string; emailSent?: boolean; acceptUrl?: string; warning?: string }
 
       if (!result.ok) {
         setNotice(result.error || 'Invitation could not be sent.')
@@ -509,7 +611,10 @@ export default function Header({ onMenuClick, compactWorkspace = false }: Header
         ],
       }))
       setInviteEmail('')
-      setNotice(`Invitation email sent to ${trimmed}.`)
+      const inviteLink = result.acceptUrl || `${window.location.origin}/signup?invite=${encodeURIComponent(trimmed.toLowerCase())}`
+      setNotice(result.emailSent
+        ? `Invitation email sent to ${trimmed}.`
+        : `${result.warning || 'Invitation saved locally.'} Share this signup link: ${inviteLink}`)
     } catch {
       setNotice('Invitation could not be sent. Check your email provider settings and try again.')
     } finally {
@@ -528,11 +633,6 @@ export default function Header({ onMenuClick, compactWorkspace = false }: Header
     setCompanies(loadCompanies())
   }
 
-  const isDarkTheme = account.theme === 'Dark'
-  const toggleTheme = () => {
-    setAccount(previous => ({ ...previous, theme: previous.theme === 'Dark' ? 'Light' : 'Dark' }))
-  }
-  const actionableRequests = changeOrders.filter(order => order.status === 'Requested' || order.status === 'Priced')
   const latestRequests = [...changeOrders].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()).slice(0, 8)
   const projectName = (id: number) => projects.find(project => project.id === id)?.name || `Project #${id}`
   const displayName = account.fullName || account.name || 'Reymark'
@@ -548,7 +648,53 @@ export default function Header({ onMenuClick, compactWorkspace = false }: Header
     isFinanceWorkspace &&
     item.recipientRole === 'Finance'
   )
-  const requestNotificationItems = [
+  const generalOutboundNotifications = outboundNotifications.filter(item =>
+    item.recipientRole !== 'Finance' || !isFinanceWorkspace
+  )
+  const leaveRequestNotificationItems: HeaderNotificationItem[] = leaveRequests
+    .filter(request => String(request.status || '').toLowerCase() !== 'draft')
+    .map(request => {
+      const status = normalizeNotificationStatus(request.status)
+      const statusAction = status.toLowerCase() === 'pending' ? 'requested' : status.toLowerCase()
+      const eventTime = request.updatedAt || request.createdAt || new Date().toISOString()
+      const days = Number(request.days || 0)
+      const dayLabel = `${days || 1} day${Number(days || 1) === 1 ? '' : 's'}`
+      return {
+        id: `leave-${request.id}`,
+        title: `${request.employeeName || 'Employee'} ${statusAction} ${request.leaveType || 'Leave'}`,
+        lines: [`${dayLabel} - ${status}`],
+        time: new Date(eventTime).toLocaleTimeString('en-PH', { hour: '2-digit', minute: '2-digit' }),
+        date: new Date(eventTime).toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: '2-digit', year: 'numeric' }),
+        age: `${Math.max(0, Math.floor((nowMs - new Date(eventTime).getTime()) / 86400000))} days ago`,
+        mentioned: true,
+        priority: status === 'Pending',
+        target: '/hr/approvals',
+        type: 'Leave Request',
+        detail: `${dayLabel} - ${status}`,
+        tone: notificationTone(status),
+        sortTime: eventTime,
+      }
+    })
+  const requestNotificationItems: HeaderNotificationItem[] = [
+    ...generalOutboundNotifications.map(item => ({
+      id: `outbound-${item.id}`,
+      title: `[${item.relatedType?.toUpperCase() || 'NOTICE'}] ${item.subject}`,
+      lines: [
+        item.message,
+        item.relatedType || 'Workspace notification',
+        'Open the related workspace to review.',
+      ],
+      time: new Date(item.createdAt).toLocaleTimeString('en-PH', { hour: '2-digit', minute: '2-digit' }),
+      date: new Date(item.createdAt).toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: '2-digit', year: 'numeric' }),
+      age: `${Math.max(0, Math.floor((nowMs - new Date(item.createdAt).getTime()) / 86400000))} days ago`,
+      mentioned: item.relatedType === 'Chat',
+      priority: item.relatedType === 'Workflow',
+      target: item.target || (item.relatedType === 'Chat' ? '/chat' : '/tasks'),
+      type: item.relatedType || 'Notification',
+      detail: item.message,
+      tone: item.relatedType === 'Workflow' ? '#159aa6' : '#64748b',
+      sortTime: item.createdAt,
+    })),
     ...financeOutboundNotifications.map(item => ({
       id: `finance-outbound-${item.id}`,
       title: `[FINANCE] ${item.subject}`,
@@ -563,6 +709,10 @@ export default function Header({ onMenuClick, compactWorkspace = false }: Header
       mentioned: true,
       priority: true,
       target: item.target || '/financials/loan-management',
+      type: 'Finance',
+      detail: item.message,
+      tone: '#159aa6',
+      sortTime: item.createdAt,
     })),
     ...(isFinanceWorkspace ? financeLoanNotifications.map(request => ({
       id: `loan-finance-${request.id}`,
@@ -578,6 +728,10 @@ export default function Header({ onMenuClick, compactWorkspace = false }: Header
       mentioned: true,
       priority: true,
       target: '/accounting/payroll-finance',
+      type: 'Loan Request',
+      detail: `Amount: PHP ${Number(request.amount || 0).toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
+      tone: '#159aa6',
+      sortTime: request.createdAt,
     })) : []),
     ...(isFinanceWorkspace ? financeAllowanceNotifications.map(request => ({
       id: `allowance-finance-${request.id}`,
@@ -593,9 +747,13 @@ export default function Header({ onMenuClick, compactWorkspace = false }: Header
       mentioned: true,
       priority: true,
       target: '/accounting/payroll-finance',
+      type: 'Allowance',
+      detail: `Amount: PHP ${Number(request.amount || 0).toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
+      tone: '#34a853',
+      sortTime: request.createdAt,
     })) : []),
   ]
-  const changeOrderNotificationItems = latestRequests.map((order, index) => ({
+  const changeOrderNotificationItems: HeaderNotificationItem[] = latestRequests.map((order, index) => ({
       id: order.id,
       title: `[${projectName(order.projectId)}] ${order.requestedBy || order.clientName} requested ${order.title}`,
       lines: [
@@ -609,27 +767,59 @@ export default function Header({ onMenuClick, compactWorkspace = false }: Header
       mentioned: index === 0,
       priority: order.status === 'Requested',
       target: '/projects',
+      type: 'Change Order',
+      detail: order.description || order.title,
+      tone: order.status === 'Requested' ? '#159aa6' : '#64748b',
+      sortTime: order.createdAt,
     }))
-  const actualNotificationItems = [...requestNotificationItems, ...changeOrderNotificationItems]
-    .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
+  const actualNotificationItems = [...leaveRequestNotificationItems, ...requestNotificationItems, ...changeOrderNotificationItems]
+    .sort((a, b) => new Date(b.sortTime || b.date).getTime() - new Date(a.sortTime || a.date).getTime())
     .slice(0, 12)
+  const unreadNotificationItems = actualNotificationItems.filter(item => !readNotificationIds.includes(String(item.id)))
   const notificationItems = actualNotificationItems.length
-    ? actualNotificationItems
+    ? unreadNotificationItems
     : [
-      { id: 1, title: '[WORKFLOWS] Welcome to WiseFlow notifications', lines: ['Workflow updates, stage changes, and tagged notes will appear here.', 'Click any notification to open its related work.', 'Use filters above to narrow the list.'], time: '10:19', date: 'Monday, Dec 15, 2025', age: 'today', mentioned: true, priority: false, target: '/tasks' },
+      { id: 1, title: '[WORKFLOWS] Welcome to WiseFlow notifications', lines: ['Workflow updates, stage changes, and tagged notes will appear here.', 'Click any notification to open its related work.', 'Use filters above to narrow the list.'], time: '10:19', date: 'Monday, Dec 15, 2025', age: 'today', mentioned: true, priority: false, target: '/tasks', type: 'Workflows', detail: 'Workflow updates, stage changes, and tagged notes will appear here.', tone: '#159aa6', sortTime: '2025-12-15T10:19:00' },
     ]
-  const notificationBadgeCount = actualNotificationItems.length
-  const filteredNotifications = notificationItems.filter(item =>
-    notificationFilter === 'all' ? true : notificationFilter === 'mentioned' ? item.mentioned : item.priority
-  )
+  const notificationBadgeCount = unreadNotificationItems.length
   const reminderTasks = tasks.filter(task => task.dueDate && task.status !== 'Completed' && !task.markedDone)
-  const importantReminders = reminderTasks.filter(task => task.stickyReminder || isSameDate(new Date(`${task.dueDate}T00:00:00`), new Date()) || new Date(`${task.dueDate}T00:00:00`) < startOfDay(new Date()))
-  const shownReminderTasks = reminderFilter === 'important' ? importantReminders : reminderTasks
+  const todayReminderTasks = reminderTasks.filter(task => isSameDate(new Date(`${task.dueDate}T00:00:00`), new Date()))
+  const lateReminderTasks = reminderTasks.filter(task => new Date(`${task.dueDate}T00:00:00`) < startOfDay(new Date()))
+  const importantReminders = reminderTasks.filter(task => task.stickyReminder || todayReminderTasks.includes(task) || lateReminderTasks.includes(task))
+  const shownReminderTasks = reminderFilter === 'important'
+    ? importantReminders
+    : reminderFilter === 'today'
+      ? todayReminderTasks
+      : reminderFilter === 'late'
+        ? lateReminderTasks
+        : reminderTasks
+  const reminderBadgeCount = importantReminders.length
   const weekDays = Array.from({ length: 7 }, (_, index) => addDays(reminderWeekStart, index))
-  const weekEnd = addDays(reminderWeekStart, 6)
 
   const dispatchWorkspaceAction = (name: string, detail?: unknown) => {
     window.dispatchEvent(new CustomEvent(name, { detail }))
+  }
+
+  const handleGlobalSearchChange = (value: string) => {
+    setGlobalSearch(value)
+    setGlobalSearchOpen(Boolean(value.trim()))
+    dispatchWorkspaceAction('flowsys-workspace-general-search', { value })
+  }
+
+  const openGlobalSearchResult = (result: GlobalSearchResult) => {
+    setGlobalSearch('')
+    setGlobalSearchOpen(false)
+    router.push(result.href)
+  }
+
+  const handleGlobalSearchKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
+    if (event.key === 'Escape') {
+      setGlobalSearchOpen(false)
+      return
+    }
+    if (event.key !== 'Enter' || !globalSearchResults[0]) return
+    event.preventDefault()
+    openGlobalSearchResult(globalSearchResults[0])
   }
 
   const openCreateReminder = () => {
@@ -643,6 +833,27 @@ export default function Header({ onMenuClick, compactWorkspace = false }: Header
       markedDone: false,
     })
     setCreateReminderOpen(true)
+  }
+
+  const openReminderCenter = () => {
+    setRemindersOpen(true)
+    setNotificationsOpen(false)
+    setHelpOpen(false)
+    setOpen(false)
+    setToolsOpen(false)
+    setCreateMenuOpen(false)
+  }
+
+  const markNotificationsRead = () => {
+    if (!actualNotificationItems.length) {
+      setNotificationsOpen(false)
+      return
+    }
+    const nextIds = Array.from(new Set([...readNotificationIds, ...actualNotificationItems.map(item => String(item.id))]))
+    setReadNotificationIds(nextIds)
+    window.localStorage.setItem(readNotificationsKey, JSON.stringify(nextIds))
+    window.dispatchEvent(new Event('storage'))
+    setNotificationsOpen(false)
   }
 
   const createReminder = () => {
@@ -686,75 +897,27 @@ export default function Header({ onMenuClick, compactWorkspace = false }: Header
     router.push(`/tasks?task=${task.id}`)
   }
 
-  const navigateTool = (href: string, viewMode?: string) => {
-    setToolsOpen(false)
-    router.push(href)
-    if (viewMode) window.setTimeout(() => dispatchWorkspaceAction('flowsys-workspace-view', { mode: viewMode }), 0)
-  }
-
-  const openTool = (href: string) => {
-    setToolsOpen(false)
-    window.open(href, '_blank', 'noopener,noreferrer')
-  }
-
-  const toolSections = [
-    {
-      label: 'Work Operations',
-      items: [
-        { label: 'Requests', detail: 'Client and change requests', icon: CheckCircle2, action: () => navigateTool('/projects') },
-        { label: 'Workflows', detail: 'Jobs and workflow stages', icon: ClipboardList, action: () => navigateTool('/tasks', 'Workflows') },
-        { label: 'Expenses', detail: 'Financial records', icon: HandCoins, action: () => navigateTool('/financial') },
-        { label: 'Projects', detail: 'Project management', icon: FolderKanban, action: () => navigateTool('/project-management') },
-        { label: 'Bookings', detail: 'Schedules and reminders', icon: CalendarCheck, action: () => navigateTool('/tasks', 'Reminders') },
-        { label: 'Offices', detail: 'Teams and locations', icon: Building2, action: () => navigateTool('/settings') },
-      ],
-    },
-    {
-      label: 'Unified Communications',
-      items: [
-        { label: 'Messages', detail: 'Team chat', icon: MessageCircle, action: () => navigateTool('/chat') },
-        { label: 'Townhall', detail: 'Company updates', icon: Building2, action: () => navigateTool('/dashboard') },
-        { label: 'Meetings', detail: 'Meeting tasks', icon: CalendarCheck, action: () => navigateTool('/to-do') },
-        { label: 'Work Rules', detail: 'Operating guidelines', icon: BookOpen, action: () => navigateTool('/settings') },
-      ],
-    },
-    {
-      label: 'Core Utility Services',
-      items: [
-        { label: 'Docs', detail: 'Project documents', icon: FileText, action: () => navigateTool('/resources') },
-        { label: 'E-Sign', detail: 'Approval documents', icon: FileSignature, action: () => navigateTool('/projects') },
-        { label: 'Automations', detail: 'Workflow automations', icon: Bot, action: () => navigateTool('/tasks', 'Workflows') },
-        { label: 'Webforms', detail: 'Client forms', icon: ClipboardCheck, action: () => navigateTool('/client-portal') },
-        { label: 'Todos', detail: 'My to-dos', icon: CheckCircle2, action: () => navigateTool('/to-do') },
-        { label: 'Mails', detail: 'Outbound alerts', icon: MailCheck, action: () => navigateTool('/settings') },
-      ],
-    },
-    {
-      label: 'Core Apps',
-      items: [
-        { label: 'Dashboard', detail: 'Business overview', icon: LayoutDashboard, action: () => navigateTool('/dashboard') },
-        { label: 'Client database', detail: 'Clients and contacts', icon: UsersRound, action: () => navigateTool('/client-database') },
-        { label: 'Sales', detail: 'Opportunities', icon: BadgeDollarSign, action: () => navigateTool('/sales') },
-        { label: 'Procurement', detail: 'Purchasing', icon: ShoppingCart, action: () => openTool('/procurement') },
-        { label: 'Supplier database', detail: 'Vendor list', icon: PackageSearch, action: () => navigateTool('/supplier-database') },
-        { label: 'Warehouse', detail: 'Inventory', icon: Warehouse, action: () => navigateTool('/warehouse-inventory') },
-      ],
-    },
-  ]
-
-  const searchedToolSections = toolSections
-    .map(section => ({
-      ...section,
-      items: section.items.filter(item => [item.label, item.detail].join(' ').toLowerCase().includes(toolsSearch.trim().toLowerCase())),
-    }))
-    .filter(section => section.items.length > 0)
-
   const pageMeta = getPageMeta(pathname)
   const PageIcon = pageMeta.icon
-  const isTasksPage = pathname === '/tasks' || pathname.startsWith('/tasks/')
 
   // Compute initials from display name
   const initials = displayName.split(' ').filter(Boolean).map((w: string) => w[0]).slice(0, 2).join('').toUpperCase()
+  const isApplicationsHeader = false
+  const compactHeaderColors = {
+    background: isApplicationsHeader ? '#000' : 'var(--background)',
+    border: isApplicationsHeader ? '#242424' : 'var(--border)',
+    text: isApplicationsHeader ? '#fff' : 'var(--foreground)',
+    muted: isApplicationsHeader ? '#8f8f8f' : 'var(--muted-foreground)',
+    searchBg: isApplicationsHeader ? '#0c0c0c' : 'var(--card)',
+    searchBorder: isApplicationsHeader ? '#2f2f2f' : 'var(--border)',
+    fieldText: isApplicationsHeader ? '#fff' : 'var(--foreground)',
+    buttonBg: isApplicationsHeader ? '#050505' : 'var(--card)',
+  }
+  const compactSearchPlaceholder = pathname === '/project-management/tasks' || pathname.startsWith('/project-management/tasks/')
+    ? 'Global search across WiseFlow...'
+    : pathname === '/project-management' || pathname.startsWith('/project-management/') || pathname === '/projects'
+    ? 'Global search across WiseFlow...'
+    : 'Search jobs, tasks, clients, invoices...'
 
   if (compactWorkspace) {
     return (
@@ -763,27 +926,27 @@ export default function Header({ onMenuClick, compactWorkspace = false }: Header
         className="app-header"
         style={{
           height: 48,
-          background: '#fff',
-          borderBottom: '1px solid #e5e7eb',
+          background: compactHeaderColors.background,
+          borderBottom: `1px solid ${compactHeaderColors.border}`,
           display: 'grid',
-          gridTemplateColumns: 'minmax(180px, 280px) 1fr minmax(240px, auto)',
+          gridTemplateColumns: isApplicationsHeader ? 'minmax(360px, 520px) minmax(0, 1fr)' : 'max-content minmax(320px, 1fr) minmax(240px, auto)',
           alignItems: 'center',
-          gap: 16,
+          gap: isApplicationsHeader ? 12 : 16,
           padding: '0 20px',
           position: 'sticky',
           top: 0,
           zIndex: 95,
-          boxShadow: '0 1px 3px rgba(0,0,0,0.05)',
+          boxShadow: isApplicationsHeader ? 'none' : '0 1px 3px rgba(0,0,0,0.05)',
           fontFamily: "var(--font-body)",
         }}
       >
         {/* -- Left: mobile menu + breadcrumb -- */}
-        <div className="header-left-area" style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
+        <div className="header-left-area" style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0, width: 'fit-content', maxWidth: '100%' }}>
           <button
             className="header-mobile-menu"
             onClick={onMenuClick}
             aria-label="Open navigation"
-            style={{ width: 34, height: 34, border: 'none', background: 'transparent', borderRadius: 8, display: 'none', placeItems: 'center', cursor: 'pointer', color: '#374151', flexShrink: 0 }}
+            style={{ width: 34, height: 34, border: 'none', background: 'transparent', borderRadius: 8, display: 'none', placeItems: 'center', cursor: 'pointer', color: compactHeaderColors.text, flexShrink: 0 }}
           >
             <Menu size={18} />
           </button>
@@ -791,37 +954,55 @@ export default function Header({ onMenuClick, compactWorkspace = false }: Header
             <span>W</span>
             <strong>WiseFlow</strong>
           </div>
-          <div className="header-breadcrumb" style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 12, minWidth: 0 }}>
-            <Home size={13} color="#9ca3af" style={{ flexShrink: 0 }} />
-            <ChevronRight size={11} color="#d1d5db" style={{ flexShrink: 0 }} />
-            <span style={{ color: '#374151', fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{pageMeta.label}</span>
+          <div className="header-breadcrumb" style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 12, minWidth: 0, width: 'fit-content', maxWidth: 260 }}>
+            <Home size={13} color={compactHeaderColors.muted} style={{ flexShrink: 0 }} />
+            <ChevronRight size={11} color={isApplicationsHeader ? '#5f5f5f' : '#d1d5db'} style={{ flexShrink: 0 }} />
+            <span style={{ color: compactHeaderColors.text, fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{pageMeta.label}</span>
           </div>
         </div>
 
         {/* -- Center: search -- */}
-        <label
-          className="header-search"
-          style={{ display: 'flex', alignItems: 'center', gap: 9, height: 34, borderRadius: 8, background: '#f9fafb', border: '1px solid #e5e7eb', padding: '0 12px', cursor: 'text', transition: 'border-color 0.15s, box-shadow 0.15s', maxWidth: 520, margin: '0 auto', width: '100%' }}
-          onFocus={e => { (e.currentTarget as HTMLLabelElement).style.borderColor = '#1A73E8'; (e.currentTarget as HTMLLabelElement).style.boxShadow = '0 0 0 2px rgba(26,115,232,0.12)' }}
-          onBlur={e => { (e.currentTarget as HTMLLabelElement).style.borderColor = '#e5e7eb'; (e.currentTarget as HTMLLabelElement).style.boxShadow = 'none' }}
-        >
-          <Search size={14} color="#9ca3af" style={{ flexShrink: 0 }} />
-          <input
-            className="workspace-general-search-input"
-            onChange={event => dispatchWorkspaceAction('flowsys-workspace-general-search', { value: event.target.value })}
-            placeholder="Search jobs, tasks, clients, invoices..."
-            style={{ flex: 1, minWidth: 0, border: 'none', outline: 'none', background: 'transparent', color: '#111827', fontSize: 13 }}
+        <div ref={searchRef} className="header-search-shell" style={{ position: 'relative', maxWidth: 520, margin: '0 auto', width: '100%', minWidth: 0 }}>
+          <label
+            className="header-search"
+            style={{ display: 'flex', alignItems: 'center', gap: 9, height: 34, borderRadius: 8, background: compactHeaderColors.searchBg, border: `1px solid ${compactHeaderColors.searchBorder}`, padding: '0 12px', cursor: 'text', transition: 'border-color 0.15s, box-shadow 0.15s', width: '100%' }}
+            onFocus={e => { (e.currentTarget as HTMLLabelElement).style.borderColor = isApplicationsHeader ? '#5f5f5f' : '#1A73E8'; (e.currentTarget as HTMLLabelElement).style.boxShadow = isApplicationsHeader ? 'none' : '0 0 0 2px rgba(26,115,232,0.12)' }}
+            onBlur={e => { (e.currentTarget as HTMLLabelElement).style.borderColor = compactHeaderColors.searchBorder; (e.currentTarget as HTMLLabelElement).style.boxShadow = 'none' }}
+          >
+            <Search size={14} color={compactHeaderColors.muted} style={{ flexShrink: 0 }} />
+            <input
+              ref={searchInputRef}
+              className="workspace-general-search-input"
+              value={globalSearch}
+              onFocus={() => setGlobalSearchOpen(true)}
+              onChange={event => handleGlobalSearchChange(event.target.value)}
+              onKeyDown={handleGlobalSearchKeyDown}
+              placeholder={compactSearchPlaceholder}
+              style={{ flex: 1, minWidth: 0, border: 'none', outline: 'none', background: 'transparent', color: compactHeaderColors.fieldText, fontSize: 13 }}
+            />
+            {globalSearch ? (
+              <button type="button" onMouseDown={event => event.preventDefault()} onClick={() => handleGlobalSearchChange('')} aria-label="Clear search" style={{ border: 'none', background: 'transparent', cursor: 'pointer', color: compactHeaderColors.muted, display: 'grid', placeItems: 'center', padding: 0 }}>
+                <X size={13} />
+              </button>
+            ) : null}
+            <kbd className="header-search-kbd" style={{ flexShrink: 0, display: 'inline-flex', alignItems: 'center', gap: 2, background: isApplicationsHeader ? '#050505' : '#f3f4f6', border: `1px solid ${compactHeaderColors.searchBorder}`, borderRadius: 5, padding: '1px 6px', fontSize: 11, color: isApplicationsHeader ? '#c8c8c8' : '#6b7280', fontFamily: "var(--font-body)", letterSpacing: '0.01em' }}>Ctrl K</kbd>
+          </label>
+          <GlobalSearchPanel
+            open={globalSearchOpen}
+            query={globalSearch}
+            results={globalSearchResults}
+            dark={true}
+            onOpen={openGlobalSearchResult}
           />
-          <kbd className="header-search-kbd" style={{ flexShrink: 0, display: 'inline-flex', alignItems: 'center', gap: 2, background: '#f3f4f6', border: '1px solid #e5e7eb', borderRadius: 5, padding: '1px 6px', fontSize: 11, color: '#6b7280', fontFamily: "var(--font-body)", letterSpacing: '0.01em' }}>? K</kbd>
-        </label>
+        </div>
 
         {/* -- Right: actions -- */}
         <div className="header-actions-area" style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 4, minWidth: 0 }}>
           {/* Bell */}
           <button
-            onClick={() => { setNotificationsOpen(!notificationsOpen); setOpen(false) }}
+            onClick={() => { setNotificationsOpen(!notificationsOpen); setRemindersOpen(false); setHelpOpen(false); setOpen(false) }}
             aria-label="Notifications"
-            style={{ position: 'relative', width: 34, height: 34, border: 'none', background: 'transparent', borderRadius: 8, display: 'grid', placeItems: 'center', cursor: 'pointer', color: '#374151' }}
+            style={{ position: 'relative', width: 34, height: 34, border: 'none', background: 'transparent', borderRadius: 8, display: 'grid', placeItems: 'center', cursor: 'pointer', color: compactHeaderColors.text }}
           >
             <Bell size={17} />
             {notificationBadgeCount > 0 && (
@@ -831,21 +1012,57 @@ export default function Header({ onMenuClick, compactWorkspace = false }: Header
             )}
           </button>
 
+          <button
+            onClick={openReminderCenter}
+            aria-label="Open reminders"
+            aria-expanded={remindersOpen}
+            title="Reminders"
+            style={{ position: 'relative', width: 34, height: 34, border: 'none', background: 'transparent', borderRadius: 8, display: 'grid', placeItems: 'center', cursor: 'pointer', color: compactHeaderColors.text }}
+          >
+            <CalendarDays size={17} />
+            {reminderBadgeCount > 0 && (
+              <span style={{ position: 'absolute', top: 4, right: 4, minWidth: 16, height: 16, borderRadius: 999, background: '#ef4444', color: '#fff', fontSize: 10, fontWeight: 700, display: 'grid', placeItems: 'center', padding: '0 4px', lineHeight: 1 }}>
+                {reminderBadgeCount}
+              </span>
+            )}
+          </button>
+
           {/* Help — hidden on mobile */}
           <button
             className="header-help-btn"
             title="Help"
-            style={{ width: 34, height: 34, border: 'none', background: 'transparent', borderRadius: 8, display: 'grid', placeItems: 'center', cursor: 'pointer', color: '#374151' }}
+            aria-label="Open help menu"
+            aria-expanded={helpOpen}
+            onClick={() => { setHelpOpen(open => !open); setNotificationsOpen(false); setOpen(false); setToolsOpen(false); setCreateMenuOpen(false) }}
+            style={{ width: 34, height: 34, border: 'none', background: 'transparent', borderRadius: 8, display: 'grid', placeItems: 'center', cursor: 'pointer', color: compactHeaderColors.text }}
           >
             <HelpCircle size={17} />
           </button>
+
+          {helpOpen && (
+            <div className="header-help-menu" role="menu" aria-label="Help menu" style={{ position: 'absolute', top: 52, right: 88, width: 260, background: '#fff', border: '1px solid #eef2f7', borderRadius: 12, boxShadow: '0 24px 70px rgba(15,23,42,0.18)', padding: 10, zIndex: 105, display: 'grid', gap: 6 }}>
+              <div style={{ padding: '8px 10px 6px' }}>
+                <strong style={{ display: 'block', fontSize: 13, color: '#111827' }}>Help & support</strong>
+                <span style={{ display: 'block', marginTop: 3, fontSize: 12, color: '#64748b', lineHeight: 1.35 }}>Open guidance for your workspace.</span>
+              </div>
+              {[
+                { label: 'Open dashboard guide', href: '/dashboard' },
+                { label: 'Workspace settings', href: '/settings' },
+                { label: 'Design system', href: '/design-system' },
+              ].map(item => (
+                <button key={item.label} type="button" role="menuitem" onClick={() => { setHelpOpen(false); router.push(item.href) }} style={{ border: 0, background: 'transparent', color: '#111827', borderRadius: 8, padding: '9px 10px', textAlign: 'left', fontSize: 13, fontWeight: 700, cursor: 'pointer' }}>
+                  {item.label}
+                </button>
+              ))}
+            </div>
+          )}
 
           {/* Settings — hidden on small mobile */}
           <button
             className="header-settings-btn"
             onClick={() => router.push('/settings')}
             title="Settings"
-            style={{ width: 34, height: 34, border: 'none', background: 'transparent', borderRadius: 8, display: 'grid', placeItems: 'center', cursor: 'pointer', color: '#374151' }}
+            style={{ width: 34, height: 34, border: 'none', background: 'transparent', borderRadius: 8, display: 'grid', placeItems: 'center', cursor: 'pointer', color: compactHeaderColors.text }}
           >
             <Settings size={17} />
           </button>
@@ -854,43 +1071,43 @@ export default function Header({ onMenuClick, compactWorkspace = false }: Header
           <button
             className="header-user-button"
             onClick={() => setOpen(!open)}
-            style={{ display: 'inline-flex', alignItems: 'center', gap: 7, border: '1px solid #e5e7eb', background: '#fff', borderRadius: 8, padding: '5px 10px 5px 5px', cursor: 'pointer', marginLeft: 2 }}
+            style={{ display: 'inline-flex', alignItems: 'center', gap: 7, border: `1px solid ${compactHeaderColors.searchBorder}`, background: compactHeaderColors.buttonBg, borderRadius: 8, padding: '5px 10px 5px 5px', cursor: 'pointer', marginLeft: 2 }}
           >
             <span style={{ width: 28, height: 28, borderRadius: '50%', background: '#1A73E8', color: '#fff', display: 'grid', placeItems: 'center', fontSize: 11, fontWeight: 700, flexShrink: 0 }}>
               {initials}
             </span>
-            <span className="header-username" style={{ fontSize: 13, fontWeight: 500, color: '#111827', whiteSpace: 'nowrap', maxWidth: 130, overflow: 'hidden', textOverflow: 'ellipsis' }}>{displayName}</span>
-            <ChevronDown size={13} color="#9ca3af" />
+            <span className="header-username" style={{ fontSize: 13, fontWeight: 500, color: compactHeaderColors.fieldText, whiteSpace: 'nowrap', maxWidth: 130, overflow: 'hidden', textOverflow: 'ellipsis' }}>{displayName}</span>
+            <ChevronDown size={13} color={compactHeaderColors.muted} />
           </button>
 
           {notificationsOpen && (
             <NotificationPanel
-              items={filteredNotifications}
+              items={notificationItems}
               allCount={notificationItems.length}
-              mentionedCount={notificationItems.filter(item => item.mentioned).length}
-              priorityCount={notificationItems.filter(item => item.priority).length}
-              filter={notificationFilter}
-              onFilter={setNotificationFilter}
+              onMarkAllRead={markNotificationsRead}
               onClose={() => setNotificationsOpen(false)}
               onOpen={target => { setNotificationsOpen(false); router.push(target) }}
             />
           )}
 
           {open && (
-            <div className="profile-menu" style={{ position: 'absolute', top: 52, right: 8, width: 280, background: '#fff', border: '1px solid #eef2f7', borderRadius: 12, boxShadow: '0 24px 70px rgba(15,23,42,0.22)', overflow: 'hidden', zIndex: 100, color: '#111827' }}>
-              <div style={{ padding: 20, textAlign: 'center' }}>
-                <div style={{ fontWeight: 600 }}>{activeCompany?.name || account.company}</div>
-                <div style={{ fontSize: 12, color: '#6b7280' }}>{account.email}</div>
+            <div className="profile-menu" style={{ position: 'absolute', top: 52, right: 8, width: 380, background: '#fff', border: '1px solid #d7d7d7', borderRadius: 4, boxShadow: '0 24px 80px rgba(0,0,0,0.18)', overflow: 'hidden', zIndex: 100, color: '#111827' }}>
+              <div style={{ padding: '24px 26px 18px', textAlign: 'center', borderBottom: '1px solid #e8e8e8' }}>
+                <span style={{ width: 44, height: 44, borderRadius: 14, background: '#1769aa', color: '#fff', display: 'grid', placeItems: 'center', fontSize: 17, fontWeight: 900, margin: '0 auto 12px' }}>{initials}</span>
+                <div style={{ fontSize: 16, fontWeight: 800, color: '#111' }}>{displayName}</div>
+                <div style={{ fontSize: 12, color: '#6b7280', marginTop: 4 }}>{account.email}</div>
+                <div style={{ fontSize: 11, color: '#6b7280', marginTop: 8 }}>Standard account in <strong style={{ color: '#111827' }}>{activeCompany?.name || account.company}</strong></div>
               </div>
-              <div style={{ padding: '0 14px 12px', display: 'grid', gap: 6, borderBottom: '1px solid #eef2f7' }}>
-                <div style={tinyLabelStyle}>Company switcher</div>
+              <div style={{ padding: '14px 26px', display: 'grid', gap: 0, borderBottom: '1px solid #e8e8e8' }}>
+                <div style={{ ...tinyLabelStyle, marginBottom: 8 }}>Choose an account</div>
                 {companies.map(company => (
-                  <button key={company.id} onClick={() => switchCompany(company.id)} style={{ border: '1px solid #e5e7eb', background: activeCompany?.id === company.id ? '#ecfdf5' : '#fff', color: '#111827', borderRadius: 8, padding: '8px 10px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, cursor: 'pointer', textAlign: 'left' }}>
+                  <button key={company.id} onClick={() => switchCompany(company.id)} style={{ border: 0, borderTop: '1px solid #e8e8e8', background: '#fff', color: '#111827', minHeight: 76, padding: '12px 0', display: 'grid', gridTemplateColumns: '40px minmax(0, 1fr) auto', alignItems: 'center', gap: 12, cursor: 'pointer', textAlign: 'left' }}>
+                    <span style={{ width: 34, height: 34, borderRadius: '50%', background: activeCompany?.id === company.id ? '#1a73e8' : '#eef0ff', color: activeCompany?.id === company.id ? '#fff' : '#6b6eea', display: 'grid', placeItems: 'center', fontSize: 12, fontWeight: 900 }}>{company.name.slice(0, 2).toUpperCase()}</span>
                     <span style={{ minWidth: 0 }}>
-                      <span style={{ display: 'block', fontSize: 13, fontWeight: 700, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{company.name}</span>
-                      <span style={{ display: 'block', fontSize: 11, color: '#64748b', marginTop: 2 }}>{company.type}</span>
+                      <span style={{ display: 'block', fontSize: 13, fontWeight: 800, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{company.name}</span>
+                      <span style={{ display: 'block', fontSize: 12, color: '#6b7280', marginTop: 3 }}>{company.type}</span>
                     </span>
-                    {activeCompany?.id === company.id && <Check size={14} color="#16a34a" />}
+                    {activeCompany?.id === company.id ? <span style={{ color: '#16a34a', fontSize: 12, fontWeight: 800 }}>Active</span> : <span style={{ color: '#111', fontSize: 12, fontWeight: 800 }}>Continue</span>}
                   </button>
                 ))}
               </div>
@@ -913,14 +1130,14 @@ export default function Header({ onMenuClick, compactWorkspace = false }: Header
               <div style={{ width: '100%', height: 'calc(100vh - 32px)', background: '#fff', borderRadius: 4, overflow: 'hidden', boxShadow: '0 18px 70px rgba(0,0,0,.35)', display: 'grid', gridTemplateColumns: '380px minmax(0, 1fr)' }}>
                 <aside style={{ borderRight: '1px solid #d8d8d8', background: '#f5f5f5', display: 'flex', flexDirection: 'column', minWidth: 0 }}>
                   <div style={{ height: 50, borderBottom: '1px solid #d8d8d8', display: 'grid', gridTemplateColumns: '1fr 1fr 1fr' }}>
-                    {[
+                    {([
                       ['important', 'IMPORTANT', importantReminders.length],
-                      ['all', 'TODAY', reminderTasks.filter(task => isSameDate(new Date(`${task.dueDate}T00:00:00`), new Date())).length],
-                      ['late', 'LATE', reminderTasks.filter(task => new Date(`${task.dueDate}T00:00:00`) < startOfDay(new Date())).length],
-                    ].map(([key, label, count]) => {
-                      const active = reminderFilter === key || (key === 'late' && false)
+                      ['today', 'TODAY', todayReminderTasks.length],
+                      ['late', 'LATE', lateReminderTasks.length],
+                    ] as Array<[ReminderFilter, string, number]>).map(([key, label, count]) => {
+                      const active = reminderFilter === key
                       return (
-                        <button key={String(key)} onClick={() => setReminderFilter(key === 'important' ? 'important' : 'all')} style={{ border: 'none', borderBottom: active ? '2px solid #168c96' : '2px solid transparent', background: 'transparent', color: active ? '#168c96' : '#888', fontSize: 11, fontWeight: 800, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 9, cursor: 'pointer' }}>
+                        <button key={key} onClick={() => setReminderFilter(key)} style={{ border: 'none', borderBottom: active ? '2px solid #168c96' : '2px solid transparent', background: 'transparent', color: active ? '#168c96' : '#888', fontSize: 11, fontWeight: 800, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 9, cursor: 'pointer' }}>
                           <span style={{ width: 18, height: 18, borderRadius: '50%', background: active ? '#168c96' : '#999', color: '#fff', display: 'grid', placeItems: 'center', fontSize: 10 }}>{count as number}</span>
                           {label}
                         </button>
@@ -1169,7 +1386,7 @@ export default function Header({ onMenuClick, compactWorkspace = false }: Header
                   <div style={{ display: 'grid', gap: 14 }}>
                     <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) 150px auto', gap: 10, alignItems: 'end' }}>
                       <label style={fieldGroupStyle}><span style={labelStyle}>Email</span><input value={inviteEmail} onChange={event => setInviteEmail(event.target.value)} placeholder="teammate@example.com" style={fieldStyle} /></label>
-                      <label style={fieldGroupStyle}><span style={labelStyle}>Role</span><select value={inviteRole} onChange={event => setInviteRole(event.target.value as CompanyRole)} style={fieldStyle}><option>Member</option><option>Sales</option><option>HR</option><option>Finance</option><option>Project Manager</option><option>Warehouse</option><option>Procurement</option><option>Admin</option></select></label>
+                      <label style={fieldGroupStyle}><span style={labelStyle}>Role</span><select value={inviteRole} onChange={event => setInviteRole(event.target.value as CompanyRole)} style={fieldStyle}>{inviteRoleOptions.map(option => <option key={option}>{option}</option>)}</select></label>
                       <button onClick={sendInvite} disabled={!inviteEmail.trim() || inviteSending} style={{ ...primaryButtonStyle, height: 40, opacity: inviteEmail.trim() && !inviteSending ? 1 : 0.45 }}>{inviteSending ? 'Sending...' : 'Invite'}</button>
                     </div>
                     <div style={infoCardStyle}><div style={tinyLabelStyle}>Permissions for {inviteRole}</div><div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 8 }}>{rolePermissions(inviteRole).map(permission => <span key={permission} style={permissionPillStyle}>{permission}</span>)}</div></div>
@@ -1253,28 +1470,40 @@ export default function Header({ onMenuClick, compactWorkspace = false }: Header
 
       {/* -- Centred search bar -- */}
       {!compactWorkspace && (
-        <label style={{ position: 'absolute', left: '50%', transform: 'translateX(-50%)', display: 'flex', alignItems: 'center', gap: 8, background: '#f3f4f6', border: '1px solid #e5e7eb', borderRadius: 999, padding: '7px 16px', width: 320, cursor: 'text', transition: 'border-color 0.15s, box-shadow 0.15s' }}
-          onFocus={e => { (e.currentTarget as HTMLLabelElement).style.borderColor = '#22c55e'; (e.currentTarget as HTMLLabelElement).style.boxShadow = '0 0 0 3px rgba(34,197,94,0.12)' }}
-          onBlur={e => { (e.currentTarget as HTMLLabelElement).style.borderColor = '#e5e7eb'; (e.currentTarget as HTMLLabelElement).style.boxShadow = 'none' }}
-        >
-          <Search size={14} color="#9ca3af" style={{ flexShrink: 0 }} />
-          <input
-            value={globalSearch}
-            onChange={e => setGlobalSearch(e.target.value)}
-            placeholder="Search"
-            style={{ flex: 1, border: 'none', outline: 'none', background: 'transparent', color: '#111827', fontSize: 13, fontFamily: 'inherit' }}
+        <div ref={searchRef} style={{ position: 'absolute', left: '50%', transform: 'translateX(-50%)', width: 360, zIndex: 85 }}>
+          <label style={{ display: 'flex', alignItems: 'center', gap: 8, background: '#f3f4f6', border: '1px solid #e5e7eb', borderRadius: 999, padding: '7px 16px', width: '100%', cursor: 'text', transition: 'border-color 0.15s, box-shadow 0.15s' }}
+            onFocus={e => { (e.currentTarget as HTMLLabelElement).style.borderColor = '#22c55e'; (e.currentTarget as HTMLLabelElement).style.boxShadow = '0 0 0 3px rgba(34,197,94,0.12)' }}
+            onBlur={e => { (e.currentTarget as HTMLLabelElement).style.borderColor = '#e5e7eb'; (e.currentTarget as HTMLLabelElement).style.boxShadow = 'none' }}
+          >
+            <Search size={14} color="#9ca3af" style={{ flexShrink: 0 }} />
+            <input
+              ref={searchInputRef}
+              value={globalSearch}
+              onFocus={() => setGlobalSearchOpen(true)}
+              onChange={event => handleGlobalSearchChange(event.target.value)}
+              onKeyDown={handleGlobalSearchKeyDown}
+              placeholder="Search records"
+              style={{ flex: 1, border: 'none', outline: 'none', background: 'transparent', color: '#111827', fontSize: 13, fontFamily: 'inherit' }}
+            />
+            {globalSearch && (
+              <button type="button" onMouseDown={event => event.preventDefault()} onClick={() => handleGlobalSearchChange('')} aria-label="Clear search" style={{ border: 'none', background: 'transparent', cursor: 'pointer', color: '#9ca3af', display: 'grid', placeItems: 'center', padding: 0 }}>
+                <X size={13} />
+              </button>
+            )}
+          </label>
+          <GlobalSearchPanel
+            open={globalSearchOpen}
+            query={globalSearch}
+            results={globalSearchResults}
+            dark={false}
+            onOpen={openGlobalSearchResult}
           />
-          {globalSearch && (
-            <button onClick={() => setGlobalSearch('')} style={{ border: 'none', background: 'transparent', cursor: 'pointer', color: '#9ca3af', display: 'grid', placeItems: 'center', padding: 0 }}>
-              <X size={13} />
-            </button>
-          )}
-        </label>
+        </div>
       )}
 
       <div ref={ref} style={{ position: 'relative', display: 'flex', alignItems: 'center', gap: 12, pointerEvents: 'auto' }}>
         <button
-          onClick={() => { setNotificationsOpen(!notificationsOpen); setOpen(false) }}
+          onClick={() => { setNotificationsOpen(!notificationsOpen); setRemindersOpen(false); setOpen(false) }}
           aria-label="Open notifications"
           style={notificationButtonStyle}
         >
@@ -1282,16 +1511,11 @@ export default function Header({ onMenuClick, compactWorkspace = false }: Header
           {notificationBadgeCount > 0 && <span style={notificationBadgeStyle}>{notificationBadgeCount}</span>}
         </button>
 
-        <ThemeSwitcher />
-
         {notificationsOpen && (
           <NotificationPanel
-            items={filteredNotifications}
+            items={notificationItems}
             allCount={notificationItems.length}
-            mentionedCount={notificationItems.filter(item => item.mentioned).length}
-            priorityCount={notificationItems.filter(item => item.priority).length}
-            filter={notificationFilter}
-            onFilter={setNotificationFilter}
+            onMarkAllRead={markNotificationsRead}
             onClose={() => setNotificationsOpen(false)}
             onOpen={target => { setNotificationsOpen(false); router.push(target) }}
           />
@@ -1302,20 +1526,23 @@ export default function Header({ onMenuClick, compactWorkspace = false }: Header
         </button>
 
         {open && (
-          <div className="profile-menu" style={{ position: 'absolute', top: 50, right: 0, width: 280, background: '#fff', border: '1px solid #eef2f7', borderRadius: 16, boxShadow: '0 24px 70px rgba(15,23,42,0.16)', overflow: 'hidden', zIndex: 80 }}>
-            <div style={{ padding: 20, textAlign: 'center' }}>
-              <div style={{ fontWeight: 600 }}>{activeCompany?.name || account.company}</div>
-              <div style={{ fontSize: 12, color: '#6b7280' }}>{account.email}</div>
+          <div className="profile-menu" style={{ position: 'absolute', top: 50, right: 0, width: 380, background: '#fff', border: '1px solid #d7d7d7', borderRadius: 4, boxShadow: '0 24px 80px rgba(0,0,0,0.18)', overflow: 'hidden', zIndex: 80, color: '#111827' }}>
+            <div style={{ padding: '24px 26px 18px', textAlign: 'center', borderBottom: '1px solid #e8e8e8' }}>
+              <span style={{ width: 44, height: 44, borderRadius: 14, background: '#1769aa', color: '#fff', display: 'grid', placeItems: 'center', fontSize: 17, fontWeight: 900, margin: '0 auto 12px' }}>{initials}</span>
+              <div style={{ fontSize: 16, fontWeight: 800, color: '#111' }}>{displayName}</div>
+              <div style={{ fontSize: 12, color: '#6b7280', marginTop: 4 }}>{account.email}</div>
+              <div style={{ fontSize: 11, color: '#6b7280', marginTop: 8 }}>Standard account in <strong style={{ color: '#111827' }}>{activeCompany?.name || account.company}</strong></div>
             </div>
-            <div style={{ padding: '0 14px 12px', display: 'grid', gap: 6, borderBottom: '1px solid #eef2f7' }}>
-              <div style={tinyLabelStyle}>Company switcher</div>
+            <div style={{ padding: '14px 26px', display: 'grid', gap: 0, borderBottom: '1px solid #e8e8e8' }}>
+              <div style={{ ...tinyLabelStyle, marginBottom: 8 }}>Choose an account</div>
               {companies.map(company => (
-                <button key={company.id} onClick={() => switchCompany(company.id)} style={{ border: '1px solid #e5e7eb', background: activeCompany?.id === company.id ? '#ecfdf5' : '#fff', color: '#111827', borderRadius: 8, padding: '8px 10px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, cursor: 'pointer', textAlign: 'left' }}>
+                <button key={company.id} onClick={() => switchCompany(company.id)} style={{ border: 0, borderTop: '1px solid #e8e8e8', background: '#fff', color: '#111827', minHeight: 76, padding: '12px 0', display: 'grid', gridTemplateColumns: '40px minmax(0, 1fr) auto', alignItems: 'center', gap: 12, cursor: 'pointer', textAlign: 'left' }}>
+                  <span style={{ width: 34, height: 34, borderRadius: '50%', background: activeCompany?.id === company.id ? '#1a73e8' : '#eef0ff', color: activeCompany?.id === company.id ? '#fff' : '#6b6eea', display: 'grid', placeItems: 'center', fontSize: 12, fontWeight: 900 }}>{company.name.slice(0, 2).toUpperCase()}</span>
                   <span style={{ minWidth: 0 }}>
-                    <span style={{ display: 'block', fontSize: 13, fontWeight: 700, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{company.name}</span>
-                    <span style={{ display: 'block', fontSize: 11, color: '#64748b', marginTop: 2 }}>{company.type}</span>
+                    <span style={{ display: 'block', fontSize: 13, fontWeight: 800, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{company.name}</span>
+                    <span style={{ display: 'block', fontSize: 12, color: '#6b7280', marginTop: 3 }}>{company.type}</span>
                   </span>
-                  {activeCompany?.id === company.id && <Check size={14} color="#16a34a" />}
+                  {activeCompany?.id === company.id ? <span style={{ color: '#16a34a', fontSize: 12, fontWeight: 800 }}>Active</span> : <span style={{ color: '#111', fontSize: 12, fontWeight: 800 }}>Continue</span>}
                 </button>
               ))}
             </div>
@@ -1401,14 +1628,7 @@ export default function Header({ onMenuClick, compactWorkspace = false }: Header
                     <label style={fieldGroupStyle}>
                       <span style={labelStyle}>Role</span>
                       <select value={inviteRole} onChange={event => setInviteRole(event.target.value as CompanyRole)} style={fieldStyle}>
-                        <option>Member</option>
-                        <option>Sales</option>
-                        <option>HR</option>
-                        <option>Finance</option>
-                        <option>Project Manager</option>
-                        <option>Warehouse</option>
-                        <option>Procurement</option>
-                        <option>Admin</option>
+                        {inviteRoleOptions.map(option => <option key={option}>{option}</option>)}
                       </select>
                     </label>
                     <button onClick={sendInvite} disabled={!inviteEmail.trim() || inviteSending} style={{ ...primaryButtonStyle, height: 40, opacity: inviteEmail.trim() && !inviteSending ? 1 : 0.45 }}>{inviteSending ? 'Sending...' : 'Invite'}</button>
@@ -1512,83 +1732,173 @@ export default function Header({ onMenuClick, compactWorkspace = false }: Header
   )
 }
 
+function GlobalSearchPanel({
+  open,
+  query,
+  results,
+  dark,
+  onOpen,
+}: {
+  open: boolean
+  query: string
+  results: GlobalSearchResult[]
+  dark: boolean
+  onOpen: (result: GlobalSearchResult) => void
+}) {
+  if (!open) return null
+
+  const trimmed = query.trim()
+  const colors = dark
+    ? {
+        bg: '#050505',
+        border: '#262626',
+        text: '#f9fafb',
+        muted: '#9ca3af',
+        item: '#0b0b0b',
+        hover: '#111',
+        badge: '#161616',
+      }
+    : {
+        bg: '#fff',
+        border: '#e5e7eb',
+        text: '#111827',
+        muted: '#6b7280',
+        item: '#fff',
+        hover: '#f9fafb',
+        badge: '#f3f4f6',
+      }
+
+  return (
+    <div
+      role="listbox"
+      aria-label="Global search results"
+      onMouseDown={event => event.preventDefault()}
+      style={{
+        position: 'absolute',
+        top: 'calc(100% + 8px)',
+        left: 0,
+        right: 0,
+        minWidth: 360,
+        maxWidth: 'min(560px, calc(100vw - 32px))',
+        background: colors.bg,
+        border: `1px solid ${colors.border}`,
+        borderRadius: 12,
+        boxShadow: dark ? '0 22px 70px rgba(0,0,0,.54)' : '0 22px 70px rgba(15,23,42,.2)',
+        padding: 8,
+        zIndex: 180,
+        color: colors.text,
+      }}
+    >
+      {trimmed.length < 2 ? (
+        <div style={{ padding: '12px 12px', color: colors.muted, fontSize: 13 }}>Type at least 2 characters to search real records.</div>
+      ) : results.length === 0 ? (
+        <div style={{ padding: '12px 12px', color: colors.muted, fontSize: 13 }}>No matching records found.</div>
+      ) : (
+        <div style={{ display: 'grid', gap: 4, maxHeight: 380, overflowY: 'auto' }}>
+          {results.map(result => (
+            <button
+              key={result.id}
+              type="button"
+              role="option"
+              aria-selected={false}
+              onClick={() => onOpen(result)}
+              style={{
+                border: 'none',
+                background: colors.item,
+                color: colors.text,
+                borderRadius: 8,
+                padding: '10px 11px',
+                cursor: 'pointer',
+                display: 'grid',
+                gridTemplateColumns: 'minmax(0, 1fr) auto',
+                alignItems: 'center',
+                gap: 12,
+                textAlign: 'left',
+              }}
+              onMouseEnter={event => { event.currentTarget.style.background = colors.hover }}
+              onMouseLeave={event => { event.currentTarget.style.background = colors.item }}
+            >
+              <span style={{ minWidth: 0 }}>
+                <span style={{ display: 'block', fontSize: 13, fontWeight: 800, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{result.title}</span>
+                <span style={{ display: 'block', marginTop: 3, fontSize: 12, color: colors.muted, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  {result.subtitle || result.href}
+                </span>
+              </span>
+              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
+                <span style={{ maxWidth: 118, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', border: `1px solid ${colors.border}`, background: colors.badge, color: colors.muted, borderRadius: 999, padding: '4px 8px', fontSize: 11, fontWeight: 700 }}>
+                  {result.module}
+                </span>
+              </span>
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
+function notificationMeta(item: HeaderNotificationItem) {
+  const bracket = item.title.match(/^\[([^\]]+)\]\s*/)
+  const type = item.type || bracket?.[1] || 'Notification'
+  const parsed = new Date(item.sortTime || item.date)
+  const date = Number.isNaN(parsed.getTime())
+    ? item.date
+    : parsed.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+  return `${type.toUpperCase()} · ${date.toUpperCase()}`
+}
+
+function notificationTitle(item: HeaderNotificationItem) {
+  const bracket = item.title.match(/^\[([^\]]+)\]\s*/)
+  if (!bracket || !item.type || bracket[1].toLowerCase() !== item.type.toLowerCase()) return item.title
+  return item.title.replace(/^\[[^\]]+\]\s*/, '')
+}
+
 function NotificationPanel({
   items,
   allCount,
-  mentionedCount,
-  priorityCount,
-  filter,
-  onFilter,
+  onMarkAllRead,
   onClose,
   onOpen,
 }: {
-  items: Array<{ id: number | string; title: string; lines: string[]; time: string; date: string; age: string; target: string; mentioned?: boolean; priority?: boolean }>
+  items: HeaderNotificationItem[]
   allCount: number
-  mentionedCount: number
-  priorityCount: number
-  filter: 'all' | 'mentioned' | 'priority'
-  onFilter: (filter: 'all' | 'mentioned' | 'priority') => void
+  onMarkAllRead: () => void
   onClose: () => void
   onOpen: (target: string) => void
 }) {
   return (
-    <div style={{ position: 'absolute', top: 36, right: 32, width: 630, maxWidth: 'calc(100vw - 24px)', height: 'min(835px, calc(100vh - 54px))', background: '#fff', color: '#111', border: '1px solid #e1e1e1', boxShadow: '0 22px 70px rgba(0,0,0,.28)', zIndex: 145, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
-      <div style={{ padding: '14px 18px 0', background: '#fff' }}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
-          <h2 style={{ margin: 0, color: '#111', fontSize: 22, fontWeight: 900, letterSpacing: 0 }}>Notifications</h2>
-          <button onClick={onClose} style={{ border: 'none', background: 'transparent', color: '#666', fontSize: 13, cursor: 'pointer' }}>Mark all as read</button>
+    <div className="notifications-panel" style={{ position: 'absolute', top: 42, right: 128, width: 380, maxWidth: 'calc(100vw - 24px)', background: '#fff', color: '#202124', border: '1px solid #dadce0', borderRadius: 18, boxShadow: '0 12px 34px rgba(60,64,67,.24), 0 3px 10px rgba(60,64,67,.12)', zIndex: 145, overflow: 'hidden' }}>
+      <div style={{ padding: '16px 18px 12px', borderBottom: '1px solid #f1f3f4', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
+        <div>
+          <h2 style={{ margin: 0, color: '#202124', fontSize: 18, fontWeight: 900, letterSpacing: 0, lineHeight: 1.2 }}>Notifications</h2>
+          <span style={{ display: 'block', marginTop: 4, color: '#5f6368', fontSize: 12 }}>{allCount ? `${allCount} update${allCount === 1 ? '' : 's'} waiting` : 'You are all caught up'}</span>
         </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 22, borderBottom: '1px solid #ddd' }}>
-          {[
-            ['all', 'All', allCount],
-            ['mentioned', 'Mentioned', mentionedCount],
-            ['priority', 'Priority', priorityCount],
-          ].map(([key, label, count]) => {
-            const active = filter === key
-            return (
-              <button key={String(key)} onClick={() => onFilter(key as 'all' | 'mentioned' | 'priority')} style={{ height: 39, border: 'none', borderBottom: active ? '2px solid #159aa6' : '2px solid transparent', background: 'transparent', color: active ? '#159aa6' : '#888', fontSize: 14, fontWeight: active ? 800 : 600, display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer' }}>
-                {label}
-                <span style={{ minWidth: 18, height: 18, borderRadius: 4, background: active ? '#159aa6' : '#e5e5e5', color: active ? '#fff' : '#777', display: 'grid', placeItems: 'center', fontSize: 11, fontWeight: 800 }}>{count as number}</span>
-              </button>
-            )
-          })}
-          <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 18, color: '#888', fontSize: 13 }}>
-            <button style={notificationFilterButtonStyle}><SlidersHorizontal size={13} /> Filter apps</button>
-            <button style={notificationFilterButtonStyle}><SlidersHorizontal size={13} /> All</button>
-          </div>
-        </div>
+        <button type="button" onClick={onMarkAllRead} style={{ border: 'none', background: 'transparent', color: '#111', cursor: 'pointer', fontSize: 12, fontWeight: 800, padding: '6px 8px', borderRadius: 999 }}>
+          Done
+        </button>
       </div>
 
-      <div style={{ flex: 1, overflowY: 'auto', background: '#fff' }}>
-        {items.length > 0 && (
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '13px 14px 8px', color: '#111', fontSize: 14, fontWeight: 800 }}>
-            <span>{items[0].date}</span>
-            <span style={{ color: '#999', fontSize: 13, fontWeight: 500 }}>{items[0].age}</span>
+      <div style={{ maxHeight: 390, overflowY: 'auto', background: '#fff' }}>
+        {items.length === 0 ? (
+          <div style={{ minHeight: 150, display: 'grid', placeItems: 'center', textAlign: 'center', gap: 7, color: '#5f6368', padding: 24, fontSize: 12 }}>
+            <Bell size={20} />
+            <strong style={{ color: '#202124', fontSize: 13 }}>No unread notifications</strong>
+            <span>New admin approvals, workflow, and business updates will appear here.</span>
           </div>
-        )}
-        {items.map(item => (
-          <button key={item.id} onClick={() => onOpen(item.target)} style={{ width: '100%', border: 'none', borderTop: '1px solid #ffffff', borderBottom: '1px solid #e8f4e8', background: '#f2fff0', color: '#111', display: 'grid', gridTemplateColumns: '44px minmax(0, 1fr) 14px', gap: 12, padding: '14px 14px 12px', textAlign: 'left', cursor: 'pointer' }}>
-            <span style={{ width: 38, height: 38, borderRadius: '50%', background: '#d9eadc', color: '#0f3d2a', display: 'grid', placeItems: 'center', fontSize: 13, fontWeight: 900, overflow: 'hidden' }}>
-              {item.title.charAt(1)?.toUpperCase() || 'N'}
-            </span>
+        ) : items.slice(0, 8).map(item => (
+          <button key={item.id} type="button" onClick={() => onOpen(item.target)} style={{ width: '100%', border: 0, borderBottom: '1px solid #f1f3f4', background: '#fff', color: '#202124', display: 'grid', gridTemplateColumns: '10px minmax(0, 1fr)', gap: 12, textAlign: 'left', padding: '16px 18px', cursor: 'pointer' }}>
+            <span style={{ width: 8, height: 8, borderRadius: 999, marginTop: 8, background: item.tone || '#159aa6' }} />
             <span style={{ minWidth: 0 }}>
-              <span style={{ display: 'block', fontSize: 16, fontWeight: 600, color: '#111', lineHeight: 1.25, marginBottom: 6 }}>{item.title}</span>
-              {item.lines.map((line, index) => (
-                <span key={index} style={{ display: 'grid', gridTemplateColumns: '12px minmax(0, 1fr) 42px', gap: 6, color: '#4c4c4c', fontSize: 12, lineHeight: 1.45 }}>
-                  <span style={{ color: '#aaa' }}>=</span>
-                  <span style={{ overflow: 'hidden', whiteSpace: 'nowrap', textOverflow: 'ellipsis' }}>{line}</span>
-                  <span style={{ color: '#444', textAlign: 'right' }}>{item.time}</span>
-                </span>
-              ))}
-              <span style={{ display: 'block', color: '#888', fontSize: 12, marginTop: 5 }}>{item.time} {item.date.replace(/^[^,]+,\s*/, '')}</span>
+              <span style={{ display: 'block', color: '#5f6368', fontSize: 11, fontWeight: 800, marginBottom: 4, textTransform: 'uppercase', letterSpacing: .3 }}>{notificationMeta(item)}</span>
+              <span style={{ display: 'block', color: '#202124', fontSize: 14, fontWeight: 900, lineHeight: 1.25, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{notificationTitle(item)}</span>
+              <span style={{ display: 'block', color: '#5f6368', fontSize: 12.5, lineHeight: 1.35, marginTop: 5, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.detail || item.lines[0] || item.age}</span>
             </span>
-            <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#159aa6', marginTop: 4 }} />
           </button>
         ))}
       </div>
 
-      <button onClick={onClose} style={{ height: 46, border: 'none', borderTop: '1px solid #e5e5e5', background: '#f6f6f6', color: '#555', fontSize: 14, cursor: 'pointer' }}>
-        View more notifications
+      <button type="button" onClick={onClose} style={{ width: '100%', minHeight: 46, border: 'none', borderTop: '1px solid #f1f3f4', background: '#f8f9fa', color: '#111', fontSize: 13, fontWeight: 900, cursor: 'pointer' }}>
+        View all admin notifications
       </button>
     </div>
   )
@@ -1651,53 +1961,6 @@ const notificationBadgeStyle = {
   fontWeight: 600,
   padding: '0 4px',
 }
-const notificationMenuStyle = {
-  position: 'absolute' as const,
-  top: 50,
-  right: 88,
-  width: 380,
-  background: '#fff',
-  border: '1px solid #e5e7eb',
-  borderRadius: 16,
-  boxShadow: '0 24px 70px rgba(15,23,42,0.16)',
-  overflow: 'hidden',
-  zIndex: 85,
-}
-const notificationItemStyle = {
-  padding: '14px 16px',
-  borderBottom: '1px solid #f1f5f9',
-  background: '#fff',
-}
-const notificationFooterStyle = {
-  width: '100%',
-  border: 'none',
-  background: '#f8fafc',
-  color: '#111827',
-  padding: '13px 16px',
-  fontSize: 13,
-  fontWeight: 600,
-  cursor: 'pointer',
-}
-const notificationFilterButtonStyle = {
-  border: 'none',
-  background: 'transparent',
-  color: '#777',
-  display: 'inline-flex',
-  alignItems: 'center',
-  gap: 7,
-  fontSize: 13,
-  cursor: 'pointer',
-}
-const requestStatusStyle = (status: ChangeOrderStatus) => ({
-  borderRadius: 999,
-  padding: '4px 8px',
-  fontSize: 10,
-  fontWeight: 600,
-  color: status === 'Approved' ? '#047857' : status === 'Rejected' ? '#b91c1c' : status === 'Priced' ? '#6d28d9' : '#c2410c',
-  background: status === 'Approved' ? '#d1fae5' : status === 'Rejected' ? '#fee2e2' : status === 'Priced' ? '#ede9fe' : '#ffedd5',
-  whiteSpace: 'nowrap' as const,
-})
-
 function startOfDay(date: Date) {
   return new Date(date.getFullYear(), date.getMonth(), date.getDate())
 }
@@ -1765,135 +2028,13 @@ const reminderSwitchStyle = (active: boolean) => ({
   alignItems: 'center',
   justifyContent: active ? 'flex-end' : 'flex-start',
 })
-const reminderSwitchKnobStyle = (_active: boolean) => ({
+const reminderSwitchKnobStyle = (_active: boolean) => {
+  void _active
+  return {
   width: 12,
   height: 12,
   borderRadius: '50%',
   background: '#fff',
   display: 'block',
-})
-const workspaceIconButtonStyle = {
-  width: 26,
-  height: 26,
-  border: 'none',
-  borderRadius: 3,
-  background: 'transparent',
-  color: '#d8f6f8',
-  display: 'inline-grid',
-  placeItems: 'center',
-  cursor: 'pointer',
-  padding: 0,
+  }
 }
-const workspacePillButtonStyle = {
-  height: 28,
-  border: 'none',
-  borderRadius: 3,
-  background: 'rgba(255,255,255,.12)',
-  color: '#f7ffff',
-  display: 'inline-flex',
-  alignItems: 'center',
-  justifyContent: 'center',
-  padding: '0 10px',
-  cursor: 'pointer',
-  fontSize: 13,
-}
-const workspaceCountButtonStyle = {
-  ...workspacePillButtonStyle,
-  width: 34,
-  padding: 0,
-  fontWeight: 800,
-  fontVariantNumeric: 'tabular-nums' as const,
-}
-const workspaceNotificationBadgeStyle = {
-  position: 'absolute' as const,
-  top: -5,
-  right: -4,
-  minWidth: 18,
-  height: 18,
-  borderRadius: 3,
-  background: '#d73535',
-  color: '#fff',
-  display: 'grid',
-  placeItems: 'center',
-  fontSize: 10,
-  fontWeight: 800,
-  padding: '0 4px',
-}
-const launcherRailButtonStyle = {
-  width: 34,
-  height: 34,
-  border: 'none',
-  borderRadius: '50%',
-  background: '#f0f0f0',
-  color: '#555',
-  display: 'grid',
-  placeItems: 'center',
-  cursor: 'pointer',
-}
-const launcherToolButtonStyle = {
-  width: '100%',
-  minHeight: 42,
-  border: 'none',
-  borderRadius: 5,
-  background: 'transparent',
-  color: '#444',
-  display: 'flex',
-  alignItems: 'center',
-  gap: 12,
-  padding: '7px 8px',
-  textAlign: 'left' as const,
-  cursor: 'pointer',
-}
-const launcherToolTitleStyle = {
-  display: 'block',
-  color: '#4c4c4c',
-  fontSize: 14,
-  fontWeight: 600,
-  whiteSpace: 'nowrap' as const,
-  overflow: 'hidden',
-  textOverflow: 'ellipsis',
-}
-const launcherToolDetailStyle = {
-  display: 'block',
-  color: '#9a9a9a',
-  fontSize: 12,
-  marginTop: 2,
-  whiteSpace: 'nowrap' as const,
-  overflow: 'hidden',
-  textOverflow: 'ellipsis',
-}
-const createMenuItemStyle = {
-  width: '100%',
-  border: 'none',
-  background: 'transparent',
-  color: '#333',
-  display: 'block',
-  padding: '10px 20px',
-  textAlign: 'left' as const,
-  cursor: 'pointer',
-  fontSize: 13,
-  fontWeight: 500,
-}
-const themeToggleStyle = (isDark: boolean) => ({
-  width: 58,
-  height: 32,
-  borderRadius: 999,
-  border: `2px solid ${isDark ? '#e5e7eb' : '#111827'}`,
-  background: isDark ? '#2b2f36' : '#fff',
-  padding: 3,
-  display: 'flex',
-  alignItems: 'center',
-  justifyContent: isDark ? 'flex-end' : 'flex-start',
-  cursor: 'pointer',
-  boxShadow: isDark ? 'inset 0 0 0 1px rgba(255,255,255,.08), 0 8px 18px rgba(0,0,0,.18)' : '0 8px 18px rgba(15,23,42,0.08)',
-})
-const themeKnobStyle = (isDark: boolean) => ({
-  width: 22,
-  height: 22,
-  borderRadius: '50%',
-  background: isDark ? '#fff' : '#020617',
-  color: isDark ? '#111827' : '#fff',
-  display: 'grid',
-  placeItems: 'center',
-  transition: 'transform .18s ease, background-color .18s ease, color .18s ease',
-})

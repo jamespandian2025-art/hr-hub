@@ -23,7 +23,17 @@ interface Employee {
   updatedAt: string
 }
 
-type DeletedEmployee = Employee & { deletedAt?: string }
+type ExitReason = 'Resigned' | 'AWOL' | 'Terminated' | 'Retired' | 'End of contract' | 'Other'
+type DeletedEmployee = Employee & { deletedAt?: string; exitReason?: ExitReason; exitNotes?: string }
+
+const exitReasonStyles: Record<ExitReason, { bg: string; color: string }> = {
+  Resigned:           { bg: '#dbeafe', color: '#1d4ed8' },
+  AWOL:               { bg: '#fee2e2', color: '#b91c1c' },
+  Terminated:         { bg: '#fef3c7', color: '#92400e' },
+  Retired:            { bg: '#ede9fe', color: '#6d28d9' },
+  'End of contract':  { bg: '#dcfce7', color: '#15803d' },
+  Other:              { bg: '#e2e8f0', color: '#334155' },
+}
 
 const font = "var(--font-body)"
 const employeesKey = 'flowsys-hr-employees'
@@ -36,6 +46,7 @@ function loadStored<T>(key: string, fallback: T): T {
 
 function saveStored<T>(key: string, value: T) {
   window.localStorage.setItem(key, JSON.stringify(value))
+  window.dispatchEvent(new StorageEvent('storage', { key }))
 }
 
 function fullName(employee: Employee) {
@@ -68,22 +79,27 @@ export default function DeletedEmployeesPage() {
   function restoreEmployee(employee: DeletedEmployee) {
     const activeEmployees = loadStored<Employee[]>(employeesKey, [])
     const restored: Employee = { ...employee }
-    delete (restored as Partial<DeletedEmployee>).deletedAt
+    const restoredAsPartial = restored as Partial<DeletedEmployee>
+    delete restoredAsPartial.deletedAt
+    delete restoredAsPartial.exitReason
+    delete restoredAsPartial.exitNotes
     saveStored(employeesKey, [{ ...restored, updatedAt: new Date().toISOString() }, ...activeEmployees.filter(item => item.id !== employee.id)])
     persistDeleted(employees.filter(item => item.id !== employee.id))
+    window.dispatchEvent(new Event('wiseflow:hr-data-changed'))
   }
 
   function deleteForever(employeeId: string) {
     persistDeleted(employees.filter(employee => employee.id !== employeeId))
+    window.dispatchEvent(new Event('wiseflow:hr-data-changed'))
   }
 
   return (
-    <main style={{ fontFamily: font, padding: '0 20px 32px', minHeight: '100vh', background: '#f8fafc' }}>
+    <main style={{ fontFamily: font, padding: '0 20px 32px', minHeight: '100vh' }}>
       <div style={{ padding: '20px 0 18px', display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 14, flexWrap: 'wrap' }}>
         <div>
-          <div style={{ fontSize: 12, color: '#64748b', marginBottom: 12 }}>HR Hub &gt; Employees &gt; Deleted Employees</div>
-          <h1 style={{ margin: 0, color: '#0f172a', fontSize: 24 }}>Deleted Employees</h1>
-          <p style={{ margin: '6px 0 0', color: '#64748b', fontSize: 13 }}>Restore employees or delete them forever.</p>
+          <div style={{ fontSize: 12, color: '#64748b', marginBottom: 12 }}>HR Hub &gt; Employees &gt; Ex Employees</div>
+          <h1 style={{ margin: 0, color: '#0f172a', fontSize: 24 }}>Ex Employees</h1>
+          <p style={{ margin: '6px 0 0', color: '#64748b', fontSize: 13 }}>People who have left the company. Reinstate or remove the record permanently.</p>
         </div>
         <Link href="/hr/employees" style={secondaryLinkStyle}><ArrowLeft size={15} /> Back to Employees</Link>
       </div>
@@ -91,14 +107,16 @@ export default function DeletedEmployeesPage() {
       <section style={cardStyle}>
         <label style={searchStyle}>
           <Search size={15} color="#94a3b8" />
-          <input value={query} onChange={event => setQuery(event.target.value)} placeholder="Search deleted employees..." style={searchInputStyle} />
+          <input value={query} onChange={event => setQuery(event.target.value)} placeholder="Search ex employees..." style={searchInputStyle} />
         </label>
         <div style={{ overflowX: 'auto', marginTop: 16 }}>
           <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 820 }}>
-            <thead><tr>{['Employee', 'Employee ID', 'Position', 'Department', 'Deleted On', 'Actions'].map(header => <th key={header} style={thStyle}>{header}</th>)}</tr></thead>
+            <thead><tr>{['Employee', 'Employee ID', 'Position', 'Department', 'Reason', 'Exit date', 'Actions'].map(header => <th key={header} style={thStyle}>{header}</th>)}</tr></thead>
             <tbody>
               {filtered.map(employee => {
                 const name = fullName(employee)
+                const reason = employee.exitReason
+                const reasonStyle = reason ? exitReasonStyles[reason] : null
                 return (
                   <tr key={employee.id} style={{ borderTop: '1px solid #f1f5f9' }}>
                     <td style={tdStyle}>
@@ -108,17 +126,23 @@ export default function DeletedEmployeesPage() {
                     <td style={tdStyle}>{employee.employeeId}</td>
                     <td style={tdStyle}>{employee.jobTitle || '-'}</td>
                     <td style={tdStyle}>{employee.department || '-'}</td>
+                    <td style={tdStyle}>
+                      {reason && reasonStyle ? (
+                        <span style={{ display: 'inline-flex', alignItems: 'center', padding: '3px 9px', borderRadius: 999, background: reasonStyle.bg, color: reasonStyle.color, fontSize: 11, fontWeight: 800 }}>{reason}</span>
+                      ) : <span style={{ color: '#94a3b8' }}>Not specified</span>}
+                      {employee.exitNotes && <div style={{ marginTop: 4, color: '#64748b', fontSize: 11, maxWidth: 220, whiteSpace: 'normal' }}>{employee.exitNotes}</div>}
+                    </td>
                     <td style={tdStyle}>{employee.deletedAt ? new Date(employee.deletedAt).toLocaleString() : '-'}</td>
                     <td style={{ ...tdStyle, textAlign: 'right' }}>
-                      <button onClick={() => restoreEmployee(employee)} style={restoreButtonStyle}><RotateCcw size={14} /> Restore</button>
-                      <button onClick={() => deleteForever(employee.id)} style={dangerButtonStyle}><Trash2 size={14} /> Delete forever</button>
+                      <button onClick={() => restoreEmployee(employee)} style={restoreButtonStyle}><RotateCcw size={14} /> Reinstate</button>
+                      <button onClick={() => deleteForever(employee.id)} style={dangerButtonStyle}><Trash2 size={14} /> Remove</button>
                     </td>
                   </tr>
                 )
               })}
             </tbody>
           </table>
-          {filtered.length === 0 && <EmptyState icon={<Users size={30} />} title="No deleted employees" text="Deleted employees will appear here before they are removed forever." />}
+          {filtered.length === 0 && <EmptyState icon={<Users size={30} />} title="No ex employees" text="People you mark as having left the company will appear here." />}
         </div>
       </section>
     </main>

@@ -29,6 +29,7 @@ import {
 } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import { formatDate, initials } from '@/lib/project-management/metrics'
+import { uploadFileObject } from '@/lib/uploads/client'
 import type {
   ProjectActivity,
   ProjectManagementState,
@@ -41,7 +42,6 @@ import type {
   TaskPriority,
   TaskStatus,
 } from '@/lib/project-management/types'
-import { getActiveCompany } from '@/lib/tenant/company'
 import { useProjectManagement } from './useProjectManagement'
 
 const taskTabs = ['Overview', 'Subtasks', 'Updates', 'Files', 'Time Log', 'Activity'] as const
@@ -49,13 +49,13 @@ type TaskDetailTab = typeof taskTabs[number]
 const taskStatuses: TaskStatus[] = ['To Do', 'In Progress', 'Review', 'Done', 'Blocked']
 const taskPriorities: TaskPriority[] = ['Low', 'Medium', 'High', 'Critical']
 
-function formatCurrency(value: number, currency = 'USD') {
-  const safeCurrency = currency || 'USD'
+function formatCurrency(value: number, currency = 'PHP') {
+  const safeCurrency = currency || 'PHP'
   const locale = safeCurrency === 'PHP' ? 'en-PH' : 'en-US'
   try {
     return new Intl.NumberFormat(locale, { style: 'currency', currency: safeCurrency, maximumFractionDigits: 0 }).format(value || 0)
   } catch {
-    return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(value || 0)
+    return new Intl.NumberFormat('en-PH', { style: 'currency', currency: 'PHP', maximumFractionDigits: 0 }).format(value || 0)
   }
 }
 
@@ -180,15 +180,12 @@ function fileIcon(attachment: ProjectTaskAttachment) {
   return Paperclip
 }
 
-function readFileAsDataUrl(file: File) {
-  const maxStoredFileBytes = 2 * 1024 * 1024
-  if (file.size > maxStoredFileBytes) return Promise.resolve<string | undefined>(undefined)
-  return new Promise<string | undefined>(resolve => {
-    const reader = new FileReader()
-    reader.onload = () => resolve(typeof reader.result === 'string' ? reader.result : undefined)
-    reader.onerror = () => resolve(undefined)
-    reader.readAsDataURL(file)
-  })
+async function uploadProjectAttachment(file: File) {
+  try {
+    return await uploadFileObject(file, 'project-attachments')
+  } catch {
+    return undefined
+  }
 }
 
 function formatFileSize(bytes: number) {
@@ -303,7 +300,7 @@ export default function ProjectTaskDetailsPage({ taskId }: { taskId: string }) {
   const [descriptionDraft, setDescriptionDraft] = useState('')
   const [commentDraft, setCommentDraft] = useState('')
   const [subtaskDraft, setSubtaskDraft] = useState('')
-  const [currency] = useState(() => getActiveCompany()?.settings.currency || 'USD')
+  const [currency] = useState('PHP')
 
   const task = useMemo(() => {
     const normalized = taskId.toLowerCase()
@@ -323,7 +320,7 @@ export default function ProjectTaskDetailsPage({ taskId }: { taskId: string }) {
           <BriefcaseBusiness size={34} />
           <h1>Task not found</h1>
           <p>The task may have been archived, deleted, or belongs to another company workspace.</p>
-          <Link href="/project-management/tasks"><ArrowLeft size={15} /> Back to tasks</Link>
+          <Link href="/project-management/projects"><ArrowLeft size={15} /> Back to projects</Link>
         </section>
       </main>
     )
@@ -332,7 +329,7 @@ export default function ProjectTaskDetailsPage({ taskId }: { taskId: string }) {
   const project = state.projects.find(item => item.id === task.projectId)
   const projectTasksHref = project
     ? `/project-management/projects?project=${encodeURIComponent(project.id)}&detail=Tasks`
-    : '/project-management/tasks'
+    : '/project-management/projects'
   const assignee = state.members.find(member => member.id === task.assigneeId)
   const comments = state.taskComments.filter(comment => comment.taskId === task.id)
   const attachments = state.taskAttachments.filter(attachment => attachment.taskId === task.id)
@@ -379,15 +376,21 @@ export default function ProjectTaskDetailsPage({ taskId }: { taskId: string }) {
   const attachFiles = async (event: ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(event.target.files || [])
     if (!files.length) return
-    const drafts = await Promise.all(files.map(async file => ({
-      taskId: task.id,
-      name: file.name,
-      fileType: fileKind(file.name, file.type),
-      mimeType: file.type || 'application/octet-stream',
-      size: formatFileSize(file.size),
-      evidence: true,
-      dataUrl: await readFileAsDataUrl(file),
-    })))
+    const drafts = await Promise.all(files.map(async file => {
+      const uploaded = await uploadProjectAttachment(file)
+      return {
+        taskId: task.id,
+        name: file.name,
+        fileType: fileKind(file.name, file.type),
+        mimeType: file.type || 'application/octet-stream',
+        size: formatFileSize(file.size),
+        evidence: true,
+        dataUrl: uploaded?.url,
+        fileUrl: uploaded?.url,
+        objectKey: uploaded?.objectKey,
+        storageProvider: uploaded?.storageProvider,
+      }
+    }))
     store.addTaskAttachments(drafts)
     event.target.value = ''
   }
@@ -468,6 +471,7 @@ export default function ProjectTaskDetailsPage({ taskId }: { taskId: string }) {
         {attachments.length ? attachments.map(attachment => {
           const owner = state.members.find(member => member.id === attachment.ownerId)
           const Icon = fileIcon(attachment)
+          const fileUrl = attachment.fileUrl || attachment.dataUrl
           return (
             <article key={attachment.id}>
               <span className={`pmtd-file-icon file-${fileKind(attachment.name, attachment.mimeType).toLowerCase()}`}><Icon size={17} /></span>
@@ -476,7 +480,7 @@ export default function ProjectTaskDetailsPage({ taskId }: { taskId: string }) {
                 <small>{fileKind(attachment.name, attachment.mimeType)} - {attachment.size}</small>
               </div>
               <small>{formatCompactDate(attachment.uploadedAt)}<br />{owner?.name || 'WiseFlow'}</small>
-              {attachment.dataUrl ? <a href={attachment.dataUrl} download={attachment.name} aria-label={`Download ${attachment.name}`}><Download size={16} /></a> : <button type="button" aria-label={`File ${attachment.name}`}><Download size={16} /></button>}
+              {fileUrl ? <a href={fileUrl} download={attachment.name} aria-label={`Download ${attachment.name}`}><Download size={16} /></a> : <button type="button" aria-label={`File ${attachment.name}`}><Download size={16} /></button>}
               <button type="button" onClick={() => store.deleteTaskAttachment(attachment.id)} aria-label={`Remove ${attachment.name}`}><MoreVertical size={16} /></button>
             </article>
           )
@@ -1169,11 +1173,12 @@ html[data-theme='dark'] body .app-shell .main-content .pmtd-panel.pmtd-panel .pm
 .pmtd-side {
   position: sticky;
   top: 72px;
+  align-self: start;
 }
 .pmtd-actions {
   justify-content: flex-end;
-  gap: 10px;
-  margin-bottom: 22px;
+  gap: 8px;
+  margin-bottom: 10px;
 }
 .pmtd-actions > div {
   display: inline-flex;
@@ -1184,8 +1189,13 @@ html[data-theme='dark'] body .app-shell .main-content .pmtd-panel.pmtd-panel .pm
 .pmtd-actions > div button {
   border: 0;
   border-radius: 0;
-  width: 42px;
+  width: 36px;
   padding: 0;
+}
+.pmtd-actions button {
+  min-height: 32px;
+  padding: 0 10px;
+  font-size: 12px;
 }
 .pmtd-actions > button:last-child {
   background: var(--pmtd-fg);
@@ -1193,24 +1203,24 @@ html[data-theme='dark'] body .app-shell .main-content .pmtd-panel.pmtd-panel .pm
   border-color: var(--pmtd-fg);
 }
 .pmtd-side-panel {
-  padding: 18px;
+  padding: 12px;
   display: grid;
-  gap: 16px;
+  gap: 10px;
 }
 .pmtd-side-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 12px;
-  padding-top: 14px;
+  gap: 8px;
+  padding-top: 8px;
   border-top: 1px solid var(--pmtd-border-soft);
 }
 .pmtd-field {
   min-width: 0;
   display: grid;
-  gap: 8px;
+  gap: 5px;
 }
 .pmtd-field-full {
-  padding-bottom: 10px;
+  padding-bottom: 4px;
 }
 .pmtd-field span,
 .pmtd-metric header span,
@@ -1223,16 +1233,17 @@ html[data-theme='dark'] body .app-shell .main-content .pmtd-panel.pmtd-panel .pm
 .pmtd-field input,
 .pmtd-field select {
   min-width: 0;
-  height: 38px;
-  padding: 0 11px;
+  height: 32px;
+  padding: 0 9px;
+  font-size: 13px;
 }
 .pmtd-field input:disabled {
   color: var(--pmtd-muted);
 }
 .pmtd-metric {
   display: grid;
-  gap: 10px;
-  padding-top: 14px;
+  gap: 6px;
+  padding-top: 8px;
   border-top: 1px solid var(--pmtd-border-soft);
 }
 .pmtd-metric header {
@@ -1250,16 +1261,16 @@ html[data-theme='dark'] body .app-shell .main-content .pmtd-panel.pmtd-panel .pm
 .pmtd-audit {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 6px 20px;
+  gap: 3px 12px;
 }
 .pmtd-budget > div strong,
 .pmtd-time-summary strong {
-  font-size: 18px;
+  font-size: 15px;
 }
 .pmtd-budget p {
   position: relative;
   display: grid;
-  gap: 3px;
+  gap: 2px;
   margin: 0;
   color: #22c55e;
 }
@@ -1276,31 +1287,31 @@ html[data-theme='dark'] body .app-shell .main-content .pmtd-panel.pmtd-panel .pm
 }
 .pmtd-tags {
   display: grid;
-  gap: 10px;
-  padding-top: 14px;
+  gap: 6px;
+  padding-top: 8px;
   border-top: 1px solid var(--pmtd-border-soft);
 }
 .pmtd-tags div {
   display: flex;
   flex-wrap: wrap;
-  gap: 8px;
+  gap: 6px;
 }
 .pmtd-tags em,
 .pmtd-tags button {
-  min-height: 26px;
+  min-height: 22px;
   border: 1px solid rgba(139,92,246,.34);
   border-radius: 999px;
   background: rgba(139,92,246,.22);
   color: #d8b4fe;
-  padding: 0 10px;
+  padding: 0 7px;
   display: inline-flex;
   align-items: center;
   font-style: normal;
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 650;
 }
 .pmtd-tags button {
-  width: 28px;
+  width: 24px;
   padding: 0;
   justify-content: center;
   border-color: var(--pmtd-border);
@@ -1308,23 +1319,23 @@ html[data-theme='dark'] body .app-shell .main-content .pmtd-panel.pmtd-panel .pm
   color: var(--pmtd-fg);
 }
 .pmtd-audit {
-  padding-top: 14px;
+  padding-top: 8px;
   border-top: 1px solid var(--pmtd-border-soft);
 }
 .pmtd-audit span {
   display: grid;
-  gap: 6px;
+  gap: 3px;
   min-width: 0;
 }
 .pmtd-audit strong {
-  font-size: 13px;
-  line-height: 1.35;
+  font-size: 11.5px;
+  line-height: 1.25;
 }
 .pmtd-audit em {
-  gap: 6px;
+  gap: 5px;
   color: var(--pmtd-muted);
   font-style: normal;
-  font-size: 12px;
+  font-size: 11px;
 }
 .pmtd-avatar {
   width: 30px;
@@ -1338,6 +1349,11 @@ html[data-theme='dark'] body .app-shell .main-content .pmtd-panel.pmtd-panel .pm
   flex: 0 0 auto;
   font-size: 12px;
   font-weight: 800;
+}
+.pmtd-side-panel .pmtd-avatar {
+  width: 24px;
+  height: 24px;
+  font-size: 10px;
 }
 .pmtd-empty,
 .pmtd-empty-block {

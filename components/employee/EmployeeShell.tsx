@@ -11,7 +11,6 @@ import {
   FileText,
   HelpCircle,
   Home,
-  LogOut,
   Megaphone,
   HandCoins,
   MessageCircle,
@@ -98,7 +97,7 @@ function EmployeeWorkspace({ children, pathname }: { children: ReactNode; pathna
         </nav>
 
         <div className="employee-sidebar-footer">
-          <Link href="/hr/overview" className="employee-back-link"><LogOut size={16} /> Back to HR Hub</Link>
+          <Link href="/employee/dashboard" className="employee-back-link"><Home size={16} /> Back to Dashboard</Link>
           <Link href="/employee/profile" className="employee-profile-card">
             {employee.photo ? (
               // eslint-disable-next-line @next/next/no-img-element

@@ -374,7 +374,7 @@ export default function PurchaseOrdersPage() {
       notes: '',
       supplies: [],
     }
-    const nextStored = [supplier, ...readStored(suppliersKey)]
+    const nextStored = [supplier, ...loadRows(suppliersKey, companyId)]
     persistRows(suppliersKey, nextStored, companyId)
     const option = normalizeSupplier(supplier, 0)
     setSuppliers(previous => [option, ...previous])
@@ -540,7 +540,7 @@ export default function PurchaseOrdersPage() {
           <button type="button" className="po-secondary-button" onClick={() => { setActiveTab(activeTab === 'Received' ? 'All' : 'Received'); setPage(1) }}>
             <Package size={16} /> Group by <ChevronDown size={14} />
           </button>
-          <button type="button" className="po-icon-button" aria-label="More purchase order actions" onClick={resetFilters}>
+          <button type="button" className="po-icon-button" aria-label="Reset purchase order filters" onClick={resetFilters}>
             <MoreHorizontal size={18} />
           </button>
           <button type="button" className="po-secondary-button" onClick={() => importOrdersRef.current?.click()}>
@@ -687,9 +687,9 @@ export default function PurchaseOrdersPage() {
               <div className="po-pagination">
                 <span>Showing {pageStart} to {pageEnd} of {filteredOrders.length} entries</span>
                 <div>
-                  <button type="button" disabled={currentPage === 1} onClick={() => setPage(value => Math.max(1, value - 1))}>‹</button>
+                  <button type="button" disabled={currentPage === 1} onClick={() => setPage(value => Math.max(1, value - 1))} aria-label="Previous page">&lt;</button>
                   <strong>{currentPage}</strong>
-                  <button type="button" disabled={currentPage === totalPages} onClick={() => setPage(value => Math.min(totalPages, value + 1))}>›</button>
+                  <button type="button" disabled={currentPage === totalPages} onClick={() => setPage(value => Math.min(totalPages, value + 1))} aria-label="Next page">&gt;</button>
                   <select value={pageSize} onChange={event => { setPageSize(Number(event.target.value)); setPage(1) }} aria-label="Rows per page">
                     {[10, 25, 50].map(size => <option key={size} value={size}>{size} / page</option>)}
                   </select>
@@ -1098,8 +1098,8 @@ function OrderDetails({ order, activeTab, onTabChange, onClose, onStatusChange }
       )}
 
       <div className="po-detail-actions">
-        <button type="button" className="po-secondary-button"><Download size={15} /> Download PDF</button>
-        <button type="button" className="po-primary-button" onClick={() => onStatusChange('Received')}>Edit PO</button>
+        <button type="button" className="po-secondary-button" onClick={() => downloadPurchaseOrderCsv(order)}><Download size={15} /> Export CSV</button>
+        <button type="button" className="po-primary-button" onClick={() => onStatusChange('Received')}><Truck size={15} /> Mark Received</button>
       </div>
     </aside>
   )
@@ -1116,7 +1116,10 @@ function DetailRow({ label, value }: { label: string; value: string }) {
 
 function loadRows(key: string, companyId: string) {
   const scoped = companyId ? companyScopedKey(key, companyId) : key
-  const rows = [...readStored(key), ...(scoped === key ? [] : readStored(scoped))]
+  const scopedRows = scoped === key ? [] : readStored(scoped)
+  const globalRows = readStored(key)
+  const globalForCompany = scopedRows.length ? globalRows.filter(row => textFrom(row.companyId) === companyId) : globalRows
+  const rows = scopedRows.length ? [...scopedRows, ...globalForCompany] : globalForCompany
   return uniqueRows(rows).filter(row => {
     const rowCompanyId = textFrom(row.companyId)
     return !companyId || !rowCompanyId || rowCompanyId === companyId
@@ -1285,6 +1288,42 @@ function parseOrderCsv(text: string, companyId: string): StoredRow[] {
 
 function splitCsvLine(line: string) {
   return line.split(',').map(value => value.replace(/^"|"$/g, '').trim())
+}
+
+function downloadPurchaseOrderCsv(order: NormalizedOrder) {
+  if (typeof window === 'undefined') return
+  const rows = [
+    ['PO Number', order.poNumber],
+    ['Supplier', order.supplierName],
+    ['Order Date', order.orderDate],
+    ['Delivery Date', order.deliveryDate],
+    ['Status', order.status],
+    ['Total', String(order.total)],
+    [],
+    ['Item', 'SKU', 'Quantity', 'Unit', 'Unit Price', 'Amount'],
+    ...order.items.map(item => [
+      item.name,
+      item.sku,
+      String(item.quantity),
+      item.unit,
+      String(item.unitPrice),
+      String(item.amount),
+    ]),
+  ]
+  const csv = rows.map(row => row.map(csvEscape).join(',')).join('\n')
+  const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }))
+  const link = document.createElement('a')
+  link.href = url
+  link.download = `${order.poNumber || 'purchase-order'}.csv`
+  document.body.appendChild(link)
+  link.click()
+  link.remove()
+  URL.revokeObjectURL(url)
+}
+
+function csvEscape(value: string) {
+  if (/[",\n]/.test(value)) return `"${value.replace(/"/g, '""')}"`
+  return value
 }
 
 function uniqueRows(rows: StoredRow[]) {

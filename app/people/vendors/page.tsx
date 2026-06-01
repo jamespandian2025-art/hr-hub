@@ -180,9 +180,9 @@ export default function VendorsPage() {
                       boxShadow: '0 10px 20px rgba(0,0,0,0.05)',
                       overflow: 'hidden'
                     }}>
-                      <div style={menuItem} onClick={() => { console.log('View', vendor.id); setActiveMenu(null) }}>View</div>
-                      <div style={menuItem} onClick={() => { console.log('Edit', vendor.id); setActiveMenu(null) }}>Edit</div>
-                      <div style={{ ...menuItem, color: '#ef4444', borderBottom: 'none' }} onClick={() => { console.log('Delete', vendor.id); setActiveMenu(null) }}>Delete</div>
+                      <div style={menuItem} onClick={() => setActiveMenu(null)}>View</div>
+                      <div style={menuItem} onClick={() => setActiveMenu(null)}>Edit</div>
+                      <div style={{ ...menuItem, color: '#ef4444', borderBottom: 'none' }} onClick={() => setActiveMenu(null)}>Delete</div>
                     </div>
                   )}
                 </td>

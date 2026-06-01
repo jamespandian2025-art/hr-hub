@@ -1,13 +1,18 @@
 'use client'
 
+import { clearLegacyBusinessRows, deleteBusinessRecord, listBusinessRecords, readLegacyBusinessRows, replaceBusinessCollection, upsertBusinessRecord } from '@/lib/business/client'
+import type { BusinessCollection } from '@/lib/business/collections'
 import { getActiveCompany } from '@/lib/tenant/company'
 
 export type StoredRow = Record<string, unknown>
 
 export type AccountingTransactionType = 'Income' | 'Expense' | 'Transfer'
+export type AccountingTransactionSource = 'manual' | 'invoice' | 'bill' | 'expense' | 'payroll'
 
 export type AccountingTransaction = {
   id: string
+  source: AccountingTransactionSource
+  sourceId: string
   date: string
   description: string
   secondary: string
@@ -36,6 +41,7 @@ export type AccountingBankAccount = {
 
 export type AccountingInvoice = {
   id: string
+  clientId?: string
   number: string
   customer: string
   email: string
@@ -60,6 +66,7 @@ export type AccountingInvoice = {
   lineItems?: Array<{
     id: string
     description: string
+    unitType?: string
     unitCost: number
     quantity: number
     amount: number
@@ -99,6 +106,18 @@ export type AccountingExpenseInput = {
   amount: number
   date: string
   category: string
+  status: string
+  notes?: string
+}
+
+export type AccountingTransactionInput = {
+  date: string
+  description: string
+  account: string
+  category: string
+  type: AccountingTransactionType
+  reference?: string
+  amount: number
   status: string
   notes?: string
 }
@@ -167,15 +186,41 @@ const taxKeys = ['flowsys-tax-obligations', 'flowsys-accounting-tax-obligations'
 
 const colors = ['#2563eb', '#4f46e5', '#14b8a6', '#f59e0b', '#fb923c', '#64748b', '#7c3aed']
 
+type AccountingCollectionConfig = {
+  collection: BusinessCollection
+  keys: string[]
+  idPrefix: string
+}
+
+const accountingCollections = {
+  invoices: { collection: 'accounting-invoices', keys: invoiceKeys, idPrefix: 'INV' },
+  bills: { collection: 'accounting-bills', keys: billKeys, idPrefix: 'BILL' },
+  expenses: { collection: 'accounting-expenses', keys: expenseKeys, idPrefix: 'EXP' },
+  bankAccounts: { collection: 'accounting-bank-accounts', keys: bankKeys, idPrefix: 'BANK' },
+  transactions: { collection: 'accounting-transactions', keys: transactionKeys, idPrefix: 'TX' },
+  budgets: { collection: 'accounting-budgets', keys: budgetKeys, idPrefix: 'BUD' },
+  auditEvents: { collection: 'accounting-audit-events', keys: auditKeys, idPrefix: 'AUD' },
+  taxObligations: { collection: 'accounting-tax-obligations', keys: taxKeys, idPrefix: 'TAX' },
+} satisfies Record<string, AccountingCollectionConfig>
+
+const accountingConfigs = Object.values(accountingCollections)
+const collectionByPrimaryKey = new Map(accountingConfigs.map(config => [config.keys[0], config]))
+let accountingCache: Partial<Record<BusinessCollection, StoredRow[]>> = {}
+let accountingHydratedCompanyId = ''
+let accountingRefreshPromise: Promise<AccountingData> | null = null
+
 export function loadAccountingData(): AccountingData {
   const activeCompany = getActiveCompany()
   const companyId = activeCompany?.id
+  if (typeof window !== 'undefined' && accountingHydratedCompanyId !== (companyId || '')) {
+    void refreshAccountingData()
+  }
   const rawInvoices = loadRows(invoiceKeys, companyId)
   const rawBills = loadRows(billKeys, companyId)
   const rawExpenses = loadRows(expenseKeys, companyId)
   const rawBankAccounts = loadRows(bankKeys, companyId)
   const rawTransactions = loadRows(transactionKeys, companyId)
-  const payrollRecords = loadRows(payrollKeys, companyId)
+  const payrollRecords = loadPayrollRows(companyId)
   const invoices = rawInvoices.map(toInvoice)
   const bills = rawBills.map(toBill)
   const expenses = rawExpenses
@@ -197,6 +242,38 @@ export function loadAccountingData(): AccountingData {
   }
 }
 
+export async function refreshAccountingData(): Promise<AccountingData> {
+  if (accountingRefreshPromise) return accountingRefreshPromise
+
+  accountingRefreshPromise = (async () => {
+    const activeCompany = getActiveCompany()
+    const companyId = activeCompany?.id || ''
+    const nextCache: Partial<Record<BusinessCollection, StoredRow[]>> = {}
+
+    await Promise.all(accountingConfigs.map(async config => {
+      let rows = await listBusinessRecords<StoredRow>(config.collection)
+      if (!rows.length) {
+        const legacyRows = dedupeRows(readLegacyBusinessRows<StoredRow>(config.keys)).map((row, index) => ensureRowId(row, config.idPrefix, index))
+        if (legacyRows.length) {
+          rows = await replaceBusinessCollection(config.collection, legacyRows)
+          clearLegacyBusinessRows(config.keys)
+        }
+      }
+      nextCache[config.collection] = dedupeRows(rows)
+    }))
+
+    accountingCache = nextCache
+    accountingHydratedCompanyId = companyId
+    const data = loadAccountingData()
+    if (typeof window !== 'undefined') window.dispatchEvent(new Event('wiseflow-accounting-refresh'))
+    return data
+  })().finally(() => {
+    accountingRefreshPromise = null
+  })
+
+  return accountingRefreshPromise
+}
+
 export function emptyAccountingData(): AccountingData {
   return {
     companyName: 'Current company',
@@ -214,7 +291,12 @@ export function emptyAccountingData(): AccountingData {
 }
 
 export function money(value: number, currency = 'PHP') {
-  return new Intl.NumberFormat(currency === 'PHP' ? 'en-PH' : 'en-US', { style: 'currency', currency }).format(Number(value || 0))
+  return new Intl.NumberFormat(currency === 'PHP' ? 'en-PH' : 'en-US', {
+    style: 'currency',
+    currency,
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  }).format(Number(value || 0))
 }
 
 export function formatDate(value?: string) {
@@ -293,16 +375,7 @@ export function createAccountingBill(input: AccountingBillInput): AccountingBill
     createdAt: new Date().toISOString(),
   }
 
-  if (typeof window !== 'undefined') {
-    const activeCompany = getActiveCompany()
-    const keys = new Set([billKeys[0], activeCompany?.id ? `${billKeys[0]}:${activeCompany.id}` : billKeys[0]])
-    keys.forEach(key => {
-      const rows = readStoredRows(key).filter(existing => readString(existing, ['id', 'billNo', 'billNumber'], '') !== id)
-      window.localStorage.setItem(key, JSON.stringify([row, ...rows]))
-    })
-    window.dispatchEvent(new Event('storage'))
-    window.dispatchEvent(new Event('wiseflow-accounting-refresh'))
-  }
+  upsertAccountingRow(accountingCollections.bills.collection, row)
 
   return toBill(row, 0)
 }
@@ -327,18 +400,57 @@ export function createAccountingExpense(input: AccountingExpenseInput): StoredRo
     createdAt: new Date().toISOString(),
   }
 
-  if (typeof window !== 'undefined') {
-    const activeCompany = getActiveCompany()
-    const keys = new Set([expenseKeys[0], activeCompany?.id ? `${expenseKeys[0]}:${activeCompany.id}` : expenseKeys[0]])
-    keys.forEach(key => {
-      const rows = readStoredRows(key).filter(existing => readString(existing, ['id', 'reference'], '') !== id)
-      window.localStorage.setItem(key, JSON.stringify([row, ...rows]))
-    })
-    window.dispatchEvent(new Event('storage'))
-    window.dispatchEvent(new Event('wiseflow-accounting-refresh'))
-  }
+  upsertAccountingRow(accountingCollections.expenses.collection, row)
 
   return row
+}
+
+export function createAccountingTransaction(input: AccountingTransactionInput): AccountingTransaction {
+  const amount = Math.max(Number(input.amount || 0), 0)
+  const id = `TX-${Date.now()}`
+  const row: StoredRow = {
+    id,
+    source: 'manual',
+    reference: input.reference?.trim() || id,
+    date: input.date || new Date().toISOString().slice(0, 10),
+    description: input.description.trim() || id,
+    account: input.account.trim() || 'Accounting ledger',
+    category: input.category.trim() || input.type,
+    type: input.type,
+    amount,
+    inflow: input.type === 'Income' ? amount : 0,
+    outflow: input.type === 'Expense' ? amount : 0,
+    balance: 0,
+    status: titleCase(input.status || 'Recorded'),
+    notes: input.notes?.trim() || '',
+    createdAt: new Date().toISOString(),
+  }
+
+  upsertAccountingRow(accountingCollections.transactions.collection, row)
+
+  return storedToTransaction(row, 0)
+}
+
+export function updateAccountingTransactionStatus(id: string, status: string) {
+  mutateStoredTransactions(id, row => ({ ...row, status: titleCase(status) }))
+}
+
+export function deleteAccountingTransaction(id: string) {
+  mutateStoredTransactions(id, () => null)
+}
+
+export function saveAccountingInvoices(invoices: AccountingInvoice[]) {
+  const rows = invoices.map(invoiceToStored)
+  return replaceAccountingRows(accountingCollections.invoices.collection, rows)
+}
+
+export function saveAccountingBudgets(budgets: AccountingBudget[]) {
+  const rows = budgets.map(budgetToStored)
+  replaceAccountingRows(accountingCollections.budgets.collection, rows)
+}
+
+export function saveAccountingBankAccounts(accounts: AccountingBankAccount[]) {
+  replaceAccountingRows(accountingCollections.bankAccounts.collection, accounts)
 }
 
 export function monthlySeries(transactions: AccountingTransaction[]) {
@@ -363,33 +475,38 @@ export function expenseBreakdown(transactions: AccountingTransaction[]) {
   return Array.from(groups.entries()).sort((a, b) => b[1] - a[1]).map(([name, value], index) => ({ name, value, color: colors[index % colors.length] }))
 }
 
-function readStoredRows(key: string): StoredRow[] {
-  if (typeof window === 'undefined') return []
-  try {
-    const parsed = JSON.parse(window.localStorage.getItem(key) || '[]') as unknown
-    return Array.isArray(parsed) ? parsed.filter(item => item && typeof item === 'object') as StoredRow[] : []
-  } catch {
-    return []
+function mutateStoredTransactions(id: string, mutate: (row: StoredRow) => StoredRow | null) {
+  const rows = accountingCache[accountingCollections.transactions.collection] || []
+  if (!rows.length) return
+  let changed = false
+  const nextRows = rows.flatMap(row => {
+    const rowId = readString(row, ['id', 'reference'], '')
+    const matches = rowId === id || `transaction-${rowId}` === id
+    if (!matches) return [row]
+    changed = true
+    const next = mutate(row)
+    if (!next) {
+      void deleteBusinessRecord(accountingCollections.transactions.collection, rowId).catch(() => undefined)
+      return []
+    }
+    void upsertBusinessRecord(accountingCollections.transactions.collection, next).catch(() => undefined)
+    return [next]
+  })
+  if (changed) {
+    accountingCache = { ...accountingCache, [accountingCollections.transactions.collection]: nextRows }
+    emitAccountingRefresh()
   }
 }
 
 function loadRows(keys: string[], companyId?: string): StoredRow[] {
-  if (typeof window === 'undefined') return []
-  const rows: StoredRow[] = []
-  const seenKeys = new Set<string>()
-  keys.flatMap(key => companyId ? [`${key}:${companyId}`, key] : [key]).forEach(key => {
-    if (seenKeys.has(key)) return
-    seenKeys.add(key)
-    try {
-      const parsed = JSON.parse(window.localStorage.getItem(key) || '[]') as unknown
-      if (Array.isArray(parsed)) parsed.forEach(item => {
-        if (item && typeof item === 'object') rows.push(item as StoredRow)
-      })
-    } catch {
-      // Ignore invalid legacy rows.
-    }
-  })
-  return dedupeRows(rows)
+  const config = collectionByPrimaryKey.get(keys[0])
+  if (!config) return []
+  if (accountingHydratedCompanyId !== (companyId || '')) return []
+  return dedupeRows(accountingCache[config.collection] || [])
+}
+
+function loadPayrollRows(companyId?: string): StoredRow[] {
+  return dedupeRows(readLegacyBusinessRows<StoredRow>(payrollKeys, companyId))
 }
 
 function dedupeRows(rows: StoredRow[]) {
@@ -402,6 +519,98 @@ function dedupeRows(rows: StoredRow[]) {
   })
 }
 
+function ensureRowId(row: StoredRow, prefix: string, index: number): StoredRow {
+  const id = readString(row, ['id', 'invoiceNo', 'invoiceNumber', 'billNo', 'billNumber', 'reference', 'number'], '')
+  return id ? { ...row, id } : { ...row, id: `${prefix}-${Date.now()}-${index}` }
+}
+
+function emitAccountingRefresh() {
+  if (typeof window === 'undefined') return
+  window.dispatchEvent(new Event('wiseflow-accounting-refresh'))
+}
+
+function upsertAccountingRow(collection: BusinessCollection, row: StoredRow) {
+  const existing = accountingCache[collection] || []
+  const rowId = readString(row, ['id', 'reference', 'billNo', 'billNumber', 'invoiceNo', 'invoiceNumber'], '')
+  accountingCache = {
+    ...accountingCache,
+    [collection]: [row, ...existing.filter(item => readString(item, ['id', 'reference', 'billNo', 'billNumber', 'invoiceNo', 'invoiceNumber'], '') !== rowId)],
+  }
+  void upsertBusinessRecord(collection, row).catch(() => undefined)
+  emitAccountingRefresh()
+}
+
+function replaceAccountingRows(collection: BusinessCollection, rows: StoredRow[]) {
+  accountingCache = {
+    ...accountingCache,
+    [collection]: dedupeRows(rows),
+  }
+  emitAccountingRefresh()
+  return replaceBusinessCollection(collection, rows)
+    .then(savedRows => {
+      accountingCache = {
+        ...accountingCache,
+        [collection]: dedupeRows(savedRows),
+      }
+      emitAccountingRefresh()
+    })
+    .catch(error => {
+      if (process.env.NODE_ENV === 'production') throw error
+    })
+}
+
+function invoiceToStored(invoice: AccountingInvoice): StoredRow {
+  return {
+    id: invoice.id,
+    clientId: invoice.clientId,
+    invoiceNo: invoice.number,
+    recipient: invoice.customer,
+    customer: invoice.customer,
+    email: invoice.email,
+    dateCreated: invoice.issueDate,
+    issueDate: invoice.issueDate,
+    dueDate: invoice.dueDate,
+    total: invoice.amount,
+    amount: invoice.amount,
+    paid: invoice.paid,
+    paidAmount: invoice.paid,
+    balanceDue: invoice.balanceDue,
+    status: invoice.status,
+    purchaseOrder: invoice.purchaseOrder,
+    companyDetails: invoice.companyDetails,
+    billTo: invoice.billTo,
+    currency: invoice.currency,
+    notes: invoice.notes,
+    bankDetails: invoice.bankDetails,
+    logoName: invoice.logoName,
+    subtotal: invoice.subtotal,
+    taxRate: invoice.taxRate,
+    taxAmount: invoice.taxAmount,
+    discount: invoice.discount,
+    shippingFee: invoice.shippingFee,
+    lineItems: invoice.lineItems,
+  }
+}
+
+function budgetToStored(budget: AccountingBudget): StoredRow {
+  return {
+    id: budget.id,
+    name: budget.name,
+    title: budget.name,
+    project: budget.project,
+    date: budget.date,
+    status: budget.status,
+    description: budget.description,
+    total: budget.total,
+    budget: budget.total,
+    amount: budget.total,
+    actual: budget.actual,
+    spent: budget.actual,
+    department: budget.department,
+    category: budget.category,
+  }
+}
+
 function toInvoice(row: StoredRow, index: number): AccountingInvoice {
   const status = titleCase(readString(row, ['status'], 'Draft'))
   const amount = readNumber(row, ['total', 'amount', 'balance'], 0)
@@ -409,6 +618,7 @@ function toInvoice(row: StoredRow, index: number): AccountingInvoice {
   const rawLineItems = Array.isArray(row.lineItems) ? row.lineItems : []
   return {
     id: readString(row, ['id', 'invoiceNo', 'invoiceNumber', 'number'], String(index)),
+    clientId: readString(row, ['clientId', 'client_id'], ''),
     number: readString(row, ['invoiceNo', 'invoiceNumber', 'number'], `INV-${index + 1}`),
     customer: readString(row, ['recipient', 'customer', 'client', 'company'], 'No recipient'),
     email: readString(row, ['email', 'customerEmail', 'recipientEmail'], ''),
@@ -437,6 +647,7 @@ function toInvoice(row: StoredRow, index: number): AccountingInvoice {
       return {
         id: readString(row, ['id'], `item-${itemIndex}`),
         description: readString(row, ['description', 'item'], ''),
+        unitType: readString(row, ['unitType', 'unit', 'billingUnit'], 'Quantity'),
         unitCost,
         quantity,
         amount: readNumber(row, ['amount', 'total'], unitCost * quantity),
@@ -539,6 +750,8 @@ function buildTransactions(rawTransactions: StoredRow[], invoices: AccountingInv
 function invoiceToTransaction(invoice: AccountingInvoice): AccountingTransaction {
   return {
     id: `invoice-${invoice.id}`,
+    source: 'invoice',
+    sourceId: invoice.id,
     date: invoice.issueDate,
     description: invoice.number,
     secondary: invoice.customer,
@@ -557,6 +770,8 @@ function invoiceToTransaction(invoice: AccountingInvoice): AccountingTransaction
 function billToTransaction(bill: AccountingBill): AccountingTransaction {
   return {
     id: `bill-${bill.id}`,
+    source: 'bill',
+    sourceId: bill.id,
     date: bill.date,
     description: bill.name,
     secondary: bill.vendor,
@@ -573,9 +788,12 @@ function billToTransaction(bill: AccountingBill): AccountingTransaction {
 }
 
 function expenseToTransaction(expense: StoredRow, index: number): AccountingTransaction {
+  const sourceId = readString(expense, ['id', 'reference'], String(index))
   const amount = readNumber(expense, ['amount', 'total', 'cost'], 0)
   return {
-    id: `expense-${readString(expense, ['id', 'reference'], String(index))}`,
+    id: `expense-${sourceId}`,
+    source: 'expense',
+    sourceId,
     date: readString(expense, ['date', 'createdAt', 'expenseDate'], ''),
     description: readString(expense, ['description', 'name', 'merchant'], 'Expense'),
     secondary: readString(expense, ['merchant', 'vendor', 'employee'], 'Recorded expense'),
@@ -594,8 +812,11 @@ function expenseToTransaction(expense: StoredRow, index: number): AccountingTran
 function payrollToTransaction(record: StoredRow, index: number): AccountingTransaction | null {
   const amount = readNumber(record, ['net', 'netPay', 'gross', 'grossPay', 'totalCost', 'totalPayrollCost'], 0)
   if (!amount) return null
+  const sourceId = readString(record, ['id', 'payrollId', 'period'], String(index))
   return {
-    id: `payroll-${readString(record, ['id', 'payrollId', 'period'], String(index))}`,
+    id: `payroll-${sourceId}`,
+    source: 'payroll',
+    sourceId,
     date: readString(record, ['paidAt', 'payDate', 'createdAt', 'periodEnd', 'date'], ''),
     description: readString(record, ['period', 'name'], 'Payroll release'),
     secondary: readString(record, ['employeeName', 'employee', 'department'], 'Payroll Finance'),
@@ -612,6 +833,7 @@ function payrollToTransaction(record: StoredRow, index: number): AccountingTrans
 }
 
 function storedToTransaction(row: StoredRow, index: number): AccountingTransaction {
+  const sourceId = readString(row, ['id', 'reference'], String(index))
   const rawType = readString(row, ['type', 'transactionType'], 'Transfer').toLowerCase()
   const type = rawType.includes('income') || rawType.includes('inflow') || rawType.includes('credit') || rawType.includes('deposit')
     ? 'Income'
@@ -622,7 +844,9 @@ function storedToTransaction(row: StoredRow, index: number): AccountingTransacti
   const outflow = readNumber(row, ['outflow', 'debit'], 0)
   const amount = readNumber(row, ['amount', 'total'], type === 'Income' ? inflow : type === 'Expense' ? outflow : Math.max(inflow, outflow))
   return {
-    id: `transaction-${readString(row, ['id', 'reference'], String(index))}`,
+    id: `transaction-${sourceId}`,
+    source: 'manual',
+    sourceId,
     date: readString(row, ['date', 'transactionDate', 'createdAt'], ''),
     description: readString(row, ['description', 'name', 'reference'], 'Transaction'),
     secondary: readString(row, ['account', 'customer', 'vendor', 'notes'], 'Accounting ledger'),

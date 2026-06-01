@@ -317,7 +317,7 @@ export default function HROverview() {
 
   // â”€â”€â”€ Render â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   return (
-    <main style={{ fontFamily: font, padding: '0 20px 32px', minHeight: '100vh', background: '#f8fafc' }}>
+    <main style={{ fontFamily: font, padding: '0 20px 32px', minHeight: '100vh' }}>
 
       {/* Page header */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 20, paddingTop: 20, flexWrap: 'wrap', gap: 12 }}>

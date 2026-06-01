@@ -1,6 +1,7 @@
 'use client'
 
 import { ChangeEvent, FormEvent, type ComponentType, useEffect, useMemo, useRef, useState } from 'react'
+import Link from 'next/link'
 import {
   Box,
   ChevronDown,
@@ -19,6 +20,7 @@ import {
   XCircle,
 } from 'lucide-react'
 import { companyChangeEvent, companyScopedKey, getActiveCompany } from '@/lib/tenant/company'
+import { syncProcurementReceiptToWarehouse } from '@/lib/warehouse/store'
 
 const font = 'var(--font-body)'
 const receivingKey = 'flowsys-procurement-receiving'
@@ -320,6 +322,9 @@ export default function ReceivingPage() {
       createdAt: now.toISOString(),
     }
     persistReceipts([record, ...storedReceipts])
+    if (receiptStatus === 'Received' || receiptStatus === 'Partially Received') {
+      syncProcurementReceiptToWarehouse({ receipt: record, order: selectedOrder.source, companyId })
+    }
     updatePurchaseOrderFromReceipt(selectedOrder, receiptStatus, summary.receivedPercent, summary.total)
     setSelectedId(String(record.id))
     resetCreateForm()
@@ -357,17 +362,24 @@ export default function ReceivingPage() {
   }
 
   function updateReceiptStatus(receipt: NormalizedReceipt, status: ReceiptStatus) {
+    let syncedReceipt: StoredRow | null = null
     const next = storedReceipts.map(record => {
       const normalized = normalizeReceipt(record, 0, orders)
       if (!normalized || normalized.id !== receipt.id) return record
-      return {
+      const updated = {
         ...record,
         status,
         activity: [`Status changed to ${status} on ${formatDate(new Date().toISOString())}`, ...readStringArray(record.activity)],
         updatedAt: new Date().toISOString(),
       }
+      syncedReceipt = updated
+      return updated
     })
     persistReceipts(next)
+    if ((status === 'Received' || status === 'Partially Received') && syncedReceipt) {
+      const sourceOrder = orders.find(order => order.id === receipt.poId || order.poNumber === receipt.poNumber)
+      syncProcurementReceiptToWarehouse({ receipt: syncedReceipt, order: sourceOrder?.source, companyId })
+    }
     setOpenActionId('')
   }
 
@@ -403,7 +415,7 @@ export default function ReceivingPage() {
         <div className="receiving-actions">
           <button type="button" className="receiving-secondary" onClick={exportCsv}><Download size={16} /> Export</button>
           <button type="button" className="receiving-primary" onClick={() => setShowCreate(true)}><Plus size={16} /> New Receiving <ChevronDown size={14} /></button>
-          <button type="button" className="receiving-icon-button" aria-label="More receiving actions"><ChevronDown size={16} /></button>
+          <button type="button" className="receiving-icon-button" aria-label="Toggle receiving filters" aria-expanded={showFilters} onClick={() => setShowFilters(value => !value)}><ChevronDown size={16} /></button>
         </div>
       </section>
 
@@ -531,7 +543,7 @@ export default function ReceivingPage() {
 
         <aside className="receiving-right">
           {selectedReceipt ? (
-            <ReceiptDetail receipt={selectedReceipt} activeTab={detailTab} setActiveTab={setDetailTab} />
+            <ReceiptDetail receipt={selectedReceipt} activeTab={detailTab} setActiveTab={setDetailTab} onClose={() => setSelectedId('')} />
           ) : (
             <>
               <section className="receiving-side-card">
@@ -548,8 +560,8 @@ export default function ReceivingPage() {
               </section>
               <section className="receiving-side-card">
                 <h2>Related Documents</h2>
-                <RelatedLink label="Purchase Orders" value="View all purchase orders" />
-                <RelatedLink label="Delivery Receipts" value="View all delivery receipts" />
+                <RelatedLink label="Purchase Orders" value="View all purchase orders" href="/procurement/purchase-orders" />
+                <RelatedLink label="Delivery Receipts" value="View all delivery receipts" href="/procurement/receiving" />
               </section>
             </>
           )}
@@ -767,13 +779,13 @@ function SummaryLine({ label, value }: { label: string; value: string }) {
   )
 }
 
-function RelatedLink({ label, value }: { label: string; value: string }) {
+function RelatedLink({ label, value, href }: { label: string; value: string; href: string }) {
   return (
-    <button type="button" className="receiving-related-link">
+    <Link href={href} className="receiving-related-link">
       <FileText size={16} />
       <span><strong>{label}</strong><small>{value}</small></span>
       <ChevronDown size={14} />
-    </button>
+    </Link>
   )
 }
 
@@ -788,11 +800,11 @@ function EmptyReceiving({ onCreate }: { onCreate: () => void }) {
   )
 }
 
-function ReceiptDetail({ receipt, activeTab, setActiveTab }: { receipt: NormalizedReceipt; activeTab: DetailTab; setActiveTab: (tab: DetailTab) => void }) {
+function ReceiptDetail({ receipt, activeTab, setActiveTab, onClose }: { receipt: NormalizedReceipt; activeTab: DetailTab; setActiveTab: (tab: DetailTab) => void; onClose: () => void }) {
   return (
     <section className="receiving-detail-panel">
       <div className="receiving-detail-head">
-        <button type="button" aria-label="Close receiving detail"><X size={17} /></button>
+        <button type="button" aria-label="Close receiving detail" onClick={onClose}><X size={17} /></button>
         <h2>{receipt.receiptNumber}</h2>
         <Badge tone={statusConfig[receipt.status].tone}>{receipt.status}</Badge>
         <p>{receipt.poNumber} - {receipt.supplierName}</p>
@@ -819,8 +831,8 @@ function ReceiptDetail({ receipt, activeTab, setActiveTab }: { receipt: Normaliz
           <span className="receiving-progress large"><span style={{ width: `${clampPercent(receipt.receivedPercent)}%` }} /></span>
           <strong>{clampPercent(receipt.receivedPercent)}% received</strong>
           <h3>Related Documents</h3>
-          <RelatedLink label="Purchase Order" value={receipt.poNumber || '-'} />
-          <RelatedLink label="Delivery Receipt" value={receipt.receiptNumber} />
+          <RelatedLink label="Purchase Order" value={receipt.poNumber || '-'} href="/procurement/purchase-orders" />
+          <RelatedLink label="Delivery Receipt" value={receipt.receiptNumber} href="/procurement/receiving" />
         </div>
       )}
 
@@ -858,8 +870,8 @@ function ReceiptDetail({ receipt, activeTab, setActiveTab }: { receipt: Normaliz
       )}
 
       <div className="receiving-detail-actions">
-        <button type="button" className="receiving-secondary"><Printer size={15} /> Print</button>
-        <button type="button" className="receiving-primary">View / Edit <ChevronDown size={14} /></button>
+        <button type="button" className="receiving-secondary" onClick={() => window.print()}><Printer size={15} /> Print</button>
+        <button type="button" className="receiving-primary" onClick={onClose}>Close Detail <ChevronDown size={14} /></button>
       </div>
     </section>
   )
@@ -867,7 +879,10 @@ function ReceiptDetail({ receipt, activeTab, setActiveTab }: { receipt: Normaliz
 
 function loadRows(key: string, companyId: string) {
   const scoped = companyId ? companyScopedKey(key, companyId) : key
-  const rows = [...readStored(key), ...(scoped === key ? [] : readStored(scoped))]
+  const scopedRows = scoped === key ? [] : readStored(scoped)
+  const globalRows = readStored(key)
+  const globalForCompany = scopedRows.length ? globalRows.filter(row => textFrom(row.companyId) === companyId) : globalRows
+  const rows = scopedRows.length ? [...scopedRows, ...globalForCompany] : globalForCompany
   return uniqueRows(rows).filter(row => {
     const rowCompanyId = textFrom(row.companyId)
     return !companyId || !rowCompanyId || rowCompanyId === companyId
@@ -1091,7 +1106,11 @@ function uniqueValues(values: string[]) {
 }
 
 function csvEscape(value: string) {
-  return `"${value.replace(/"/g, '""')}"`
+  // Neutralize spreadsheet formula injection: a cell starting with = + - @ is
+  // treated as a formula by Excel/Sheets. Prefix it with an apostrophe.
+  let text = String(value ?? '').replace(/"/g, '""')
+  if (/^[=+\-@]/.test(text.trimStart())) text = `'${text}`
+  return `"${text}"`
 }
 
 function downloadCsv(filename: string, rows: string[][]) {
@@ -1610,6 +1629,8 @@ const receivingCss = `
   background: #fff;
   padding: 0 12px;
   text-align: left;
+  text-decoration: none;
+  color: #0f172a;
   margin-top: 10px;
   cursor: pointer;
 }

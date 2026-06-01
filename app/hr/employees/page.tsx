@@ -1,13 +1,13 @@
 'use client'
 
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { Fragment, useEffect, useMemo, useRef, useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import {
   ChevronDown, ChevronLeft, ChevronRight,
-  Download, Eye, FileText, MoreHorizontal,
-  Pencil, Plus, Search, Settings2, Trash2,
-  UserMinus, UserPlus, Users,
+  Download, Eye, FileText, Grid3X3, List,
+  MoreHorizontal, Pencil, Plus, Search, Settings2, Trash2,
+  Upload, UserMinus, UserPlus, Users,
 } from 'lucide-react'
 
 // â”€â”€â”€ Types â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
@@ -28,12 +28,58 @@ interface Employee {
 }
 
 type FloatingMenuPosition = { top: number; left: number }
+type EmployeeColumnKey = 'employee' | 'employeeId' | 'position' | 'department' | 'team' | 'email' | 'phone' | 'status' | 'attendance' | 'payroll' | 'actions'
+
+type ExitReason = 'Resigned' | 'AWOL' | 'Terminated' | 'Retired' | 'End of contract' | 'Other'
+const EXIT_REASONS: ExitReason[] = ['Resigned', 'AWOL', 'Terminated', 'Retired', 'End of contract', 'Other']
+
+const EMPLOYEE_COLUMNS: Array<{ key: EmployeeColumnKey; label: string; locked?: boolean }> = [
+  { key: 'employee', label: 'Employee', locked: true },
+  { key: 'employeeId', label: 'Employee ID' },
+  { key: 'position', label: 'Position' },
+  { key: 'department', label: 'Department' },
+  { key: 'team', label: 'Team' },
+  { key: 'email', label: 'Email' },
+  { key: 'phone', label: 'Phone' },
+  { key: 'status', label: 'Status' },
+  { key: 'attendance', label: 'Attendance' },
+  { key: 'payroll', label: 'Payroll' },
+  { key: 'actions', label: 'Actions', locked: true },
+]
+
+const DEFAULT_EMPLOYEE_COLUMNS = EMPLOYEE_COLUMNS.map(column => column.key)
 
 // â”€â”€â”€ Helpers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 const font = "var(--font-body)"
 const employeesKey = 'flowsys-hr-employees'
 const deletedEmployeesKey = 'flowsys-hr-deleted-employees'
+const employeeWorkspaceKeys = [
+  employeesKey,
+  deletedEmployeesKey,
+  'flowsys-hr-attendance',
+  'flowsys-hr-attendance-corrections',
+  'flowsys-hr-payroll-records',
+  'flowsys-hr-payroll-reports',
+  'flowsys-hr-documents',
+  'flowsys-hr-deleted-documents',
+  'flowsys-hr-document-versions',
+  'flowsys-hr-leave-requests',
+  'wiseflow-employee-leave-request-outbox',
+  'flowsys-employee-leave-drafts',
+  'flowsys-hr-deleted-approvals',
+  'flowsys-hr-loan-requests',
+  'flowsys-hr-allowance-requests',
+  'flowsys-hr-performance-goals',
+  'flowsys-hr-performance-reviews',
+  'flowsys-hr-performance-feedback',
+  'flowsys-hr-credential-email-outbox',
+]
+const employeeWorkspaceKeyPrefixes = [
+  'flowsys-hr-leave-requests:',
+  'flowsys-employee-leave-drafts:',
+  'wiseflow-employee-leave-request-outbox:',
+]
 
 function loadStored<T>(key: string, fallback: T): T {
   if (typeof window === 'undefined') return fallback
@@ -94,6 +140,105 @@ function payBadge(status?: string): { dot: string; label: string } {
 
 // â”€â”€â”€ Employees page â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
+function parseCsvRows(text: string) {
+  const rows: string[][] = []
+  let current = ''
+  let row: string[] = []
+  let quoted = false
+
+  for (let index = 0; index < text.length; index += 1) {
+    const char = text[index]
+    const next = text[index + 1]
+    if (char === '"' && quoted && next === '"') {
+      current += '"'
+      index += 1
+    } else if (char === '"') {
+      quoted = !quoted
+    } else if (char === ',' && !quoted) {
+      row.push(current.trim())
+      current = ''
+    } else if ((char === '\n' || char === '\r') && !quoted) {
+      if (char === '\r' && next === '\n') index += 1
+      row.push(current.trim())
+      if (row.some(Boolean)) rows.push(row)
+      row = []
+      current = ''
+    } else {
+      current += char
+    }
+  }
+
+  row.push(current.trim())
+  if (row.some(Boolean)) rows.push(row)
+  return rows
+}
+
+function valueFrom(row: Record<string, string>, keys: string[], fallback = '') {
+  const normalized = Object.entries(row).reduce<Record<string, string>>((map, [key, value]) => {
+    map[key.toLowerCase().replace(/[^a-z0-9]/g, '')] = value
+    return map
+  }, {})
+  for (const key of keys) {
+    const match = normalized[key.toLowerCase().replace(/[^a-z0-9]/g, '')]
+    if (match) return match
+  }
+  return fallback
+}
+
+function nextEmployeeId(existingIds: string[], index: number) {
+  const max = existingIds.reduce((highest, id) => {
+    const number = Number(String(id).match(/\d+/)?.[0] || 0)
+    return Number.isFinite(number) ? Math.max(highest, number) : highest
+  }, 0)
+  return `EMP-${String(max + index + 1).padStart(4, '0')}`
+}
+
+function recordsFromCsv(text: string, existing: Employee[]): Employee[] {
+  const rows = parseCsvRows(text)
+  if (rows.length < 2) return []
+  const headers = rows[0].map(header => header.trim())
+  const existingIds = existing.map(employee => employee.employeeId).filter(Boolean)
+  const now = new Date().toISOString()
+
+  return rows.slice(1).map((cells, index) => {
+    const row = headers.reduce<Record<string, string>>((record, header, cellIndex) => {
+      record[header] = cells[cellIndex] || ''
+      return record
+    }, {})
+    const name = valueFrom(row, ['name', 'fullName'])
+    const [firstFromName, ...restFromName] = name.split(' ').filter(Boolean)
+    const employeeId = valueFrom(row, ['employeeId', 'employee ID', 'id']) || nextEmployeeId(existingIds, index)
+    return {
+      id: `emp_import_${Date.now()}_${index}`,
+      employeeId,
+      firstName: valueFrom(row, ['firstName', 'first name'], firstFromName || 'Employee'),
+      middleName: valueFrom(row, ['middleName', 'middle name']),
+      lastName: valueFrom(row, ['lastName', 'last name'], restFromName.join(' ') || `Imported ${index + 1}`),
+      email: valueFrom(row, ['email', 'emailAddress']),
+      phone: valueFrom(row, ['phone', 'mobile', 'contactNumber']),
+      employeeType: valueFrom(row, ['employeeType', 'type'], 'Full Time'),
+      employeeRole: valueFrom(row, ['employeeRole', 'role'], 'Employee'),
+      employmentStatus: valueFrom(row, ['status', 'employmentStatus'], 'Active'),
+      dateOfJoining: valueFrom(row, ['dateOfJoining', 'date joined', 'joined'], new Date().toISOString().slice(0, 10)),
+      department: valueFrom(row, ['department'], 'Human Resources'),
+      team: valueFrom(row, ['team'], 'HR Team'),
+      jobTitle: valueFrom(row, ['jobTitle', 'position', 'title'], 'Team Member'),
+      basicSalary: Number(valueFrom(row, ['basicSalary', 'salary'], '0')) || 0,
+      allowances: Number(valueFrom(row, ['allowances', 'allowance'], '0')) || 0,
+      deductions: Number(valueFrom(row, ['deductions', 'deduction'], '0')) || 0,
+      attendanceStatus: valueFrom(row, ['attendanceStatus', 'attendance'], 'Present'),
+      payrollStatus: valueFrom(row, ['payrollStatus', 'payroll'], 'Pending'),
+      createdAt: now,
+      updatedAt: now,
+    }
+  }).filter(employee => employee.firstName.trim() || employee.email.trim())
+}
+
+function csvEscape(value: unknown) {
+  const text = String(value ?? '')
+  return /[",\n\r]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text
+}
+
 const PAGE_SIZE_OPTIONS = [10, 25, 50, 100]
 
 export default function EmployeesPage() {
@@ -117,6 +262,13 @@ export default function EmployeesPage() {
   const [sortOpen,  setSortOpen]   = useState(false)
   const [psOpen,    setPsOpen]     = useState(false)
   const menuRef = useRef<HTMLDivElement>(null)
+  const columnsRef = useRef<HTMLDivElement>(null)
+  const importInputRef = useRef<HTMLInputElement>(null)
+  const [importMessage, setImportMessage] = useState<{ tone: 'success' | 'error'; text: string } | null>(null)
+  const [viewMode, setViewMode] = useState<'list' | 'grid'>('list')
+  const [columnsOpen, setColumnsOpen] = useState(false)
+  const [visibleColumns, setVisibleColumns] = useState<Set<EmployeeColumnKey>>(() => new Set(DEFAULT_EMPLOYEE_COLUMNS))
+  const [exitPrompt, setExitPrompt] = useState<{ employee: Employee; reason: ExitReason; notes: string } | null>(null)
 
   useEffect(() => {
     const id = window.setTimeout(() => {
@@ -129,6 +281,7 @@ export default function EmployeesPage() {
   useEffect(() => {
     const h = (e: MouseEvent) => {
       if (menuRef.current && !menuRef.current.contains(e.target as Node)) setOpenMenu(null)
+      if (columnsRef.current && !columnsRef.current.contains(e.target as Node)) setColumnsOpen(false)
     }
     document.addEventListener('mousedown', h)
     return () => document.removeEventListener('mousedown', h)
@@ -174,6 +327,7 @@ export default function EmployeesPage() {
 
   const allChecked  = paginated.length > 0 && paginated.every(e => selected.has(e.id))
   const someChecked = paginated.some(e => selected.has(e.id))
+  const visibleEmployeeColumns = EMPLOYEE_COLUMNS.filter(column => visibleColumns.has(column.key))
 
   function toggleAll() {
     if (allChecked) setSelected(prev => { const s = new Set(prev); paginated.forEach(e => s.delete(e.id)); return s })
@@ -183,18 +337,137 @@ export default function EmployeesPage() {
     setSelected(prev => { const s = new Set(prev); if (s.has(id)) s.delete(id); else s.add(id); return s })
   }
 
-  function deleteEmployee(id: string) {
+  function openExitPrompt(id: string) {
+    const employee = employees.find(item => item.id === id)
+    if (!employee) return
+    setExitPrompt({ employee, reason: 'Resigned', notes: '' })
+    setOpenMenu(null)
+  }
+
+  function confirmExit() {
+    if (!exitPrompt) return
+    const { employee, reason, notes } = exitPrompt
+    const exitRecord: Employee & { deletedAt: string; exitReason: ExitReason; exitNotes?: string } = {
+      ...employee,
+      deletedAt: new Date().toISOString(),
+      exitReason: reason,
+      exitNotes: notes.trim() || undefined,
+    }
     setEmployees(prev => {
-      const employee = prev.find(e => e.id === id)
-      const updated = prev.filter(e => e.id !== id)
-      if (employee) {
-        const deleted = loadStored<Array<Employee & { deletedAt?: string }>>(deletedEmployeesKey, [])
-        window.localStorage.setItem(deletedEmployeesKey, JSON.stringify([{ ...employee, deletedAt: new Date().toISOString() }, ...deleted.filter(item => item.id !== id)]))
-      }
+      const updated = prev.filter(e => e.id !== employee.id)
+      const archive = loadStored<Array<Employee & { deletedAt?: string; exitReason?: ExitReason; exitNotes?: string }>>(deletedEmployeesKey, [])
+      window.localStorage.setItem(deletedEmployeesKey, JSON.stringify([exitRecord, ...archive.filter(item => item.id !== employee.id)]))
       window.localStorage.setItem(employeesKey, JSON.stringify(updated))
       return updated
     })
+    setExitPrompt(null)
+    window.dispatchEvent(new Event('wiseflow:hr-data-changed'))
+  }
+
+  function clearAllEmployeeData() {
+    const confirmed = window.confirm('Clear all employees and employee-linked HR demo records? This removes employee profiles, attendance, payroll, leave, loan, allowance, document, and performance records from this browser.')
+    if (!confirmed) return
+
+    employeeWorkspaceKeys.forEach(key => {
+      window.localStorage.setItem(key, '[]')
+    })
+
+    const scopedKeys: string[] = []
+    for (let index = 0; index < window.localStorage.length; index += 1) {
+      const key = window.localStorage.key(index)
+      if (key && employeeWorkspaceKeyPrefixes.some(prefix => key.startsWith(prefix))) scopedKeys.push(key)
+    }
+    scopedKeys.forEach(key => window.localStorage.removeItem(key))
+
+    const warningKeys: string[] = []
+    for (let index = 0; index < window.sessionStorage.length; index += 1) {
+      const key = window.sessionStorage.key(index)
+      if (key?.startsWith('flowsys-hr-employee-warning-')) warningKeys.push(key)
+    }
+    warningKeys.forEach(key => window.sessionStorage.removeItem(key))
+
+    setEmployees([])
+    setSelected(new Set())
     setOpenMenu(null)
+    setPage(1)
+    setSearch('')
+    setDeptFilter('All Departments')
+    setTeamFilter('All Teams')
+    setStatusFilter('All Status')
+    setTypeFilter('All Types')
+    setImportMessage({ tone: 'success', text: 'All employee records and employee-linked HR demo records have been cleared.' })
+    window.dispatchEvent(new Event('wiseflow:hr-data-changed'))
+    window.dispatchEvent(new Event('storage'))
+  }
+
+  function toggleColumn(key: EmployeeColumnKey) {
+    const column = EMPLOYEE_COLUMNS.find(item => item.key === key)
+    if (column?.locked) return
+    setVisibleColumns(prev => {
+      const next = new Set(prev)
+      if (next.has(key)) next.delete(key)
+      else next.add(key)
+      return next
+    })
+  }
+
+  function exportEmployees() {
+    const headers = ['Employee ID', 'Name', 'Email', 'Phone', 'Position', 'Department', 'Team', 'Status', 'Attendance', 'Payroll', 'Date Joined']
+    const rows = filtered.map(employee => [
+      employee.employeeId,
+      fullName(employee),
+      employee.email,
+      employee.phone,
+      employee.jobTitle,
+      employee.department,
+      employee.team,
+      employee.employmentStatus,
+      attBadge(employee.attendanceStatus).label,
+      payBadge(employee.payrollStatus).label,
+      employee.dateOfJoining || employee.createdAt,
+    ])
+    const csv = [headers, ...rows].map(row => row.map(csvEscape).join(',')).join('\n')
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' })
+    const url = URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = url
+    link.download = `employees-${new Date().toISOString().slice(0, 10)}.csv`
+    document.body.appendChild(link)
+    link.click()
+    link.remove()
+    URL.revokeObjectURL(url)
+    setImportMessage({ tone: 'success', text: `${filtered.length} employee${filtered.length === 1 ? '' : 's'} exported to CSV.` })
+  }
+
+  async function importEmployees(file?: File) {
+    if (!file) return
+    try {
+      const text = await file.text()
+      const imported = file.name.toLowerCase().endsWith('.json')
+        ? (JSON.parse(text) as Employee[])
+        : recordsFromCsv(text, employees)
+      const clean = imported.filter(employee => employee.employeeId || employee.email || fullName(employee))
+      if (!clean.length) {
+        setImportMessage({ tone: 'error', text: 'No employee rows were found. Use CSV headers like firstName, lastName, email, department, team, and jobTitle.' })
+        return
+      }
+      const existingByKey = new Set(employees.flatMap(employee => [employee.id, employee.employeeId, employee.email].filter(Boolean).map(String)))
+      const uniqueRows = clean.filter(employee => ![employee.id, employee.employeeId, employee.email].filter(Boolean).some(key => existingByKey.has(String(key))))
+      if (!uniqueRows.length) {
+        setImportMessage({ tone: 'error', text: 'Those employees already exist in HR.' })
+        return
+      }
+      const next = [...uniqueRows, ...employees]
+      setEmployees(next)
+      window.localStorage.setItem(employeesKey, JSON.stringify(next))
+      window.dispatchEvent(new Event('wiseflow:hr-data-changed'))
+      setPage(1)
+      setImportMessage({ tone: 'success', text: `${uniqueRows.length} employee${uniqueRows.length === 1 ? '' : 's'} imported from ${file.name}.` })
+    } catch {
+      setImportMessage({ tone: 'error', text: 'Import failed. Please use a valid CSV or JSON employee file.' })
+    } finally {
+      if (importInputRef.current) importInputRef.current.value = ''
+    }
   }
 
   function toggleActionMenu(id: string, event: React.MouseEvent<HTMLButtonElement>) {
@@ -212,14 +485,126 @@ export default function EmployeesPage() {
     setOpenMenu(id)
   }
 
-  const inputStyle = { border: '1px solid #e5e7eb', background: '#fff', borderRadius: 8, padding: '7px 12px', fontSize: 13, color: '#374151', fontFamily: font, outline: 'none', width: '100%' }
-  const dropBtnStyle = (active: boolean): React.CSSProperties => ({ display: 'flex', alignItems: 'center', gap: 6, border: '1px solid #e5e7eb', background: active ? '#f0fdf4' : '#fff', borderRadius: 8, padding: '7px 12px', fontSize: 13, color: active ? '#15803d' : '#374151', cursor: 'pointer', fontFamily: font, fontWeight: active ? 500 : 400, whiteSpace: 'nowrap' })
+  function renderEmployeeAvatar(emp: Employee, size = 34) {
+    return (
+      <div style={{ width: size, height: size, borderRadius: '50%', background: '#22c55e', display: 'grid', placeItems: 'center', flexShrink: 0, fontSize: size > 36 ? 14 : 12, fontWeight: 700, color: '#fff', overflow: 'hidden' }}>
+        {emp.photo ? (
+          <span
+            role="img"
+            aria-label={fullName(emp)}
+            style={{ width: '100%', height: '100%', backgroundImage: `url(${emp.photo})`, backgroundSize: 'cover', backgroundPosition: 'center' }}
+          />
+        ) : (
+          initials(fullName(emp))
+        )}
+      </div>
+    )
+  }
+
+  function renderActionsMenu(emp: Employee) {
+    return openMenu === emp.id ? (
+      <div ref={menuRef} style={{ position: 'fixed', top: menuPosition.top, left: menuPosition.left, width: 190, background: '#fff', border: '1px solid #e5e7eb', borderRadius: 12, boxShadow: '0 18px 48px rgba(15,23,42,0.18)', zIndex: 300, overflow: 'hidden', padding: 6 }}>
+        {[
+          { label: 'View Profile', Icon: Eye,      action: () => router.push(`/hr/employees/${emp.id}`) },
+          { label: 'Edit',         Icon: Pencil,   action: () => router.push(`/hr/employees/${emp.id}`) },
+          { label: 'Documents',    Icon: FileText, action: () => setOpenMenu(null) },
+          { label: 'Payroll',      Icon: FileText, action: () => setOpenMenu(null) },
+        ].map(item => (
+          <button key={item.label} onClick={item.action} style={{ display: 'flex', alignItems: 'center', gap: 10, width: '100%', border: 'none', background: 'transparent', padding: '10px 12px', borderRadius: 8, fontSize: 13, color: '#374151', cursor: 'pointer', fontFamily: font, textAlign: 'left' }}>
+            <item.Icon size={13} color="#9ca3af" /> {item.label}
+          </button>
+        ))}
+        <div style={{ height: 1, background: '#f3f4f6', margin: '4px 0' }} />
+        <button onClick={() => openExitPrompt(emp.id)} style={{ display: 'flex', alignItems: 'center', gap: 10, width: '100%', border: 'none', background: 'transparent', padding: '10px 12px', borderRadius: 8, fontSize: 13, color: '#ef4444', cursor: 'pointer', fontFamily: font }}>
+          <UserMinus size={13} /> Mark as ex-employee
+        </button>
+      </div>
+    ) : null
+  }
+
+  function renderEmployeeCell(emp: Employee, key: EmployeeColumnKey) {
+    const att = attBadge(emp.attendanceStatus)
+    const pay = payBadge(emp.payrollStatus)
+    const sb = statusBadge(emp.employmentStatus)
+    const dc = deptColor(emp.department)
+
+    switch (key) {
+      case 'employee':
+        return (
+          <td style={{ padding: '11px 12px', minWidth: 180 }}>
+            <Link href={`/hr/employees/${emp.id}`} style={{ textDecoration: 'none', display: 'flex', alignItems: 'center', gap: 10 }}>
+              {renderEmployeeAvatar(emp)}
+              <div>
+                <div style={{ fontSize: 13, fontWeight: 500, color: '#111827' }}>{fullName(emp)}</div>
+                <div style={{ fontSize: 11, color: '#9ca3af' }}>Joined {new Date(emp.dateOfJoining || emp.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</div>
+              </div>
+            </Link>
+          </td>
+        )
+      case 'employeeId':
+        return <td style={{ padding: '11px 12px', whiteSpace: 'nowrap', color: '#6b7280' }}>{emp.employeeId}</td>
+      case 'position':
+        return <td style={{ padding: '11px 12px', whiteSpace: 'nowrap' }}>{emp.jobTitle || '-'}</td>
+      case 'department':
+        return (
+          <td style={{ padding: '11px 12px' }}>
+            <span style={{ fontSize: 12, fontWeight: 600, padding: '3px 10px', borderRadius: 99, background: dc.bg, color: dc.text, whiteSpace: 'nowrap' }}>{emp.department || '-'}</span>
+          </td>
+        )
+      case 'team':
+        return <td style={{ padding: '11px 12px', whiteSpace: 'nowrap', color: '#374151' }}>{emp.team || '-'}</td>
+      case 'email':
+        return <td style={{ padding: '11px 12px', whiteSpace: 'nowrap', color: '#374151', maxWidth: 180, overflow: 'hidden', textOverflow: 'ellipsis' }}>{emp.email}</td>
+      case 'phone':
+        return <td style={{ padding: '11px 12px', whiteSpace: 'nowrap', color: '#374151' }}>{emp.phone || '-'}</td>
+      case 'status':
+        return (
+          <td style={{ padding: '11px 12px' }}>
+            <span style={{ fontSize: 11, fontWeight: 600, padding: '3px 10px', borderRadius: 99, background: sb.bg, color: sb.text, whiteSpace: 'nowrap' }}>{emp.employmentStatus}</span>
+          </td>
+        )
+      case 'attendance':
+        return (
+          <td style={{ padding: '11px 12px', whiteSpace: 'nowrap' }}>
+            <span style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 12 }}>
+              <span style={{ width: 7, height: 7, borderRadius: '50%', background: att.dot, flexShrink: 0 }} />{att.label}
+            </span>
+          </td>
+        )
+      case 'payroll':
+        return (
+          <td style={{ padding: '11px 12px', whiteSpace: 'nowrap' }}>
+            <span style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 12 }}>
+              <span style={{ width: 7, height: 7, borderRadius: '50%', background: pay.dot, flexShrink: 0 }} />{pay.label}
+            </span>
+          </td>
+        )
+      case 'actions':
+        return (
+          <td style={{ padding: '11px 12px' }}>
+            <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+              <button onClick={event => toggleActionMenu(emp.id, event)} style={{ border: '1px solid #e5e7eb', background: '#fff', cursor: 'pointer', width: 34, height: 34, borderRadius: 9, color: '#64748b', display: 'grid', placeItems: 'center' }} aria-label={`Open actions for ${fullName(emp)}`}>
+                <MoreHorizontal size={16} />
+              </button>
+              {renderActionsMenu(emp)}
+            </div>
+          </td>
+        )
+    }
+  }
+
+  const inputStyle = { border: '1px solid #e5e7eb', background: '#fff', borderRadius: 8, padding: '7px 12px', minHeight: 40, fontSize: 13, color: '#374151', fontFamily: font, outline: 'none', width: '100%' }
+  const dropBtnStyle = (active: boolean): React.CSSProperties => ({ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, border: '1px solid #e5e7eb', background: active ? '#f0fdf4' : '#fff', borderRadius: 8, padding: '0 12px', minHeight: 40, width: '100%', fontSize: 13, color: active ? '#15803d' : '#374151', cursor: 'pointer', fontFamily: font, fontWeight: active ? 500 : 400, whiteSpace: 'nowrap' })
   const dropMenuStyle: React.CSSProperties = { position: 'absolute', top: 'calc(100% + 6px)', left: 0, minWidth: 180, background: '#fff', border: '1px solid #e5e7eb', borderRadius: 10, boxShadow: '0 8px 24px rgba(0,0,0,0.1)', zIndex: 60, overflow: 'hidden' }
   const dropItemStyle = (active: boolean): React.CSSProperties => ({ display: 'block', width: '100%', border: 'none', background: active ? '#f0fdf4' : 'transparent', padding: '8px 14px', fontSize: 13, color: active ? '#15803d' : '#374151', fontWeight: active ? 600 : 400, cursor: 'pointer', textAlign: 'left', fontFamily: font })
+  const filterWrapStyle: React.CSSProperties = { position: 'relative', flex: '0 0 154px', minWidth: 154 }
+  const filterTextStyle: React.CSSProperties = { minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }
+  const toolbarButtonStyle: React.CSSProperties = { display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, border: '1px solid #e5e7eb', background: '#fff', borderRadius: 7, padding: '0 12px', minHeight: 38, fontSize: 12, color: '#374151', cursor: 'pointer', fontFamily: font, whiteSpace: 'nowrap', flexShrink: 0 }
+  const viewToggleButtonStyle = (active: boolean): React.CSSProperties => ({ display: 'grid', placeItems: 'center', width: 34, height: 34, border: 'none', borderRadius: 7, background: active ? '#dcfce7' : 'transparent', color: active ? '#15803d' : '#475569', cursor: 'pointer', flexShrink: 0 })
 
   // â”€â”€â”€ Render â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   return (
-    <main style={{ fontFamily: font, padding: '0 20px 32px', minHeight: '100vh', background: '#f8fafc' }}>
+    <main style={{ fontFamily: font, padding: '0 20px 32px', minHeight: '100vh' }}>
 
       {/* Page header */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', paddingTop: 20, marginBottom: 18, flexWrap: 'wrap', gap: 10 }}>
@@ -227,9 +612,27 @@ export default function EmployeesPage() {
           <h1 style={{ margin: 0, color: '#0f172a', fontSize: 28, fontWeight: 900 }}>Employees</h1>
           <p style={{ margin: '6px 0 0', color: '#475569', fontSize: 14 }}>Manage employee records, profiles, roles, and work information across your organization.</p>
         </div>
-        <div style={{ display: 'flex', gap: 8 }}>
-          <button style={{ display: 'flex', alignItems: 'center', gap: 6, border: '1px solid #e5e7eb', background: '#fff', borderRadius: 8, padding: '7px 14px', fontSize: 13, fontWeight: 500, color: '#374151', cursor: 'pointer' }}>
-            <Download size={14} /> Import Employees
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', justifyContent: 'flex-end', rowGap: 8 }}>
+          <input
+            ref={importInputRef}
+            type="file"
+            accept=".csv,.json,text/csv,application/json"
+            onChange={event => void importEmployees(event.target.files?.[0])}
+            style={{ display: 'none' }}
+          />
+          <button
+            type="button"
+            onClick={() => importInputRef.current?.click()}
+            style={{ display: 'flex', alignItems: 'center', gap: 6, border: '1px solid #e5e7eb', background: '#fff', borderRadius: 8, padding: '7px 14px', fontSize: 13, fontWeight: 500, color: '#374151', cursor: 'pointer' }}
+          >
+            <Upload size={14} /> Import Employees
+          </button>
+          <button
+            type="button"
+            onClick={clearAllEmployeeData}
+            style={{ display: 'flex', alignItems: 'center', gap: 6, border: '1px solid #fecaca', background: '#fff', borderRadius: 8, padding: '7px 14px', fontSize: 13, fontWeight: 600, color: '#dc2626', cursor: 'pointer' }}
+          >
+            <Trash2 size={14} /> Clear Employees
           </button>
           <Link href="/hr/employees/new">
             <button style={{ display: 'flex', alignItems: 'center', gap: 6, background: '#22c55e', border: 'none', borderRadius: 8, padding: '7px 14px', fontSize: 13, fontWeight: 600, color: '#fff', cursor: 'pointer' }}>
@@ -237,12 +640,27 @@ export default function EmployeesPage() {
             </button>
           </Link>
           <Link href="/hr/employees/deleted">
-            <button style={{ display: 'flex', alignItems: 'center', gap: 6, border: '1px solid #fecaca', background: '#fff', borderRadius: 8, padding: '7px 14px', fontSize: 13, fontWeight: 600, color: '#dc2626', cursor: 'pointer' }}>
-              <Trash2 size={14} /> Deleted Employees
+            <button style={{ display: 'flex', alignItems: 'center', gap: 6, border: '1px solid #cbd5e1', background: '#fff', borderRadius: 8, padding: '7px 14px', fontSize: 13, fontWeight: 600, color: '#0f172a', cursor: 'pointer' }}>
+              <UserMinus size={14} /> Ex Employees
             </button>
           </Link>
         </div>
       </div>
+
+      {importMessage && (
+        <div style={{
+          marginBottom: 12,
+          border: `1px solid ${importMessage.tone === 'success' ? '#bbf7d0' : '#fecaca'}`,
+          background: importMessage.tone === 'success' ? '#f0fdf4' : '#fef2f2',
+          color: importMessage.tone === 'success' ? '#166534' : '#b91c1c',
+          borderRadius: 10,
+          padding: '10px 12px',
+          fontSize: 13,
+          fontWeight: 700,
+        }}>
+          {importMessage.text}
+        </div>
+      )}
 
       {/* KPI cards */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, minmax(0, 1fr))', gap: 10, marginBottom: 16 }}>
@@ -270,60 +688,85 @@ export default function EmployeesPage() {
       </div>
 
       {/* Filters */}
-      <div style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: 12, padding: '14px 16px', marginBottom: 12, display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
+      <div style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: 12, padding: '14px 16px', marginBottom: 12, display: 'flex', gap: 10, alignItems: 'stretch', flexWrap: 'wrap' }}>
         {/* Search */}
-        <div style={{ position: 'relative', flex: '1 1 220px', minWidth: 180 }}>
+        <div style={{ position: 'relative', flex: '1 1 360px', minWidth: 280 }}>
           <Search size={14} color="#9ca3af" style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)' }} />
           <input value={search} onChange={e => { setSearch(e.target.value); setPage(1) }} placeholder="Search by name, employee ID, email..." style={{ ...inputStyle, paddingLeft: 32 }} />
         </div>
         {/* Department */}
-        <div style={{ position: 'relative' }}>
+        <div style={filterWrapStyle}>
           <button onClick={() => { setDeptOpen(v => !v); setTeamOpen(false); setStatOpen(false); setTypeOpen(false) }} style={dropBtnStyle(deptFilter !== 'All Departments')}>
-            {deptFilter} <ChevronDown size={13} />
+            <span style={filterTextStyle}>{deptFilter}</span> <ChevronDown size={13} style={{ flexShrink: 0 }} />
           </button>
           {deptOpen && <div style={dropMenuStyle}>{depts.map(o => <button key={o} onClick={() => { setDeptFilter(o); setDeptOpen(false); setPage(1) }} style={dropItemStyle(deptFilter === o)}>{o}</button>)}</div>}
         </div>
         {/* Team */}
-        <div style={{ position: 'relative' }}>
+        <div style={filterWrapStyle}>
           <button onClick={() => { setTeamOpen(v => !v); setDeptOpen(false); setStatOpen(false); setTypeOpen(false) }} style={dropBtnStyle(teamFilter !== 'All Teams')}>
-            {teamFilter} <ChevronDown size={13} />
+            <span style={filterTextStyle}>{teamFilter}</span> <ChevronDown size={13} style={{ flexShrink: 0 }} />
           </button>
           {teamOpen && <div style={dropMenuStyle}>{teams.map(o => <button key={o} onClick={() => { setTeamFilter(o); setTeamOpen(false); setPage(1) }} style={dropItemStyle(teamFilter === o)}>{o}</button>)}</div>}
         </div>
         {/* Status */}
-        <div style={{ position: 'relative' }}>
+        <div style={filterWrapStyle}>
           <button onClick={() => { setStatOpen(v => !v); setDeptOpen(false); setTeamOpen(false); setTypeOpen(false) }} style={dropBtnStyle(statusFilter !== 'All Status')}>
-            {statusFilter} <ChevronDown size={13} />
+            <span style={filterTextStyle}>{statusFilter}</span> <ChevronDown size={13} style={{ flexShrink: 0 }} />
           </button>
           {statOpen && <div style={dropMenuStyle}>{['All Status','Active','On Leave','Inactive','Resigned','Terminated'].map(o => <button key={o} onClick={() => { setStatusFilter(o); setStatOpen(false); setPage(1) }} style={dropItemStyle(statusFilter === o)}>{o}</button>)}</div>}
         </div>
         {/* Job Type */}
-        <div style={{ position: 'relative' }}>
+        <div style={filterWrapStyle}>
           <button onClick={() => { setTypeOpen(v => !v); setDeptOpen(false); setTeamOpen(false); setStatOpen(false) }} style={dropBtnStyle(typeFilter !== 'All Types')}>
-            {typeFilter} <ChevronDown size={13} />
+            <span style={filterTextStyle}>{typeFilter}</span> <ChevronDown size={13} style={{ flexShrink: 0 }} />
           </button>
           {typeOpen && <div style={dropMenuStyle}>{types.map(o => <button key={o} onClick={() => { setTypeFilter(o); setTypeOpen(false); setPage(1) }} style={dropItemStyle(typeFilter === o)}>{o}</button>)}</div>}
         </div>
-        <button style={{ display: 'flex', alignItems: 'center', gap: 6, border: '1px solid #e5e7eb', background: '#fff', borderRadius: 8, padding: '7px 12px', fontSize: 13, color: '#374151', cursor: 'pointer', marginLeft: 'auto' }}>
-          <Settings2 size={14} /> More Filters
-        </button>
       </div>
 
       {/* Table card */}
       <div style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: 12, boxShadow: '0 1px 4px rgba(0,0,0,0.05)', overflow: 'hidden' }}>
         {/* Table toolbar */}
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 16px', borderBottom: '1px solid #f3f4f6' }}>
-          <span style={{ fontSize: 14, fontWeight: 600, color: '#111827' }}>{filtered.length} Employee{filtered.length !== 1 ? 's' : ''}</span>
-          <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-            <button style={{ display: 'flex', alignItems: 'center', gap: 6, border: '1px solid #e5e7eb', background: '#fff', borderRadius: 7, padding: '5px 12px', fontSize: 12, color: '#374151', cursor: 'pointer' }}>
-              <Settings2 size={13} /> Columns
-            </button>
-            <button style={{ display: 'flex', alignItems: 'center', gap: 6, border: '1px solid #e5e7eb', background: '#fff', borderRadius: 7, padding: '5px 12px', fontSize: 12, color: '#374151', cursor: 'pointer' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, flexWrap: 'wrap', padding: '12px 16px', borderBottom: '1px solid #f3f4f6' }}>
+          <span style={{ fontSize: 14, fontWeight: 600, color: '#111827', flex: '1 1 150px' }}>{filtered.length} Employee{filtered.length !== 1 ? 's' : ''}</span>
+          <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap', justifyContent: 'flex-end', rowGap: 8, flex: '1 1 540px' }}>
+            <div role="group" aria-label="Employee view mode" style={{ display: 'inline-flex', alignItems: 'center', gap: 2, border: '1px solid #e5e7eb', borderRadius: 9, padding: 2, background: '#fff', minHeight: 40, flexShrink: 0 }}>
+              <button type="button" aria-label="List view" title="List view" onClick={() => setViewMode('list')} style={viewToggleButtonStyle(viewMode === 'list')}>
+                <List size={16} />
+              </button>
+              <button type="button" aria-label="Grid view" title="Grid view" onClick={() => setViewMode('grid')} style={viewToggleButtonStyle(viewMode === 'grid')}>
+                <Grid3X3 size={15} />
+              </button>
+            </div>
+            <div ref={columnsRef} style={{ position: 'relative' }}>
+              <button type="button" onClick={() => setColumnsOpen(value => !value)} style={toolbarButtonStyle}>
+                <Settings2 size={13} /> Columns
+              </button>
+              {columnsOpen && (
+                <div style={{ ...dropMenuStyle, left: 'auto', right: 0, width: 220, padding: 8 }}>
+                  {EMPLOYEE_COLUMNS.map(column => (
+                    <label key={column.key} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 10px', borderRadius: 8, fontSize: 13, color: column.locked ? '#94a3b8' : '#334155', cursor: column.locked ? 'not-allowed' : 'pointer', fontFamily: font }}>
+                      <input
+                        type="checkbox"
+                        checked={visibleColumns.has(column.key)}
+                        disabled={column.locked}
+                        onChange={() => toggleColumn(column.key)}
+                      />
+                      {column.label}
+                    </label>
+                  ))}
+                  <button type="button" onClick={() => setVisibleColumns(new Set(DEFAULT_EMPLOYEE_COLUMNS))} style={{ width: '100%', border: '1px solid #e5e7eb', background: '#f8fafc', borderRadius: 8, padding: '8px 10px', marginTop: 6, fontSize: 12, fontWeight: 700, color: '#334155', cursor: 'pointer', fontFamily: font }}>
+                    Reset columns
+                  </button>
+                </div>
+              )}
+            </div>
+            <button type="button" onClick={exportEmployees} style={toolbarButtonStyle}>
               <Download size={13} /> Export
             </button>
-            <span style={{ fontSize: 12, color: '#9ca3af' }}>Sort:</span>
+            <span style={{ fontSize: 12, color: '#9ca3af', flexShrink: 0 }}>Sort:</span>
             <div style={{ position: 'relative' }}>
-              <button onClick={() => setSortOpen(v => !v)} style={{ display: 'flex', alignItems: 'center', gap: 4, border: '1px solid #e5e7eb', background: '#fff', borderRadius: 7, padding: '5px 12px', fontSize: 12, color: '#374151', cursor: 'pointer' }}>
+              <button onClick={() => setSortOpen(v => !v)} style={{ ...toolbarButtonStyle, justifyContent: 'space-between', minWidth: 126 }}>
                 {sortLabel} <ChevronDown size={11} />
               </button>
               {sortOpen && (
@@ -337,115 +780,96 @@ export default function EmployeesPage() {
           </div>
         </div>
 
-        {/* Table */}
-        <div style={{ overflowX: 'auto' }}>
-          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13, color: '#374151' }}>
-            <thead>
-              <tr style={{ borderBottom: '1px solid #f3f4f6', background: '#fafafa' }}>
-                <th style={{ padding: '10px 12px', textAlign: 'left', width: 36 }}>
-                  <input type="checkbox" checked={allChecked} ref={el => { if (el) el.indeterminate = someChecked && !allChecked }} onChange={toggleAll} style={{ cursor: 'pointer' }} />
-                </th>
-                {['Employee','Employee ID','Position','Department','Team','Email','Phone','Status','Attendance','Payroll','Actions'].map(h => (
-                  <th key={h} style={{ padding: '10px 12px', textAlign: 'left', fontSize: 11, fontWeight: 600, color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '0.04em', whiteSpace: 'nowrap' }}>{h}</th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {paginated.length === 0 ? (
-                <tr><td colSpan={12} style={{ padding: '48px 20px', textAlign: 'center' }}>
-                  <Users size={36} color="#d1d5db" style={{ marginBottom: 12 }} />
-                  <div style={{ fontSize: 14, fontWeight: 500, color: '#6b7280', marginBottom: 8 }}>No employees found</div>
-                  <div style={{ fontSize: 13, color: '#9ca3af', marginBottom: 16 }}>
-                    {search || deptFilter !== 'All Departments' ? 'Try adjusting your filters.' : 'Get started by adding your first employee.'}
-                  </div>
-                  {!search && deptFilter === 'All Departments' && (
-                    <Link href="/hr/employees/new">
-                      <button style={{ background: '#22c55e', border: 'none', borderRadius: 8, padding: '8px 18px', fontSize: 13, fontWeight: 600, color: '#fff', cursor: 'pointer' }}>Add Employee</button>
-                    </Link>
-                  )}
-                </td></tr>
-              ) : paginated.map((emp, idx) => {
-                const att = attBadge(emp.attendanceStatus)
-                const pay = payBadge(emp.payrollStatus)
-                const sb  = statusBadge(emp.employmentStatus)
-                const dc  = deptColor(emp.department)
-                const isSelected = selected.has(emp.id)
-                return (
-                  <tr key={emp.id} style={{ borderBottom: '1px solid #f9fafb', background: isSelected ? '#f0fdf4' : idx % 2 === 0 ? '#fff' : '#fafafa', transition: 'background 100ms' }}>
-                    <td style={{ padding: '11px 12px' }}>
-                      <input type="checkbox" checked={isSelected} onChange={() => toggleOne(emp.id)} style={{ cursor: 'pointer' }} />
-                    </td>
-                    <td style={{ padding: '11px 12px', minWidth: 180 }}>
-                      <Link href={`/hr/employees/${emp.id}`} style={{ textDecoration: 'none', display: 'flex', alignItems: 'center', gap: 10 }}>
-                        <div style={{ width: 34, height: 34, borderRadius: '50%', background: '#22c55e', display: 'grid', placeItems: 'center', flexShrink: 0, fontSize: 12, fontWeight: 700, color: '#fff', overflow: 'hidden' }}>
-                          {emp.photo ? (
-                            <span
-                              role="img"
-                              aria-label={fullName(emp)}
-                              style={{ width: '100%', height: '100%', backgroundImage: `url(${emp.photo})`, backgroundSize: 'cover', backgroundPosition: 'center' }}
-                            />
-                          ) : (
-                            initials(fullName(emp))
-                          )}
-                        </div>
-                        <div>
-                          <div style={{ fontSize: 13, fontWeight: 500, color: '#111827' }}>{fullName(emp)}</div>
-                          <div style={{ fontSize: 11, color: '#9ca3af' }}>Joined {new Date(emp.dateOfJoining || emp.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</div>
-                        </div>
+        {viewMode === 'list' ? (
+          <div style={{ overflowX: 'auto' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13, color: '#374151' }}>
+              <thead>
+                <tr style={{ borderBottom: '1px solid #f3f4f6', background: '#fafafa' }}>
+                  <th style={{ padding: '10px 12px', textAlign: 'left', width: 36 }}>
+                    <input type="checkbox" checked={allChecked} ref={el => { if (el) el.indeterminate = someChecked && !allChecked }} onChange={toggleAll} style={{ cursor: 'pointer' }} />
+                  </th>
+                  {visibleEmployeeColumns.map(column => (
+                    <th key={column.key} style={{ padding: '10px 12px', textAlign: column.key === 'actions' ? 'right' : 'left', fontSize: 11, fontWeight: 600, color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '0.04em', whiteSpace: 'nowrap' }}>{column.label}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {paginated.length === 0 ? (
+                  <tr><td colSpan={visibleEmployeeColumns.length + 1} style={{ padding: '48px 20px', textAlign: 'center' }}>
+                    <Users size={36} color="#d1d5db" style={{ marginBottom: 12 }} />
+                    <div style={{ fontSize: 14, fontWeight: 500, color: '#6b7280', marginBottom: 8 }}>No employees found</div>
+                    <div style={{ fontSize: 13, color: '#9ca3af', marginBottom: 16 }}>
+                      {search || deptFilter !== 'All Departments' ? 'Try adjusting your filters.' : 'Get started by adding your first employee.'}
+                    </div>
+                    {!search && deptFilter === 'All Departments' && (
+                      <Link href="/hr/employees/new">
+                        <button style={{ background: '#22c55e', border: 'none', borderRadius: 8, padding: '8px 18px', fontSize: 13, fontWeight: 600, color: '#fff', cursor: 'pointer' }}>Add Employee</button>
                       </Link>
-                    </td>
-                    <td style={{ padding: '11px 12px', whiteSpace: 'nowrap', color: '#6b7280' }}>{emp.employeeId}</td>
-                    <td style={{ padding: '11px 12px', whiteSpace: 'nowrap' }}>{emp.jobTitle || '-'}</td>
-                    <td style={{ padding: '11px 12px' }}>
-                      <span style={{ fontSize: 12, fontWeight: 600, padding: '3px 10px', borderRadius: 99, background: dc.bg, color: dc.text, whiteSpace: 'nowrap' }}>{emp.department || '-'}</span>
-                    </td>
-                    <td style={{ padding: '11px 12px', whiteSpace: 'nowrap', color: '#374151' }}>{emp.team || '-'}</td>
-                    <td style={{ padding: '11px 12px', whiteSpace: 'nowrap', color: '#374151', maxWidth: 180, overflow: 'hidden', textOverflow: 'ellipsis' }}>{emp.email}</td>
-                    <td style={{ padding: '11px 12px', whiteSpace: 'nowrap', color: '#374151' }}>{emp.phone || '-'}</td>
-                    <td style={{ padding: '11px 12px' }}>
-                      <span style={{ fontSize: 11, fontWeight: 600, padding: '3px 10px', borderRadius: 99, background: sb.bg, color: sb.text, whiteSpace: 'nowrap' }}>{emp.employmentStatus}</span>
-                    </td>
-                    <td style={{ padding: '11px 12px', whiteSpace: 'nowrap' }}>
-                      <span style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 12 }}>
-                        <span style={{ width: 7, height: 7, borderRadius: '50%', background: att.dot, flexShrink: 0 }} />{att.label}
-                      </span>
-                    </td>
-                    <td style={{ padding: '11px 12px', whiteSpace: 'nowrap' }}>
-                      <span style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 12 }}>
-                        <span style={{ width: 7, height: 7, borderRadius: '50%', background: pay.dot, flexShrink: 0 }} />{pay.label}
-                      </span>
-                    </td>
-                    <td style={{ padding: '11px 12px' }}>
-                      <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
-                        <button onClick={event => toggleActionMenu(emp.id, event)} style={{ border: '1px solid #e5e7eb', background: '#fff', cursor: 'pointer', width: 34, height: 34, borderRadius: 9, color: '#64748b', display: 'grid', placeItems: 'center' }} aria-label={`Open actions for ${fullName(emp)}`}>
-                          <MoreHorizontal size={16} />
-                        </button>
-                        {openMenu === emp.id && (
-                          <div ref={menuRef} style={{ position: 'fixed', top: menuPosition.top, left: menuPosition.left, width: 190, background: '#fff', border: '1px solid #e5e7eb', borderRadius: 12, boxShadow: '0 18px 48px rgba(15,23,42,0.18)', zIndex: 300, overflow: 'hidden', padding: 6 }}>
-                            {[
-                              { label: 'View Profile', Icon: Eye,      action: () => router.push(`/hr/employees/${emp.id}`) },
-                              { label: 'Edit',         Icon: Pencil,   action: () => router.push(`/hr/employees/${emp.id}`) },
-                              { label: 'Documents',    Icon: FileText, action: () => setOpenMenu(null) },
-                              { label: 'Payroll',      Icon: FileText, action: () => setOpenMenu(null) },
-                            ].map(item => (
-                              <button key={item.label} onClick={item.action} style={{ display: 'flex', alignItems: 'center', gap: 10, width: '100%', border: 'none', background: 'transparent', padding: '10px 12px', borderRadius: 8, fontSize: 13, color: '#374151', cursor: 'pointer', fontFamily: font, textAlign: 'left' }}>
-                                <item.Icon size={13} color="#9ca3af" /> {item.label}
-                              </button>
-                            ))}
-                            <div style={{ height: 1, background: '#f3f4f6', margin: '4px 0' }} />
-                            <button onClick={() => deleteEmployee(emp.id)} style={{ display: 'flex', alignItems: 'center', gap: 10, width: '100%', border: 'none', background: 'transparent', padding: '10px 12px', borderRadius: 8, fontSize: 13, color: '#ef4444', cursor: 'pointer', fontFamily: font }}>
-                              <Trash2 size={13} /> Delete
-                            </button>
-                          </div>
-                        )}
+                    )}
+                  </td></tr>
+                ) : paginated.map((emp, idx) => {
+                  const isSelected = selected.has(emp.id)
+                  return (
+                    <tr key={emp.id} style={{ borderBottom: '1px solid #f9fafb', background: isSelected ? '#f0fdf4' : idx % 2 === 0 ? '#fff' : '#fafafa', transition: 'background 100ms' }}>
+                      <td style={{ padding: '11px 12px' }}>
+                        <input type="checkbox" checked={isSelected} onChange={() => toggleOne(emp.id)} style={{ cursor: 'pointer' }} />
+                      </td>
+                      {visibleEmployeeColumns.map(column => (
+                        <Fragment key={column.key}>{renderEmployeeCell(emp, column.key)}</Fragment>
+                      ))}
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+          </div>
+        ) : (
+          <div style={{ padding: 16, display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: 12 }}>
+            {paginated.length === 0 ? (
+              <div style={{ gridColumn: '1 / -1', border: '1px dashed #cbd5e1', borderRadius: 14, padding: '42px 20px', textAlign: 'center', color: '#64748b' }}>
+                <Users size={36} color="#cbd5e1" style={{ marginBottom: 12 }} />
+                <div style={{ fontSize: 14, fontWeight: 800, color: '#334155', marginBottom: 6 }}>No employees found</div>
+                <div style={{ fontSize: 13 }}>Try adjusting your search or filters.</div>
+              </div>
+            ) : paginated.map(emp => {
+              const sb = statusBadge(emp.employmentStatus)
+              const dc = deptColor(emp.department)
+              const att = attBadge(emp.attendanceStatus)
+              const pay = payBadge(emp.payrollStatus)
+              return (
+                <article key={emp.id} style={{ border: '1px solid #e5e7eb', borderRadius: 14, background: '#fff', padding: 14, boxShadow: '0 1px 3px rgba(15,23,42,0.05)' }}>
+                  <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12 }}>
+                    <Link href={`/hr/employees/${emp.id}`} style={{ display: 'flex', gap: 12, minWidth: 0, textDecoration: 'none' }}>
+                      {renderEmployeeAvatar(emp, 44)}
+                      <div style={{ minWidth: 0 }}>
+                        <div style={{ fontSize: 14, fontWeight: 800, color: '#0f172a', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{fullName(emp)}</div>
+                        <div style={{ fontSize: 12, color: '#64748b', marginTop: 2 }}>{emp.employeeId} · {emp.jobTitle || 'No position'}</div>
                       </div>
-                    </td>
-                  </tr>
-                )
-              })}
-            </tbody>
-          </table>
-        </div>
+                    </Link>
+                    <button onClick={event => toggleActionMenu(emp.id, event)} style={{ border: '1px solid #e5e7eb', background: '#fff', cursor: 'pointer', width: 34, height: 34, borderRadius: 9, color: '#64748b', display: 'grid', placeItems: 'center', flexShrink: 0 }} aria-label={`Open actions for ${fullName(emp)}`}>
+                      <MoreHorizontal size={16} />
+                    </button>
+                    {renderActionsMenu(emp)}
+                  </div>
+                  <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 14 }}>
+                    <span style={{ fontSize: 11, fontWeight: 700, padding: '4px 9px', borderRadius: 999, background: sb.bg, color: sb.text }}>{emp.employmentStatus}</span>
+                    <span style={{ fontSize: 11, fontWeight: 700, padding: '4px 9px', borderRadius: 999, background: dc.bg, color: dc.text }}>{emp.department || 'No department'}</span>
+                  </div>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginTop: 14, fontSize: 12, color: '#475569' }}>
+                    <div><strong style={{ color: '#0f172a' }}>Team</strong><br />{emp.team || '-'}</div>
+                    <div><strong style={{ color: '#0f172a' }}>Phone</strong><br />{emp.phone || '-'}</div>
+                    <div style={{ minWidth: 0 }}><strong style={{ color: '#0f172a' }}>Email</strong><br /><span style={{ display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{emp.email || '-'}</span></div>
+                    <div><strong style={{ color: '#0f172a' }}>Joined</strong><br />{new Date(emp.dateOfJoining || emp.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</div>
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10, marginTop: 14, paddingTop: 12, borderTop: '1px solid #f1f5f9', fontSize: 12 }}>
+                    <span style={{ display: 'flex', alignItems: 'center', gap: 5 }}><span style={{ width: 7, height: 7, borderRadius: '50%', background: att.dot }} />{att.label}</span>
+                    <span style={{ display: 'flex', alignItems: 'center', gap: 5 }}><span style={{ width: 7, height: 7, borderRadius: '50%', background: pay.dot }} />{pay.label}</span>
+                  </div>
+                </article>
+              )
+            })}
+          </div>
+        )}
 
         {/* Pagination */}
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 16px', borderTop: '1px solid #f3f4f6', flexWrap: 'wrap', gap: 8 }}>
@@ -495,6 +919,86 @@ export default function EmployeesPage() {
           </div>
         </div>
       </div>
+
+      {exitPrompt && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="exit-prompt-title"
+          onClick={() => setExitPrompt(null)}
+          style={{ position: 'fixed', inset: 0, background: 'rgba(15,23,42,0.5)', zIndex: 200, display: 'grid', placeItems: 'center', padding: 16 }}
+        >
+          <div
+            onClick={event => event.stopPropagation()}
+            style={{ width: 'min(440px, 100%)', background: '#fff', borderRadius: 14, boxShadow: '0 24px 60px rgba(15,23,42,0.2)', padding: 22, fontFamily: font }}
+          >
+            <h2 id="exit-prompt-title" style={{ margin: 0, color: '#0f172a', fontSize: 18, fontWeight: 800 }}>Mark as ex-employee</h2>
+            <p style={{ margin: '6px 0 18px', color: '#475569', fontSize: 13 }}>
+              <strong style={{ color: '#0f172a' }}>{[exitPrompt.employee.firstName, exitPrompt.employee.middleName, exitPrompt.employee.lastName].filter(Boolean).join(' ')}</strong>
+              {' '}will move to Ex Employees. Pick a reason so HR has a record of why they left.
+            </p>
+
+            <label style={{ display: 'block', color: '#0f172a', fontSize: 12, fontWeight: 700, marginBottom: 6 }}>Reason</label>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0,1fr))', gap: 8, marginBottom: 16 }}>
+              {EXIT_REASONS.map(reason => {
+                const active = exitPrompt.reason === reason
+                return (
+                  <button
+                    key={reason}
+                    type="button"
+                    onClick={() => setExitPrompt(prev => prev ? { ...prev, reason } : prev)}
+                    style={{
+                      minHeight: 36,
+                      border: `1px solid ${active ? '#0f172a' : '#e2e8f0'}`,
+                      background: active ? '#0f172a' : '#fff',
+                      color: active ? '#fff' : '#0f172a',
+                      borderRadius: 8,
+                      padding: '0 10px',
+                      fontSize: 12,
+                      fontWeight: 700,
+                      cursor: 'pointer',
+                      fontFamily: font,
+                    }}
+                  >
+                    {reason}
+                  </button>
+                )
+              })}
+            </div>
+
+            <label style={{ display: 'block', color: '#0f172a', fontSize: 12, fontWeight: 700, marginBottom: 6 }}>Notes <span style={{ color: '#94a3b8', fontWeight: 500 }}>(optional)</span></label>
+            <textarea
+              value={exitPrompt.notes}
+              onChange={event => setExitPrompt(prev => prev ? { ...prev, notes: event.target.value } : prev)}
+              placeholder={
+                exitPrompt.reason === 'AWOL' ? 'Last day reported, attempts to contact, etc.'
+                : exitPrompt.reason === 'Terminated' ? 'Reference the termination memo or case number.'
+                : exitPrompt.reason === 'Resigned' ? 'Effective date, handover notes, or rehire eligibility.'
+                : 'Any context HR should keep on file.'
+              }
+              rows={3}
+              style={{ width: '100%', border: '1px solid #e2e8f0', borderRadius: 8, padding: '10px 12px', fontSize: 13, color: '#0f172a', fontFamily: font, resize: 'vertical', outline: 'none' }}
+            />
+
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, marginTop: 18 }}>
+              <button
+                type="button"
+                onClick={() => setExitPrompt(null)}
+                style={{ minHeight: 38, border: '1px solid #e2e8f0', background: '#fff', color: '#0f172a', borderRadius: 8, padding: '0 16px', fontSize: 13, fontWeight: 700, cursor: 'pointer', fontFamily: font }}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={confirmExit}
+                style={{ minHeight: 38, border: 0, background: '#dc2626', color: '#fff', borderRadius: 8, padding: '0 18px', fontSize: 13, fontWeight: 800, cursor: 'pointer', fontFamily: font }}
+              >
+                Move to Ex Employees
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </main>
   )
 }

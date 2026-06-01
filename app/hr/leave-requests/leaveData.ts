@@ -13,6 +13,11 @@ export interface Employee {
   lastName?: string
   email?: string
   portalEmail?: string
+  portalPasswordHash?: string
+  portalPasswordSalt?: string
+  portalPasswordAlgorithm?: 'pbkdf2-sha256'
+  portalPasswordUpdatedAt?: string
+  /** Legacy local records only. New records store portal password hashes instead. */
   portalPassword?: string
   mustChangePassword?: boolean
   phone?: string
@@ -184,11 +189,14 @@ export function isTeamManager(employee?: Partial<Employee>, request?: Partial<Le
   return /\b(team\s*manager|manager|team\s*lead|lead)\b/.test(haystack)
 }
 
-export function requiresTeamManagerApproval(row: Partial<LeaveRow> | Partial<LeaveRequest>, employee?: Partial<Employee>) {
+export function requiresTeamManagerApproval(_row: Partial<LeaveRow> | Partial<LeaveRequest>, _employee?: Partial<Employee>) {
+  void _row
+  void _employee
   return false
 }
 
-export function approvalState(row: Partial<LeaveRow> | Partial<LeaveRequest>, employee?: Partial<Employee>) {
+export function approvalState(row: Partial<LeaveRow> | Partial<LeaveRequest>, _employee?: Partial<Employee>) {
+  void _employee
   const status = normalizeStatus(String(row.status || 'Pending'))
   const needsManager = false
   const managerStatus: ApprovalDecision = 'Skipped'
@@ -296,7 +304,13 @@ export function daysBetweenInclusive(startDate: string, endDate: string) {
 }
 
 export function downloadCsv(filename: string, rows: string[][]) {
-  const csv = rows.map(row => row.map(cell => `"${String(cell).replace(/"/g, '""')}"`).join(',')).join('\n')
+  const csv = rows.map(row => row.map(cell => {
+    // Neutralize spreadsheet formula injection: a cell starting with = + - @
+    // is treated as a formula by Excel/Sheets. Prefix it with an apostrophe.
+    let text = String(cell ?? '').replace(/"/g, '""')
+    if (/^[=+\-@]/.test(text.trimStart())) text = `'${text}`
+    return `"${text}"`
+  }).join(',')).join('\n')
   const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' })
   const url = URL.createObjectURL(blob)
   const link = document.createElement('a')

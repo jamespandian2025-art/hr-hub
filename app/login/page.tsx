@@ -3,10 +3,13 @@
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { FormEvent, useEffect, useState } from 'react'
-import { Eye, EyeOff, Lock, Mail } from 'lucide-react'
+import { BriefcaseBusiness, Building2, ExternalLink, Eye, EyeOff, Lock, Mail, Users } from 'lucide-react'
 import { getSupabaseBrowserClient, hasSupabaseConfig } from '@/lib/auth/supabaseClient'
+import { checkLoginAllowed, establishServerSession, recordLoginAttempt } from '@/lib/auth/sessionClient'
+import { activeCompanyKey, bootstrapCompanyOnServer } from '@/lib/tenant/company'
 import {
   accountKey,
+  type AccountRole,
   type AuthUser,
   createPasswordFields,
   isGmailAddress,
@@ -25,42 +28,45 @@ interface AccountState {
   name?: string
   theme?: string
   company?: string
-  role?: 'Admin' | 'Finance' | 'HR' | 'Project Manager' | 'Support' | 'Client'
+  companyId?: string
+  role?: AccountRole
   roleLocked?: boolean
   onboardingComplete?: boolean
 }
 
-const accountRoles = new Set(['Admin', 'Finance', 'HR', 'Project Manager', 'Support', 'Client'])
+const accountRoles = new Set(['Admin', 'Finance', 'HR', 'Employee', 'Team Manager', 'Project Manager', 'Support', 'Client'])
+
+const loginStats = [
+  { icon: Building2, value: '\u20b112.5M', label: 'Total Managed Budget' },
+  { icon: BriefcaseBusiness, value: '48', label: 'Active Projects' },
+  { icon: Users, value: '126', label: 'Team Members' },
+]
 
 function invitedRole(input: unknown): AccountState['role'] | null {
   if (typeof input !== 'string') return null
   if (accountRoles.has(input)) return input as AccountState['role']
-  if (input === 'Member') return 'Support'
+  if (['Member', 'Sales', 'Warehouse', 'Procurement'].includes(input)) return 'Support'
   return null
-}
-
-function routeForRole(role?: AccountState['role']) {
-  if (role === 'Client') return '/client-portal'
-  if (role === 'Finance') return '/financials/loan-management'
-  if (role === 'HR') return '/hr/overview'
-  return '/dashboard'
 }
 
 function existingSessionRoute() {
   try {
     if (window.localStorage.getItem(logoutIntentKey)) return null
+    if (new URLSearchParams(window.location.search).has('next')) {
+      window.localStorage.removeItem(sessionKey)
+      return null
+    }
 
     const sessionRaw = window.localStorage.getItem(sessionKey)
     if (!sessionRaw) return null
 
     const accountRaw = window.localStorage.getItem(accountKey)
     const account = accountRaw ? (JSON.parse(accountRaw) as AccountState) : {}
-    const session = JSON.parse(sessionRaw) as { role?: AccountState['role'] }
     const stored = window.localStorage.getItem(onboardingKey)
     const onboarding = stored ? JSON.parse(stored) as { complete?: boolean } : null
 
     if (!onboarding?.complete && !account.onboardingComplete) return '/onboarding'
-    return routeForRole(session.role || account.role)
+    return '/choose-account'
   } catch {
     return null
   }
@@ -125,6 +131,14 @@ export default function LoginPage() {
 
       const userName = registeredUser.name || sessionUser.user_metadata?.full_name || sessionUser.user_metadata?.name || userEmail.split('@')[0] || 'Google User'
       const role = registeredUser.role || account.role || 'Admin'
+      await supabase.auth.updateUser({
+        data: {
+          role,
+          full_name: userName,
+          name: userName,
+          company_name: account.company || userName || 'WiseFlow Company',
+        },
+      }).catch(() => undefined)
       window.localStorage.setItem(sessionKey, JSON.stringify({ userId: registeredUser.id, email: userEmail, provider: registeredUser.provider, role }))
       window.localStorage.setItem(accountKey, JSON.stringify({
         ...account,
@@ -133,11 +147,25 @@ export default function LoginPage() {
         fullName: userName,
         email: userEmail,
         role,
-        theme: account.theme || 'WiseFlow Light',
+        theme: account.theme || 'Bright',
       }))
+      await establishServerSession({ userId: registeredUser.id, email: userEmail, name: userName, provider: registeredUser.provider, role })
+      const bootstrappedCompany = await bootstrapCompanyOnServer({
+        companyName: account.company || userName || 'WiseFlow Company',
+        companyId: account.companyId,
+        companyType: 'Operating Company',
+      })
+      const accountAfterBootstrapRaw = window.localStorage.getItem(accountKey)
+      const accountAfterBootstrap = accountAfterBootstrapRaw ? JSON.parse(accountAfterBootstrapRaw) as AccountState : {}
+      window.localStorage.setItem(accountKey, JSON.stringify({
+        ...accountAfterBootstrap,
+        company: bootstrappedCompany.name,
+        companyId: bootstrappedCompany.id,
+      }))
+      window.localStorage.setItem(activeCompanyKey, bootstrappedCompany.id)
       const stored = window.localStorage.getItem(onboardingKey)
       const onboarding = stored ? JSON.parse(stored) as { complete?: boolean } : null
-      router.replace(!onboarding?.complete && !account.onboardingComplete ? '/onboarding' : routeForRole(role))
+      router.replace(!onboarding?.complete && !account.onboardingComplete ? '/onboarding' : '/choose-account')
     }
 
     supabase.auth.getSession().then(({ data }) => {
@@ -156,12 +184,13 @@ export default function LoginPage() {
     }
   }, [router])
 
-  const saveSession = (user: AuthUser) => {
+  const saveSession = async (user: AuthUser) => {
     const accountRaw = window.localStorage.getItem(accountKey)
     const account = accountRaw ? (JSON.parse(accountRaw) as AccountState) : {}
     const role = user.role || account.role || 'Admin'
     window.localStorage.setItem(sessionKey, JSON.stringify({ userId: user.id, email: user.email, provider: user.provider, role }))
     window.localStorage.setItem(accountKey, JSON.stringify({ ...account, user: publicUser(user), email: user.email, role }))
+    await establishServerSession({ userId: user.id, email: user.email, name: user.name, provider: user.provider, role })
     const stored = window.localStorage.getItem(onboardingKey)
     const onboarding = stored ? JSON.parse(stored) as { complete?: boolean } : null
     if (!onboarding?.complete && !account.onboardingComplete) {
@@ -169,41 +198,111 @@ export default function LoginPage() {
       return
     }
 
-    router.push(routeForRole(role))
+    router.push('/choose-account')
   }
 
   const login = async (event: FormEvent) => {
     event.preventDefault()
     const trimmedEmail = email.trim().toLowerCase()
+    try {
+      await checkLoginAllowed(trimmedEmail)
+    } catch (rateError) {
+      setError(rateError instanceof Error ? rateError.message : 'Too many failed login attempts. Try again later.')
+      return
+    }
     if (!isGmailAddress(trimmedEmail)) {
       setError('Use the Gmail address registered for this workspace.')
+      await recordLoginAttempt(trimmedEmail, false)
       return
     }
 
     const user = users.find(item => item.email.toLowerCase() === trimmedEmail)
     const passwordMatches = user ? await verifyPassword(user, password) : false
 
-    if (!user || !passwordMatches) {
-      setError('Email or password is incorrect.')
+    if (user && passwordMatches) {
+      if ((user.password && !user.passwordHash) || (user.passwordHash && !user.passwordAlgorithm)) {
+        const passwordFields = await createPasswordFields(password)
+        const migrated = { ...user, ...passwordFields, password: undefined }
+        const nextUsers = users.map(item => item.id === user.id ? migrated : item)
+        setUsers(nextUsers)
+        saveAuthUsers(nextUsers)
+        await recordLoginAttempt(trimmedEmail, true)
+        await saveSession(migrated)
+        return
+      }
+
+      await recordLoginAttempt(trimmedEmail, true)
+      await saveSession(user)
       return
     }
 
-    if (user.password && !user.passwordHash) {
-      const passwordFields = await createPasswordFields(password)
-      const migrated = { ...user, ...passwordFields, password: undefined }
-      const nextUsers = users.map(item => item.id === user.id ? migrated : item)
-      setUsers(nextUsers)
-      saveAuthUsers(nextUsers)
-      saveSession(migrated)
+    const supabase = getSupabaseBrowserClient()
+    if (supabase && hasSupabaseConfig()) {
+      const { data, error: supabaseError } = await supabase.auth.signInWithPassword({
+        email: trimmedEmail,
+        password,
+      })
+
+      if (supabaseError || !data.user) {
+        setError('Email or password is incorrect.')
+        await recordLoginAttempt(trimmedEmail, false)
+        return
+      }
+
+      const metadata = data.user.user_metadata || {}
+      const existingLocalUser = users.find(item => item.email.toLowerCase() === trimmedEmail)
+      const role = invitedRole(metadata.role) || existingLocalUser?.role || 'Employee'
+      const userName = metadata.full_name || metadata.name || trimmedEmail.split('@')[0] || 'WiseFlow User'
+      const companyName = metadata.company_name || userName || 'WiseFlow Company'
+      const user: AuthUser = {
+        id: users.reduce((max, item) => Math.max(max, item.id), 0) + 1,
+        name: userName,
+        email: trimmedEmail,
+        provider: 'email',
+        role,
+      }
+
+      try {
+        window.localStorage.setItem(sessionKey, JSON.stringify({ userId: user.id, email: trimmedEmail, provider: user.provider, role }))
+        window.localStorage.setItem(accountKey, JSON.stringify({
+          user: publicUser(user),
+          name: userName,
+          fullName: userName,
+          email: trimmedEmail,
+          role,
+          theme: 'Bright',
+        }))
+        await recordLoginAttempt(trimmedEmail, true)
+        await establishServerSession({ userId: user.id, email: trimmedEmail, name: userName, provider: user.provider, role })
+        const bootstrappedCompany = await bootstrapCompanyOnServer({
+          companyName,
+          companyType: 'Operating Company',
+        })
+        const accountRaw = window.localStorage.getItem(accountKey)
+        const account = accountRaw ? JSON.parse(accountRaw) as AccountState : {}
+        window.localStorage.setItem(accountKey, JSON.stringify({
+          ...account,
+          company: bootstrappedCompany.name,
+          companyId: bootstrappedCompany.id,
+        }))
+        window.localStorage.setItem(activeCompanyKey, bootstrappedCompany.id)
+        const stored = window.localStorage.getItem(onboardingKey)
+        const onboarding = stored ? JSON.parse(stored) as { complete?: boolean } : null
+        router.push(!onboarding?.complete ? '/onboarding' : '/choose-account')
+      } catch (setupError) {
+        setError(setupError instanceof Error ? setupError.message : 'Workspace setup could not be completed.')
+        await supabase.auth.signOut()
+      }
       return
     }
 
-    saveSession(user)
+    setError('Email or password is incorrect.')
+    await recordLoginAttempt(trimmedEmail, false)
   }
 
-  const socialLogin = (provider: 'gmail' | 'facebook') => {
+  const socialLogin = (provider: 'gmail' | 'microsoft') => {
     if (provider !== 'gmail') {
-      setError('Facebook login is disabled for HR HUB. Use your registered Gmail and password.')
+      setError('Microsoft login is not configured yet. Use your registered Gmail and password.')
       return
     }
 
@@ -228,73 +327,96 @@ export default function LoginPage() {
   }
 
   return (
-    <AuthShell title="Welcome back" subtitle="Log in to manage projects, finances, resources, and conversations.">
+    <AuthShell>
       <form onSubmit={login} className="login-form">
-        {error && <div style={alertStyle}>{error}</div>}
+        {error && <div className="login-alert">{error}</div>}
 
-        <label className="login-field" style={fieldGroupStyle}>
-          <span style={labelStyle}>Email</span>
-          <div className="login-input-wrap" style={inputWrapStyle}>
-            <Mail size={17} color="#64748b" />
-            <input value={email} onChange={event => setEmail(event.target.value)} type="email" placeholder="you@gmail.com" required style={inputStyle} />
+        <label className="login-field">
+          <span>Email</span>
+          <div className="login-input-wrap">
+            <Mail size={18} aria-hidden="true" />
+            <input className="login-control" value={email} onChange={event => setEmail(event.target.value)} type="email" placeholder="wiseflow.demo@gmail.com" autoComplete="email" required />
           </div>
         </label>
 
-        <label className="login-field" style={fieldGroupStyle}>
-          <span style={labelStyle}>Password</span>
-          <div className="login-input-wrap" style={inputWrapStyle}>
-            <Lock size={17} color="#64748b" />
-            <input value={password} onChange={event => setPassword(event.target.value)} type={showPassword ? 'text' : 'password'} placeholder="Enter password" required style={inputStyle} />
-            <button type="button" className="login-password-toggle" onClick={() => setShowPassword(!showPassword)} style={ghostIconButtonStyle} aria-label={showPassword ? 'Hide password' : 'Show password'}>
-              {showPassword ? <EyeOff size={17} /> : <Eye size={17} />}
+        <div className="login-field">
+          <div className="login-field-row">
+            <span>Password</span>
+            <Link href="/account-recovery" className="login-accent-link">Forgot password?</Link>
+          </div>
+          <div className="login-input-wrap">
+            <Lock size={18} aria-hidden="true" />
+            <input className="login-control" aria-label="Password" value={password} onChange={event => setPassword(event.target.value)} type={showPassword ? 'text' : 'password'} placeholder="Enter password" autoComplete="current-password" required />
+            <button type="button" className="login-password-toggle" onClick={() => setShowPassword(!showPassword)} aria-label={showPassword ? 'Hide password' : 'Show password'}>
+              {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
             </button>
           </div>
-        </label>
+        </div>
 
-        <button type="submit" className="login-primary-button" style={primaryButtonStyle}>Log in</button>
+        <button type="submit" className="login-primary-button">Log in</button>
       </form>
 
-      <SocialButtons onSocial={socialLogin} label="Log in" />
+      <SocialButtons onSocial={socialLogin} />
 
-      <div className="employee-login-panel" style={{ marginTop: 18, padding: 12, borderRadius: 12, background: '#f0fdf4', border: '1px solid #bbf7d0', display: 'grid', gap: 8 }}>
-        <div style={{ color: '#14532d', fontSize: 13, fontWeight: 700 }}>Logging in as an employee?</div>
-        <Link href="/employee/login" className="employee-login-link" style={employeeLoginLinkStyle}>Open Employee Self-Service Portal</Link>
+      <div className="employee-login-panel">
+        <div>Logging in as an employee?</div>
+        <Link href="/employee/login" className="employee-login-link">
+          <ExternalLink size={17} aria-hidden="true" />
+          Open Employee Self-Service Portal
+        </Link>
       </div>
 
-      <div className="login-create-line" style={{ textAlign: 'center', fontSize: 13, color: '#64748b', marginTop: 18 }}>
-        No account yet? <Link href="/signup" className="login-create-link" style={{ color: '#111827', fontWeight: 600, textDecoration: 'none' }}>Create one</Link>
+      <div className="login-create-line">
+        No account yet? <Link href="/signup" className="login-accent-link">Create one</Link>
       </div>
     </AuthShell>
   )
 }
 
-function AuthShell({ title, subtitle, children }: { title: string; subtitle: string; children: React.ReactNode }) {
+function AuthShell({ children }: { children: React.ReactNode }) {
   return (
-    <main className="login-page-shell" style={{ fontFamily: "var(--font-body)" }}>
+    <main className="login-shell">
       <style>{loginCss}</style>
-      <section className="login-hero" style={{ background: '#111827', color: '#fff' }}>
-        <div>
-          <div className="login-brand">
-            <div className="login-logo-mark">W</div>
-            <div className="login-wordmark">WiseFlow</div>
-          </div>
-          <div className="login-hero-copy">
-            <h1 className="login-hero-title">Run your construction workflow in one place.</h1>
-            <p className="login-hero-subtitle">Track projects, clients, budgets, bills, inventory, suppliers, and team messages with a focused business workspace.</p>
-          </div>
+      <video className="login-bg-video login-bg-video-mobile" autoPlay muted loop playsInline preload="auto" aria-hidden="true">
+        <source src="/videos/mobile.mp4" type="video/mp4" />
+      </video>
+      <section className="login-visual" aria-label="WiseFlow business management platform">
+        <video className="login-bg-video login-bg-video-desktop" autoPlay muted loop playsInline preload="auto" aria-hidden="true">
+          <source src="/videos/desktop-video.mp4" type="video/mp4" />
+        </video>
+        <div className="login-brand">
+          <div className="login-logo-mark">W</div>
+          <div className="login-wordmark">WiseFlow</div>
         </div>
-        <div className="login-feature-pills">
-          {['Projects', 'Financials', 'Resources'].map(item => (
-            <div key={item} className="login-feature-pill">{item}</div>
-          ))}
+
+        <div className="login-hero-copy">
+          <h1 className="login-hero-title">Run your entire<br />business in <span>one place</span>.</h1>
+          <p className="login-hero-subtitle">Track projects, clients, budgets, bills, inventory, suppliers, and team messages with a focused business workspace.</p>
+        </div>
+
+        <div className="login-stats" aria-label="WiseFlow project metrics">
+          {loginStats.map(stat => {
+            const StatIcon = stat.icon
+            return (
+              <div className="login-stat" key={stat.label}>
+                <StatIcon size={28} aria-hidden="true" />
+                <strong>{stat.value}</strong>
+                <span>{stat.label}</span>
+              </div>
+            )
+          })}
+        </div>
+
+        <div className="login-footer-line">
+          <span>{'\u00a9 2026 WiseFlow. All rights reserved.'}</span>
         </div>
       </section>
 
-      <section className="login-form-panel">
-        <div className="login-card">
-          <div className="login-card-header">
-            <div className="login-card-title">{title}</div>
-            <div className="login-card-subtitle">{subtitle}</div>
+      <section className="login-form-panel" aria-label="WiseFlow login form">
+        <div className="login-auth-panel">
+          <div className="login-panel-header">
+            <div className="login-panel-title">Welcome back</div>
+            <div className="login-panel-subtitle">Log in to manage projects, finances, resources, and conversations.</div>
           </div>
           {children}
         </div>
@@ -303,323 +425,975 @@ function AuthShell({ title, subtitle, children }: { title: string; subtitle: str
   )
 }
 
-function SocialButtons({ onSocial, label }: { onSocial: (provider: 'gmail' | 'facebook') => void; label: string }) {
+function SocialButtons({ onSocial }: { onSocial: (provider: 'gmail' | 'microsoft') => void }) {
   return (
     <>
-      <div className="login-divider" style={{ display: 'grid', gridTemplateColumns: '1fr auto 1fr', gap: 12, alignItems: 'center', margin: '20px 0', color: '#94a3b8', fontSize: 12, fontWeight: 600 }}>
-        <span style={{ height: 1, background: '#e5e7eb' }} />
-        OR
-        <span style={{ height: 1, background: '#e5e7eb' }} />
+      <div className="login-divider">
+        <span />
+        <div>OR</div>
+        <span />
       </div>
       <div className="login-social-grid">
-        <button type="button" className="login-social-button" onClick={() => onSocial('gmail')} style={socialButtonStyle}><span style={{ color: '#dc2626', fontWeight: 600 }}>G</span>{label} with Gmail</button>
-        <button type="button" className="login-social-button" onClick={() => onSocial('facebook')} style={socialButtonStyle}><span style={{ color: '#2563eb', fontWeight: 600 }}>f</span>{label} with Facebook</button>
+        <button type="button" className="login-social-button" onClick={() => onSocial('gmail')}>
+          <span className="google-mark" aria-hidden="true">G</span>
+          Continue with Google
+        </button>
+        <button type="button" className="login-social-button" onClick={() => onSocial('microsoft')}>
+          <span className="microsoft-mark" aria-hidden="true">
+            <i />
+            <i />
+            <i />
+            <i />
+          </span>
+          Continue with Microsoft
+        </button>
       </div>
     </>
   )
 }
 
-const fieldGroupStyle = { display: 'grid', gap: 7 }
-const labelStyle = { fontSize: 12, color: '#374151', fontWeight: 600 }
-const inputWrapStyle = { height: 44, border: '1px solid #e5e7eb', borderRadius: 10, display: 'flex', alignItems: 'center', gap: 9, padding: '0 12px', background: '#fff' }
-const inputStyle = { border: 'none', outline: 'none', flex: 1, minWidth: 0, fontSize: 14, color: '#111827', background: 'transparent' }
-const primaryButtonStyle = { border: 'none', borderRadius: 10, background: '#111827', color: '#fff', height: 44, fontSize: 14, fontWeight: 600, cursor: 'pointer' }
-const employeeLoginLinkStyle = { height: 38, borderRadius: 10, background: '#16a34a', color: '#fff', fontSize: 13, fontWeight: 800, textDecoration: 'none', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }
-const socialButtonStyle = { height: 42, border: '1px solid #e5e7eb', borderRadius: 10, background: '#fff', color: '#111827', fontSize: 13, fontWeight: 600, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 8 }
-const ghostIconButtonStyle = { border: 'none', background: 'transparent', color: '#64748b', cursor: 'pointer', display: 'inline-flex', padding: 0 }
-const alertStyle = { padding: '10px 12px', borderRadius: 10, background: '#fef2f2', color: '#dc2626', fontSize: 13, fontWeight: 600 }
-
 const loginCss = `
-.login-page-shell,
-.login-page-shell * {
+.login-shell,
+.login-shell * {
   box-sizing: border-box;
 }
 
-.login-page-shell {
+.login-shell {
+  position: relative;
+  isolation: isolate;
+  min-height: 100vh;
   min-height: 100svh;
   width: 100%;
   max-width: 100vw;
   overflow-x: hidden;
-  background: #eef2f7;
-  display: flex;
-  flex-direction: column;
+  background:
+    radial-gradient(circle at 77% 19%, rgba(24, 198, 96, 0.12), transparent 26%),
+    linear-gradient(135deg, #060a0e 0%, #090d11 47%, #05070a 100%);
+  color: #f8fafc;
+  display: grid;
+  font-family: var(--font-body), "Geist Sans", sans-serif;
 }
 
-.login-hero {
-  padding: 24px clamp(18px, 6vw, 56px) 18px;
-  background: #eef2f7 !important;
-  color: #111827 !important;
+.login-shell button:hover {
+  transform: none;
+}
+
+.login-bg-video {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border: 0;
+  pointer-events: none;
+  z-index: -2;
+}
+
+.login-bg-video-mobile {
+  display: none;
+}
+
+.login-visual {
+  min-height: 100svh;
+  min-width: 0;
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  padding: clamp(28px, 5vw, 56px);
+  border-right: 1px solid rgba(148, 163, 184, 0.18);
+  background: #05080b;
+}
+
+.login-visual::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background:
+    linear-gradient(90deg, rgba(5, 10, 14, 0.92) 0%, rgba(5, 10, 14, 0.62) 42%, rgba(5, 10, 14, 0.40) 100%),
+    linear-gradient(180deg, rgba(0, 0, 0, 0.08) 52%, rgba(0, 0, 0, 0.52) 100%),
+    radial-gradient(circle at 55% 50%, rgba(33, 197, 94, 0.12), transparent 31%);
 }
 
 .login-brand {
   display: flex;
   align-items: center;
-  justify-content: center;
-  gap: 12px;
+  gap: 14px;
+  align-self: start;
 }
 
 .login-logo-mark {
-  width: 40px;
-  height: 40px;
-  border-radius: 11px;
-  background: #22c55e;
-  color: #191414;
+  width: 48px;
+  height: 48px;
+  border-radius: 10px;
+  background: linear-gradient(135deg, #31e977 0%, #16a34a 100%);
+  color: #ffffff;
   display: grid;
   place-items: center;
-  font-weight: 600;
+  font-size: 22px;
+  font-weight: 850;
   flex: 0 0 auto;
 }
 
 .login-wordmark {
-  color: #111827;
-  font-size: clamp(18px, 4vw, 20px);
-  font-weight: 600;
+  color: #ffffff;
+  font-size: clamp(20px, 2vw, 26px);
+  font-weight: 760;
+  letter-spacing: 0;
 }
 
-.login-hero-copy,
-.login-feature-pills {
-  display: none;
+.login-hero-copy {
+  align-self: start;
+  max-width: min(730px, 94%);
+  margin-top: clamp(48px, 7vh, 72px);
+}
+
+.login-shell .login-hero-title {
+  margin: 0;
+  color: #ffffff !important;
+  font-size: clamp(44px, 3.8vw, 56px) !important;
+  line-height: 1.22 !important;
+  font-weight: 760 !important;
+  letter-spacing: 0 !important;
+  text-wrap: balance;
+}
+
+.login-hero-title span {
+  color: #22c55e;
+}
+
+.login-hero-subtitle {
+  max-width: 570px;
+  margin: 24px 0 0;
+  color: #b8c0cc;
+  font-size: clamp(18px, 1.7vw, 22px);
+  line-height: 1.65;
+  font-weight: 430;
+}
+
+.login-stats {
+  position: absolute;
+  left: clamp(28px, 5vw, 56px);
+  top: calc(100svh - 334px);
+  width: min(540px, calc(100% - 112px));
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 20px;
+  max-width: 540px;
+}
+
+.login-stat {
+  min-height: 150px;
+  display: grid;
+  align-content: center;
+  gap: 16px;
+  padding: 28px;
+  border: 1px solid rgba(148, 163, 184, 0.18);
+  border-radius: 12px;
+  background: linear-gradient(145deg, rgba(15, 23, 42, 0.64), rgba(8, 13, 18, 0.48));
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+  backdrop-filter: blur(18px);
+}
+
+.login-stat svg {
+  color: #22c55e;
+  stroke-width: 2;
+}
+
+.login-stat strong {
+  color: #ffffff !important;
+  font-size: clamp(28px, 2.7vw, 38px);
+  line-height: 1;
+  font-weight: 760;
+  letter-spacing: 0;
+}
+
+.login-stat span {
+  color: #aeb7c4;
+  font-size: 16px;
+  line-height: 1.45;
+}
+
+.login-footer-line {
+  position: absolute;
+  left: clamp(28px, 5vw, 56px);
+  top: calc(100svh - 92px);
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  color: #aeb7c4;
+  font-size: 15px;
+}
+
+.login-footer-line span {
+  color: #aeb7c4 !important;
 }
 
 .login-form-panel {
-  flex: 1;
+  min-height: 100svh;
+  min-width: 0;
   width: 100%;
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   justify-content: center;
-  padding: clamp(16px, 5vw, 40px);
+  padding: clamp(28px, 4.8vw, 64px);
+  background:
+    radial-gradient(circle at 38% 18%, rgba(148, 163, 184, 0.08), transparent 24%),
+    linear-gradient(135deg, rgba(6, 9, 13, 0.95), rgba(5, 7, 10, 0.98));
 }
 
-.login-card {
-  width: min(100%, 430px);
+.login-auth-panel {
+  width: min(100%, 520px);
+  min-width: 0;
   max-width: 100%;
-  background: #ffffff;
-  border: 1px solid #e5e7eb;
-  border-radius: 18px;
-  padding: clamp(20px, 5vw, 28px);
-  box-shadow: 0 24px 70px rgba(15, 23, 42, 0.12);
+  border: 1px solid rgba(148, 163, 184, 0.2);
+  border-radius: 14px;
+  padding: clamp(30px, 4.4vw, 54px) clamp(28px, 5vw, 64px);
+  background: linear-gradient(145deg, rgba(12, 18, 24, 0.72), rgba(6, 9, 13, 0.58));
+  box-shadow: 0 30px 90px rgba(0, 0, 0, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.04);
+  backdrop-filter: blur(22px);
 }
 
-.login-card-header {
-  margin-bottom: 22px;
+.login-panel-header {
+  margin-bottom: 26px;
 }
 
-.login-card-title {
-  color: #111827;
-  font-size: clamp(24px, 6vw, 26px);
-  font-weight: 600;
+.login-panel-title {
+  color: #ffffff !important;
+  font-size: clamp(30px, 3vw, 39px);
+  font-weight: 760;
   line-height: 1.15;
-  margin-bottom: 8px;
+  margin-bottom: 14px;
+  letter-spacing: 0;
 }
 
-.login-card-subtitle {
-  color: #64748b;
-  font-size: 13px;
+.login-panel-subtitle {
+  max-width: 420px;
+  color: #aeb7c4 !important;
+  font-size: 15px;
   line-height: 1.6;
+  font-weight: 400 !important;
+}
+
+html[data-theme='dark'] body .login-shell .login-panel-subtitle.login-panel-subtitle,
+html[data-theme='light'] body .login-shell .login-panel-subtitle.login-panel-subtitle {
+  color: #aeb7c4 !important;
+  font-weight: 400 !important;
 }
 
 .login-form {
   display: grid;
-  gap: 14px;
+  gap: 18px;
+}
+
+.login-alert {
+  padding: 12px 14px;
+  border: 1px solid rgba(248, 113, 113, 0.32);
+  border-radius: 10px;
+  background: rgba(127, 29, 29, 0.28);
+  color: #fecaca;
+  font-size: 14px;
+  line-height: 1.45;
+  font-weight: 620;
+}
+
+.login-field {
+  display: grid;
+  gap: 12px;
 }
 
 .login-field,
+.login-field-row,
 .login-input-wrap,
-.login-page-shell input,
-.login-page-shell button,
-.login-page-shell a {
+.login-shell input,
+.login-shell button,
+.login-shell a {
   max-width: 100%;
 }
 
-.login-input-wrap {
-  min-height: 46px;
-  width: 100%;
+.login-field > span,
+.login-field-row > span {
+  color: #d6dce5;
+  font-size: 15px;
+  font-weight: 650;
 }
 
-.login-page-shell input {
+.login-field-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.login-input-wrap {
+  min-height: 50px;
   width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 0 16px;
+  border: 1px solid rgba(148, 163, 184, 0.2);
+  border-radius: 8px;
+  background: rgba(5, 9, 13, 0.46);
+  color: #94a3b8;
+  box-shadow: inset 0 1px 12px rgba(0, 0, 0, 0.12);
+}
+
+.login-shell .login-control {
+  width: 100%;
+  min-width: 0;
+  min-height: 0;
+  height: auto;
+  flex: 1;
+  border: 0 !important;
+  outline: none !important;
+  box-shadow: none !important;
+  background: transparent !important;
+  color: #eef2f7 !important;
+  font-size: 15px;
+  font-weight: 500;
+  padding: 0;
+}
+
+.login-shell .login-control::placeholder {
+  color: #aab3bf !important;
+  opacity: 0.92;
+}
+
+.login-input-wrap:focus-within {
+  border-color: rgba(34, 197, 94, 0.66);
+  box-shadow: 0 0 0 3px rgba(34, 197, 94, 0.13), inset 0 1px 12px rgba(0, 0, 0, 0.12);
+}
+
+.login-password-toggle {
+  width: 34px;
+  height: 34px;
+  border: 0;
+  background: transparent;
+  color: #b4bdca;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
 }
 
 .login-primary-button {
-  background: #000000 !important;
-  border-color: #000000 !important;
-  color: #ffffff !important;
-  min-height: 46px;
+  min-height: 52px;
   width: 100%;
+  border: 0;
+  border-radius: 8px;
+  background: linear-gradient(135deg, #21d566 0%, #16a34a 100%);
+  color: #ffffff;
+  font-size: 16px;
+  font-weight: 760;
+  cursor: pointer;
+  box-shadow: 0 18px 38px rgba(22, 163, 74, 0.22);
 }
-.login-primary-button:hover,
-.login-primary-button:focus,
-.login-primary-button:active {
-  background: #000000 !important;
-  border-color: #000000 !important;
+
+html[data-theme='dark'] .login-shell .login-primary-button,
+html[data-theme='light'] .login-shell .login-primary-button,
+.login-shell .login-primary-button {
+  background: linear-gradient(135deg, #21d566 0%, #16a34a 100%) !important;
+  border-color: transparent !important;
   color: #ffffff !important;
+  box-shadow: 0 18px 38px rgba(22, 163, 74, 0.22) !important;
+}
+
+html[data-theme='dark'] body .login-shell .login-primary-button.login-primary-button.login-primary-button.login-primary-button,
+html[data-theme='light'] body .login-shell .login-primary-button.login-primary-button.login-primary-button.login-primary-button {
+  background: linear-gradient(135deg, #21d566 0%, #16a34a 100%) !important;
+  border-color: transparent !important;
+  color: #ffffff !important;
+  box-shadow: 0 18px 38px rgba(22, 163, 74, 0.22) !important;
+}
+
+.login-primary-button:hover,
+.login-primary-button:focus-visible {
+  background: linear-gradient(135deg, #2be872 0%, #19b955 100%);
+}
+
+html[data-theme='dark'] .login-shell .login-primary-button:hover,
+html[data-theme='dark'] .login-shell .login-primary-button:focus-visible,
+html[data-theme='light'] .login-shell .login-primary-button:hover,
+html[data-theme='light'] .login-shell .login-primary-button:focus-visible {
+  background: linear-gradient(135deg, #2be872 0%, #19b955 100%) !important;
+}
+
+html[data-theme='dark'] body .login-shell .login-primary-button.login-primary-button.login-primary-button.login-primary-button:hover,
+html[data-theme='dark'] body .login-shell .login-primary-button.login-primary-button.login-primary-button.login-primary-button:focus-visible,
+html[data-theme='light'] body .login-shell .login-primary-button.login-primary-button.login-primary-button.login-primary-button:hover,
+html[data-theme='light'] body .login-shell .login-primary-button.login-primary-button.login-primary-button.login-primary-button:focus-visible {
+  background: linear-gradient(135deg, #2be872 0%, #19b955 100%) !important;
 }
 
 .login-primary-button:focus-visible,
 .login-social-button:focus-visible,
 .employee-login-link:focus-visible,
-.login-create-link:focus-visible,
+.login-accent-link:focus-visible,
 .login-password-toggle:focus-visible,
-.login-page-shell input:focus-visible {
-  outline: 2px solid #2563eb;
+.login-shell input:focus-visible {
+  outline: 2px solid #22c55e;
   outline-offset: 2px;
 }
 
-.login-password-toggle {
-  min-width: 32px;
-  min-height: 32px;
-  align-items: center;
-  justify-content: center;
+.login-accent-link {
+  color: #22c55e;
+  font-size: 14px;
+  font-weight: 650;
+  text-decoration: none;
+  white-space: nowrap;
 }
 
 .login-divider {
-  margin: 20px 0;
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  gap: 18px;
+  align-items: center;
+  margin: 26px 0 18px;
+  color: #9aa3b0;
+  font-size: 14px;
+  font-weight: 600;
+  text-align: center;
+}
+
+.login-divider span {
+  height: 1px;
+  background: rgba(148, 163, 184, 0.18);
 }
 
 .login-social-grid {
   display: grid;
   grid-template-columns: 1fr;
-  gap: 10px;
+  gap: 12px;
 }
 
 .login-social-button {
   width: 100%;
-  min-height: 44px;
-  color: #111827 !important;
+  min-height: 50px;
+  border: 1px solid rgba(148, 163, 184, 0.2);
+  border-radius: 8px;
+  background: rgba(5, 9, 13, 0.34);
+  color: #ffffff;
+  font-size: 16px;
+  font-weight: 680;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
 }
 
+html[data-theme='dark'] .login-shell .login-social-button,
+html[data-theme='light'] .login-shell .login-social-button,
+.login-shell .login-social-button {
+  background: rgba(5, 9, 13, 0.34) !important;
+  border-color: rgba(148, 163, 184, 0.2) !important;
+  color: #ffffff !important;
+  box-shadow: none !important;
+}
+
+.login-social-button:hover {
+  border-color: rgba(148, 163, 184, 0.34);
+  background: rgba(15, 23, 42, 0.44);
+}
+
+html[data-theme='dark'] .login-shell .login-social-button:hover,
+html[data-theme='light'] .login-shell .login-social-button:hover {
+  background: rgba(15, 23, 42, 0.44) !important;
+  border-color: rgba(148, 163, 184, 0.34) !important;
+}
+
+html[data-theme='dark'] .login-shell .login-input-wrap button.login-password-toggle.login-password-toggle.login-password-toggle,
+html[data-theme='light'] .login-shell .login-input-wrap button.login-password-toggle.login-password-toggle.login-password-toggle {
+  background: transparent !important;
+  border-color: transparent !important;
+  box-shadow: none !important;
+  color: #b4bdca !important;
+}
+
+.google-mark {
+  font-size: 22px;
+  line-height: 1;
+  font-weight: 850;
+  background: conic-gradient(from -35deg, #4285f4 0 28%, #34a853 28% 45%, #fbbc05 45% 64%, #ea4335 64% 84%, #4285f4 84% 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+.microsoft-mark {
+  width: 18px;
+  height: 18px;
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  grid-template-rows: repeat(2, 1fr);
+  gap: 2px;
+}
+
+.microsoft-mark i {
+  display: block;
+}
+
+.microsoft-mark i:nth-child(1) { background: #f35325; }
+.microsoft-mark i:nth-child(2) { background: #81bc06; }
+.microsoft-mark i:nth-child(3) { background: #05a6f0; }
+.microsoft-mark i:nth-child(4) { background: #ffba08; }
+
 .employee-login-panel {
-  margin-top: 18px;
+  margin-top: 22px;
+  padding: 16px;
+  border: 1px solid rgba(34, 197, 94, 0.24);
+  border-radius: 8px;
+  display: grid;
+  gap: 16px;
+  background: rgba(8, 23, 15, 0.46);
+  color: #22c55e;
+  font-size: 15px;
+  font-weight: 560;
 }
 
 .employee-login-link {
-  min-height: 44px;
+  min-height: 48px;
   width: 100%;
-  background: #16a34a !important;
-  color: #ffffff !important;
+  border: 1px solid #22c55e;
+  border-radius: 8px;
+  color: #22c55e;
+  background: rgba(34, 197, 94, 0.04);
+  text-decoration: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  font-size: 15px;
+  font-weight: 760;
   text-align: center;
-  padding: 0 12px;
+  padding: 0 14px;
+}
+
+html[data-theme='dark'] .login-shell .employee-login-link,
+html[data-theme='light'] .login-shell .employee-login-link,
+.login-shell .employee-login-link {
+  background: rgba(34, 197, 94, 0.04) !important;
+  border-color: #22c55e !important;
+  color: #22c55e !important;
+  box-shadow: none !important;
+}
+
+.employee-login-link:hover {
+  background: rgba(34, 197, 94, 0.12);
+}
+
+html[data-theme='dark'] .login-shell .employee-login-link:hover,
+html[data-theme='light'] .login-shell .employee-login-link:hover {
+  background: rgba(34, 197, 94, 0.12) !important;
 }
 
 .login-create-line {
   margin-top: 18px;
+  color: #aab3bf;
+  font-size: 15px;
+  text-align: center;
 }
 
-@media (max-width: 420px) {
-  .login-hero {
-    padding: 18px 16px 10px;
-  }
-
-  .login-form-panel {
-    padding: 14px;
-  }
-
-  .login-card {
-    padding: 20px 18px;
-    border-radius: 16px;
+@media (min-width: 1060px) {
+  .login-shell {
+    grid-template-columns: minmax(0, 1.05fr) minmax(480px, 0.95fr);
+    height: 100vh;
+    height: 100svh;
+    overflow: hidden;
   }
 }
 
-@media (min-width: 768px) {
-  .login-hero {
-    min-height: 320px;
-    padding: 36px clamp(32px, 7vw, 56px);
-    display: flex;
-    flex-direction: column;
-    justify-content: space-between;
-    gap: 40px;
-    background: #111827 !important;
-    color: #ffffff !important;
+@media (min-width: 1060px) and (max-height: 1000px) {
+  .login-visual {
+    padding: 36px 48px;
   }
 
-  .login-brand {
-    justify-content: flex-start;
-  }
-
-  .login-wordmark {
-    color: #ffffff;
+  .login-logo-mark {
+    width: 46px;
+    height: 46px;
   }
 
   .login-hero-copy {
-    display: block;
-    margin-top: 44px;
+    margin-top: 42px;
+    max-width: 680px;
   }
 
-  .login-hero-title {
-    color: #ffffff;
-    font-size: clamp(32px, 5vw, 38px);
-    line-height: 1.08;
-    margin: 0 0 16px;
-    max-width: 650px;
+  .login-shell .login-hero-title {
+    font-size: 50px !important;
+    line-height: 1.18 !important;
   }
 
   .login-hero-subtitle {
-    color: #cbd5e1;
-    font-size: clamp(14px, 1.6vw, 15px);
-    line-height: 1.7;
-    max-width: 560px;
-    margin: 0;
+    margin-top: 18px;
+    max-width: 530px;
+    font-size: 18px;
+    line-height: 1.52;
   }
 
-  .login-feature-pills {
-    display: grid;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-    gap: 12px;
-    max-width: 820px;
+  .login-stats {
+    left: 48px;
+    top: calc(100svh - 260px);
+    width: min(520px, calc(100% - 96px));
+    gap: 16px;
   }
 
-  .login-feature-pill {
-    border: 1px solid rgba(255, 255, 255, 0.14);
-    border-radius: 12px;
-    padding: 14px;
-    color: #e5e7eb;
-    font-size: 13px;
-    font-weight: 600;
-    min-width: 0;
+  .login-stat {
+    min-height: 126px;
+    gap: 10px;
+    padding: 20px 22px;
+  }
+
+  .login-stat strong {
+    font-size: 30px;
+  }
+
+  .login-stat span {
+    font-size: 14px;
+    line-height: 1.35;
+  }
+
+  .login-footer-line {
+    left: 48px;
+    top: calc(100svh - 66px);
+    gap: 16px;
+    font-size: 14px;
   }
 
   .login-form-panel {
-    padding: 40px 24px;
+    padding: 28px 44px;
   }
 
-  .login-card {
-    width: min(430px, 100%);
+  .login-auth-panel {
+    width: min(100%, 520px);
+    padding: 30px 48px;
+  }
+
+  .login-panel-header {
+    margin-bottom: 18px;
+  }
+
+  .login-panel-title {
+    font-size: 32px;
+    margin-bottom: 8px;
+  }
+
+  .login-panel-subtitle {
+    font-size: 14px;
+    line-height: 1.45;
+  }
+
+  .login-form {
+    gap: 12px;
+  }
+
+  .login-alert {
+    padding: 8px 12px;
+    font-size: 13px;
+    line-height: 1.35;
+  }
+
+  .login-field {
+    gap: 8px;
+  }
+
+  .login-field > span,
+  .login-field-row > span {
+    font-size: 14px;
+  }
+
+  .login-input-wrap {
+    min-height: 44px;
+    padding: 0 14px;
+  }
+
+  .login-primary-button {
+    min-height: 46px;
+    font-size: 15px;
+  }
+
+  .login-divider {
+    margin: 18px 0 14px;
   }
 
   .login-social-grid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
+  }
+
+  .login-social-button {
+    min-height: 44px;
+    font-size: 15px;
+  }
+
+  .employee-login-panel {
+    margin-top: 16px;
+    padding: 12px;
+    gap: 10px;
+    font-size: 14px;
+  }
+
+  .employee-login-link {
+    min-height: 42px;
+    font-size: 14px;
+  }
+
+  .login-create-line {
+    margin-top: 14px;
+    font-size: 14px;
   }
 }
 
-@media (min-width: 1024px) {
-  .login-page-shell {
-    min-height: 100vh;
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+@media (max-width: 1059px) {
+  .login-shell {
+    grid-template-columns: 1fr;
   }
 
-  .login-hero {
-    min-height: 100vh;
-    padding: clamp(32px, 4vw, 56px);
-  }
-
-  .login-hero-copy {
-    margin-top: clamp(52px, 8vh, 80px);
-  }
-
-  .login-hero-title {
-    font-size: clamp(36px, 3.1vw, 42px);
-    max-width: 560px;
-  }
-
-  .login-hero-subtitle {
-    max-width: 470px;
+  .login-visual {
+    min-height: auto;
+    border-right: 0;
+    border-bottom: 1px solid rgba(148, 163, 184, 0.18);
   }
 
   .login-form-panel {
+    min-height: auto;
+  }
+
+  .login-hero-copy {
+    margin-top: 34px;
+  }
+
+  .login-stats {
+    position: static;
+    width: auto;
+    max-width: none;
+    margin-top: 34px;
+    margin-bottom: 0;
+  }
+
+  .login-footer-line {
+    position: static;
+    margin-top: 26px;
+  }
+}
+
+@media (max-width: 760px) {
+  .login-shell {
+    display: flex;
+    flex-direction: column;
+    background: #05080b;
+  }
+
+  .login-shell::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    z-index: -1;
+    pointer-events: none;
+    background: linear-gradient(180deg, rgba(0, 0, 0, 0.8) 0%, rgba(0, 0, 0, 0.84) 55%, rgba(0, 0, 0, 0.9) 100%);
+  }
+
+  .login-bg-video-desktop {
+    display: none;
+  }
+
+  .login-bg-video-mobile {
+    display: block;
+  }
+
+  .login-visual {
+    flex: 0 0 auto;
+    width: 100%;
+    max-width: 100vw;
+    min-height: 0;
+    padding: 0;
+    border: 0;
+    background: none;
     align-items: center;
+  }
+
+  .login-visual::after {
+    display: none;
+  }
+
+  .login-brand {
+    align-self: center;
     justify-content: center;
-    padding: clamp(24px, 4vw, 56px);
+    gap: 10px;
+    width: 100%;
+    padding: 32px 0 0;
+  }
+
+  .login-logo-mark {
+    width: 38px;
+    height: 38px;
+    border-radius: 9px;
+    font-size: 18px;
+  }
+
+  .login-wordmark {
+    font-size: 19px;
+  }
+
+  .login-hero-copy,
+  .login-stats,
+  .login-footer-line {
+    display: none;
+  }
+
+  .login-form-panel {
+    flex: 1 1 auto;
+    width: 100%;
+    max-width: 100vw;
+    flex-direction: column;
+    align-items: stretch;
+    justify-content: flex-end;
+    background: none;
+    padding: 0 14px 18px;
+  }
+
+  .login-auth-panel {
+    width: 100%;
+    max-width: 100%;
+    border: 1px solid rgba(148, 163, 184, 0.22);
+    border-radius: 16px;
+    padding: 20px 18px;
+    background: none;
+    box-shadow: none;
+    backdrop-filter: none;
+  }
+
+  html[data-theme='dark'] .login-shell .login-form-panel,
+  html[data-theme='light'] .login-shell .login-form-panel,
+  html[data-theme='dark'] .login-shell .login-auth-panel,
+  html[data-theme='light'] .login-shell .login-auth-panel,
+  html[data-theme='dark'] .login-shell .employee-login-panel,
+  html[data-theme='light'] .login-shell .employee-login-panel,
+  html[data-theme='dark'] .login-shell .login-panel-title,
+  html[data-theme='light'] .login-shell .login-panel-title,
+  html[data-theme='dark'] .login-shell .login-panel-subtitle,
+  html[data-theme='light'] .login-shell .login-panel-subtitle {
+    background: none !important;
+    box-shadow: none !important;
+    backdrop-filter: none !important;
+  }
+
+  html[data-theme='dark'] .login-shell .login-panel-header.login-panel-header.login-panel-header.login-panel-header,
+  html[data-theme='light'] .login-shell .login-panel-header.login-panel-header.login-panel-header.login-panel-header {
+    background: none !important;
+    box-shadow: none !important;
+  }
+
+  .login-panel-header {
+    margin-bottom: 16px;
+  }
+
+  .login-shell .login-panel-title {
+    font-size: 24px;
+    margin-bottom: 8px;
+  }
+
+  .login-panel-subtitle {
+    font-size: 13px;
+    line-height: 1.45;
+  }
+
+  .login-form {
+    gap: 11px;
+  }
+
+  .login-field {
+    gap: 7px;
+  }
+
+  .login-field > span,
+  .login-field-row > span {
+    font-size: 13px;
+  }
+
+  .login-input-wrap {
+    min-height: 44px;
+    gap: 10px;
+    padding: 0 13px;
+  }
+
+  .login-input-wrap svg {
+    width: 17px;
+    height: 17px;
+  }
+
+  .login-shell .login-control {
+    font-size: 14px;
+  }
+
+  .login-accent-link {
+    font-size: 13px;
+  }
+
+  .login-alert {
+    padding: 9px 12px;
+    font-size: 13px;
+  }
+
+  .login-primary-button {
+    min-height: 44px;
+    font-size: 15px;
+  }
+
+  .login-divider {
+    margin: 14px 0 10px;
+    font-size: 13px;
+  }
+
+  .login-social-grid {
+    gap: 9px;
+  }
+
+  .login-social-button {
+    min-height: 44px;
+    font-size: 14px;
+    gap: 12px;
+  }
+
+  .google-mark {
+    font-size: 19px;
+  }
+
+  .microsoft-mark {
+    width: 16px;
+    height: 16px;
+  }
+
+  .employee-login-panel {
+    margin-top: 12px;
+    padding: 11px;
+    gap: 9px;
+    font-size: 13px;
+  }
+
+  .employee-login-link {
+    min-height: 40px;
+    font-size: 13px;
+  }
+
+  .login-create-line {
+    margin-top: 11px;
+    font-size: 13px;
+  }
+}
+
+@media (max-width: 430px) {
+  .login-logo-mark {
+    width: 36px;
+    height: 36px;
+    font-size: 17px;
+  }
+
+  .login-wordmark {
+    font-size: 18px;
   }
 }
 `

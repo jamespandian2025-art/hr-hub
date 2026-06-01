@@ -8,6 +8,7 @@ import {
   CheckCircle2,
   ChevronDown,
   Clock3,
+  Download,
   Filter,
   MoreHorizontal,
   PieChart,
@@ -18,18 +19,17 @@ import {
   TrendingUp,
 } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
-import { getActiveCompany } from '@/lib/tenant/company'
 import {
   type AccountingBudget,
   emptyAccountingData,
   formatDate,
   loadAccountingData,
   money,
+  saveAccountingBudgets,
   subscribeAccountingData,
 } from '@/lib/accounting/data'
 
 const font = 'var(--font-body)'
-const budgetStorageKeys = ['flowsys-budgets', 'flowsys-accounting-budgets', 'wiseflow-accounting-budgets']
 const tabs = ['All', 'Draft', 'Pending', 'Approved', 'Over Budget']
 
 type BudgetForm = {
@@ -66,37 +66,23 @@ function derivedStatus(budget: AccountingBudget) {
   return budget.status
 }
 
-function budgetToStored(budget: AccountingBudget) {
-  return {
-    id: budget.id,
-    name: budget.name,
-    title: budget.name,
-    project: budget.project,
-    date: budget.date,
-    status: budget.status,
-    description: budget.description,
-    total: budget.total,
-    budget: budget.total,
-    amount: budget.total,
-    actual: budget.actual,
-    spent: budget.actual,
-    department: budget.department,
-    category: budget.category,
-  }
-}
-
-function saveBudgets(budgets: AccountingBudget[]) {
-  if (typeof window === 'undefined') return
-  const companyId = getActiveCompany()?.id
-  const rows = budgets.map(budgetToStored)
-  const keys = budgetStorageKeys.flatMap(key => companyId ? [`${key}:${companyId}`, key] : [key])
-  keys.forEach(key => window.localStorage.setItem(key, JSON.stringify(rows)))
-  window.dispatchEvent(new Event('wiseflow-accounting-refresh'))
-}
-
 function StatusPill({ value }: { value: string }) {
   const tone = statusTone(value)
   return <span className="budget-status-pill" style={{ background: tone.bg, color: tone.color }}>{value}</span>
+}
+
+function downloadCsv(filename: string, rows: Array<Record<string, string | number>>) {
+  const headers = Object.keys(rows[0] || { Empty: 'No rows' })
+  const csv = [
+    headers.join(','),
+    ...(rows.length ? rows : [{ Empty: 'No budget rows' }]).map(row => headers.map(header => `"${String(row[header] ?? '').replaceAll('"', '""')}"`).join(',')),
+  ].join('\n')
+  const url = window.URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }))
+  const link = document.createElement('a')
+  link.href = url
+  link.download = filename
+  link.click()
+  window.URL.revokeObjectURL(url)
 }
 
 function ProgressBar({ value }: { value: number }) {
@@ -178,7 +164,7 @@ export default function AccountingBudgetingPage() {
   }
 
   const updateBudgets = (nextBudgets: AccountingBudget[]) => {
-    saveBudgets(nextBudgets)
+    saveAccountingBudgets(nextBudgets)
     setData(loadAccountingData())
   }
 
@@ -211,6 +197,20 @@ export default function AccountingBudgetingPage() {
     updateBudgets(budgets.filter(budget => budget.id !== id))
     setSelected(prev => prev.filter(item => item !== id))
   }
+  const exportBudgets = () => {
+    const rows = filtered.map(budget => ({
+      Name: budget.name,
+      Project: budget.project,
+      Department: budget.department,
+      Category: budget.category,
+      Date: formatDate(budget.date),
+      Budget: money(budget.total, data.currency),
+      Actual: money(budget.actual, data.currency),
+      Remaining: money(budget.total - budget.actual, data.currency),
+      Status: derivedStatus(budget),
+    }))
+    downloadCsv(`accounting-budgets-${new Date().toISOString().slice(0, 10)}.csv`, rows)
+  }
 
   const approveSelected = () => {
     if (!selected.length) return
@@ -221,7 +221,15 @@ export default function AccountingBudgetingPage() {
   const toggleSelected = (id: string) => setSelected(prev => prev.includes(id) ? prev.filter(item => item !== id) : [...prev, id])
 
   return (
-    <div className="budget-page" style={{ fontFamily: font }}>
+    <div
+      className="budget-page"
+      style={{
+        fontFamily: font,
+        minHeight: 'calc(100dvh - 76px)',
+        background: '#101010',
+        color: '#fafafa',
+      }}
+    >
       <style>{budgetCss}</style>
       <div className="budget-header">
         <div>
@@ -233,6 +241,7 @@ export default function AccountingBudgetingPage() {
             <Search size={16} color="#64748b" />
             <input value={search} onChange={event => setSearch(event.target.value)} placeholder="Search budgets, projects..." />
           </label>
+          <button type="button" className="budget-toolbar-button" onClick={exportBudgets}><Download size={15} /> Export CSV</button>
           <button type="button" className={filtersOpen ? 'budget-toolbar-button is-active' : 'budget-toolbar-button'} onClick={() => setFiltersOpen(open => !open)}><Filter size={15} /> Filters</button>
           <button type="button" className="budget-primary-button" onClick={() => setShowCreate(true)}><Plus size={15} /> New Budget <ChevronDown size={13} /></button>
         </div>
@@ -429,7 +438,7 @@ export default function AccountingBudgetingPage() {
 }
 
 const budgetCss = `
-.budget-page { padding: 26px 28px 40px; color: #0f172a; }
+.budget-page { min-height: calc(100dvh - 76px); padding: 26px 28px 40px; background: #101010; color: #fafafa; }
 .budget-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 18px; margin-bottom: 24px; }
 .budget-title { margin: 0; font-size: 28px; line-height: 1.1; font-weight: 950; }
 .budget-subtitle { margin: 8px 0 0; color: #334155; font-size: 13.5px; }
@@ -494,6 +503,14 @@ const budgetCss = `
 .budget-actions { display: grid; grid-template-columns: 1fr; gap: 12px; margin-top: 18px; }
 .budget-actions button { border: 0; background: #fff; color: #0f172a; display: grid; grid-template-columns: 28px minmax(0, 1fr) 16px; align-items: center; gap: 10px; min-height: 38px; font-size: 12.5px; font-weight: 900; cursor: pointer; text-align: left; }
 .budget-actions button span { width: 28px; height: 28px; border-radius: 7px; background: #eff6ff; color: #2563eb; display: grid; place-items: center; }
+.accounting-theme-dark .budget-page,
+html[data-theme='dark'] .budget-page { background: #101010 !important; background-color: #101010 !important; color: #fafafa !important; }
+.accounting-theme-dark .budget-page :is(.budget-card,.budget-table-wrap,.budget-filter-panel),
+html[data-theme='dark'] .budget-page :is(.budget-card,.budget-table-wrap,.budget-filter-panel) { background: #101010 !important; background-color: #101010 !important; border-color: #333 !important; color: #fafafa !important; box-shadow: none !important; }
+.accounting-theme-dark .budget-page .budget-table th,
+html[data-theme='dark'] .budget-page .budget-table th { background: #181818 !important; color: #c7c7cf !important; border-color: #333 !important; }
+.accounting-theme-dark .budget-page .budget-table td,
+html[data-theme='dark'] .budget-page .budget-table td { background: #101010 !important; color: #fafafa !important; border-color: #333 !important; }
 @media (max-width: 1280px) {
   .budget-page { padding: 22px; }
   .budget-header { flex-direction: column; }

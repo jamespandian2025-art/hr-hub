@@ -7,7 +7,7 @@ import {
   BadgeDollarSign, Boxes, Building2,
   CalendarDays, CheckCircle2, ChevronDown, ChevronRight,
   ClipboardList, FileText, FolderKanban,
-  HandCoins, Package, Percent, Plus,
+  HandCoins, Package, Plus,
   Receipt, ShoppingBag, ShoppingCart,
   Target, TrendingDown, TrendingUp,
   UserPlus, UsersRound, Wallet, Warehouse, Zap,
@@ -79,6 +79,22 @@ function trend(cur: number, prv: number): { text: string; up: boolean; zero: boo
   const pct = Math.round(Math.abs(ch))
   return { text: `${ch >= 0 ? '+' : '-'}${pct}% vs last`, up: ch >= 0, zero: ch === 0 }
 }
+function forecastPct(actual: number, forecast: number) {
+  if (!forecast) return actual ? 100 : 0
+  return Math.max(0, Math.round((actual / forecast) * 100))
+}
+function forecastTrend(actual: number, forecast: number, inverse = false) {
+  const percent = forecastPct(actual, forecast)
+  const gap = forecast - actual
+  const onPlan = inverse ? actual <= forecast : actual >= forecast
+  return {
+    text: `${percent}% of forecast`,
+    up: onPlan,
+    zero: !actual && !forecast,
+    gap,
+    percent,
+  }
+}
 function greeting() { const h = new Date().getHours(); return h < 12 ? 'Good morning' : h < 17 ? 'Good afternoon' : 'Good evening' }
 
 // --- Dashboard --------------------------------------------------------------
@@ -148,6 +164,7 @@ export default function Dashboard() {
 
   // -- Analytics -------------------------------------------------------------
   const stats = useMemo(() => {
+    const projectCost = projects.reduce((s, p) => s + (p.projectCost || 0), 0)
     const revenue   = projects.reduce((s, p) => s + (p.paidAmount || 0), 0)
     const material  = projects.reduce((s, p) => s + (p.materialCost || 0), 0)
     const labor     = projects.reduce((s, p) => s + (p.laborCost || 0), 0)
@@ -159,8 +176,38 @@ export default function Dashboard() {
     const today     = new Date()
     const openTasks = tasks.filter(t => norm(t.status) !== 'completed').length
     const overdue   = tasks.filter(t => { const d = parseDate(t.dueDate); return d && d < today && norm(t.status) !== 'completed' }).length
-    return { revenue, expenses, profit, pipeline, openTasks, overdue }
+    return { projectCost, revenue, expenses, profit, pipeline, openTasks, overdue }
   }, [projects, tasks, opps, bills])
+
+  const analyticsForecasts = useMemo(() => {
+    const projectCost = stats.projectCost || stats.revenue
+    const plannedProjectExpense = projects.reduce((s, p) => (
+      s + (p.materialCost || 0) + (p.laborCost || 0) + (p.overheadProfit || 0) + (p.generalExpense || 0)
+    ), 0)
+    const openBills = bills
+      .filter(b => norm(b.status) !== 'paid')
+      .reduce((s, b) => s + (b.amount || 0), 0)
+    const expensesForecast = plannedProjectExpense + openBills
+    const profitForecast = Math.max(projectCost - expensesForecast, 0)
+    const quotation = opps.reduce((s, o) => s + (o.quotation || 0), 0)
+    const approvedBudget = opps.reduce((s, o) => s + (o.approvedBudget || 0), 0)
+    const estimatedCost = opps.reduce((s, o) => s + (o.estimatedCost || 0), 0)
+    const salesForecast = quotation || approvedBudget || estimatedCost
+
+    return {
+      projectCost,
+      expenses: expensesForecast || stats.expenses,
+      profit: profitForecast || stats.profit,
+      quotation: salesForecast || quotation,
+      approvedBudget: approvedBudget || quotation,
+      estimatedCost: estimatedCost || approvedBudget || quotation,
+      revenue: stats.projectCost || stats.revenue,
+      netProfit: profitForecast || stats.profit,
+      outstanding: bills.reduce((s, b) => s + (b.amount || 0), 0) || 0,
+      budget: budgets.reduce((s, b) => s + (b.total || b.amount || 0), 0),
+      quotationDelta: quotation - approvedBudget,
+    }
+  }, [bills, budgets, opps, projects, stats])
 
   // -- Project perf paid/unpaid for subtitle ---------------------------------
   const perfPaid   = useMemo(() => projects.reduce((s, p) => s + (p.paidAmount || 0), 0), [projects])
@@ -438,16 +485,18 @@ export default function Dashboard() {
 
   // -- Render ----------------------------------------------------------------
   return (
-    <main className="dashboard-page" style={{ fontFamily: font, paddingBottom: 16 }}>
+    <main className={`dashboard-page dashboard-tab-${tab.toLowerCase()}`} style={{ fontFamily: font }}>
+      <section className="dashboard-hero">
+        <div className="dashboard-inner">
 
       {/* Page title + greeting row */}
-      <div className="dash-header-row" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10, gap: 12, flexWrap: 'wrap' }}>
+      <div className="dash-header-row" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 22, gap: 12, flexWrap: 'wrap' }}>
         <div>
           <h1 style={{ margin: 0, fontSize: 30, fontWeight: 700, color: '#111827', fontFamily: display, letterSpacing: '-0.3px' }}>
             Dashboard
           </h1>
           <p style={{ margin: '3px 0 0', fontSize: 14, color: '#6b7280' }}>
-            {greeting()}, {firstName}! ?? Here&apos;s what&apos;s happening across your business today.
+            {greeting()}, {firstName}! 👋 Here&apos;s what&apos;s happening across your business today.
           </p>
         </div>
         <div className="dashboard-header-actions" style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
@@ -456,12 +505,12 @@ export default function Dashboard() {
           <div ref={dateRef} style={{ position: 'relative' }}>
             <button
               onClick={() => setDateOpen(v => !v)}
-              style={{ border: '1px solid #e5e7eb', background: '#fff', borderRadius: 8, padding: '6px 12px', fontSize: 12, color: '#374151', fontWeight: 500, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 5 }}
+              style={{ border: '1px solid #e5e7eb', background: '#fff', borderRadius: 6, padding: '6px 12px', fontSize: 12, color: '#374151', fontWeight: 500, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 5 }}
             >
-              ?? {dateRange} <ChevronDown size={12} style={{ transition: 'transform 150ms', transform: dateOpen ? 'rotate(180deg)' : 'none' }} />
+              <CalendarDays size={13} style={{ color: '#6b7280' }} /> {dateRange} <ChevronDown size={12} style={{ transition: 'transform 150ms', transform: dateOpen ? 'rotate(180deg)' : 'none' }} />
             </button>
             {dateOpen && (
-              <div style={{ position: 'absolute', top: 'calc(100% + 6px)', right: 0, width: 170, background: '#fff', border: '1px solid #e5e7eb', borderRadius: 10, boxShadow: '0 8px 24px rgba(0,0,0,0.1)', zIndex: 60, overflow: 'hidden' }}>
+              <div style={{ position: 'absolute', top: 'calc(100% + 6px)', right: 0, width: 170, background: '#fff', border: '1px solid #e5e7eb', borderRadius: 6, boxShadow: '0 8px 24px rgba(0,0,0,0.1)', zIndex: 60, overflow: 'hidden' }}>
                 {['Today', 'This Week', 'This Month', 'This Quarter', 'This Year', 'All Time'].map(opt => (
                   <button key={opt} onClick={() => setDateOpen(false)} style={{ display: 'block', width: '100%', border: 'none', background: 'transparent', padding: '9px 14px', textAlign: 'left', fontSize: 12, color: '#374151', cursor: 'pointer', fontFamily: font, fontWeight: 400 }}>
                     {opt}
@@ -475,12 +524,12 @@ export default function Dashboard() {
           <div ref={newRef} style={{ position: 'relative' }}>
             <button
               onClick={() => setNewOpen(v => !v)}
-              style={{ background: '#22c55e', border: 'none', borderRadius: 8, padding: '6px 14px', fontSize: 12, color: '#fff', fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 5 }}
+              style={{ background: '#22c55e', border: 'none', borderRadius: 6, padding: '6px 14px', fontSize: 12, color: '#fff', fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 5 }}
             >
               <Plus size={13} /> New <ChevronDown size={12} style={{ transition: 'transform 150ms', transform: newOpen ? 'rotate(180deg)' : 'none' }} />
             </button>
             {newOpen && (
-              <div style={{ position: 'absolute', top: 'calc(100% + 6px)', right: 0, width: 200, background: '#fff', border: '1px solid #e5e7eb', borderRadius: 10, boxShadow: '0 8px 24px rgba(0,0,0,0.12)', zIndex: 60, overflow: 'hidden' }}>
+              <div style={{ position: 'absolute', top: 'calc(100% + 6px)', right: 0, width: 200, background: '#fff', border: '1px solid #e5e7eb', borderRadius: 6, boxShadow: '0 8px 24px rgba(0,0,0,0.12)', zIndex: 60, overflow: 'hidden' }}>
                 {([
                   { label: 'New Project',     href: '/project-management', icon: FolderKanban,    color: '#8b5cf6' },
                   { label: 'New Task',        href: '/tasks',              icon: ClipboardList,   color: '#06b6d4' },
@@ -495,7 +544,7 @@ export default function Dashboard() {
                     onClick={() => setNewOpen(false)}
                     style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '9px 14px', textDecoration: 'none', color: '#374151', fontSize: 13, fontFamily: font }}
                   >
-                    <span style={{ width: 26, height: 26, borderRadius: 7, background: `${color}18`, display: 'grid', placeItems: 'center', flexShrink: 0 }}>
+                    <span style={{ width: 26, height: 26, borderRadius: 6, background: `${color}18`, display: 'grid', placeItems: 'center', flexShrink: 0 }}>
                       <Icon size={13} color={color} />
                     </span>
                     {label}
@@ -509,51 +558,47 @@ export default function Dashboard() {
       </div>
 
       {/* Tabs */}
-      <div className="dashboard-tabs" style={{ display: 'flex', gap: 2, borderBottom: '1px solid #e5e7eb', marginBottom: 14 }}>
+      <div className="dashboard-tabs" style={{ display: 'flex', gap: 2, borderBottom: '1px solid #e5e7eb', marginBottom: 26 }}>
         {['Projects', 'Sales', 'Financials', 'Operations'].map(t => (
           <button key={t} className={tab === t ? 'is-active' : undefined} onClick={() => setTab(t)} style={{ border: 'none', borderBottom: `2px solid ${tab === t ? '#111827' : 'transparent'}`, background: 'transparent', color: tab === t ? '#111827' : '#6b7280', borderRadius: 0, padding: '8px 16px', fontSize: 13, fontWeight: 700, cursor: 'pointer', transition: 'border-color 150ms ease, color 150ms ease' }}>{t}</button>
         ))}
       </div>
 
       {/* -- KPI row — changes per tab --------------------------------------- */}
-      <div className="kpi-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(6, minmax(0, 1fr))', gap: 10, marginBottom: 12 }}>
+      <div className="kpi-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: 16, marginBottom: 0 }}>
         {tab === 'Projects' && <>
           <KpiCard label="Total Projects" value={String(projects.length)} t={trends.neutral}  icon={CalendarDays}    iconColor="#22c55e" sparkData={sparklines.projects} />
-          <KpiCard label="Revenue"        value={money(stats.revenue)}    t={trends.revenue}  icon={BadgeDollarSign} iconColor="#3b82f6" sparkData={sparklines.revenue} />
-          <KpiCard label="Expenses"       value={money(stats.expenses)}   t={trends.expenses} icon={Receipt}         iconColor="#f97316" sparkData={sparklines.expenses} neg />
-          <KpiCard label="Profit Margin"  value={money(stats.profit)}     t={trends.profit}   icon={TrendingUp}      iconColor="#8b5cf6" sparkData={sparklines.profit} />
-          <KpiCard label="Open Tasks"     value={String(stats.openTasks)} t={trends.neutral}  icon={ClipboardList}   iconColor="#06b6d4" sparkData={sparklines.openTasks} />
-          <KpiCard label="Overdue Jobs"   value={String(stats.overdue)}   t={trends.neutral}  icon={AlarmClock}      iconColor="#ef4444" sparkData={sparklines.overdue} neg />
+          <KpiCard label="Project Cost"   value={money(stats.revenue)}    t={forecastTrend(stats.revenue, analyticsForecasts.projectCost)} icon={BadgeDollarSign} iconColor="#3b82f6" sparkData={sparklines.revenue} forecast={analyticsForecasts.projectCost} />
+          <KpiCard label="Expenses"       value={money(stats.expenses)}   t={forecastTrend(stats.expenses, analyticsForecasts.expenses, true)} icon={Receipt} iconColor="#f97316" sparkData={sparklines.expenses} forecast={analyticsForecasts.expenses} neg />
+          <KpiCard label="Profit Margin"  value={money(stats.profit)}     t={forecastTrend(stats.profit, analyticsForecasts.profit)} icon={TrendingUp} iconColor="#8b5cf6" sparkData={sparklines.profit} forecast={analyticsForecasts.profit} />
         </>}
         {tab === 'Sales' && <>
-          <KpiCard label="Total Revenue"    value={money(stats.revenue)}           t={trends.revenue}  icon={BadgeDollarSign} iconColor="#3b82f6" sparkData={sparklines.revenue} />
-          <KpiCard label="New Leads"        value={String(salesData.leads)}        t={trends.neutral}  icon={UserPlus}        iconColor="#06b6d4" sparkData={sparklines.openTasks} />
-          <KpiCard label="Opportunities"    value={String(salesData.closed + salesData.leads + opps.filter(o => !['won','closed','lead'].includes(norm(o.status))).length)} t={trends.neutral} icon={Target} iconColor="#f59e0b" sparkData={sparklines.projects} />
+          <KpiCard label="Quotation"        value={money(analyticsForecasts.quotation)} t={forecastTrend(analyticsForecasts.quotation, analyticsForecasts.quotation)} icon={BadgeDollarSign} iconColor="#3b82f6" sparkData={sparklines.revenue} forecast={analyticsForecasts.quotation} />
+          <KpiCard label="Approved Budget"  value={money(analyticsForecasts.approvedBudget)} t={forecastTrend(analyticsForecasts.approvedBudget, analyticsForecasts.approvedBudget)} icon={Target} iconColor="#22c55e" sparkData={sparklines.projects} forecast={analyticsForecasts.approvedBudget} delta={analyticsForecasts.quotationDelta} />
           <KpiCard label="Closed Deals"     value={String(salesData.closed)}       t={trends.neutral}  icon={Award}           iconColor="#22c55e" sparkData={sparklines.profit} />
-          <KpiCard label="Conversion Rate"  value={`${salesData.conversion}%`}     t={trends.neutral}  icon={Percent}         iconColor="#8b5cf6" sparkData={sparklines.overdue} />
-          <KpiCard label="Sales Target"     value={money(salesData.target)}        t={trends.neutral}  icon={TrendingUp}      iconColor="#f97316" sparkData={sparklines.revenue} />
+          <KpiCard label="Estimated Cost"   value={money(analyticsForecasts.estimatedCost)} t={forecastTrend(analyticsForecasts.estimatedCost, analyticsForecasts.estimatedCost, true)} icon={TrendingUp} iconColor="#f97316" sparkData={sparklines.revenue} forecast={analyticsForecasts.estimatedCost || salesData.target} />
         </>}
         {tab === 'Financials' && <>
-          <KpiCard label="Total Revenue"        value={money(stats.revenue)}              t={trends.revenue}  icon={ShoppingBag}     iconColor="#22c55e" sparkData={sparklines.revenue} />
-          <KpiCard label="Total Expenses"       value={money(stats.expenses)}             t={trends.expenses} icon={Receipt}         iconColor="#f97316" sparkData={sparklines.expenses} neg />
-          <KpiCard label="Net Profit"           value={money(stats.profit)}               t={trends.profit}   icon={TrendingUp}      iconColor="#8b5cf6" sparkData={sparklines.profit} />
-          <KpiCard label="Outstanding Invoices" value={money(finTabData.outstandingAmt)}  t={trends.neutral}  icon={FileText}        iconColor="#f59e0b" sparkData={sparklines.overdue} />
-          <KpiCard label="Cash Flow"            value={money(Math.abs(finTabData.cashFlow))} t={finTabData.cashFlow >= 0 ? { text: '0% vs last', up: true, zero: true } : { text: 'Negative', up: false, zero: false }} icon={HandCoins} iconColor="#06b6d4" sparkData={sparklines.profit} />
-          <KpiCard label="Budget Usage"         value={`${finTabData.budgetUsage}%`}      t={trends.neutral}  icon={Boxes}           iconColor="#ec4899" sparkData={sparklines.expenses} />
+          <KpiCard label="Total Revenue"        value={money(stats.revenue)}              t={forecastTrend(stats.revenue, analyticsForecasts.revenue)} icon={ShoppingBag} iconColor="#22c55e" sparkData={sparklines.revenue} forecast={analyticsForecasts.revenue} />
+          <KpiCard label="Total Expenses"       value={money(stats.expenses)}             t={forecastTrend(stats.expenses, analyticsForecasts.expenses, true)} icon={Receipt} iconColor="#f97316" sparkData={sparklines.expenses} forecast={analyticsForecasts.expenses} neg />
+          <KpiCard label="Net Profit"           value={money(stats.profit)}               t={forecastTrend(stats.profit, analyticsForecasts.netProfit)} icon={TrendingUp} iconColor="#8b5cf6" sparkData={sparklines.profit} forecast={analyticsForecasts.netProfit} />
+          <KpiCard label="Outstanding Invoices" value={money(finTabData.outstandingAmt)}  t={forecastTrend(finTabData.outstandingAmt, analyticsForecasts.outstanding, true)} icon={FileText} iconColor="#f59e0b" sparkData={sparklines.overdue} forecast={analyticsForecasts.outstanding} />
         </>}
         {tab === 'Operations' && <>
           <KpiCard label="Open Tasks"           value={String(opsData.openT)}   t={trends.neutral}  icon={ClipboardList}   iconColor="#06b6d4" sparkData={sparklines.openTasks} />
           <KpiCard label="Delayed Tasks"        value={String(opsData.delayed)} t={{ text: opsData.delayed > 0 ? 'Action needed' : 'All on track', up: opsData.delayed === 0, zero: opsData.delayed === 0 }} icon={AlarmClock} iconColor="#ef4444" sparkData={sparklines.overdue} neg />
           <KpiCard label="Active Workflows"     value={String(opsData.active)}  t={trends.neutral}  icon={Zap}             iconColor="#8b5cf6" sparkData={sparklines.openTasks} />
-          <KpiCard label="Procurement Requests" value="0"                        t={trends.neutral}  icon={ShoppingCart}    iconColor="#f59e0b" sparkData={sparklines.overdue} />
           <KpiCard label="Warehouse Alerts"     value={String(warehouses.length)} t={trends.neutral} icon={Warehouse}       iconColor="#0ea5e9" sparkData={sparklines.projects} />
-          <KpiCard label="Team Workload"        value="0%"                       t={trends.neutral}  icon={UsersRound}      iconColor="#22c55e" sparkData={sparklines.openTasks} />
         </>}
       </div>
+        </div>
+      </section>
+
+      <section className="dashboard-content">
 
       {/* -- Projects tab --------------------------------------------------- */}
       {tab === 'Projects' && <>
-        <div className="charts-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 10, marginBottom: 10 }}>
+        <div className="charts-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 18, marginBottom: 18 }}>
           <ChartCard title="Project Performance" sub={`${projects.length} projects tracked with ${money(perfPaid)} paid and ${money(perfUnpaid)} unpaid.`} filter={perfFilter} filterOptions={['All Projects','Paid','Unpaid','In Progress','On Hold','Cancelled']} onFilterChange={setPerfFilter}>
             <div style={{ display: 'flex', gap: 12, alignItems: 'center', marginTop: 4 }}>
               <Donut data={filteredPerfData.length ? filteredPerfData : [{ name: 'None', value: 1, color: '#e5e7eb' }]} center={String(filteredPerfData.reduce((s, d) => s + d.value, 0) || projects.length)} />
@@ -567,7 +612,7 @@ export default function Dashboard() {
                   <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f3f4f6" />
                   <XAxis dataKey="month" axisLine={false} tickLine={false} tick={{ fill: '#9ca3af', fontSize: 10 }} />
                   <YAxis axisLine={false} tickLine={false} tick={{ fill: '#9ca3af', fontSize: 10 }} tickFormatter={v => `${Math.round(Number(v)/1000)}k`} width={32} />
-                  <Tooltip formatter={v => money(Number(v))} contentStyle={{ borderRadius: 8, border: '1px solid #e5e7eb', fontSize: 12, fontFamily: font }} />
+                  <Tooltip formatter={v => money(Number(v))} contentStyle={{ borderRadius: 6, border: '1px solid #e5e7eb', fontSize: 12, fontFamily: font }} />
                   {series.map(s => <Bar key={s.key} dataKey={s.key} name={s.name} fill={s.color} radius={[4,4,0,0]} />)}
                 </BarChart>
               </ResponsiveContainer>
@@ -580,19 +625,19 @@ export default function Dashboard() {
             </div>
           </ChartCard>
         </div>
-        <div className="data-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 10, marginBottom: 12 }}>
+        <div className="data-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 18, marginBottom: 32 }}>
           <ChartCard title="Financial Overview" sub="" filter={finPeriod} filterOptions={['This Month','Last Month','This Quarter','This Year','All Time']} onFilterChange={setFinPeriod}>
-            <div className="fin-overview-grid" style={{ display: 'grid', gridTemplateColumns: '1fr', gap: 8, marginTop: 10 }}>
+            <div style={{ display: 'flex', flexDirection: 'column', marginTop: 2 }}>
               <FinBlock icon={ShoppingBag} iconColor="#22c55e" label="Total Revenue"  value={money(finStats.revenue)}  t={trends.revenue} />
-              <FinBlock icon={Receipt}     iconColor="#f97316" label="Total Expenses" value={money(finStats.expenses)} t={trends.expenses} />
-              <FinBlock icon={Wallet}      iconColor="#3b82f6" label="Net Profit"     value={money(finStats.profit)}   t={trends.profit} />
+              <FinBlock icon={Receipt}     iconColor="#f97316" label="Total Expenses" value={money(finStats.expenses)} t={trends.expenses} divider />
+              <FinBlock icon={Wallet}      iconColor="#3b82f6" label="Net Profit"     value={money(finStats.profit)}   t={trends.profit} divider />
             </div>
           </ChartCard>
           <ChartCard title="Recent Activity" sub="">
             {activity.length === 0 ? <EmptyBox msg="No recent activity" sub="Activity from across your workspace will appear here." /> : (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 9, marginTop: 4 }}>
-                {activity.slice(0, 4).map(item => <ActivityRow key={item.id} item={item} />)}
-                <Link href="/project-management" style={{ fontSize: 12, color: '#22c55e', fontWeight: 500, textDecoration: 'none', marginTop: 2 }}>View all activity ?</Link>
+              <div style={{ display: 'flex', flexDirection: 'column', marginTop: 2 }}>
+                {activity.slice(0, 4).map((item, i) => <ActivityRow key={item.id} item={item} divider={i > 0} />)}
+                <Link href="/project-management" style={{ fontSize: 12, color: '#22c55e', fontWeight: 500, textDecoration: 'none', marginTop: 12 }}>View all activity →</Link>
               </div>
             )}
           </ChartCard>
@@ -623,7 +668,7 @@ export default function Dashboard() {
       {/* -- Sales tab ------------------------------------------------------ */}
       {tab === 'Sales' && <>
         {/* Row 1: Pipeline | Revenue Trend | Top Deals */}
-        <div className="charts-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 10, marginBottom: 10 }}>
+        <div className="charts-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 18, marginBottom: 18 }}>
           <ChartCard title="Sales Pipeline" sub="" filter={salePipeFilter} filterOptions={['This Month','This Quarter','This Year','All Time']} onFilterChange={setSalePipeFilter}>
             <div style={{ display: 'flex', gap: 14, alignItems: 'center', marginTop: 8 }}>
               <SalesFunnel data={salesData.pipeline} />
@@ -641,7 +686,7 @@ export default function Dashboard() {
                 ))}
               </div>
             </div>
-            <Link href="/sales" style={{ fontSize: 12, color: '#22c55e', fontWeight: 500, textDecoration: 'none', display: 'block', marginTop: 10 }}>View full pipeline ?</Link>
+            <Link href="/sales" style={{ fontSize: 12, color: '#22c55e', fontWeight: 500, textDecoration: 'none', display: 'block', marginTop: 10 }}>View full pipeline →</Link>
           </ChartCard>
 
           <ChartCard title="Revenue Trend" sub="Opportunities tracked over time" filter={revTrendFilter} filterOptions={['This Month','This Quarter','This Year']} onFilterChange={setRevTrendFilter}>
@@ -651,7 +696,7 @@ export default function Dashboard() {
                   <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f3f4f6" />
                   <XAxis dataKey="month" axisLine={false} tickLine={false} tick={{ fill: '#9ca3af', fontSize: 10 }} />
                   <YAxis axisLine={false} tickLine={false} tick={{ fill: '#9ca3af', fontSize: 10 }} tickFormatter={v => `${Math.round(Number(v)/1000)}k`} width={32} />
-                  <Tooltip formatter={v => money(Number(v))} contentStyle={{ borderRadius: 8, border: '1px solid #e5e7eb', fontSize: 12, fontFamily: font }} />
+                  <Tooltip formatter={v => money(Number(v))} contentStyle={{ borderRadius: 6, border: '1px solid #e5e7eb', fontSize: 12, fontFamily: font }} />
                   <Line type="monotone" dataKey="project"  name="Revenue"      stroke="#22c55e" strokeWidth={2} dot={false} />
                   <Line type="monotone" dataKey="pipeline" name="Quotations"   stroke="#3b82f6" strokeWidth={2} dot={false} />
                   <Line type="monotone" dataKey="profit"   name="Closed Deals" stroke="#8b5cf6" strokeWidth={2} dot={false} />
@@ -689,21 +734,21 @@ export default function Dashboard() {
                     </div>
                   )
                 })}
-                <Link href="/sales" style={{ fontSize: 12, color: '#22c55e', fontWeight: 500, textDecoration: 'none', display: 'block', marginTop: 8 }}>View all deals ?</Link>
+                <Link href="/sales" style={{ fontSize: 12, color: '#22c55e', fontWeight: 500, textDecoration: 'none', display: 'block', marginTop: 8 }}>View all deals →</Link>
               </div>
             )}
           </ChartCard>
         </div>
 
         {/* Row 2: Sales Activity | Sales by Source | Quick Actions */}
-        <div className="data-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 10, marginBottom: 12 }}>
+        <div className="data-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 18, marginBottom: 32 }}>
           <ChartCard title="Sales Activity" sub="">
             {activity.filter(a => a.type === 'opportunity').length === 0 && activity.length === 0
               ? <EmptyBox msg="No sales activity" sub="Activity from opportunities will appear here." />
               : (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 9, marginTop: 4 }}>
-                  {(activity.filter(a => a.type === 'opportunity').length > 0 ? activity.filter(a => a.type === 'opportunity') : activity).slice(0, 5).map(item => <ActivityRow key={item.id} item={item} />)}
-                  <Link href="/sales" style={{ fontSize: 12, color: '#22c55e', fontWeight: 500, textDecoration: 'none', marginTop: 2 }}>View all activity ?</Link>
+                <div style={{ display: 'flex', flexDirection: 'column', marginTop: 2 }}>
+                  {(activity.filter(a => a.type === 'opportunity').length > 0 ? activity.filter(a => a.type === 'opportunity') : activity).slice(0, 5).map((item, i) => <ActivityRow key={item.id} item={item} divider={i > 0} />)}
+                  <Link href="/sales" style={{ fontSize: 12, color: '#22c55e', fontWeight: 500, textDecoration: 'none', marginTop: 12 }}>View all activity →</Link>
                 </div>
               )}
           </ChartCard>
@@ -735,8 +780,8 @@ export default function Dashboard() {
                 { label: 'Import Leads',        href: '/sales',           icon: Package,         color: '#8b5cf6' },
               ] as const).map(a => (
                 <Link key={a.label} href={a.href} style={{ textDecoration: 'none' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 10px', border: '1px solid #e5e7eb', borderRadius: 9, cursor: 'pointer' }}>
-                    <span style={{ width: 28, height: 28, borderRadius: 7, background: `${a.color}18`, display: 'grid', placeItems: 'center', flexShrink: 0 }}><a.icon size={13} color={a.color} /></span>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 10px', border: '1px solid #e5e7eb', borderRadius: 6, cursor: 'pointer' }}>
+                    <span style={{ width: 28, height: 28, borderRadius: 6, background: `${a.color}18`, display: 'grid', placeItems: 'center', flexShrink: 0 }}><a.icon size={13} color={a.color} /></span>
                     <span style={{ fontSize: 12, fontWeight: 500, color: '#374151', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1 }}>{a.label}</span>
                     <ChevronRight size={12} color="#d1d5db" style={{ flexShrink: 0 }} />
                   </div>
@@ -747,13 +792,13 @@ export default function Dashboard() {
         </div>
 
         {/* Tip banner */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 14, background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: 12, padding: '12px 16px', marginBottom: 12 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 14, background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: 6, padding: '14px 18px', marginBottom: 32 }}>
           <div style={{ width: 32, height: 32, borderRadius: '50%', background: '#22c55e', display: 'grid', placeItems: 'center', flexShrink: 0 }}><TrendingUp size={15} color="#fff" /></div>
           <div style={{ flex: 1 }}>
             <div style={{ fontSize: 13, fontWeight: 600, color: '#166534' }}>Tip: Keep your pipeline updated</div>
             <div style={{ fontSize: 12, color: '#16a34a' }}>Regular updates help you forecast accurately and close more deals.</div>
           </div>
-          <Link href="/sales" style={{ flexShrink: 0, border: '1px solid #22c55e', background: '#fff', borderRadius: 7, padding: '5px 14px', fontSize: 12, fontWeight: 500, color: '#166534', textDecoration: 'none' }}>Learn more</Link>
+          <Link href="/sales" style={{ flexShrink: 0, border: '1px solid #22c55e', background: '#fff', borderRadius: 6, padding: '5px 14px', fontSize: 12, fontWeight: 500, color: '#166534', textDecoration: 'none' }}>Learn more</Link>
         </div>
 
         <TabModules title="Sales modules" subtitle="Quick access to the sales areas." modules={[
@@ -768,7 +813,7 @@ export default function Dashboard() {
       {/* -- Financials tab -------------------------------------------------- */}
       {tab === 'Financials' && <>
         {/* Row 1: Income vs Expense | Cash Flow | Budget Allocation */}
-        <div className="charts-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 10, marginBottom: 10 }}>
+        <div className="charts-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 18, marginBottom: 18 }}>
           <ChartCard title="Income vs Expense" sub="" filter={incExpFilter} filterOptions={['This Month','This Quarter','This Year','All Time']} onFilterChange={setIncExpFilter}>
             <div style={{ display: 'flex', gap: 10, marginBottom: 8, marginTop: 6 }}>
               {[{l:'Income',c:'#22c55e'},{l:'Expense',c:'#ef4444'}].map(x => (
@@ -793,13 +838,13 @@ export default function Dashboard() {
                   <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f3f4f6" />
                   <XAxis dataKey="month" axisLine={false} tickLine={false} tick={{ fill: '#9ca3af', fontSize: 10 }} />
                   <YAxis axisLine={false} tickLine={false} tick={{ fill: '#9ca3af', fontSize: 10 }} tickFormatter={v => `${Math.round(Number(v)/1000)}k`} width={32} />
-                  <Tooltip formatter={v => money(Number(v))} contentStyle={{ borderRadius: 8, border: '1px solid #e5e7eb', fontSize: 12, fontFamily: font }} />
+                  <Tooltip formatter={v => money(Number(v))} contentStyle={{ borderRadius: 6, border: '1px solid #e5e7eb', fontSize: 12, fontFamily: font }} />
                   <Area type="monotone" dataKey="project"  name="Income"  stroke="#22c55e" fill="url(#gradIncome)"  strokeWidth={2} />
                   <Area type="monotone" dataKey="expenses" name="Expense" stroke="#ef4444" fill="url(#gradExpense)" strokeWidth={2} />
                 </AreaChart>
               </ResponsiveContainer>
             </div>
-            <Link href="/financial" style={{ fontSize: 12, color: '#22c55e', fontWeight: 500, textDecoration: 'none', display: 'block', marginTop: 8 }}>View full report ?</Link>
+            <Link href="/financial" style={{ fontSize: 12, color: '#22c55e', fontWeight: 500, textDecoration: 'none', display: 'block', marginTop: 'auto', paddingTop: 14 }}>View full report →</Link>
           </ChartCard>
 
           <ChartCard title="Cash Flow Overview" sub="" filter={cashFlowFilter} filterOptions={['This Month','This Quarter','This Year','All Time']} onFilterChange={setCashFlowFilter}>
@@ -821,13 +866,13 @@ export default function Dashboard() {
                   <XAxis dataKey="month" axisLine={false} tickLine={false} tick={{ fill: '#9ca3af', fontSize: 9 }} />
                   <YAxis axisLine={false} tickLine={false} tick={{ fill: '#9ca3af', fontSize: 9 }} tickFormatter={v => `${Math.round(Number(v)/1000)}k`} width={28} />
                   <ReferenceLine y={0} stroke="#e5e7eb" strokeWidth={1} />
-                  <Tooltip formatter={v => money(Math.abs(Number(v)))} contentStyle={{ borderRadius: 8, border: '1px solid #e5e7eb', fontSize: 12, fontFamily: font }} />
+                  <Tooltip formatter={v => money(Math.abs(Number(v)))} contentStyle={{ borderRadius: 6, border: '1px solid #e5e7eb', fontSize: 12, fontFamily: font }} />
                   <Bar dataKey="inflow"  name="Inflow"  fill="#22c55e" fillOpacity={0.75} radius={[3,3,0,0]} />
                   <Bar dataKey="outflow" name="Outflow" fill="#ef4444" fillOpacity={0.65} radius={[3,3,0,0]} />
                 </BarChart>
               </ResponsiveContainer>
             </div>
-            <Link href="/financial" style={{ fontSize: 12, color: '#22c55e', fontWeight: 500, textDecoration: 'none', display: 'block', marginTop: 8 }}>View cash flow statement ?</Link>
+            <Link href="/financial" style={{ fontSize: 12, color: '#22c55e', fontWeight: 500, textDecoration: 'none', display: 'block', marginTop: 'auto', paddingTop: 14 }}>View cash flow statement →</Link>
           </ChartCard>
 
           <ChartCard title="Budget Allocation" sub="" filter={budgetFilter} filterOptions={['This Year','Last Year','All Time']} onFilterChange={setBudgetFilter}>
@@ -844,13 +889,13 @@ export default function Dashboard() {
                 ))}
               </div>
             </div>
-            <Link href="/financial" style={{ fontSize: 12, color: '#22c55e', fontWeight: 500, textDecoration: 'none', display: 'block', marginTop: 10 }}>View budget details ?</Link>
+            <Link href="/financial" style={{ fontSize: 12, color: '#22c55e', fontWeight: 500, textDecoration: 'none', display: 'block', marginTop: 'auto', paddingTop: 14 }}>View budget details →</Link>
           </ChartCard>
         </div>
 
         {/* Row 2: Recent Invoices | Expense Requests | Financial Alerts */}
-        <div className="data-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 10, marginBottom: 12 }}>
-          <ChartCard title="Recent Invoices" sub="" action={<Link href="/financial" style={{ fontSize: 12, color: '#22c55e', fontWeight: 500, textDecoration: 'none' }}>View all invoices ?</Link>}>
+        <div className="data-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 18, marginBottom: 32 }}>
+          <ChartCard title="Recent Invoices" sub="" action={<Link href="/financial" style={{ fontSize: 12, color: '#22c55e', fontWeight: 500, textDecoration: 'none' }}>View all invoices →</Link>}>
             {finTabData.recentInvoices.length === 0 ? <EmptyBox msg="No invoices yet" sub="Invoices will appear here once created." /> : (
               <div style={{ marginTop: 8 }}>
                 <div style={{ display: 'grid', gridTemplateColumns: 'auto 1fr auto auto auto', gap: '3px 8px', marginBottom: 6 }}>
@@ -874,7 +919,7 @@ export default function Dashboard() {
             )}
           </ChartCard>
 
-          <ChartCard title="Expense Requests" sub="" action={<Link href="/financial" style={{ fontSize: 12, color: '#22c55e', fontWeight: 500, textDecoration: 'none' }}>View all requests ?</Link>}>
+          <ChartCard title="Expense Requests" sub="" action={<Link href="/financial" style={{ fontSize: 12, color: '#22c55e', fontWeight: 500, textDecoration: 'none' }}>View all requests →</Link>}>
             {bills.length === 0 ? <EmptyBox msg="No expense requests yet" sub="Expense requests will appear here." /> : (
               <div style={{ marginTop: 8 }}>
                 <div style={{ display: 'grid', gridTemplateColumns: 'auto 1fr auto auto auto', gap: '3px 8px', marginBottom: 6 }}>
@@ -904,7 +949,7 @@ export default function Dashboard() {
                 const cfg = { error: { icon: AlertTriangle, bg: '#fef2f2', border: '#fecaca', iconColor: '#ef4444', textColor: '#991b1b' }, warning: { icon: AlertTriangle, bg: '#fffbeb', border: '#fde68a', iconColor: '#f59e0b', textColor: '#92400e' }, info: { icon: CheckCircle2, bg: '#f0fdf4', border: '#bbf7d0', iconColor: '#22c55e', textColor: '#166534' } }[alert.level]
                 const AlertIcon = cfg.icon
                 return (
-                  <div key={i} style={{ display: 'flex', alignItems: 'flex-start', gap: 10, background: cfg.bg, border: `1px solid ${cfg.border}`, borderRadius: 9, padding: '10px 12px' }}>
+                  <div key={i} style={{ display: 'flex', alignItems: 'flex-start', gap: 10, background: cfg.bg, border: `1px solid ${cfg.border}`, borderRadius: 6, padding: '10px 12px' }}>
                     <AlertIcon size={15} color={cfg.iconColor} style={{ flexShrink: 0, marginTop: 1 }} />
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <div style={{ fontSize: 12, fontWeight: 600, color: cfg.textColor }}>{alert.title}</div>
@@ -914,7 +959,7 @@ export default function Dashboard() {
                   </div>
                 )
               })}
-              <Link href="/financial" style={{ fontSize: 12, color: '#22c55e', fontWeight: 500, textDecoration: 'none', marginTop: 2 }}>View all alerts ?</Link>
+              <Link href="/financial" style={{ fontSize: 12, color: '#22c55e', fontWeight: 500, textDecoration: 'none', marginTop: 2 }}>View all alerts →</Link>
             </div>
           </ChartCard>
         </div>
@@ -931,7 +976,7 @@ export default function Dashboard() {
       {/* -- Operations tab -------------------------------------------------- */}
       {tab === 'Operations' && <>
         {/* Row 1: Workflow Activity | Task Status | Team Workload */}
-        <div className="charts-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 10, marginBottom: 10 }}>
+        <div className="charts-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 18, marginBottom: 18 }}>
           <ChartCard title="Workflow Activity" sub="" filter={wfFilter} filterOptions={['This Week','This Month','All Time']} onFilterChange={setWfFilter}>
             <div style={{ display: 'flex', gap: 12, alignItems: 'center', marginTop: 4 }}>
               <Donut data={opsData.workflowActivity.length ? opsData.workflowActivity : [{name:'None',value:1,color:'#e5e7eb'}]} center={String(tasks.length)} />
@@ -955,7 +1000,7 @@ export default function Dashboard() {
                   <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f3f4f6" />
                   <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fill: '#9ca3af', fontSize: 10 }} />
                   <YAxis axisLine={false} tickLine={false} tick={{ fill: '#9ca3af', fontSize: 10 }} width={24} />
-                  <Tooltip contentStyle={{ borderRadius: 8, border: '1px solid #e5e7eb', fontSize: 12, fontFamily: font }} />
+                  <Tooltip contentStyle={{ borderRadius: 6, border: '1px solid #e5e7eb', fontSize: 12, fontFamily: font }} />
                   <Bar dataKey="value" name="Tasks" radius={[4,4,0,0]}>
                     {opsData.taskStatusBars.map((entry, index) => <Cell key={index} fill={entry.fill} />)}
                   </Bar>
@@ -988,25 +1033,25 @@ export default function Dashboard() {
                     </div>
                   )
                 })}
-                <Link href="/tasks" style={{ fontSize: 12, color: '#22c55e', fontWeight: 500, textDecoration: 'none', marginTop: 2 }}>View all team workload ?</Link>
+                <Link href="/tasks" style={{ fontSize: 12, color: '#22c55e', fontWeight: 500, textDecoration: 'none', marginTop: 2 }}>View all team workload →</Link>
               </div>
             )}
           </ChartCard>
         </div>
 
         {/* Row 2: Procurement Status | Inventory Alerts | Upcoming Tasks */}
-        <div className="data-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 10, marginBottom: 12 }}>
+        <div className="data-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 18, marginBottom: 32 }}>
           <ChartCard title="Procurement Status" sub="" filter={procFilter} filterOptions={['All Requests','Approved','Pending','In Review']} onFilterChange={setProcFilter}>
             <EmptyBox msg="No procurement records" sub="Procurement requests will appear here." />
-            <Link href="/procurement" style={{ fontSize: 12, color: '#22c55e', fontWeight: 500, textDecoration: 'none', display: 'block', marginTop: 4 }}>View all procurement ?</Link>
+            <Link href="/procurement" style={{ fontSize: 12, color: '#22c55e', fontWeight: 500, textDecoration: 'none', display: 'block', marginTop: 4 }}>View all procurement →</Link>
           </ChartCard>
 
           <ChartCard title="Inventory Alerts" sub="" filter={invFilter} filterOptions={['All Locations','Warehouse 1','Warehouse 2','Warehouse 3']} onFilterChange={setInvFilter}>
             {warehouses.length === 0 ? <EmptyBox msg="No inventory alerts" sub="Low stock items will appear here." /> : (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 8 }}>
                 {warehouses.slice(0, 4).map((wh, i) => (
-                  <div key={wh.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 10px', border: '1px solid #e5e7eb', borderRadius: 8 }}>
-                    <div style={{ width: 28, height: 28, borderRadius: 7, background: '#fef2f218', display: 'grid', placeItems: 'center', flexShrink: 0 }}>
+                  <div key={wh.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 10px', border: '1px solid #e5e7eb', borderRadius: 6 }}>
+                    <div style={{ width: 28, height: 28, borderRadius: 6, background: '#fef2f218', display: 'grid', placeItems: 'center', flexShrink: 0 }}>
                       <Warehouse size={13} color="#ef4444" />
                     </div>
                     <div style={{ flex: 1, minWidth: 0 }}>
@@ -1016,7 +1061,7 @@ export default function Dashboard() {
                     <span style={{ fontSize: 11, fontWeight: 600, color: '#ef4444', whiteSpace: 'nowrap' }}>{wh.total ?? wh.amount ?? 0} units</span>
                   </div>
                 ))}
-                <Link href="/warehouse-inventory" style={{ fontSize: 12, color: '#22c55e', fontWeight: 500, textDecoration: 'none', marginTop: 2 }}>View all inventory ?</Link>
+                <Link href="/warehouse-inventory" style={{ fontSize: 12, color: '#22c55e', fontWeight: 500, textDecoration: 'none', marginTop: 2 }}>View all inventory →</Link>
               </div>
             )}
           </ChartCard>
@@ -1048,6 +1093,7 @@ export default function Dashboard() {
           { title: 'Team Workload',href: '/hr',                icon: UsersRound,   color: '#ef4444', stat: Array.from(new Set(tasks.map(t=>t.assignee).filter(Boolean))).length, label: 'team members' },
         ]} />
       </>}
+      </section>
     </main>
   )
 }
@@ -1069,9 +1115,9 @@ function ChartCard({ title, sub, children, action, filter, filterOptions, onFilt
   }, [dropOpen])
 
   return (
-    <div className="dashboard-card" style={{ background: '#fff', borderRadius: 12, border: '1px solid #e5e7eb', padding: '14px 16px 16px', boxShadow: '0 1px 4px rgba(0,0,0,0.05)' }}>
-      <div className="dashboard-card-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: sub ? 2 : 0 }}>
-        <h3 style={{ margin: 0, fontSize: 14, fontWeight: 600, color: '#111827' }}>{title}</h3>
+    <div className="dashboard-card" style={{ background: '#fff', borderRadius: 6, border: '1px solid #e5e7eb', padding: '18px 20px 20px', boxShadow: '0 1px 4px rgba(0,0,0,0.05)', display: 'flex', flexDirection: 'column' }}>
+      <div className="dashboard-card-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: sub ? 2 : 12 }}>
+        <h3 style={{ margin: 0, fontSize: 14.5, fontWeight: 600, color: '#111827', letterSpacing: '-0.1px' }}>{title}</h3>
         {filter ? (
           <div ref={dropRef} style={{ position: 'relative', flexShrink: 0 }}>
             <button
@@ -1082,7 +1128,7 @@ function ChartCard({ title, sub, children, action, filter, filterOptions, onFilt
               <ChevronDown size={11} style={{ transition: 'transform 150ms', transform: dropOpen ? 'rotate(180deg)' : 'none' }} />
             </button>
             {dropOpen && filterOptions && (
-              <div style={{ position: 'absolute', top: 'calc(100% + 6px)', right: 0, minWidth: 160, background: '#fff', border: '1px solid #e5e7eb', borderRadius: 8, boxShadow: '0 6px 20px rgba(0,0,0,0.1)', zIndex: 50, overflow: 'hidden' }}>
+              <div style={{ position: 'absolute', top: 'calc(100% + 6px)', right: 0, minWidth: 160, background: '#fff', border: '1px solid #e5e7eb', borderRadius: 6, boxShadow: '0 6px 20px rgba(0,0,0,0.1)', zIndex: 50, overflow: 'hidden' }}>
                 {filterOptions.map(opt => (
                   <button
                     key={opt}
@@ -1098,7 +1144,7 @@ function ChartCard({ title, sub, children, action, filter, filterOptions, onFilt
           </div>
         ) : action}
       </div>
-      {sub && <p style={{ margin: '3px 0 0', fontSize: 12, color: '#9ca3af' }}>{sub}</p>}
+      {sub && <p style={{ margin: '4px 0 14px', fontSize: 12, color: '#9ca3af' }}>{sub}</p>}
       {children}
     </div>
   )
@@ -1116,24 +1162,34 @@ function Sparkline({ data, color }: { data: number[]; color: string }) {
   )
 }
 
-function KpiCard({ label, value, t, neg = false, icon: Icon, iconColor, sparkData }: {
+function KpiCard({ label, value, t, neg = false, icon: Icon, iconColor, sparkData, forecast, delta }: {
   label: string; value: string
   t: { text: string; up: boolean; zero: boolean }
   neg?: boolean
   icon: ComponentType<{ size?: number; color?: string }>
   iconColor: string
   sparkData: number[]
+  forecast?: number
+  delta?: number
 }) {
   const positive = neg ? !t.up : t.up
+  const showForecast = typeof forecast === 'number' && forecast > 0
+  const showDelta = typeof delta === 'number' && delta !== 0
   return (
-    <div className="dashboard-kpi-card" style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: 11, padding: '11px 13px', boxShadow: '0 1px 3px rgba(0,0,0,0.04)' }}>
-      <div style={{ display: 'flex', gap: 9, alignItems: 'flex-start' }}>
-        <div style={{ width: 32, height: 32, borderRadius: 9, background: `${iconColor}18`, color: iconColor, display: 'grid', placeItems: 'center', flexShrink: 0 }}>
+    <div className="dashboard-kpi-card" style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: 6, padding: '15px 16px', boxShadow: '0 1px 3px rgba(0,0,0,0.04)' }}>
+      <div style={{ display: 'flex', gap: 11, alignItems: 'flex-start' }}>
+        <div style={{ width: 32, height: 32, borderRadius: 6, background: `${iconColor}18`, color: iconColor, display: 'grid', placeItems: 'center', flexShrink: 0 }}>
           <Icon size={15} color={iconColor} />
         </div>
         <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ fontSize: 13, color: '#9ca3af', fontWeight: 500, marginBottom: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{label}</div>
-          <div style={{ fontSize: 18, fontWeight: 700, color: '#111827', fontFamily: display, letterSpacing: '-0.3px', marginBottom: 3 }}>{value}</div>
+          <div style={{ fontSize: 13, color: '#9ca3af', fontWeight: 500, marginBottom: 3, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{label}</div>
+          <div style={{ fontSize: 20, fontWeight: 700, color: '#111827', fontFamily: display, letterSpacing: '-0.4px', marginBottom: 4 }}>{value}</div>
+          {showForecast ? (
+            <div style={{ display: 'grid', gap: 2, marginBottom: 4 }}>
+              <div style={{ fontSize: 11, color: '#6b7280', fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{money(forecast)} Forecast</div>
+              {showDelta ? <div style={{ fontSize: 11, color: delta > 0 ? '#f59e0b' : '#22c55e', fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{money(Math.abs(delta))} Delta</div> : null}
+            </div>
+          ) : null}
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 4 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 3, fontSize: 10, color: t.zero ? '#9ca3af' : positive ? '#22c55e' : '#ef4444', fontWeight: 500, minWidth: 0 }}>
               {!t.zero && (t.up ? <TrendingUp size={10} /> : <TrendingDown size={10} />)}
@@ -1179,20 +1235,23 @@ function DonutLegend({ data, total }: { data: Array<{ name: string; value: numbe
   )
 }
 
-function FinBlock({ icon: Icon, iconColor, label, value, t }: {
+function FinBlock({ icon: Icon, iconColor, label, value, t, divider = false }: {
   icon: ComponentType<{ size?: number; color?: string }>
   iconColor: string; label: string; value: string
   t: { text: string; up: boolean; zero: boolean }
+  divider?: boolean
 }) {
   return (
-    <div className="dashboard-activity-row" style={{ display: 'flex', gap: 10, alignItems: 'flex-start' }}>
-      <div style={{ width: 34, height: 34, borderRadius: 9, background: `${iconColor}18`, color: iconColor, display: 'grid', placeItems: 'center', flexShrink: 0 }}>
-        <Icon size={16} color={iconColor} />
+    <div style={{ display: 'flex', gap: 12, alignItems: 'center', justifyContent: 'space-between', padding: '14px 0', borderTop: divider ? '1px solid #f1f3f5' : 'none' }}>
+      <div style={{ display: 'flex', gap: 12, alignItems: 'center', minWidth: 0 }}>
+        <div style={{ width: 38, height: 38, borderRadius: 6, background: `${iconColor}18`, color: iconColor, display: 'grid', placeItems: 'center', flexShrink: 0 }}>
+          <Icon size={18} color={iconColor} />
+        </div>
+        <div style={{ fontSize: 13, color: '#6b7280', fontWeight: 500, lineHeight: 1.3 }}>{label}</div>
       </div>
-      <div style={{ minWidth: 0 }}>
-        <div style={{ fontSize: 13, color: '#9ca3af', fontWeight: 500, marginBottom: 3 }}>{label}</div>
-        <div style={{ fontSize: 15, fontWeight: 700, color: '#111827', fontFamily: display, letterSpacing: '-0.2px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{value}</div>
-        <div style={{ fontSize: 10, color: t.zero ? '#9ca3af' : t.up ? iconColor : '#ef4444', marginTop: 2 }}>{t.text}</div>
+      <div style={{ textAlign: 'right', flexShrink: 0 }}>
+        <div style={{ fontSize: 17, fontWeight: 700, color: '#111827', fontFamily: display, letterSpacing: '-0.2px', whiteSpace: 'nowrap' }}>{value}</div>
+        <div style={{ fontSize: 11, color: t.zero ? '#9ca3af' : t.up ? iconColor : '#ef4444', marginTop: 2 }}>{t.text}</div>
       </div>
     </div>
   )
@@ -1207,19 +1266,19 @@ const activityIcons = {
   supplier:    { icon: Package,        bg: '#f0f9ff', color: '#6366f1' },
 } as const
 
-function ActivityRow({ item }: { item: ActivityItem }) {
+function ActivityRow({ item, divider = false }: { item: ActivityItem; divider?: boolean }) {
   const cfg = activityIcons[item.type]
   const Icon = cfg.icon
   return (
-    <div style={{ display: 'flex', gap: 10, alignItems: 'flex-start' }}>
-      <div style={{ width: 30, height: 30, borderRadius: 8, background: cfg.bg, color: cfg.color, display: 'grid', placeItems: 'center', flexShrink: 0 }}>
-        <Icon size={14} />
+    <div style={{ display: 'flex', gap: 12, alignItems: 'flex-start', padding: '12px 0', borderTop: divider ? '1px solid #f1f3f5' : 'none' }}>
+      <div style={{ width: 34, height: 34, borderRadius: 6, background: cfg.bg, color: cfg.color, display: 'grid', placeItems: 'center', flexShrink: 0 }}>
+        <Icon size={15} />
       </div>
       <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{ fontSize: 12, fontWeight: 500, color: '#374151', lineHeight: 1.4 }}>{item.description}</div>
-        <div style={{ fontSize: 11, color: '#9ca3af', marginTop: 1 }}>{item.subtext}</div>
+        <div style={{ fontSize: 12.5, fontWeight: 500, color: '#374151', lineHeight: 1.4 }}>{item.description}</div>
+        <div style={{ fontSize: 11, color: '#9ca3af', marginTop: 2 }}>{item.subtext}</div>
       </div>
-      <div style={{ fontSize: 11, color: '#9ca3af', flexShrink: 0, whiteSpace: 'nowrap' }}>{timeAgo(item.date)}</div>
+      <div style={{ fontSize: 11, color: '#9ca3af', flexShrink: 0, whiteSpace: 'nowrap', paddingTop: 1 }}>{timeAgo(item.date)}</div>
     </div>
   )
 }
@@ -1237,8 +1296,8 @@ function ModuleCard({ m }: { m: { title: string; href: string; icon: ComponentTy
   const Icon = m.icon
   return (
     <Link href={m.href} style={{ textDecoration: 'none' }}>
-      <div className="dashboard-module-card" style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: 9, padding: '9px 12px', display: 'flex', alignItems: 'center', gap: 9, cursor: 'pointer', transition: 'border-color 150ms ease' }}>
-        <div style={{ width: 28, height: 28, borderRadius: 7, background: `${m.color}18`, color: m.color, display: 'grid', placeItems: 'center', flexShrink: 0 }}>
+      <div className="dashboard-module-card" style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: 6, padding: '12px 14px', display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer', transition: 'border-color 150ms ease' }}>
+        <div style={{ width: 28, height: 28, borderRadius: 6, background: `${m.color}18`, color: m.color, display: 'grid', placeItems: 'center', flexShrink: 0 }}>
           <Icon size={13} />
         </div>
         <div style={{ flex: 1, minWidth: 0 }}>
@@ -1312,13 +1371,13 @@ type ModuleItem = { title: string; href: string; icon: ComponentType<{ size?: nu
 function TabModules({ title, subtitle, modules }: { title: string; subtitle: string; modules: ModuleItem[] }) {
   return (
     <div>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
         <div>
-          <div style={{ fontSize: 14, fontWeight: 600, color: '#111827' }}>{title}</div>
-          {subtitle && <div style={{ fontSize: 12, color: '#9ca3af', marginTop: 1 }}>{subtitle}</div>}
+          <div style={{ fontSize: 12, fontWeight: 700, color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.06em' }}>{title}</div>
+          {subtitle && <div style={{ fontSize: 12.5, color: '#9ca3af', marginTop: 3 }}>{subtitle}</div>}
         </div>
       </div>
-      <div className="modules-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(5, minmax(0, 1fr))', gap: 8 }}>
+      <div className="modules-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(5, minmax(0, 1fr))', gap: 12 }}>
         {modules.map(m => <ModuleCard key={m.title} m={m} />)}
       </div>
     </div>

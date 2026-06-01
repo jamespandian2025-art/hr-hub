@@ -4,6 +4,7 @@ import Link from 'next/link'
 import Image from 'next/image'
 import { useParams } from 'next/navigation'
 import { ChangeEvent, useEffect, useMemo, useState } from 'react'
+import { uploadFileObject } from '@/lib/uploads/client'
 
 const font = "var(--font-body)"
 const tabs = ['Inventory', 'Purchase Orders', 'Outgoing Transfers'] as const
@@ -281,13 +282,16 @@ export default function WarehouseDetailPage() {
     setOpenMenu(null)
   }
 
-  const uploadItemPhoto = (event: ChangeEvent<HTMLInputElement>) => {
+  const uploadItemPhoto = async (event: ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0]
     if (!file) return
 
-    const reader = new FileReader()
-    reader.onload = () => setItemPhotoUrl(String(reader.result || ''))
-    reader.readAsDataURL(file)
+    try {
+      const uploaded = await uploadFileObject(file, 'warehouse-photos')
+      setItemPhotoUrl(uploaded.url)
+    } catch {
+      setItemPhotoUrl('')
+    }
   }
 
   const selectSupplier = (value: number) => {

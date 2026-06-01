@@ -24,6 +24,8 @@ const maxChatAttachmentBytes = 5 * 1024 * 1024
 const employeesStorageKey = 'flowsys-hr-employees'
 const accountStorageKey = 'flowsys-account'
 const sessionStorageKey = 'flowsys-auth-session'
+const outboundNotificationsKey = 'flowsys-outbound-notifications'
+const activeChatChannelKey = 'flowsys-chat-active-channel'
 
 type ChannelType = 'channel' | 'dm'
 
@@ -253,6 +255,28 @@ function saveStore(store: ChatStore) {
   }
 }
 
+function addChatNotification(channel: ChatChannel, message: ChatMessage) {
+  if (typeof window === 'undefined') return
+  try {
+    const rows = loadJson<Array<Record<string, unknown>>>(outboundNotificationsKey, [])
+    const notification = {
+      id: Date.now(),
+      channel: 'In-App',
+      recipientRole: 'Admin',
+      subject: `New message in ${channel.type === 'channel' ? `#${channel.name}` : channel.name}`,
+      message: `${message.author}: ${message.body}`,
+      relatedType: 'Chat',
+      relatedId: channel.id,
+      status: 'Queued',
+      target: '/chat',
+      createdAt: message.createdAt,
+    }
+    window.localStorage.setItem(outboundNotificationsKey, JSON.stringify([notification, ...rows].slice(0, 100)))
+    window.dispatchEvent(new Event('storage'))
+  } catch {
+  }
+}
+
 const loadStore = () => {
   if (typeof window === 'undefined') return initialStore
   const employees = loadJson<Employee[]>(employeesStorageKey, [])
@@ -276,7 +300,10 @@ const avatarColor = (name: string) => ['#2563eb', '#7c3aed', '#059669', '#f59e0b
 export default function ChatPage() {
   const [store, setStore] = useState<ChatStore>(loadStore)
   const [account, setAccount] = useState<AccountState>(() => typeof window === 'undefined' ? {} : loadAccount())
-  const [activeChannelId, setActiveChannelId] = useState(() => loadStore().channels[0]?.id || 'general')
+  const [activeChannelId, setActiveChannelId] = useState(() => {
+    if (typeof window === 'undefined') return loadStore().channels[0]?.id || 'general'
+    return window.localStorage.getItem(activeChatChannelKey) || loadStore().channels[0]?.id || 'general'
+  })
   const [message, setMessage] = useState('')
   const [attachments, setAttachments] = useState<string[]>([])
   const [attachmentNotice, setAttachmentNotice] = useState('')
@@ -290,6 +317,10 @@ export default function ChatPage() {
   useEffect(() => {
     saveStore(store)
   }, [store])
+
+  useEffect(() => {
+    window.localStorage.setItem(activeChatChannelKey, activeChannelId)
+  }, [activeChannelId])
 
   useEffect(() => {
     const reload = () => {
@@ -336,22 +367,24 @@ export default function ChatPage() {
     const trimmed = message.trim()
     if (!trimmed && attachments.length === 0) return
 
-    setStore(previous => ({
-      ...previous,
-      messages: [
-        ...previous.messages,
-        {
-          id: nextMessageId(previous.messages),
-          channelId: activeChannel.id,
-          author: authorName,
-          role: authorRole,
-          body: trimmed || `[Attached: ${attachments.join(', ')}]`,
-          createdAt: new Date().toISOString(),
-          reactions: [],
-          attachments,
-        },
-      ],
-    }))
+    setStore(previous => {
+      const nextMessage: ChatMessage = {
+        id: nextMessageId(previous.messages),
+        channelId: activeChannel.id,
+        author: authorName,
+        role: authorRole,
+        body: trimmed || `[Attached: ${attachments.join(', ')}]`,
+        createdAt: new Date().toISOString(),
+        reactions: [],
+        attachments,
+      }
+      addChatNotification(activeChannel, nextMessage)
+      return {
+        ...previous,
+        channels: previous.channels.map(channel => channel.id === activeChannel.id ? { ...channel, unread: 0 } : channel),
+        messages: [...previous.messages, nextMessage],
+      }
+    })
     setMessage('')
     setAttachments([])
     setAttachmentNotice('')

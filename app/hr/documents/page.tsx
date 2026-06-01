@@ -20,6 +20,8 @@ import {
   Upload,
   Users,
 } from 'lucide-react'
+import { secureId } from '@/lib/security/random'
+import { uploadFileObject } from '@/lib/uploads/client'
 
 type HRDocument = {
   id: string
@@ -46,6 +48,9 @@ type HRDocument = {
   size?: string
   sizeBytes?: number
   dataUrl?: string
+  fileUrl?: string
+  objectKey?: string
+  storageProvider?: 'supabase' | 'local'
   category?: string
   uploadedByName?: string
   uploadedAt?: string
@@ -112,15 +117,6 @@ function formatFileSize(bytes: number) {
   return `${(bytes / 1024 / 1024).toFixed(2)} MB`
 }
 
-function readFileAsDataUrl(file: File) {
-  return new Promise<string>((resolve, reject) => {
-    const reader = new FileReader()
-    reader.onload = () => resolve(String(reader.result || ''))
-    reader.onerror = reject
-    reader.readAsDataURL(file)
-  })
-}
-
 function formatDate(value?: string) {
   if (!value) return '-'
   return new Date(value).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
@@ -138,7 +134,11 @@ function documentType(doc: HRDocument) {
 }
 
 function isImageDocument(doc: HRDocument) {
-  return Boolean(doc.dataUrl && (doc.mimeType?.startsWith('image/') || /\.(png|jpe?g|gif|webp|bmp|svg)$/i.test(doc.name)))
+  return Boolean(documentAssetUrl(doc) && (doc.mimeType?.startsWith('image/') || /\.(png|jpe?g|gif|webp|bmp|svg)$/i.test(doc.name)))
+}
+
+function documentAssetUrl(doc: HRDocument) {
+  return doc.fileUrl || doc.dataUrl || ''
 }
 
 function typeTone(type: string) {
@@ -172,7 +172,7 @@ export default function HrDocumentsPage() {
   useEffect(() => {
     const load = () => {
       const storedDocs = loadStored<HRDocument[]>(documentsKey, [])
-      setDocuments(storedDocs.filter(doc => Boolean(doc.dataUrl) && !doc.deletedAt))
+      setDocuments(storedDocs.filter(doc => Boolean(documentAssetUrl(doc) || doc.objectKey) && !doc.deletedAt))
       setDeletedDocuments(loadStored<HRDocument[]>(deletedDocumentsKey, []))
       setFolders(loadStored<HRFolder[]>(foldersKey, []))
       setAccount({
@@ -204,7 +204,7 @@ export default function HrDocumentsPage() {
   }
 
   const sharedWithMeDocuments = documents.filter(isSharedWithMe)
-  const selectedFolder = folders.find(folder => folder.id === selectedFolderId) || null
+  const selectedFolder = folders.find(folder => folder.id === selectedFolderId) || folders[0] || null
 
   const visibleBase = activeTab === 'trash'
     ? deletedDocuments
@@ -242,8 +242,6 @@ export default function HrDocumentsPage() {
     return new Date(second.lastOpenedAt || 0).getTime() - new Date(first.lastOpenedAt || 0).getTime()
   })
 
-  const filteredFolders = folders.filter(folder => folder.name.toLowerCase().includes(query.trim().toLowerCase()))
-
   const storageUsed = documents.reduce((sum, doc) => sum + Number(doc.sizeBytes || 0), 0)
 
   function openDocument(doc: HRDocument) {
@@ -263,19 +261,22 @@ export default function HrDocumentsPage() {
 
     const next: HRDocument[] = []
     for (const file of Array.from(files)) {
-      if (file.size > 1024 * 1024) {
-        setUploadError('Each document must be 1MB or smaller while using local browser storage.')
+      if (file.size > 10 * 1024 * 1024) {
+        setUploadError('Each document must be 10MB or smaller.')
         continue
       }
       try {
+        const uploaded = await uploadFileObject(file, 'hr-documents')
         next.push({
-          id: `doc_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
-          name: file.name,
+          id: secureId('doc', 6),
+          name: uploaded.name,
           type: fileExtension(file.name),
-          mimeType: file.type || 'application/octet-stream',
-          size: formatFileSize(file.size),
-          sizeBytes: file.size,
-          dataUrl: await readFileAsDataUrl(file),
+          mimeType: uploaded.mimeType,
+          size: formatFileSize(uploaded.sizeBytes),
+          sizeBytes: uploaded.sizeBytes,
+          fileUrl: uploaded.url,
+          objectKey: uploaded.objectKey,
+          storageProvider: uploaded.storageProvider,
           category: targetFolder?.name || 'Uncategorized',
           uploadedById: currentUserId || undefined,
           uploadedByEmail: currentUserEmail || undefined,
@@ -293,7 +294,7 @@ export default function HrDocumentsPage() {
       const storedDocs = loadStored<HRDocument[]>(documentsKey, [])
       const updated = [...next, ...storedDocs]
       saveStored(documentsKey, updated)
-      setDocuments(updated.filter(doc => Boolean(doc.dataUrl) && !doc.deletedAt))
+      setDocuments(updated.filter(doc => Boolean(documentAssetUrl(doc) || doc.objectKey) && !doc.deletedAt))
     }
     if (fileInputRef.current) fileInputRef.current.value = ''
     if (folderFileInputRef.current) folderFileInputRef.current.value = ''
@@ -311,8 +312,27 @@ export default function HrDocumentsPage() {
     setFolderModalOpen(false)
   }
 
+  function handleFolderDragEnter(event: React.DragEvent<HTMLDivElement>) {
+    if (!Array.from(event.dataTransfer.types).includes('Files')) return
+    event.preventDefault()
+    setIsDraggingFiles(true)
+  }
+
+  function handleFolderDragOver(event: React.DragEvent<HTMLDivElement>) {
+    if (!Array.from(event.dataTransfer.types).includes('Files')) return
+    event.preventDefault()
+    setIsDraggingFiles(true)
+  }
+
+  function handleFolderDragLeave(event: React.DragEvent<HTMLDivElement>) {
+    const nextTarget = event.relatedTarget
+    if (nextTarget instanceof Node && event.currentTarget.contains(nextTarget)) return
+    setIsDraggingFiles(false)
+  }
+
   function handleFolderDrop(event: React.DragEvent<HTMLDivElement>) {
     event.preventDefault()
+    event.stopPropagation()
     setIsDraggingFiles(false)
     if (!selectedFolder) {
       setUploadError('Choose a folder before uploading files into it.')
@@ -322,9 +342,10 @@ export default function HrDocumentsPage() {
   }
 
   function downloadDocument(doc: HRDocument) {
-    if (!doc.dataUrl) return
+    const url = documentAssetUrl(doc)
+    if (!url) return
     const link = document.createElement('a')
-    link.href = doc.dataUrl
+    link.href = url
     link.download = doc.name
     link.click()
   }
@@ -386,7 +407,6 @@ export default function HrDocumentsPage() {
           <p style={pageSubtitleStyle}>Manage and organize HR related documents.</p>
         </div>
         <div className="documents-toolbar" style={toolbarStyle}>
-          <SearchBox value={query} onChange={setQuery} placeholder="Search documents..." />
           <input ref={fileInputRef} type="file" multiple hidden onChange={event => uploadDocuments(event.target.files)} />
           <input ref={folderFileInputRef} type="file" multiple hidden onChange={event => uploadDocuments(event.target.files, selectedFolder)} />
           <button style={secondaryButtonStyle} onClick={() => fileInputRef.current?.click()}><Upload size={15} /> Upload Document</button>
@@ -400,13 +420,12 @@ export default function HrDocumentsPage() {
         <Metric icon={FileText} label="Total Documents" value={documents.length} sub="Uploaded files" color="#16a34a" bg="#dcfce7" />
         <Metric icon={Folder} label="Folders" value={folders.length} sub="Created folders" color="#2563eb" bg="#dbeafe" />
         <Metric icon={Users} label="Shared Documents" value={sharedWithMeDocuments.length} sub="Shared with you" color="#7c3aed" bg="#ede9fe" />
-        <Metric icon={File} label="Storage Used" value={formatFileSize(storageUsed)} sub="Local browser storage" color="#d97706" bg="#fef3c7" />
+        <Metric icon={File} label="Storage Used" value={formatFileSize(storageUsed)} sub="Object storage metadata" color="#d97706" bg="#fef3c7" />
         <Metric icon={Trash2} label="Trash" value={deletedDocuments.length} sub={deletedDocuments.length ? 'Empty trash' : 'Deleted documents'} color="#ca8a04" bg="#fef9c3" />
       </div>
 
       <div className="documents-drive" style={driveWorkspaceStyle}>
         <aside className="documents-drive-rail" style={driveRailStyle} aria-label="Document library sections">
-          <button style={driveNewButtonStyle} onClick={() => fileInputRef.current?.click()}><Plus size={18} /> New</button>
           <nav style={driveNavStyle}>
             {documentTabs.map(item => {
               const Icon = item.icon
@@ -422,7 +441,7 @@ export default function HrDocumentsPage() {
           <div style={storagePanelStyle}>
             <div style={storageBarTrackStyle}><span style={{ ...storageBarFillStyle, width: `${Math.min((storageUsed / (4 * 1024 * 1024)) * 100, 100)}%` }} /></div>
             <strong>{formatFileSize(storageUsed)} used</strong>
-            <span>Local browser storage</span>
+            <span>Object storage metadata</span>
           </div>
         </aside>
 
@@ -430,7 +449,7 @@ export default function HrDocumentsPage() {
           <div style={driveContentHeaderStyle}>
             <div>
               <h2 style={driveTitleStyle}>{activeTabLabel}</h2>
-              <p style={driveHintStyle}>{activeTab === 'folders' ? 'Create folders, select one, then upload files into it.' : 'Search, filter, preview, download, or move files to trash.'}</p>
+              <p style={driveHintStyle}>{activeTab === 'folders' ? 'Upload files into your drive folder.' : 'Search, filter, preview, download, or move files to trash.'}</p>
             </div>
             <div style={driveHeaderActionsStyle}>
               <button style={secondaryButtonStyle} onClick={() => fileInputRef.current?.click()}><Upload size={15} /> Upload</button>
@@ -441,40 +460,13 @@ export default function HrDocumentsPage() {
           <div style={cardStyle}>
             {activeTab === 'folders' ? (
           <div className="documents-folder-workspace" style={folderWorkspaceStyle}>
-            <div style={folderPanelStyle}>
-              <div style={folderPanelHeaderStyle}>
-                <div>
-                  <h2 style={sectionTitleStyle}>Folders</h2>
-                  <p style={sectionHintStyle}>Create folders, open one, then upload files into it.</p>
-                </div>
-                <button style={primaryButtonStyle} onClick={() => setFolderModalOpen(true)}><Plus size={15} /> New Folder</button>
-              </div>
-              <SearchBox value={query} onChange={setQuery} placeholder="Search folders..." compact />
-              <div style={folderListStyle}>
-                {filteredFolders.map(folder => {
-                  const folderCount = documents.filter(doc => doc.folderId === folder.id).length
-                  const active = selectedFolderId === folder.id
-                  return (
-                    <button key={folder.id} onClick={() => setSelectedFolderId(folder.id)} style={folderTileStyle(active)}>
-                      <span style={folderIconStyle}><Folder size={20} /></span>
-                      <span style={{ minWidth: 0 }}>
-                        <strong style={{ display: 'block', color: '#0f172a', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{folder.name}</strong>
-                        <small style={{ color: '#64748b' }}>{folderCount} files</small>
-                      </span>
-                    </button>
-                  )
-                })}
-              </div>
-              {filteredFolders.length === 0 && (
-                <div style={emptyStateStyle}>
-                  <Folder size={34} color="#94a3b8" />
-                  <strong>No folders yet.</strong>
-                  <span>Create a folder first, then upload HR documents inside it.</span>
-                </div>
-              )}
-            </div>
-
-            <div style={folderContentStyle}>
+            <div
+              style={folderContentStyle}
+              onDragEnter={handleFolderDragEnter}
+              onDragOver={handleFolderDragOver}
+              onDragLeave={handleFolderDragLeave}
+              onDrop={handleFolderDrop}
+            >
               <div style={folderPanelHeaderStyle}>
                 <div>
                   <h2 style={sectionTitleStyle}>{selectedFolder?.name || 'Select a folder'}</h2>
@@ -483,19 +475,13 @@ export default function HrDocumentsPage() {
                 <button style={secondaryButtonStyle} disabled={!selectedFolder} onClick={() => folderFileInputRef.current?.click()}><Upload size={15} /> Upload Files</button>
               </div>
 
-              <div
-                style={dropZoneStyle(Boolean(selectedFolder), isDraggingFiles)}
-                onDragOver={event => {
-                  event.preventDefault()
-                  setIsDraggingFiles(true)
-                }}
-                onDragLeave={() => setIsDraggingFiles(false)}
-                onDrop={handleFolderDrop}
-              >
-                <Upload size={24} color={selectedFolder ? '#16a34a' : '#94a3b8'} />
-                <strong>{selectedFolder ? 'Drop files to upload' : 'No folder selected'}</strong>
-                <span>{selectedFolder ? 'You can also use the Upload Files button.' : 'Select or create a folder before uploading files.'}</span>
-              </div>
+              {isDraggingFiles && (
+                <div style={dropZoneStyle(Boolean(selectedFolder), isDraggingFiles)}>
+                  <Upload size={24} color={selectedFolder ? '#16a34a' : '#94a3b8'} />
+                  <strong>{selectedFolder ? 'Drop files to upload' : 'No folder selected'}</strong>
+                  <span>{selectedFolder ? 'You can also use the Upload Files button.' : 'Select or create a folder before uploading files.'}</span>
+                </div>
+              )}
 
               {selectedFolder && (
                 <>
@@ -832,7 +818,6 @@ const documentsCss = `
   .documents-drive-rail { border-radius: 14px !important; padding: 12px !important; }
   .documents-drive-rail nav { display: flex !important; overflow-x: auto; gap: 8px !important; padding-bottom: 2px; }
   .documents-drive-rail nav button { min-width: 154px; }
-  .documents-drive-rail > button { width: 100%; }
   .documents-drive-main > div:first-child { display: grid !important; border-radius: 14px !important; }
   .documents-folder-workspace { grid-template-columns: 1fr !important; padding: 12px !important; }
   .documents-filterbar { display: grid !important; grid-template-columns: 1fr 1fr; padding: 12px !important; gap: 10px !important; }
@@ -858,7 +843,6 @@ const metricCardStyle = { minHeight: 110, padding: 18, display: 'flex', alignIte
 const metricIconStyle = { width: 54, height: 54, borderRadius: 14, display: 'grid', placeItems: 'center' }
 const driveWorkspaceStyle = { display: 'grid', gridTemplateColumns: '248px minmax(0, 1fr)', gap: 18, alignItems: 'start' }
 const driveRailStyle = { position: 'sticky' as const, top: 86, background: '#fff', border: '1px solid #e5e7eb', borderRadius: 16, padding: 14, boxShadow: '0 10px 28px rgba(15,23,42,0.05)', display: 'grid', gap: 14 }
-const driveNewButtonStyle = { minHeight: 48, border: '1px solid #dcfce7', borderRadius: 999, background: '#16a34a', color: '#fff', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 10, padding: '0 18px', fontSize: 14, fontWeight: 950, cursor: 'pointer', fontFamily: font, boxShadow: '0 12px 26px rgba(22,163,74,.22)' }
 const driveNavStyle = { display: 'grid', gap: 4 }
 const driveNavItemStyle = (active: boolean) => ({ minHeight: 42, border: '0', borderRadius: 999, background: active ? '#e9f8ef' : 'transparent', color: active ? '#0f5132' : '#334155', display: 'grid', gridTemplateColumns: '22px minmax(0, 1fr) auto', gap: 10, alignItems: 'center', padding: '0 12px', textAlign: 'left' as const, cursor: 'pointer', fontFamily: font, fontSize: 13, fontWeight: active ? 900 : 750 })
 const storagePanelStyle = { borderTop: '1px solid #eef2f7', paddingTop: 14, display: 'grid', gap: 7, color: '#64748b', fontSize: 12 }
@@ -870,15 +854,11 @@ const driveTitleStyle = { margin: 0, color: '#0f172a', fontSize: 20, fontWeight:
 const driveHintStyle = { margin: '5px 0 0', color: '#64748b', fontSize: 13 }
 const driveHeaderActionsStyle = { display: 'flex', gap: 10, flexWrap: 'wrap' as const }
 const cardStyle = { background: '#fff', border: '1px solid #e5e7eb', borderRadius: 16, boxShadow: '0 8px 24px rgba(15,23,42,0.04)', overflow: 'hidden' }
-const folderWorkspaceStyle = { display: 'grid', gridTemplateColumns: 'minmax(280px, 360px) minmax(0, 1fr)', gap: 18, padding: 18 }
-const folderPanelStyle = { border: '1px solid #e5e7eb', borderRadius: 12, padding: 16, display: 'grid', gap: 14, alignContent: 'start' }
+const folderWorkspaceStyle = { display: 'grid', gridTemplateColumns: 'minmax(0, 1fr)', gap: 18, padding: 18 }
 const folderContentStyle = { border: '1px solid #e5e7eb', borderRadius: 12, padding: 16, minWidth: 0 }
 const folderPanelHeaderStyle = { display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'flex-start', flexWrap: 'wrap' as const }
 const sectionTitleStyle = { margin: 0, color: '#0f172a', fontSize: 16, fontWeight: 900 }
 const sectionHintStyle = { margin: '5px 0 0', color: '#64748b', fontSize: 13 }
-const folderListStyle = { display: 'grid', gap: 10 }
-const folderIconStyle = { width: 40, height: 40, borderRadius: 12, background: '#dcfce7', color: '#16a34a', display: 'grid', placeItems: 'center', flexShrink: 0 }
-const folderTileStyle = (active: boolean) => ({ width: '100%', border: active ? '1px solid #22c55e' : '1px solid #e5e7eb', borderRadius: 12, background: active ? '#f0fdf4' : '#fff', padding: 12, display: 'flex', alignItems: 'center', gap: 12, textAlign: 'left' as const, cursor: 'pointer', fontFamily: font, boxShadow: active ? '0 10px 22px rgba(22, 163, 74, 0.08)' : 'none' })
 const dropZoneStyle = (enabled: boolean, active: boolean) => ({ minHeight: 138, border: `1.5px dashed ${active ? '#16a34a' : enabled ? '#86efac' : '#cbd5e1'}`, borderRadius: 12, background: active ? '#ecfdf5' : enabled ? '#f7fee7' : '#f8fafc', display: 'grid', placeItems: 'center', gap: 6, padding: 18, color: enabled ? '#166534' : '#64748b', textAlign: 'center' as const, fontSize: 13 })
 const filterBarStyle = { padding: 18, display: 'flex', gap: 12, alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap' as const, borderBottom: '1px solid #f1f5f9' }
 const trashNoticeStyle = { margin: '0 0 0', padding: '14px 18px', background: '#fffbeb', borderBottom: '1px solid #fde68a', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 14, flexWrap: 'wrap' as const }
@@ -900,14 +880,14 @@ const iconLinkStyle = { ...iconButtonStyle, textDecoration: 'none' }
 const smallButtonStyle = { minHeight: 32, border: '1px solid #bbf7d0', borderRadius: 7, background: '#fff', color: '#15803d', padding: '0 10px', fontSize: 12, fontWeight: 800, cursor: 'pointer', fontFamily: font }
 const dangerButtonStyle = { minHeight: 32, border: '1px solid #fecaca', borderRadius: 7, background: '#fff', color: '#dc2626', padding: '0 10px', fontSize: 12, fontWeight: 800, cursor: 'pointer', fontFamily: font }
 const emptyStateStyle = { padding: '54px 18px', display: 'grid', placeItems: 'center', gap: 8, color: '#64748b', fontSize: 13, textAlign: 'center' as const }
-const documentThumbStyle = (doc: HRDocument) => ({ width: 42, height: 42, borderRadius: 10, backgroundColor: '#f1f5f9', backgroundImage: `url("${doc.dataUrl}")`, backgroundSize: 'cover', backgroundPosition: 'center', overflow: 'hidden', display: 'block', flexShrink: 0, border: '1px solid #e5e7eb' })
+const documentThumbStyle = (doc: HRDocument) => ({ width: 42, height: 42, borderRadius: 10, backgroundColor: '#f1f5f9', backgroundImage: `url("${documentAssetUrl(doc)}")`, backgroundSize: 'cover', backgroundPosition: 'center', overflow: 'hidden', display: 'block', flexShrink: 0, border: '1px solid #e5e7eb' })
 const gridStyle = { padding: 18, display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))', gap: 16 }
 const documentCardStyle = { border: '1px solid #e5e7eb', borderRadius: 12, padding: 8, display: 'grid', gap: 8, background: '#eef2f7', overflow: 'hidden' }
 const clickableDocumentCardStyle = { ...documentCardStyle, cursor: 'pointer' }
 const documentCardHeaderStyle = { display: 'grid', gridTemplateColumns: '22px minmax(0, 1fr) 24px', alignItems: 'center', gap: 8, padding: '6px 6px 2px' }
 const documentCardTypeIconStyle = { width: 18, height: 18, borderRadius: 4, background: '#ef4444', color: '#fff', display: 'grid', placeItems: 'center' }
 const documentCardMenuStyle = { width: 24, height: 24, border: 'none', background: 'transparent', display: 'grid', placeItems: 'center', cursor: 'pointer', color: '#0f172a' }
-const documentPreviewStyle = (doc: HRDocument) => ({ minHeight: 150, borderRadius: 8, backgroundColor: '#fff', backgroundImage: isImageDocument(doc) ? `url("${doc.dataUrl}")` : undefined, backgroundSize: 'cover', backgroundPosition: 'center', display: 'grid', placeItems: 'center', border: '1px solid #e5e7eb', overflow: 'hidden' })
+const documentPreviewStyle = (doc: HRDocument) => ({ minHeight: 150, borderRadius: 8, backgroundColor: '#fff', backgroundImage: isImageDocument(doc) ? `url("${documentAssetUrl(doc)}")` : undefined, backgroundSize: 'cover', backgroundPosition: 'center', display: 'grid', placeItems: 'center', border: '1px solid #e5e7eb', overflow: 'hidden' })
 const errorStyle = { marginBottom: 14, border: '1px solid #fecaca', background: '#fef2f2', color: '#dc2626', borderRadius: 8, padding: '10px 12px', fontSize: 13 }
 const modalOverlayStyle = { position: 'fixed' as const, inset: 0, zIndex: 90, background: 'rgba(15,23,42,0.45)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 18 }
 const modalCardStyle = { width: 'min(480px, 100%)', background: '#fff', borderRadius: 12, border: '1px solid #e5e7eb', boxShadow: '0 24px 70px rgba(15,23,42,0.22)', padding: 20 }

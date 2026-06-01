@@ -193,7 +193,7 @@ export default function AddTeamPage() {
   const nextLabel = step === 1 ? 'Next: Assign Manager' : step === 2 ? 'Next: Add Members' : step === 3 ? 'Next: Review & Confirm' : 'Create Team'
 
   return (
-    <main style={{ fontFamily: font, padding: '0 20px 32px', minHeight: '100vh', background: '#f8fafc' }}>
+    <main style={{ fontFamily: font, padding: '0 20px 32px', minHeight: '100vh' }}>
       <div style={{ padding: '20px 0 18px' }}>
         <div style={{ fontSize: 12, color: '#6b7280', marginBottom: 14 }}>HR Hub &nbsp;&gt;&nbsp; Teams &nbsp;&gt;&nbsp; Add Team</div>
         <h1 style={{ margin: 0, color: '#111827', fontSize: 24, fontWeight: 800 }}>Add Team</h1>

@@ -1,12 +1,16 @@
 'use client'
 
+import { createPasswordFields, verifyPasswordHash } from '@/lib/security/password'
+
+export { createPasswordFields }
+
 export const usersKey = 'flowsys-auth-users'
 export const sessionKey = 'flowsys-auth-session'
 export const onboardingKey = 'flowsys-onboarding'
 export const accountKey = 'flowsys-account'
 export const logoutIntentKey = 'flowsys-auth-logged-out'
 
-export type AccountRole = 'Admin' | 'Finance' | 'HR' | 'Project Manager' | 'Support' | 'Client'
+export type AccountRole = 'Admin' | 'Finance' | 'HR' | 'Employee' | 'Team Manager' | 'Project Manager' | 'Support' | 'Client'
 export type AuthProvider = 'email' | 'gmail' | 'facebook'
 
 export interface AuthUser {
@@ -17,8 +21,18 @@ export interface AuthUser {
   password?: string
   passwordHash?: string
   passwordSalt?: string
+  passwordAlgorithm?: 'pbkdf2-sha256'
   passwordUpdatedAt?: string
   role?: AccountRole
+}
+
+const demoUser: AuthUser = {
+  id: 100001,
+  name: 'Demo Admin',
+  email: 'wiseflow.demo@gmail.com',
+  provider: 'email',
+  password: 'DemoPass123!',
+  role: 'Admin',
 }
 
 const commonPasswords = new Set([
@@ -60,46 +74,25 @@ export function validatePasswordStrength(password: string, context: { email?: st
   }
 }
 
-export function createPasswordSalt() {
-  const values = new Uint8Array(16)
-  window.crypto.getRandomValues(values)
-  return Array.from(values, value => value.toString(16).padStart(2, '0')).join('')
-}
-
-async function sha256(value: string) {
-  const encoded = new TextEncoder().encode(value)
-  const digest = await window.crypto.subtle.digest('SHA-256', encoded)
-  return Array.from(new Uint8Array(digest), value => value.toString(16).padStart(2, '0')).join('')
-}
-
-export async function createPasswordFields(password: string, salt = createPasswordSalt()) {
-  return {
-    passwordHash: await sha256(`${salt}:${password}`),
-    passwordSalt: salt,
-    passwordUpdatedAt: new Date().toISOString(),
-  }
-}
-
 export async function verifyPassword(user: AuthUser, password: string) {
-  if (user.passwordHash && user.passwordSalt) {
-    return await sha256(`${user.passwordSalt}:${password}`) === user.passwordHash
-  }
-
-  return Boolean(user.password) && user.password === password
+  return verifyPasswordHash(user, password, user.password)
 }
 
 export function loadAuthUsers() {
   if (typeof window === 'undefined') return [] as AuthUser[]
+  if (process.env.NODE_ENV === 'production') return [] as AuthUser[]
 
   try {
     const stored = window.localStorage.getItem(usersKey)
-    return stored ? (JSON.parse(stored) as AuthUser[]) : []
+    const users = stored ? (JSON.parse(stored) as AuthUser[]) : []
+    return users.some(user => user.email.toLowerCase() === demoUser.email) ? users : [demoUser, ...users]
   } catch {
-    return [] as AuthUser[]
+    return [demoUser]
   }
 }
 
 export function saveAuthUsers(users: AuthUser[]) {
+  if (process.env.NODE_ENV === 'production') return
   window.localStorage.setItem(usersKey, JSON.stringify(users))
 }
 

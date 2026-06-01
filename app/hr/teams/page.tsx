@@ -302,10 +302,9 @@ export default function HrTeamsPage() {
   }
 
   return (
-    <main style={{ fontFamily: font, padding: '0 20px 32px', minHeight: '100vh', background: '#f8fafc' }}>
+    <main style={{ fontFamily: font, padding: '0 20px 32px', minHeight: '100vh' }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 14, padding: '20px 0 18px', flexWrap: 'wrap' }}>
         <div>
-          <div style={{ fontSize: 12, color: '#6b7280', marginBottom: 12 }}>HR Hub &nbsp;&gt;&nbsp; Teams</div>
           <h1 style={{ margin: 0, color: '#0f172a', fontSize: 28, fontWeight: 900 }}>Teams</h1>
           <p style={{ margin: '6px 0 0', color: '#475569', fontSize: 14 }}>Manage departments, teams, managers, members, and reporting lines across your organization.</p>
         </div>

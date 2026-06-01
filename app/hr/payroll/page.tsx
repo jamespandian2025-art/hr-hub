@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useMemo, useState } from 'react'
-import type { ComponentType, ReactNode } from 'react'
+import type { ComponentType, MouseEvent, ReactNode } from 'react'
 import {
   AlertTriangle, ArrowLeft, CalendarDays, CheckCircle2, ChevronRight, Download, Eye,
   FileText, Pencil, Plus, Search, Users, Wallet, X,
@@ -9,6 +9,24 @@ import {
 import { loadLoanRequests, LoanRequest, loanScheduledDeduction, saveLoanRequests } from '../loan-requests/loanData'
 import { allowanceRequestKey, AllowanceRequest, appendAuditLog, appendFinanceNotification, employeeExportName, loadStored as loadEnterpriseStored, numericExport, saveStored as saveEnterpriseStored } from '../enterpriseData'
 import { resolvePayrollLoanDeduction } from './loanDeductionRules'
+import {
+  attendanceDeductionTotal,
+  buildPayrollAttendanceSummary,
+  formatAttendanceCount,
+  paidAttendanceDays,
+  type PayrollAttendanceRecord,
+  type PayrollAttendanceSummary,
+} from './attendanceRules'
+import {
+  clampDay,
+  clampDelay,
+  defaultPayrollSchedule,
+  getPayrollPeriod,
+  payrollRunDateInput,
+  payrollScheduleKey,
+  type PayrollFrequency,
+  type PayrollScheduleSettings,
+} from './payrollSchedule'
 import {
   buildPhilippinePayrollBreakdown2026,
   deductionBreakdownTotal as deductionBreakdownTotalRule,
@@ -68,6 +86,7 @@ type PayrollRecord = {
   deductionBreakdown?: DeductionBreakdown
   allowanceLines?: PayrollAllowanceLine[]
   loanDeductions?: LoanDeductionLine[]
+  attendanceSummary?: PayrollAttendanceSummary
   net: number
   status: PayrollStatus
   source?: 'payroll-run'
@@ -83,6 +102,8 @@ type PayrollRow = PayrollRecord & {
   jobTitle: string
   photo?: string
   basicSalary: number
+  scheduledBasicSalary: number
+  attendanceDeduction: number
   allowances: number
 }
 
@@ -120,16 +141,6 @@ type PayrollReport = {
   employees: number
 }
 
-type PayrollFrequency = 'monthly' | 'semi-monthly' | 'bi-weekly' | 'weekly'
-
-type PayrollScheduleSettings = {
-  frequency: PayrollFrequency
-  firstCutoffDay: number
-  secondCutoffDay: number
-  payDelayDays: number
-  scheduleStartDate: string
-}
-
 type PayrollView = 'cycles' | 'payslips' | 'components' | 'deductions' | 'thirteenth' | 'reports'
 type DetailView =
   | null
@@ -141,15 +152,14 @@ type DetailView =
 
 const font = "var(--font-body)"
 const employeeKey = 'flowsys-hr-employees'
+const attendanceKey = 'flowsys-hr-attendance'
 const payrollKey = 'flowsys-hr-payroll-records'
-const payrollScheduleKey = 'flowsys-hr-payroll-schedule'
 const payrollReportsKey = 'flowsys-hr-payroll-reports'
-const defaultSchedule: PayrollScheduleSettings = {
-  frequency: 'monthly',
-  firstCutoffDay: 15,
-  secondCutoffDay: 31,
-  payDelayDays: 5,
-  scheduleStartDate: '',
+const accountKey = 'flowsys-account'
+const sessionKey = 'flowsys-auth-session'
+
+type StoredAccount = {
+  role?: string
 }
 
 function loadStored<T>(key: string, fallback: T): T {
@@ -164,6 +174,27 @@ function loadStored<T>(key: string, fallback: T): T {
 
 function saveStored<T>(key: string, value: T) {
   if (typeof window !== 'undefined') window.localStorage.setItem(key, JSON.stringify(value))
+}
+
+function readStoredAccount(value: string | null): StoredAccount {
+  if (!value) return {}
+  try {
+    const parsed = JSON.parse(value)
+    return parsed && typeof parsed === 'object' ? parsed as StoredAccount : {}
+  } catch {
+    return {}
+  }
+}
+
+function currentAccountRole() {
+  if (typeof window === 'undefined') return ''
+  const storedSession = readStoredAccount(window.localStorage.getItem(sessionKey))
+  const storedAccount = readStoredAccount(window.localStorage.getItem(accountKey))
+  return String(({ ...storedSession, ...storedAccount }).role || '')
+}
+
+function canReleasePayroll(role: string) {
+  return /\b(admin|owner|superuser|finance|accounting|payroll|treasury)\b/i.test(role)
 }
 
 function fullName(employee?: Employee) {
@@ -185,79 +216,6 @@ function initials(name?: string) {
 
 function money(value: number) {
   return `PHP ${Number(value || 0).toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
-}
-
-function currentPeriod(date = new Date()) {
-  return date.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })
-}
-
-function clampDay(value: number) {
-  return Math.min(31, Math.max(1, Number.isFinite(value) ? value : 1))
-}
-
-function clampDelay(value: number) {
-  return Math.min(31, Math.max(0, Number.isFinite(value) ? value : 0))
-}
-
-function getPayrollPeriod(settings: PayrollScheduleSettings, date = new Date()) {
-  const year = date.getFullYear()
-  const month = date.getMonth()
-  const day = date.getDate()
-  const monthName = date.toLocaleDateString('en-US', { month: 'long' })
-  const monthShort = date.toLocaleDateString('en-US', { month: 'short' })
-  const monthEnd = new Date(year, month + 1, 0).getDate()
-  const firstCutoff = Math.min(clampDay(settings.firstCutoffDay), monthEnd)
-  const secondCutoff = Math.min(Math.max(clampDay(settings.secondCutoffDay), firstCutoff + 1), monthEnd)
-
-  if (settings.frequency === 'semi-monthly') {
-    const isFirstHalf = day <= firstCutoff
-    const start = isFirstHalf ? 1 : firstCutoff + 1
-    const end = isFirstHalf ? firstCutoff : secondCutoff
-    return {
-      label: `${monthName} ${start}-${end}, ${year}`,
-      range: `${monthShort} ${start} - ${monthShort} ${end}, ${year}`,
-      payDate: new Date(year, month, end + clampDelay(settings.payDelayDays)),
-    }
-  }
-
-  if (settings.frequency === 'weekly') {
-    const weekStart = new Date(date)
-    weekStart.setDate(day - weekStart.getDay())
-    const weekEnd = new Date(weekStart)
-    weekEnd.setDate(weekStart.getDate() + 6)
-    const payDate = new Date(weekEnd)
-    payDate.setDate(weekEnd.getDate() + clampDelay(settings.payDelayDays))
-    return {
-      label: `Week of ${formatDate(weekStart.toISOString())}`,
-      range: `${formatDate(weekStart.toISOString())} - ${formatDate(weekEnd.toISOString())}`,
-      payDate,
-    }
-  }
-
-  if (settings.frequency === 'bi-weekly') {
-    const anchor = settings.scheduleStartDate ? new Date(settings.scheduleStartDate) : new Date(year, 0, 1)
-    const days = Math.max(0, Math.floor((date.getTime() - anchor.getTime()) / 86400000))
-    const start = new Date(anchor)
-    start.setDate(anchor.getDate() + Math.floor(days / 14) * 14)
-    const end = new Date(start)
-    end.setDate(start.getDate() + 13)
-    const payDate = new Date(end)
-    payDate.setDate(end.getDate() + clampDelay(settings.payDelayDays))
-    return {
-      label: `${formatDate(start.toISOString())} - ${formatDate(end.toISOString())}`,
-      range: `${formatDate(start.toISOString())} - ${formatDate(end.toISOString())}`,
-      payDate,
-    }
-  }
-
-  const monthEndDate = new Date(year, month + 1, 0)
-  const payDate = new Date(monthEndDate)
-  payDate.setDate(monthEndDate.getDate() + clampDelay(settings.payDelayDays))
-  return {
-    label: currentPeriod(date),
-    range: `${monthShort} 1 - ${monthShort} ${monthEnd}, ${year}`,
-    payDate,
-  }
 }
 
 function periodRange(period: string) {
@@ -323,25 +281,40 @@ function buildDeductionBreakdown(total: number, existing?: Partial<DeductionBrea
   return { sss, philHealth, pagIbig, tax, loanOrCashAdvance: 0 }
 }
 
-function recalculatePayrollTaxes(employees: Employee[], records: PayrollRecord[], frequency: PayrollFrequency) {
+function recalculatePayrollTaxes(employees: Employee[], records: PayrollRecord[], frequency: PayrollFrequency, attendanceRecords: PayrollAttendanceRecord[] = []) {
   const byId = new Map(employees.filter(isRealEmployee).map(employee => [employee.id, employee]))
   return records.map(record => {
     const employee = byId.get(record.employeeId)
     if (!employee || record.source !== 'payroll-run') return record
+    const attendanceSummary = record.attendanceSummary
+      ? buildPayrollAttendanceSummary({
+          attendanceRecords,
+          employeeIds: [employee.id, employee.employeeId],
+          periodStart: record.attendanceSummary.periodStart,
+          periodEnd: record.attendanceSummary.periodEnd,
+          basicSalary: Number(employee.basicSalary || 0),
+        })
+      : undefined
+    const payrollAllowances = (record.allowanceLines || []).reduce((sum, line) => sum + Number(line.amount || 0), 0)
+    const gross = attendanceSummary
+      ? roundPeso(Number(attendanceSummary.earnedBasicPay || 0) + Number(employee.allowances || 0) + payrollAllowances)
+      : Number(record.gross || 0)
     const loanOrCashAdvance = roundPeso(
       (record.loanDeductions || []).reduce((sum, line) => sum + Number(line.amount || 0), 0) ||
       Number(record.deductionBreakdown?.loanOrCashAdvance || 0),
     )
-    const periodBasic = Number(employee.basicSalary || 0)
-    const periodNonTaxableAllowances = Math.max(0, Number(record.gross || 0) - periodBasic)
+    const periodBasic = Number(attendanceSummary?.earnedBasicPay ?? employee.basicSalary ?? 0)
+    const periodNonTaxableAllowances = Math.max(0, gross - periodBasic)
     const baseBreakdown = buildEmployeeDeductionBreakdown(periodBasic, periodBasic, periodNonTaxableAllowances, frequency)
     const baseTotal = deductionBreakdownTotal(baseBreakdown)
-    const deductions = Math.min(roundPeso(baseTotal + loanOrCashAdvance), roundPeso(record.gross))
+    const deductions = Math.min(roundPeso(baseTotal + loanOrCashAdvance), roundPeso(gross))
     return {
       ...record,
+      gross,
       deductions,
       deductionBreakdown: { ...baseBreakdown, loanOrCashAdvance },
-      net: roundPeso(Number(record.gross || 0) - deductions),
+      attendanceSummary,
+      net: roundPeso(gross - deductions),
     }
   })
 }
@@ -352,6 +325,8 @@ function buildRows(employees: Employee[], records: PayrollRecord[]): PayrollRow[
     const employee = byId.get(record.employeeId)
     if (!isRealEmployee(employee)) return []
     const payrollAllowances = (record.allowanceLines || []).reduce((sum, line) => sum + Number(line.amount || 0), 0)
+    const scheduledBasicSalary = Number(employee?.basicSalary || 0)
+    const paidBasicSalary = Number(record.attendanceSummary?.earnedBasicPay ?? scheduledBasicSalary)
     return {
       ...record,
       employee,
@@ -360,7 +335,9 @@ function buildRows(employees: Employee[], records: PayrollRecord[]): PayrollRow[
       department: employee?.department || '-',
       jobTitle: employee?.jobTitle || '-',
       photo: employee?.photo,
-      basicSalary: Number(employee?.basicSalary || 0),
+      basicSalary: paidBasicSalary,
+      scheduledBasicSalary,
+      attendanceDeduction: attendanceDeductionTotal(record.attendanceSummary),
       allowances: Number(employee?.allowances || 0) + payrollAllowances,
     } satisfies PayrollRow
   })
@@ -469,6 +446,8 @@ function buildDeductionItemsFromEmployees(employees: Employee[], frequency: Payr
         jobTitle: employee.jobTitle || '-',
         photo: employee.photo,
         basicSalary: Number(employee.basicSalary || 0),
+        scheduledBasicSalary: Number(employee.basicSalary || 0),
+        attendanceDeduction: 0,
         allowances: Number(employee.allowances || 0),
       }
     })
@@ -493,7 +472,7 @@ function exportPayslips(rows: PayrollRow[], filename = 'employee-payslips.csv') 
   const loanTypes = Array.from(new Set(rows.flatMap(row => (row.loanDeductions || []).map(line => line.type))))
   const allowanceTypes = Array.from(new Set(rows.flatMap(row => (row.allowanceLines || []).map(line => line.type.toLowerCase().includes('allowance') ? line.type : `${line.type} Allowance`))))
   downloadCsv(filename, [
-    ['Employee', 'Employee ID', 'Bank Account Number', 'Period', 'Pay Period', 'Basic Salary', 'Allowances', ...allowanceTypes, 'Gross', 'SSS', 'PhilHealth', 'Pag-IBIG', 'Tax', ...loanTypes, 'Loan / Cash Advance Total', 'Deductions', 'Net', 'Status', 'Pay Date'],
+    ['Employee', 'Employee ID', 'Bank Account Number', 'Period', 'Pay Period', 'Scheduled Basic', 'Worked/Paid Days', 'Absent Days', 'Payable Days', 'Attendance Deduction', 'Basic Salary Earned', 'Allowances', ...allowanceTypes, 'Gross', 'SSS', 'PhilHealth', 'Pag-IBIG', ...loanTypes, 'Loan / Cash Advance Total', 'Tax', 'Deductions', 'Net', 'Status', 'Pay Date'],
     ...rows.map(row => {
       const breakdown = buildDeductionBreakdown(row.deductions, row.deductionBreakdown)
       const loanAmountByType = new Map((row.loanDeductions || []).map(line => [line.type, line.amount]))
@@ -508,6 +487,11 @@ function exportPayslips(rows: PayrollRow[], filename = 'employee-payslips.csv') 
       String(row.employee?.accountNumber || ''),
       row.period,
       periodRange(row.period),
+      numericExport(row.scheduledBasicSalary),
+      row.attendanceSummary ? formatAttendanceCount(paidAttendanceDays(row.attendanceSummary)) : '',
+      row.attendanceSummary ? formatAttendanceCount(row.attendanceSummary.absentDays) : '',
+      row.attendanceSummary ? formatAttendanceCount(row.attendanceSummary.payableDays) : '',
+      numericExport(row.attendanceDeduction),
       numericExport(row.basicSalary),
       numericExport(row.allowances),
       ...allowanceTypes.map(type => numericExport(allowanceAmountByType.get(type) || 0)),
@@ -515,9 +499,9 @@ function exportPayslips(rows: PayrollRow[], filename = 'employee-payslips.csv') 
       numericExport(breakdown.sss),
       numericExport(breakdown.philHealth),
       numericExport(breakdown.pagIbig),
-      numericExport(breakdown.tax),
       ...loanTypes.map(type => numericExport(loanAmountByType.get(type) || 0)),
       numericExport(Number(breakdown.loanOrCashAdvance || 0)),
+      numericExport(breakdown.tax),
       numericExport(row.deductions),
       numericExport(row.net),
       row.status,
@@ -529,31 +513,37 @@ function exportPayslips(rows: PayrollRow[], filename = 'employee-payslips.csv') 
 
 export default function HrPayrollPage() {
   const [employees, setEmployees] = useState<Employee[]>([])
+  const [attendanceRecords, setAttendanceRecords] = useState<PayrollAttendanceRecord[]>([])
   const [records, setRecords] = useState<PayrollRecord[]>([])
   const [loanRequests, setLoanRequests] = useState<LoanRequest[]>([])
   const [allowanceRequests, setAllowanceRequests] = useState<AllowanceRequest[]>([])
   const [reports, setReports] = useState<PayrollReport[]>([])
-  const [schedule, setSchedule] = useState<PayrollScheduleSettings>(defaultSchedule)
+  const [schedule, setSchedule] = useState<PayrollScheduleSettings>(defaultPayrollSchedule)
   const [showSchedule, setShowSchedule] = useState(false)
+  const [showRunChecklist, setShowRunChecklist] = useState(false)
   const [view, setView] = useState<PayrollView>('cycles')
   const [query, setQuery] = useState('')
   const [detail, setDetail] = useState<DetailView>(null)
   const [notice, setNotice] = useState('')
+  const [accountRole, setAccountRole] = useState('')
 
   useEffect(() => {
     const load = () => {
       const storedEmployees = loadStored<Employee[]>(employeeKey, [])
+      const storedAttendance = loadStored<PayrollAttendanceRecord[]>(attendanceKey, [])
       const storedRecords = loadStored<PayrollRecord[]>(payrollKey, [])
-      const storedSchedule = { ...defaultSchedule, ...loadStored<Partial<PayrollScheduleSettings>>(payrollScheduleKey, {}) }
+      const storedSchedule = { ...defaultPayrollSchedule, ...loadStored<Partial<PayrollScheduleSettings>>(payrollScheduleKey, {}) }
       const cleanedRecords = cleanPayrollRecords(storedEmployees, storedRecords)
-      const taxReadyRecords = recalculatePayrollTaxes(storedEmployees, cleanedRecords, storedSchedule.frequency)
+      const taxReadyRecords = recalculatePayrollTaxes(storedEmployees, cleanedRecords, storedSchedule.frequency, storedAttendance)
       setEmployees(storedEmployees)
+      setAttendanceRecords(storedAttendance)
       setRecords(taxReadyRecords)
       setLoanRequests(loadLoanRequests())
       setAllowanceRequests(loadEnterpriseStored<AllowanceRequest[]>(allowanceRequestKey, []))
       setReports(loadStored<PayrollReport[]>(payrollReportsKey, []))
       if (JSON.stringify(taxReadyRecords) !== JSON.stringify(storedRecords)) saveStored(payrollKey, taxReadyRecords)
       setSchedule(storedSchedule)
+      setAccountRole(currentAccountRole())
     }
     load()
     window.addEventListener('storage', load)
@@ -574,6 +564,7 @@ export default function HrPayrollPage() {
   const periodNow = currentRun.label
   const latestPeriod = rows[0]?.period || periodNow
   const latestRows = rows.filter(row => row.period === latestPeriod)
+  const canApproveOrReleasePayroll = canReleasePayroll(accountRole)
   const salaryReadyEmployees = useMemo(
     () => activeEmployees.filter(employee => Number(employee.basicSalary || 0) + Number(employee.allowances || 0) + allowanceLinesForEmployee(employee, allowanceRequests).reduce((sum, line) => sum + Number(line.amount || 0), 0) > 0),
     [activeEmployees, allowanceRequests],
@@ -621,13 +612,17 @@ export default function HrPayrollPage() {
   }, [rows])
 
   const components = useMemo<PayrollItem[]>(() => {
-    const basic = activeEmployees.reduce((sum, employee) => sum + Number(employee.basicSalary || 0), 0)
-    const profileAllowances = activeEmployees.reduce((sum, employee) => sum + Number(employee.allowances || 0), 0)
+    const basic = latestRows.length
+      ? latestRows.reduce((sum, row) => sum + Number(row.basicSalary || 0), 0)
+      : activeEmployees.reduce((sum, employee) => sum + Number(employee.basicSalary || 0), 0)
+    const profileAllowances = latestRows.length
+      ? latestRows.reduce((sum, row) => sum + Number(row.allowances || 0), 0)
+      : activeEmployees.reduce((sum, employee) => sum + Number(employee.allowances || 0), 0)
     const approvedAllowances = pendingPayrollAllowanceRequests.reduce((sum, request) => sum + Number(request.amount || 0), 0)
     const includedAllowances = latestRows.reduce((sum, row) => sum + allowanceLineTotal(row), 0)
     return [
-      { id: 'basicSalary', name: 'Basic Salary', type: 'Earnings', amount: basic, source: 'Employee basicSalary field', employeeCount: activeEmployees.filter(employee => Number(employee.basicSalary || 0) > 0).length, fieldName: 'basicSalary' },
-      { id: 'allowances', name: 'Allowances', type: 'Earnings', amount: profileAllowances + approvedAllowances + includedAllowances, source: 'Employee allowance field plus Finance-approved fuel and meal requests', employeeCount: activeEmployees.filter(employee => Number(employee.allowances || 0) > 0 || allowanceLinesForEmployee(employee, allowanceRequests).length > 0).length, fieldName: 'allowances + allowanceLines' },
+      { id: 'basicSalary', name: latestRows.length ? 'Basic Salary Earned' : 'Basic Salary', type: 'Earnings', amount: basic, source: latestRows.length ? 'Attendance-adjusted payroll records' : 'Employee basicSalary field', employeeCount: latestRows.length ? latestRows.filter(row => Number(row.basicSalary || 0) > 0).length : activeEmployees.filter(employee => Number(employee.basicSalary || 0) > 0).length, fieldName: 'basicSalary' },
+      { id: 'allowances', name: 'Allowances', type: 'Earnings', amount: latestRows.length ? profileAllowances : profileAllowances + approvedAllowances + includedAllowances, source: latestRows.length ? 'Payroll allowance lines and employee allowance field' : 'Employee allowance field plus Finance-approved fuel and meal requests', employeeCount: latestRows.length ? latestRows.filter(row => Number(row.allowances || 0) > 0).length : activeEmployees.filter(employee => Number(employee.allowances || 0) > 0 || allowanceLinesForEmployee(employee, allowanceRequests).length > 0).length, fieldName: 'allowances + allowanceLines' },
     ].filter(item => item.amount > 0)
   }, [activeEmployees, allowanceRequests, latestRows, pendingPayrollAllowanceRequests])
 
@@ -675,7 +670,14 @@ export default function HrPayrollPage() {
       .map(employee => {
         const allowanceLines = allowanceLinesForEmployee(employee, allowanceRequests)
         const approvedAllowances = allowanceLines.reduce((sum, line) => sum + Number(line.amount || 0), 0)
-        const periodBasic = Number(employee.basicSalary || 0)
+        const attendanceSummary = buildPayrollAttendanceSummary({
+          attendanceRecords,
+          employeeIds: [employee.id, employee.employeeId],
+          periodStart: currentRun.startDate,
+          periodEnd: currentRun.endDate,
+          basicSalary: Number(employee.basicSalary || 0),
+        })
+        const periodBasic = attendanceSummary.earnedBasicPay
         const periodAllowances = Number(employee.allowances || 0)
         const gross = periodBasic + periodAllowances
         const grossWithAllowances = gross + approvedAllowances
@@ -726,6 +728,7 @@ export default function HrPayrollPage() {
           deductionBreakdown: { ...baseBreakdown, loanOrCashAdvance: loanDeduction },
           allowanceLines,
           loanDeductions,
+          attendanceSummary,
           net: Math.max(0, grossWithAllowances - deductionValue),
           status: 'Pending' as PayrollStatus,
           source: 'payroll-run' as const,
@@ -767,7 +770,7 @@ export default function HrPayrollPage() {
       setAllowanceRequests(nextAllowances)
       saveEnterpriseStored(allowanceRequestKey, nextAllowances)
     }
-    setNotice(`Created ${nextRecords.length} payslip${nextRecords.length === 1 ? '' : 's'} for ${periodNow}. Review and approve before releasing pay.`)
+    setNotice(`Created ${nextRecords.length} payslip${nextRecords.length === 1 ? '' : 's'} for ${periodNow}. Finance can review, approve, and release payment from Payroll Finance.`)
     appendAuditLog({ action: 'payroll.edit', targetType: 'Payroll Run', targetId: periodNow, summary: `Created ${nextRecords.length} payslips with finance-controlled deductions.` })
     financeRiskAlerts.forEach(alert => {
       appendFinanceNotification({
@@ -883,29 +886,31 @@ export default function HrPayrollPage() {
 
   return (
     <div className="hr-module-page" style={payrollPageStyle}>
-      <div style={pageHeaderStyle}>
+      <div style={payrollHeaderStyle}>
         <div>
-          <span style={eyebrowStyle}>HR PAYROLL</span>
-          <h1 style={pageTitleStyle}>Payroll</h1>
+          <h1 style={payrollTitleStyle}>Payroll</h1>
           <p style={pageSubtitleStyle}>Manage payroll cycles, employee payslips, salary fields, deductions, and reports.</p>
         </div>
-        <div style={toolbarStyle}>
+        <div style={payrollHeaderActionsStyle}>
           <SearchBox value={query} onChange={setQuery} placeholder="Search employees, payroll, payslips..." />
           <button onClick={() => setShowSchedule(true)} style={secondaryButtonStyle}><CalendarDays size={15} /> Payroll Settings</button>
-          <button onClick={runPayroll} style={primaryButtonStyle}><Plus size={15} /> Run Payroll</button>
+          <button onClick={() => setShowRunChecklist(true)} style={primaryButtonStyle}><Plus size={15} /> Run Payroll</button>
         </div>
       </div>
 
       <PayrollScheduleModal settings={schedule} currentRun={currentRun} open={showSchedule} onClose={() => setShowSchedule(false)} onChange={updateSchedule} />
 
-      <PayrollReadinessPanel
-        currentRun={currentRun}
-        activeEmployees={activeEmployees.length}
-        salaryReady={salaryReadyEmployees.length}
-        missingSalary={missingSalaryEmployees.length}
-        currentPayslips={currentPeriodRows.length}
-        employeesNeedingPayroll={employeesNeedingPayroll.length}
-      />
+      {showRunChecklist && (
+        <PayrollReadinessPanel
+          currentRun={currentRun}
+          activeEmployees={activeEmployees.length}
+          salaryReady={salaryReadyEmployees.length}
+          missingSalary={missingSalaryEmployees.length}
+          currentPayslips={currentPeriodRows.length}
+          employeesNeedingPayroll={employeesNeedingPayroll.length}
+          onRunPayroll={runPayroll}
+        />
+      )}
 
       {notice && (
         <div style={noticeStyle}>
@@ -917,7 +922,7 @@ export default function HrPayrollPage() {
       <div style={metricGridStyle}>
         <Metric icon={Wallet} label="Total Payroll" value={money(totals.net)} sub={`${latestPeriod} · ${latestRows.length ? `${latestRows.length} payslip${latestRows.length === 1 ? '' : 's'}` : 'No payroll records'}`} color="#16a34a" bg="#dcfce7" />
         <Metric icon={Users} label="Employees Paid" value={totals.paid} sub="Paid records" color="#2563eb" bg="#dbeafe" />
-        <Metric icon={CalendarDays} label="Current Payroll" value={periodNow} sub={`Pay date: ${formatDate(currentRun.payDate.toISOString())}`} color="#d97706" bg="#fef3c7" />
+        <Metric icon={CalendarDays} label="Current Payroll" value={periodNow} sub={`Run: ${formatDate(`${currentRun.runDate}T00:00:00`)} · Pay: ${formatDate(currentRun.payDate.toISOString())}`} color="#d97706" bg="#fef3c7" />
         <Metric icon={FileText} label="Needs Review / Release" value={totals.needsAction} sub={`${totals.pending} pending, ${totals.approved} approved`} color="#7c3aed" bg="#ede9fe" />
       </div>
 
@@ -937,7 +942,7 @@ export default function HrPayrollPage() {
 
         <div style={tabContentStyle}>
           {view === 'cycles' && <CyclesTable cycles={filteredCycles} onOpen={id => setDetail({ type: 'cycle', id })} onGenerateReport={generateReport} />}
-          {view === 'payslips' && <PayslipsTable rows={filteredRows} onOpen={id => setDetail({ type: 'payslip', id })} onApprove={approvePayslip} onPaid={markPaid} />}
+          {view === 'payslips' && <PayslipsTable rows={filteredRows} onOpen={id => setDetail({ type: 'payslip', id })} onApprove={canApproveOrReleasePayroll ? approvePayslip : undefined} onPaid={canApproveOrReleasePayroll ? markPaid : undefined} />}
           {view === 'components' && <ItemsTable title="Salary Components" subtitle="Generated from employee salary fields." items={filteredComponents} empty="No salary component data yet. Add employee salary or allowance amounts first." onOpen={id => setDetail({ type: 'component', id })} />}
           {view === 'deductions' && <ItemsTable title="Deductions" subtitle="Generated from employee deduction fields." items={filteredDeductions} empty="No deduction data yet. Add deduction amounts on employee profiles first." onOpen={id => setDetail({ type: 'deduction', id })} />}
           {view === 'thirteenth' && <ThirteenthMonthTable employees={salaryReadyEmployees} />}
@@ -1023,7 +1028,9 @@ function PayslipDetail({ row, history, onExport }: { row: PayrollRow; history: P
           <div style={{ ...cardStyle, padding: 0 }}>
             <div style={sectionHeaderStyle}>Earnings</div>
             <div style={{ padding: 18 }}>
-              <AmountLine label="Basic Salary" value={row.basicSalary} />
+              {row.attendanceSummary && <AmountLine label="Scheduled Basic Salary" value={row.scheduledBasicSalary} />}
+              {row.attendanceDeduction > 0 && <AmountLine label="Attendance Deduction" value={row.attendanceDeduction} negative />}
+              <AmountLine label={row.attendanceSummary ? 'Basic Salary Earned' : 'Basic Salary'} value={row.basicSalary} />
               <AmountLine label="Regular Allowances" value={Math.max(0, row.allowances - allowanceLineTotal(row))} />
               {row.allowanceLines?.map(line => (
                 <AmountLine key={line.allowanceId} label={line.type.toLowerCase().includes('allowance') ? line.type : `${line.type} Allowance`} value={line.amount} />
@@ -1034,10 +1041,10 @@ function PayslipDetail({ row, history, onExport }: { row: PayrollRow; history: P
               <AmountLine label="SSS" value={deductionBreakdown.sss} negative />
               <AmountLine label="PhilHealth" value={deductionBreakdown.philHealth} negative />
               <AmountLine label="Pag-IBIG" value={deductionBreakdown.pagIbig} negative />
-              <AmountLine label="Tax" value={deductionBreakdown.tax} negative />
               {row.loanDeductions?.length
                 ? row.loanDeductions.map(line => <AmountLine key={line.loanId} label={line.type} value={line.amount} negative />)
                 : <AmountLine label="Loan / Cash Advance" value={Number(deductionBreakdown.loanOrCashAdvance || 0)} negative />}
+              <AmountLine label="Tax" value={deductionBreakdown.tax} negative />
               <AmountLine label="Total Deductions" value={row.deductions} strong negative />
               <div style={netPayBannerStyle}>
                 <span>NET PAY</span>
@@ -1052,13 +1059,17 @@ function PayslipDetail({ row, history, onExport }: { row: PayrollRow; history: P
               <Fact label="Employee ID" value={row.employeeCode} />
               <Fact label="Department" value={row.department} />
               <Fact label="Designation" value={row.jobTitle} />
+              {row.attendanceSummary && <Fact label="Worked/Paid Days" value={formatAttendanceCount(paidAttendanceDays(row.attendanceSummary))} />}
+              {row.attendanceSummary && <Fact label="Absent Days" value={formatAttendanceCount(row.attendanceSummary.absentDays)} />}
+              {row.attendanceSummary && <Fact label="Payable Days" value={`${formatAttendanceCount(paidAttendanceDays(row.attendanceSummary))} / ${formatAttendanceCount(row.attendanceSummary.payableDays)}`} />}
+              {row.attendanceSummary && row.attendanceSummary.unrecordedDays > 0 && <Fact label="Unrecorded Days" value={formatAttendanceCount(row.attendanceSummary.unrecordedDays)} />}
               <Fact label="Employment Type" value={row.employee?.employeeType || '-'} />
               <Fact label="Bank Name" value={row.employee?.bankName || '-'} />
               <Fact label="Account Number" value={row.employee?.accountNumber ? mask(row.employee.accountNumber) : '-'} />
             </div>
             <div style={infoNoteStyle}>
               <FileText size={17} />
-              <span>This payslip is generated from saved employee salary and payroll records.</span>
+              <span>This payslip is generated from saved employee salary, attendance, and payroll records.</span>
             </div>
           </div>
         </div>
@@ -1090,10 +1101,17 @@ function PayslipDetail({ row, history, onExport }: { row: PayrollRow; history: P
 
 function CycleDetail({ cycle, rows, onGenerateReport }: { cycle: CycleSummary; rows: PayrollRow[]; onGenerateReport: (cycle: CycleSummary) => void }) {
   const [activeTab, setActiveTab] = useState<'overview' | 'payslips' | 'components' | 'deductions' | 'reports'>('overview')
+  const [selectedPayslipId, setSelectedPayslipId] = useState<string | null>(null)
+  const selectedPayslip = rows.find(row => row.id === selectedPayslipId)
   const firstCreated = rows.map(row => row.createdAt).sort()[0]
   const lastPaid = rows.map(row => row.paidAt).filter(Boolean).sort().at(-1)
+  const scheduledBasicSalary = rows.reduce((sum, row) => sum + row.scheduledBasicSalary, 0)
   const basicSalary = rows.reduce((sum, row) => sum + row.basicSalary, 0)
   const allowances = rows.reduce((sum, row) => sum + row.allowances, 0)
+  const attendanceDeduction = rows.reduce((sum, row) => sum + row.attendanceDeduction, 0)
+  const paidDays = rows.reduce((sum, row) => sum + paidAttendanceDays(row.attendanceSummary), 0)
+  const absentDays = rows.reduce((sum, row) => sum + Number(row.attendanceSummary?.absentDays || 0), 0)
+  const unrecordedDays = rows.reduce((sum, row) => sum + Number(row.attendanceSummary?.unrecordedDays || 0), 0)
   const otherEarnings = Math.max(0, cycle.gross - basicSalary - allowances)
   const paidCount = rows.filter(row => row.status === 'Paid').length
   const pendingCount = rows.filter(row => row.status === 'Pending').length
@@ -1105,12 +1123,13 @@ function CycleDetail({ cycle, rows, onGenerateReport }: { cycle: CycleSummary; r
     { label: 'Released / Paid', value: paidCount === rows.length && rows.length ? formatDate(lastPaid) : `${paidCount}/${rows.length} paid`, done: paidCount === rows.length && rows.length > 0 },
   ]
   const cycleComponents = [
-    { id: 'basicSalary', name: 'Basic Salary', type: 'Earnings', amount: basicSalary, source: 'Employee basicSalary field', employeeCount: rows.filter(row => row.basicSalary > 0).length, fieldName: 'basicSalary' },
+    { id: 'basicSalary', name: 'Basic Salary Earned', type: 'Earnings', amount: basicSalary, source: 'Attendance-adjusted payroll records', employeeCount: rows.filter(row => row.basicSalary > 0).length, fieldName: 'basicSalary' },
     { id: 'allowances', name: 'Allowances', type: 'Earnings', amount: allowances, source: 'Employee allowances field', employeeCount: rows.filter(row => row.allowances > 0).length, fieldName: 'allowances' },
   ].filter(item => item.amount > 0)
   const cycleDeductions = buildDeductionItemsFromRows(rows)
   const cycleReports: PayrollReport[] = []
   const exportCyclePayslips = () => exportPayslips(rows, `${cycle.period.toLowerCase().replace(/[^a-z0-9]+/g, '-')}-payslips.csv`)
+  const exportSelectedPayslip = (row: PayrollRow) => exportPayslips([row], `${row.employeeCode.toLowerCase().replace(/[^a-z0-9]+/g, '-')}-${row.period.toLowerCase().replace(/[^a-z0-9]+/g, '-')}-payslip.csv`)
   const exportCycleSummary = () => downloadCsv(`${cycle.period.toLowerCase().replace(/[^a-z0-9]+/g, '-')}-summary.csv`, [
     ['Payroll Cycle', 'Pay Period', 'Employees', 'Gross', 'Deductions', 'Net', 'Status'],
     [cycle.period, periodRange(cycle.period), String(cycle.count), numericExport(cycle.gross), numericExport(cycle.deductions), numericExport(cycle.net), cycle.status],
@@ -1157,7 +1176,9 @@ function CycleDetail({ cycle, rows, onGenerateReport }: { cycle: CycleSummary; r
             <div style={payrollSummaryGridStyle}>
               <div>
                 <SectionTitle title="Earnings" />
-                <AmountLine label="Basic Salary" value={basicSalary} />
+                {attendanceDeduction > 0 && <AmountLine label="Scheduled Basic Salary" value={scheduledBasicSalary} />}
+                {attendanceDeduction > 0 && <AmountLine label="Attendance Deduction" value={attendanceDeduction} negative />}
+                <AmountLine label={attendanceDeduction > 0 ? 'Basic Salary Earned' : 'Basic Salary'} value={basicSalary} />
                 <AmountLine label="Allowances" value={allowances} />
                 {otherEarnings > 0 && <AmountLine label="Other Earnings" value={otherEarnings} />}
                 <AmountLine label="Total Earnings" value={cycle.gross} strong positive />
@@ -1167,8 +1188,8 @@ function CycleDetail({ cycle, rows, onGenerateReport }: { cycle: CycleSummary; r
                 <AmountLine label="SSS" value={cycleDeductions.find(item => item.id === 'sss')?.amount || 0} negative />
                 <AmountLine label="PhilHealth" value={cycleDeductions.find(item => item.id === 'philHealth')?.amount || 0} negative />
                 <AmountLine label="Pag-IBIG" value={cycleDeductions.find(item => item.id === 'pagIbig')?.amount || 0} negative />
-                <AmountLine label="Tax" value={cycleDeductions.find(item => item.id === 'tax')?.amount || 0} negative />
                 {cycleDeductions.filter(item => item.type === 'Loan Deduction').map(item => <AmountLine key={item.id} label={item.name} value={item.amount} negative />)}
+                <AmountLine label="Tax" value={cycleDeductions.find(item => item.id === 'tax')?.amount || 0} negative />
                 <AmountLine label="Total Deductions" value={cycle.deductions} strong negative />
               </div>
             </div>
@@ -1181,6 +1202,7 @@ function CycleDetail({ cycle, rows, onGenerateReport }: { cycle: CycleSummary; r
           <div style={cardStyle}>
             <SectionTitle title="Payroll Notes" />
             <p style={{ margin: 0, color: '#64748b', fontSize: 13 }}>Notes are not stored for this payroll cycle yet.</p>
+            {(paidDays > 0 || absentDays > 0 || unrecordedDays > 0) && <p style={{ margin: '8px 0 0', color: '#64748b', fontSize: 13 }}>Attendance basis: {formatAttendanceCount(paidDays)} worked/paid day{paidDays === 1 ? '' : 's'}, {formatAttendanceCount(absentDays)} absent day{absentDays === 1 ? '' : 's'}, and {formatAttendanceCount(unrecordedDays)} unrecorded unpaid day{unrecordedDays === 1 ? '' : 's'}.</p>}
           </div>
         </div>
 
@@ -1211,10 +1233,18 @@ function CycleDetail({ cycle, rows, onGenerateReport }: { cycle: CycleSummary; r
         </div>
       </div>}
 
-      {activeTab === 'payslips' && <PayslipsTable rows={rows} />}
+      {activeTab === 'payslips' && <PayslipsTable rows={rows} onOpen={setSelectedPayslipId} />}
       {activeTab === 'components' && <ItemsTable title="Salary Components" subtitle="Generated from payslips in this cycle." items={cycleComponents} empty="No salary components in this cycle." />}
       {activeTab === 'deductions' && <ItemsTable title="Deductions" subtitle="Generated from payslips in this cycle." items={cycleDeductions} empty="No deductions in this cycle." />}
       {activeTab === 'reports' && <ReportsTable reports={cycleReports} onExport={exportCycleSummary} onExportReport={() => exportCycleSummary()} />}
+      {selectedPayslip && (
+        <PayslipDetailModal
+          row={selectedPayslip}
+          history={rows.filter(item => item.employeeId === selectedPayslip.employeeId)}
+          onClose={() => setSelectedPayslipId(null)}
+          onExport={() => exportSelectedPayslip(selectedPayslip)}
+        />
+      )}
     </div>
   )
 }
@@ -1301,6 +1331,28 @@ function ItemDetail({ item, kind }: { item: PayrollItem; kind: NonNullable<Detai
       <div style={cardStyle}>
         <SectionTitle title="Audit Trail" />
         <p style={{ margin: 0, color: '#64748b', fontSize: 13 }}>No audit trail saved for this component.</p>
+      </div>
+    </div>
+  )
+}
+
+function PayslipDetailModal({ row, history, onClose, onExport }: { row: PayrollRow; history: PayrollRow[]; onClose: () => void; onExport: () => void }) {
+  return (
+    <div style={modalOverlayStyle} role="dialog" aria-modal="true" aria-label={`${row.employeeName} payslip details`} onClick={onClose}>
+      <div style={payslipModalCardStyle} onClick={event => event.stopPropagation()}>
+        <div style={modalHeaderStyle}>
+          <div>
+            <h2 style={{ margin: 0, color: '#0f172a', fontSize: 20, fontWeight: 900 }}>Payslip Details</h2>
+            <p style={{ margin: '6px 0 0', color: '#64748b', fontSize: 13 }}>{row.employeeName} - {row.period}</p>
+          </div>
+          <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+            <button type="button" onClick={onExport} style={secondaryButtonStyle}><Download size={15} /> Export</button>
+            <button type="button" onClick={onClose} aria-label="Close payslip details" style={iconOnlyButtonStyle}><X size={18} /></button>
+          </div>
+        </div>
+        <div style={{ padding: '0 18px 18px' }}>
+          <PayslipDetail row={row} history={history} onExport={onExport} />
+        </div>
       </div>
     </div>
   )
@@ -1441,7 +1493,7 @@ function PayslipsTable({ rows, onOpen, onApprove, onPaid, showControls = true }:
     const matchesEmployee = employee === 'All' || row.employeeName === employee
     const matchesPeriod = period === 'All' || row.period === period
     const matchesStatus = status === 'All' || row.status === status
-    const matchesSearch = [row.employeeName, row.employeeCode, row.jobTitle, row.department, row.period, row.status, row.net]
+    const matchesSearch = [row.employeeName, row.employeeCode, row.jobTitle, row.department, row.period, row.status, row.net, row.attendanceSummary?.absentDays, paidAttendanceDays(row.attendanceSummary)]
       .some(value => String(value).toLowerCase().includes(localQuery.trim().toLowerCase()))
     return matchesEmployee && matchesPeriod && matchesStatus && matchesSearch
   })
@@ -1457,22 +1509,36 @@ function PayslipsTable({ rows, onOpen, onApprove, onPaid, showControls = true }:
         </TabFilterBar>
       )}
       <table style={tableStyle}>
-        <thead><tr><Th>Employee</Th><Th>Employee ID</Th><Th>Payroll Cycle</Th><Th>Pay Period</Th><Th>Pay Date</Th><Th>Net Pay</Th><Th>Status</Th>{hasActions && <Th>Actions</Th>}</tr></thead>
+        <thead><tr><Th>Employee</Th><Th>Employee ID</Th><Th>Payroll Cycle</Th><Th>Pay Period</Th><Th>Pay Date</Th><Th>Worked/Paid</Th><Th>Absent</Th><Th>Net Pay</Th><Th>Status</Th>{hasActions && <Th>Actions</Th>}</tr></thead>
         <tbody>{visibleRows.map(row => (
-          <tr key={row.id} style={trStyle}>
+          <tr
+            key={row.id}
+            style={onOpen ? clickableTrStyle : trStyle}
+            onClick={onOpen ? () => onOpen(row.id) : undefined}
+            role={onOpen ? 'button' : undefined}
+            tabIndex={onOpen ? 0 : undefined}
+            onKeyDown={onOpen ? event => {
+              if (event.key === 'Enter' || event.key === ' ') {
+                event.preventDefault()
+                onOpen(row.id)
+              }
+            } : undefined}
+          >
             <Td><div style={{ display: 'flex', alignItems: 'center', gap: 10 }}><Avatar row={row} size={34} /><span><strong style={{ display: 'block' }}>{row.employeeName}</strong><small style={{ color: '#64748b' }}>{row.jobTitle}</small></span></div></Td>
             <Td>{row.employeeCode}</Td>
             <Td>{row.period}</Td>
             <Td>{periodRange(row.period)}</Td>
             <Td>{formatDate(row.paidAt || row.createdAt)}</Td>
+            <Td>{row.attendanceSummary ? formatAttendanceCount(paidAttendanceDays(row.attendanceSummary)) : '-'}</Td>
+            <Td>{row.attendanceSummary ? formatAttendanceCount(row.attendanceSummary.absentDays) : '-'}</Td>
             <Td>{money(row.net)}</Td>
             <Td><Badge value={row.status} /></Td>
             {hasActions && (
               <Td>
                 <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                  {onOpen && <IconButton onClick={() => onOpen(row.id)} icon={Eye} />}
-                  {onApprove && (row.status === 'Pending' || row.status === 'Processing') && <button onClick={() => onApprove(row)} style={smallButtonStyle}>Approve</button>}
-                  {onPaid && row.status === 'Approved' && <button onClick={() => onPaid(row)} style={smallButtonStyle}>Release pay</button>}
+                  {onOpen && <IconButton onClick={(event) => { event.stopPropagation(); onOpen(row.id) }} icon={Eye} />}
+                  {onApprove && (row.status === 'Pending' || row.status === 'Processing') && <button onClick={(event) => { event.stopPropagation(); onApprove(row) }} style={smallButtonStyle}>Approve</button>}
+                  {onPaid && row.status === 'Approved' && <button onClick={(event) => { event.stopPropagation(); onPaid(row) }} style={smallButtonStyle}>Release pay</button>}
                 </div>
               </Td>
             )}
@@ -1586,6 +1652,11 @@ function PayrollScheduleModal({ settings, currentRun, open, onClose, onChange }:
           </label>
 
           <label style={fieldStyle}>
+            <span style={labelStyle}>Payroll generation date</span>
+            <input type="date" value={payrollRunDateInput(settings)} onChange={event => onChange({ runDate: event.target.value })} style={selectStyle} />
+          </label>
+
+          <label style={fieldStyle}>
             <span style={labelStyle}>First cutoff day</span>
             <input type="number" min={1} max={31} value={settings.firstCutoffDay} onChange={event => onChange({ firstCutoffDay: clampDay(Number(event.target.value)) })} style={selectStyle} />
           </label>
@@ -1607,6 +1678,7 @@ function PayrollScheduleModal({ settings, currentRun, open, onClose, onChange }:
 
           <div style={schedulePreviewStyle}>
             <strong>Preview</strong>
+            <span>Generation date: {formatDate(`${currentRun.runDate}T00:00:00`)}</span>
             <span>Current payroll run: {currentRun.label}</span>
             <span>Payroll range: {currentRun.range}</span>
             <span>Expected pay date: {formatDate(currentRun.payDate.toISOString())}</span>
@@ -1723,13 +1795,14 @@ function SearchBox({ value, onChange, placeholder, compact }: { value: string; o
   )
 }
 
-function PayrollReadinessPanel({ currentRun, activeEmployees, salaryReady, missingSalary, currentPayslips, employeesNeedingPayroll }: {
+function PayrollReadinessPanel({ currentRun, activeEmployees, salaryReady, missingSalary, currentPayslips, employeesNeedingPayroll, onRunPayroll }: {
   currentRun: ReturnType<typeof getPayrollPeriod>
   activeEmployees: number
   salaryReady: number
   missingSalary: number
   currentPayslips: number
   employeesNeedingPayroll: number
+  onRunPayroll: () => void
 }) {
   const ready = activeEmployees > 0 && salaryReady > 0 && employeesNeedingPayroll > 0
   return (
@@ -1738,8 +1811,11 @@ function PayrollReadinessPanel({ currentRun, activeEmployees, salaryReady, missi
         <span style={panelEyebrowStyle}>RUN READINESS</span>
         <strong style={{ display: 'block', color: '#0f172a', fontSize: 18, marginTop: 4 }}>Payroll run checklist</strong>
         <span style={{ display: 'block', marginTop: 5, color: '#64748b', fontSize: 13 }}>
-          Current run: {currentRun.range} · Pay date: {formatDate(currentRun.payDate.toISOString())}
+          Current run: {currentRun.range} · Generation date: {formatDate(`${currentRun.runDate}T00:00:00`)} · Pay date: {formatDate(currentRun.payDate.toISOString())}
         </span>
+        <button type="button" onClick={onRunPayroll} style={{ ...primaryButtonStyle, marginTop: 14 }}>
+          <Plus size={15} /> Run payroll now
+        </button>
       </div>
       <div style={readinessItemsStyle}>
         <ReadinessItem label="Active employees" value={activeEmployees} ok={activeEmployees > 0} />
@@ -1820,16 +1896,18 @@ function Avatar({ row, size }: { row: PayrollRow; size: number }) {
 
 function Th({ children }: { children: ReactNode }) { return <th style={thStyle}>{children}</th> }
 function Td({ children }: { children: ReactNode }) { return <td style={tdStyle}>{children}</td> }
-function IconButton({ onClick, icon: Icon }: { onClick: () => void; icon: ComponentType<{ size?: number }> }) { return <button onClick={onClick} style={iconButtonStyle}><Icon size={15} /></button> }
+function IconButton({ onClick, icon: Icon }: { onClick: (event: MouseEvent<HTMLButtonElement>) => void; icon: ComponentType<{ size?: number }> }) { return <button type="button" onClick={onClick} style={iconButtonStyle}><Icon size={15} /></button> }
 
 function mask(value: string) {
   return value.length <= 4 ? value : `${'*'.repeat(Math.max(0, value.length - 4))}${value.slice(-4)}`
 }
 
 const payrollPageStyle = { fontFamily: font, display: 'grid', gap: 18 }
+const payrollHeaderStyle = { display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 16, flexWrap: 'wrap' as const, padding: '4px 0 0' }
+const payrollHeaderActionsStyle = { display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 10, flexWrap: 'wrap' as const, marginLeft: 'auto' }
 const pageHeaderStyle = { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 360px), 1fr))', alignItems: 'center', gap: 18, background: '#fff', border: '1px solid #e5e7eb', borderRadius: 16, padding: '20px 22px', boxShadow: '0 14px 34px rgba(15,23,42,0.05)' }
-const eyebrowStyle = { display: 'block', color: '#16a34a', fontSize: 11, fontWeight: 900, letterSpacing: 0, marginBottom: 7 }
 const panelEyebrowStyle = { display: 'block', color: '#16a34a', fontSize: 11, fontWeight: 900, letterSpacing: 0 }
+const payrollTitleStyle = { margin: 0, color: '#0f172a', fontSize: 28, lineHeight: 1.12, fontWeight: 900 }
 const pageTitleStyle = { margin: 0, color: '#0f172a', fontSize: 30, lineHeight: 1.05, fontWeight: 900 }
 const pageSubtitleStyle = { margin: '8px 0 0', color: '#475569', fontSize: 14, lineHeight: 1.5 }
 const toolbarStyle = { display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 10, flexWrap: 'wrap' as const }
@@ -1842,7 +1920,7 @@ const readinessDotStyle = { width: 30, height: 30, borderRadius: 999, display: '
 const noticeStyle = { border: '1px solid #bbf7d0', background: '#f0fdf4', color: '#166534', borderRadius: 10, padding: '10px 12px', marginBottom: 16, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, fontSize: 13, fontWeight: 700 }
 const workspaceSurfaceStyle = { background: '#fff', border: '1px solid #e5e7eb', borderRadius: 16, boxShadow: '0 14px 36px rgba(15,23,42,0.05)', overflow: 'hidden' }
 const tabsStyle = { display: 'flex', gap: 6, borderBottom: '1px solid #e5e7eb', padding: '0 18px', overflowX: 'auto' as const, background: '#fff' }
-const tabStyle = (active: boolean) => ({ border: 'none', background: 'transparent', padding: '17px 10px 14px', borderBottom: active ? '3px solid #22c55e' : '3px solid transparent', color: active ? '#16a34a' : '#334155', fontSize: 13, fontWeight: 900, cursor: 'pointer', fontFamily: font, whiteSpace: 'nowrap' as const })
+const tabStyle = (active: boolean) => ({ border: 'none', background: 'transparent', padding: '17px 10px 14px', borderBottom: active ? '3px solid #111827' : '3px solid transparent', color: active ? '#111827' : '#334155', fontSize: 13, fontWeight: 900, cursor: 'pointer', fontFamily: font, whiteSpace: 'nowrap' as const })
 const tabContentStyle = { background: '#fff' }
 const detailGridStyle = { display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(280px, 420px)', gap: 18 }
 const cycleHeroStyle = { background: '#fff', border: '1px solid #e5e7eb', borderRadius: 12, boxShadow: '0 8px 24px rgba(15,23,42,0.04)', padding: 18, display: 'grid', gridTemplateColumns: 'minmax(280px, 1fr) 2.2fr', gap: 24, alignItems: 'center' }
@@ -1866,10 +1944,12 @@ const plainInputStyle = { border: 'none', outline: 'none', background: 'transpar
 const filterSelectStyle = { minHeight: 40, minWidth: 170, border: '1px solid #e5e7eb', borderRadius: 8, background: '#fff', color: '#0f172a', padding: '0 12px', fontSize: 13, fontFamily: font }
 const primaryButtonStyle = { minHeight: 40, border: 'none', borderRadius: 8, background: '#16a34a', color: '#fff', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 8, padding: '0 16px', fontSize: 13, fontWeight: 900, cursor: 'pointer', fontFamily: font }
 const secondaryButtonStyle = { minHeight: 38, border: '1px solid #e5e7eb', borderRadius: 8, background: '#fff', color: '#0f172a', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 8, padding: '0 14px', fontSize: 12, fontWeight: 900, cursor: 'pointer', fontFamily: font }
+const iconOnlyButtonStyle = { width: 38, height: 38, border: '1px solid #e5e7eb', borderRadius: 8, background: '#fff', color: '#0f172a', display: 'grid', placeItems: 'center', cursor: 'pointer' }
 const smallButtonStyle = { minHeight: 32, border: '1px solid #bbf7d0', borderRadius: 7, background: '#fff', color: '#15803d', padding: '0 10px', fontSize: 12, fontWeight: 800, cursor: 'pointer', fontFamily: font }
 const schedulePanelStyle = { borderTop: '1px solid #f1f5f9', padding: 18, display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 14, alignItems: 'end' }
 const modalOverlayStyle = { position: 'fixed' as const, inset: 0, zIndex: 80, background: 'rgba(15,23,42,0.45)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 18 }
 const modalCardStyle = { width: 'min(760px, 100%)', maxHeight: 'calc(100vh - 36px)', overflowY: 'auto' as const, background: '#fff', border: '1px solid #e5e7eb', borderRadius: 14, boxShadow: '0 24px 70px rgba(15,23,42,0.22)' }
+const payslipModalCardStyle = { width: 'min(1100px, 100%)', maxHeight: 'calc(100vh - 36px)', overflowY: 'auto' as const, background: '#fff', border: '1px solid #e5e7eb', borderRadius: 14, boxShadow: '0 24px 70px rgba(15,23,42,0.22)' }
 const modalHeaderStyle = { padding: 18, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 14 }
 const modalFooterStyle = { borderTop: '1px solid #f1f5f9', padding: 18, display: 'flex', justifyContent: 'flex-end', gap: 10 }
 const fieldStyle = { display: 'grid', gap: 7, color: '#0f172a', fontSize: 13, fontWeight: 800 }
@@ -1884,6 +1964,7 @@ const tableStyle = { width: '100%', borderCollapse: 'collapse' as const, minWidt
 const thStyle = { textAlign: 'left' as const, padding: '14px 18px', color: '#475569', fontSize: 11, fontWeight: 900, background: '#f8fafc', whiteSpace: 'nowrap' as const, borderBottom: '1px solid #eaf0f7' }
 const tdStyle = { padding: '15px 18px', borderTop: '1px solid #f1f5f9', color: '#0f172a', fontSize: 12, verticalAlign: 'middle' as const, lineHeight: 1.45 }
 const trStyle = { background: '#fff' }
+const clickableTrStyle = { ...trStyle, cursor: 'pointer' }
 const mutedLineStyle = { display: 'block', color: '#64748b', fontSize: 12, marginTop: 5, lineHeight: 1.35 }
 const factStyle = { display: 'flex', justifyContent: 'space-between', gap: 18, padding: '10px 0', color: '#334155', fontSize: 13 }
 const amountLineStyle = { display: 'flex', justifyContent: 'space-between', padding: '11px 0', borderTop: '1px solid #f1f5f9' }

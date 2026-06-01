@@ -3,39 +3,25 @@
 import type { CSSProperties, FormEvent, ReactNode } from 'react'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import {
-  BarChart3,
-  Building2,
+  Award,
+  BadgeDollarSign,
   CalendarDays,
-  CheckCircle2,
   ChevronDown,
-  ClipboardCheck,
-  ClipboardList,
   Download,
-  FileCheck2,
-  FileText,
   Filter,
-  Funnel,
-  Hammer,
-  HardHat,
-  LayoutGrid,
-  List,
-  MapPin,
-  MoreHorizontal,
-  PencilRuler,
   Plus,
-  ReceiptText,
   Search,
-  Send,
-  ShieldCheck,
-  UserRound,
-  UsersRound,
-  Warehouse,
+  Target,
+  TrendingUp,
   X,
 } from 'lucide-react'
+import type { LucideIcon } from 'lucide-react'
 import { type CompanyRecord, companyChangeEvent, companyScopedKey, getActiveCompany, getCurrentActor } from '@/lib/tenant/company'
+import { createProjectRecord, loadProjectManagementState, saveProjectManagementState } from '@/lib/project-management/service'
+import { buildEmptyClient, loadClients as loadClientDatabase, saveClient, slugify, type ClientRecord as ClientDatabaseRecord } from '../people/clients/clientData'
 
 type LeadStatus = 'New Inquiry' | 'Contacted' | 'Consultation Scheduled' | 'Qualified' | 'Lost'
-type OpportunityStage = 'Consultation' | 'Site Inspection' | 'Proposal Preparation' | 'Submitted Proposal' | 'Negotiation' | 'Contract Review' | 'Won' | 'Lost'
+type OpportunityStage = 'Lead' | 'Site Visit' | 'Site Inspection' | 'Proposal' | 'Negotiation' | 'Contract Review' | 'Awarded' | 'Not Awarded' | 'Won' | 'Lost'
 type SiteVisitStatus = 'Scheduled' | 'Completed' | 'Rescheduled' | 'Cancelled'
 type ProposalStatus = 'Draft' | 'Submitted' | 'Under Review' | 'Revision Requested' | 'Approved' | 'Rejected'
 type ContractStatus = 'Draft' | 'Pending Signature' | 'Active' | 'Completed' | 'Terminated'
@@ -63,6 +49,7 @@ type Opportunity = {
   companyId?: string
   name: string
   client: string
+  clientId?: string
   projectType: string
   estimatedContractValue: number
   projectSize: string
@@ -71,6 +58,10 @@ type Opportunity = {
   expectedCloseDate: string
   assignedTeam: string
   salesRep: string
+  contactPerson?: string
+  contactEmail?: string
+  contactPhone?: string
+  notes?: string
   lostReason?: string
 }
 
@@ -149,13 +140,21 @@ type Client = {
 }
 
 type SalesForm = {
+  clientId: string
   client: string
   projectName: string
   amount: string
   projectType: string
   location: string
+  contactPerson: string
+  email: string
+  phone: string
+  stage: OpportunityStage
+  probability: string
+  assignedTeam: string
   salesRep: string
   closeDate: string
+  notes: string
 }
 
 type SalesWorkspaceData = {
@@ -169,22 +168,60 @@ type SalesWorkspaceData = {
 }
 
 const font = 'var(--font-body)'
-const green = '#16a34a'
 const salesWorkspaceKey = 'wiseflow-sales-workspace'
-const tabs = ['Overview', 'Leads', 'Opportunities', 'Site Visits', 'Proposals & Quotations', 'Contracts', 'Progress Billing', 'Clients', 'Sales Analytics']
-const workflowSteps = ['Lead', 'Consultation', 'Site Visit', 'Proposal / BOQ', 'Quotation', 'Negotiation', 'Contract Signing', 'Project Awarded', 'Progress Billing', 'Project Handover']
-const opportunityStages: OpportunityStage[] = ['Consultation', 'Site Inspection', 'Proposal Preparation', 'Submitted Proposal', 'Negotiation', 'Contract Review', 'Won', 'Lost']
+const salesStages: { key: OpportunityStage; label: string }[] = [
+  { key: 'Lead', label: 'Lead' },
+  { key: 'Site Visit', label: 'Site Visit' },
+  { key: 'Proposal', label: 'Proposal' },
+  { key: 'Negotiation', label: 'Negotiation' },
+  { key: 'Awarded', label: 'Awarded' },
+  { key: 'Not Awarded', label: 'Not Awarded' },
+]
+const opportunityStages: OpportunityStage[] = salesStages.map(stage => stage.key)
 const projectTypes = ['Residential', 'Commercial', 'Renovation', 'Interior Design', 'Office Fit-Out', 'Resort', 'Warehouse', 'Structural']
-const leadSources = ['Facebook', 'Website', 'Referral', 'Walk-in', 'LinkedIn', 'Advertisement']
+const periodOptions = ['Current period', 'This quarter', 'This year', 'All records'] as const
+type SalesPeriod = typeof periodOptions[number]
+
+function normalizeSalesStage(stage?: string): OpportunityStage {
+  const key = (stage || '').trim().toLowerCase()
+  if (key === 'site visit' || key === 'site inspection' || key === 'consultation' || key === 'consultation scheduled') return 'Site Visit'
+  if (key === 'proposal' || key === 'proposal / boq' || key === 'proposal preparation' || key === 'submitted proposal' || key === 'quotation' || key === 'contract review') return 'Proposal'
+  if (key === 'negotiation') return 'Negotiation'
+  if (key === 'awarded' || key === 'won' || key === 'project awarded' || key === 'contract signing' || key === 'progress billing' || key === 'project handover') return 'Awarded'
+  if (key === 'not awarded' || key === 'lost' || key === 'cancelled' || key === 'rejected') return 'Not Awarded'
+  return 'Lead'
+}
+
+type SalesFilters = {
+  stage: string
+  projectType: string
+  salesRep: string
+  status: string
+}
+
+const emptyFilters: SalesFilters = {
+  stage: 'All',
+  projectType: 'All',
+  salesRep: 'All',
+  status: 'All',
+}
 
 const emptyForm: SalesForm = {
+  clientId: '',
   client: '',
   projectName: '',
   amount: '',
   projectType: 'Residential',
   location: '',
+  contactPerson: '',
+  email: '',
+  phone: '',
+  stage: 'Lead',
+  probability: '35',
+  assignedTeam: 'Architecture / Engineering',
   salesRep: '',
   closeDate: new Date().toISOString().slice(0, 10),
+  notes: '',
 }
 
 const emptySalesWorkspace: SalesWorkspaceData = {
@@ -197,11 +234,29 @@ const emptySalesWorkspace: SalesWorkspaceData = {
   clients: [],
 }
 
+function initialOpportunityForm(rep = '', client?: ClientDatabaseRecord): SalesForm {
+  const contact = client?.contacts.find(item => item.primary) || client?.contacts[0]
+  return {
+    ...emptyForm,
+    clientId: client?.id || '',
+    client: client ? clientDisplayName(client) : '',
+    contactPerson: contact?.name || client?.accountManager || '',
+    email: contact?.email || client?.email || '',
+    phone: contact?.phone || client?.phone || '',
+    location: client?.billingAddress && client.billingAddress !== '-' ? client.billingAddress : '',
+    salesRep: client?.accountManager || rep,
+  }
+}
+
 export default function SalesPage() {
-  const [activeTab, setActiveTab] = useState('Overview')
+  const [opportunityStatus, setOpportunityStatus] = useState('All')
+  const [clientFilter, setClientFilter] = useState('All')
   const [query, setQuery] = useState('')
   const [drawerOpen, setDrawerOpen] = useState(false)
-  const [newMenuOpen, setNewMenuOpen] = useState(false)
+  const [periodOpen, setPeriodOpen] = useState(false)
+  const [filtersOpen, setFiltersOpen] = useState(false)
+  const [period, setPeriod] = useState<SalesPeriod>('Current period')
+  const [salesFilters, setSalesFilters] = useState<SalesFilters>(emptyFilters)
   const [form, setForm] = useState<SalesForm>(emptyForm)
   const [notice, setNotice] = useState('')
   const [activeCompany, setActiveCompany] = useState<CompanyRecord | null>(null)
@@ -212,6 +267,7 @@ export default function SalesPage() {
   const [contracts, setContracts] = useState<Contract[]>([])
   const [billings, setBillings] = useState<ProgressBilling[]>([])
   const [clients, setClients] = useState<Client[]>([])
+  const [clientDatabase, setClientDatabase] = useState<ClientDatabaseRecord[]>([])
   const storageReady = useRef(false)
 
   useEffect(() => {
@@ -227,6 +283,9 @@ export default function SalesPage() {
       setBillings(data.billings)
       setClients(data.clients)
       storageReady.current = true
+      void loadClientDatabase()
+        .then(result => setClientDatabase(result.clients))
+        .catch(() => setClientDatabase([]))
     }
 
     loadWorkspace()
@@ -243,67 +302,157 @@ export default function SalesPage() {
     saveSalesWorkspace(activeCompany.id, { leads, opportunities, siteVisits, proposals, contracts, billings, clients })
   }, [activeCompany?.id, billings, clients, contracts, leads, opportunities, proposals, siteVisits])
 
-  const proposalValue = proposals.reduce((sum, proposal) => sum + proposal.total, 0)
-  const activeOpportunityCount = opportunities.filter(item => !['Won', 'Lost'].includes(item.stage)).length
-  const wonProjects = opportunities.filter(item => item.stage === 'Won').length
-  const conversion = Math.round((wonProjects / Math.max(opportunities.length, 1)) * 1000) / 10
-  const forecast = opportunities.filter(item => !['Won', 'Lost'].includes(item.stage)).reduce((sum, item) => sum + item.estimatedContractValue * (item.probability / 100), 0)
-  const pendingProposalCount = proposals.filter(item => ['Draft', 'Submitted', 'Under Review', 'Revision Requested'].includes(item.status)).length
-  const signedContracts = contracts.filter(item => ['Active', 'Completed'].includes(item.status)).length
-  const filtered = useMemo(() => filterRows({ leads, opportunities, siteVisits, proposals, contracts, billings, clients }, query), [billings, clients, contracts, leads, opportunities, proposals, query, siteVisits])
-  const repTotals = useMemo(() => totalBy(opportunities, item => item.salesRep, item => item.estimatedContractValue), [opportunities])
-  const categoryTotals = useMemo(() => totalBy(opportunities, item => item.projectType, item => item.estimatedContractValue), [opportunities])
-  const pipeline = useMemo(() => buildPipeline(opportunities), [opportunities])
   const salesRepOptions = useMemo(() => getSalesRepOptions(activeCompany), [activeCompany])
+  const clientOptions = useMemo(() => clientDatabase.map(client => ({ value: client.id, label: clientDisplayName(client) })), [clientDatabase])
+  const selectedClient = useMemo(() => clientDatabase.find(client => client.id === form.clientId), [clientDatabase, form.clientId])
+  const filtered = useMemo(
+    () => filterRows({ leads, opportunities, siteVisits, proposals, contracts, billings, clients }, query, period, salesFilters),
+    [billings, clients, contracts, leads, opportunities, period, proposals, query, salesFilters, siteVisits],
+  )
+  const normalizedOpportunities = useMemo(
+    () => filtered.opportunities.map(item => ({ ...item, stage: normalizeSalesStage(item.stage) })),
+    [filtered.opportunities],
+  )
+  const salesStatusOptions = useMemo(() => ['All', ...Array.from(new Set([
+    ...leads.map(item => item.status),
+    ...siteVisits.map(item => item.status),
+    ...proposals.map(item => item.status),
+    ...contracts.map(item => item.status),
+    ...billings.map(item => item.status),
+  ]))], [billings, contracts, leads, proposals, siteVisits])
+  const activeFilterCount = Object.values(salesFilters).filter(value => value !== 'All').length + (period === 'Current period' ? 0 : 1)
+  const opportunityListTabs = useMemo(() => {
+    const awardedByYear = (year: number) => normalizedOpportunities.filter(item => normalizeSalesStage(item.stage) === 'Awarded' && new Date(`${item.expectedCloseDate}T00:00:00`).getFullYear() === year).length
+    return [
+      { label: 'All', count: normalizedOpportunities.length },
+      { label: 'Pending', count: normalizedOpportunities.filter(item => ['Lead', 'Site Visit', 'Proposal'].includes(normalizeSalesStage(item.stage))).length },
+      { label: 'Negotiations', count: normalizedOpportunities.filter(item => normalizeSalesStage(item.stage) === 'Negotiation').length },
+      { label: 'Awarded 2024', count: awardedByYear(2024) },
+      { label: 'Awarded 2025', count: awardedByYear(2025) },
+      { label: 'Declined', count: normalizedOpportunities.filter(item => normalizeSalesStage(item.stage) === 'Not Awarded').length },
+    ]
+  }, [normalizedOpportunities])
+  const clientFilterOptions = useMemo(() => ['All', ...Array.from(new Set(normalizedOpportunities.map(item => item.client).filter(Boolean)))], [normalizedOpportunities])
+  const visibleOpportunities = useMemo(() => normalizedOpportunities.filter(item => {
+    const stage = normalizeSalesStage(item.stage)
+    const closeYear = new Date(`${item.expectedCloseDate}T00:00:00`).getFullYear()
+    const statusMatch = opportunityStatus === 'All'
+      || (opportunityStatus === 'Pending' && ['Lead', 'Site Visit', 'Proposal'].includes(stage))
+      || (opportunityStatus === 'Negotiations' && stage === 'Negotiation')
+      || (opportunityStatus === 'Awarded 2024' && stage === 'Awarded' && closeYear === 2024)
+      || (opportunityStatus === 'Awarded 2025' && stage === 'Awarded' && closeYear === 2025)
+      || (opportunityStatus === 'Declined' && stage === 'Not Awarded')
+    const clientMatch = clientFilter === 'All' || item.client === clientFilter
+    return statusMatch && clientMatch
+  }), [clientFilter, normalizedOpportunities, opportunityStatus])
+  const salesMetrics = useMemo(() => {
+    const pipelineValue = normalizedOpportunities.reduce((sum, item) => sum + item.estimatedContractValue, 0)
+    const weightedValue = normalizedOpportunities.reduce((sum, item) => sum + item.estimatedContractValue * Math.max(item.probability, 0) / 100, 0)
+    const awardedCount = normalizedOpportunities.filter(item => normalizeSalesStage(item.stage) === 'Awarded').length
+    const activeClients = new Set(normalizedOpportunities.map(item => item.client).filter(Boolean)).size
 
-  const createQuickOpportunity = (event: FormEvent<HTMLFormElement>) => {
+    return [
+      { label: 'Open opportunities', value: String(normalizedOpportunities.length), detail: `${visibleOpportunities.length} in current view`, icon: Target, color: '#16a34a' },
+      { label: 'Pipeline value', value: money(pipelineValue), detail: `${period} scope`, icon: BadgeDollarSign, color: '#2563eb' },
+      { label: 'Weighted budget', value: money(weightedValue), detail: 'Probability adjusted', icon: TrendingUp, color: '#f59e0b' },
+      { label: 'Awarded deals', value: String(awardedCount), detail: `${activeClients} active clients`, icon: Award, color: '#8b5cf6' },
+    ]
+  }, [normalizedOpportunities, period, visibleOpportunities.length])
+
+  const applyClientSelection = (clientId: string) => {
+    const client = clientDatabase.find(item => item.id === clientId)
+    setForm(current => {
+      if (!client) return { ...current, clientId, client: '' }
+      const contact = client.contacts.find(item => item.primary) || client.contacts[0]
+      return {
+        ...current,
+        clientId,
+        client: clientDisplayName(client),
+        contactPerson: contact?.name || client.accountManager || current.contactPerson,
+        email: contact?.email || client.email || current.email,
+        phone: contact?.phone || client.phone || current.phone,
+        location: client.billingAddress && client.billingAddress !== '-' ? client.billingAddress : current.location,
+        salesRep: client.accountManager || current.salesRep || salesRepOptions[0] || '',
+      }
+    })
+  }
+
+  const createQuickOpportunity = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
     const value = Number(form.amount)
-    if (!form.client.trim() || !form.projectName.trim() || !Number.isFinite(value) || value <= 0) {
-      setNotice('Complete client, project name, and estimated contract value before creating an opportunity.')
+    const clientName = selectedClient ? clientDisplayName(selectedClient) : form.client.trim()
+    if (!clientName || !form.projectName.trim() || !Number.isFinite(value) || value <= 0) {
+      setNotice('Select a client, project name, and estimated contract value before creating an opportunity.')
+      return
+    }
+    if (clientDatabase.length > 0 && !form.clientId) {
+      setNotice('Select a client from Client Database before saving the opportunity.')
       return
     }
 
     const rep = form.salesRep.trim() || salesRepOptions[0] || 'Unassigned'
+    const probability = Math.min(100, Math.max(0, Number(form.probability) || 35))
+    const databaseClient = selectedClient || await ensureClientDatabaseRecord(clientName, rep, form.email.trim(), form.phone.trim(), form.location.trim(), value)
     const next: Opportunity = {
       id: nextCode('OP', opportunities.map(item => item.id)),
       companyId: activeCompany?.id,
       name: form.projectName.trim(),
-      client: form.client.trim(),
+      client: clientName,
+      clientId: databaseClient?.id || form.clientId || undefined,
       projectType: form.projectType,
       estimatedContractValue: value,
-      projectSize: form.location.trim() || 'To be assessed',
-      probability: 35,
-      stage: 'Consultation',
+      projectSize: form.location.trim() || selectedClient?.billingAddress || 'To be assessed',
+      probability,
+      stage: form.stage,
       expectedCloseDate: form.closeDate,
-      assignedTeam: 'Architecture / Engineering',
+      assignedTeam: form.assignedTeam.trim() || 'Architecture / Engineering',
       salesRep: rep,
+      contactPerson: form.contactPerson.trim(),
+      contactEmail: form.email.trim(),
+      contactPhone: form.phone.trim(),
+      notes: form.notes.trim(),
     }
     setOpportunities(current => [next, ...current])
-    ensureClient(form.client.trim(), rep, value)
-    setForm({ ...emptyForm, salesRep: salesRepOptions[0] || '' })
+    ensureClient(clientName, rep, value, form.email.trim(), form.phone.trim(), form.location.trim())
+    setForm(initialOpportunityForm(salesRepOptions[0] || '', clientDatabase[0]))
     setDrawerOpen(false)
     setNotice('Project opportunity created in the acquisition pipeline.')
   }
 
-  const qualifyLead = (lead: Lead) => {
-    setLeads(current => current.map(item => item.id === lead.id ? { ...item, status: 'Qualified' } : item))
-    setOpportunities(current => [{
-      id: `OP-${lead.id.replace(/\D/g, '').padStart(4, '0')}`,
-      companyId: activeCompany?.id,
-      name: `${lead.projectType} project for ${lead.companyName}`,
-      client: lead.companyName,
-      projectType: lead.projectType,
-      estimatedContractValue: lead.estimatedBudget,
-      projectSize: lead.location,
-      probability: 30,
-      stage: 'Consultation',
-      expectedCloseDate: new Date().toISOString().slice(0, 10),
-      assignedTeam: 'Pre-construction',
-      salesRep: lead.salesRep,
-    }, ...current])
-    ensureClient(lead.companyName, lead.salesRep, lead.estimatedBudget, lead.email, lead.phone, lead.location)
-    setNotice(`${lead.companyName} moved to the construction opportunity pipeline.`)
+  const ensureClientDatabaseRecord = async (name: string, manager: string, email = '', phone = '', address = '', amount = 0) => {
+    const existing = clientDatabase.find(client => clientDisplayName(client).toLowerCase() === name.toLowerCase())
+    if (existing) return existing
+
+    const id = uniqueClientId(slugify(name), clientDatabase)
+    const client = buildEmptyClient({
+      id,
+      name,
+      company: `${slugify(name)}.com`,
+      email: email || 'client@example.com',
+      phone: phone || '-',
+      industry: 'Construction',
+      companyType: 'Private',
+      billingAddress: address || '-',
+      accountManager: manager,
+      activeProjects: amount ? 1 : 0,
+      totalProjects: amount ? 1 : 0,
+      totalRevenue: amount,
+      outstandingRevenue: amount,
+      contacts: [{
+        id: `${id}-primary`,
+        name: manager || name,
+        role: 'Primary contact',
+        email: email || 'client@example.com',
+        phone: phone || '-',
+        primary: true,
+      }],
+      tags: ['Sales'],
+      description: 'Created from a sales opportunity.',
+    })
+
+    const result = await saveClient(client)
+    setClientDatabase(current => [result.client, ...current.filter(item => item.id !== result.client.id)])
+    return result.client
   }
 
   const scheduleSiteVisit = (opportunity: Opportunity) => {
@@ -321,54 +470,49 @@ export default function SalesPage() {
       checklist: 'Photos, access, utilities, site constraints',
     }
     setSiteVisits(current => [visit, ...current])
-    setOpportunities(current => current.map(item => item.id === opportunity.id ? { ...item, stage: 'Site Inspection', probability: Math.max(item.probability, 45) } : item))
+    setOpportunities(current => current.map(item => item.id === opportunity.id ? { ...item, stage: 'Site Visit', probability: Math.max(item.probability, 45) } : item))
     setNotice(`${visit.id} scheduled for ${opportunity.client}.`)
   }
 
-  const sendProposal = (proposal: Proposal) => {
-    setProposals(current => current.map(item => item.id === proposal.id ? { ...item, status: 'Submitted' } : item))
-    setNotice(`${proposal.id} marked as submitted to ${proposal.client}.`)
-  }
-
-  const convertProposal = (proposal: Proposal) => {
-    const id = proposal.id.replace('PROP', 'CON')
-    if (contracts.some(contract => contract.id === id)) {
-      setNotice(`${id} already exists.`)
+  const convertOpportunityToProject = (opportunity: Opportunity) => {
+    const stage = normalizeSalesStage(opportunity.stage)
+    if (stage !== 'Awarded') {
+      setNotice('Move the opportunity to Awarded before creating a project.')
       return
     }
-    const contract: Contract = {
-      id,
-      companyId: activeCompany?.id,
-      client: proposal.client,
-      projectName: proposal.projectName,
-      contractAmount: proposal.total,
-      downpayment: proposal.total * 0.2,
-      retention: proposal.total * 0.1,
-      startDate: new Date().toISOString().slice(0, 10),
-      completionDate: proposal.validUntil,
-      status: 'Pending Signature',
-      milestoneTracking: proposal.timeline,
+
+    const state = loadProjectManagementState()
+    const existing = state.projects.find(project => project.opportunitySource === 'sales' && project.opportunityId === opportunity.id)
+    if (existing) {
+      setNotice(`${existing.name} is already linked to ${opportunity.id}.`)
+      return
     }
-    setProposals(current => current.map(item => item.id === proposal.id ? { ...item, status: 'Approved' } : item))
-    setContracts(current => [contract, ...current])
-    setOpportunities(current => current.map(item => item.client === proposal.client && item.name === proposal.projectName ? { ...item, stage: 'Contract Review', probability: Math.max(item.probability, 80) } : item))
-    ensureClient(proposal.client, 'Account Manager', proposal.total)
-    setNotice(`${proposal.id} converted to ${contract.id}.`)
-  }
 
-  const activateContract = (contract: Contract) => {
-    setContracts(current => current.map(item => item.id === contract.id ? { ...item, status: 'Active' } : item))
-    setOpportunities(current => current.map(item => item.client === contract.client && item.name === contract.projectName ? { ...item, stage: 'Won', probability: 100 } : item))
-    setBillings(current => current.some(item => item.project === contract.projectName) ? current : [
-      ...billingSchedule(contract, activeCompany?.id),
-      ...current,
-    ])
-    setNotice(`${contract.id} activated. Progress billing schedule created for Financials.`)
-  }
+    const clientId = opportunity.clientId || state.clients.find(client => client.name.toLowerCase() === opportunity.client.toLowerCase())?.id || 'client-local'
+    const clients = state.clients.some(client => client.id === clientId) ? state.clients : [...state.clients, { id: clientId, name: opportunity.client }]
+    const nextState = createProjectRecord({ ...state, clients }, {
+      name: opportunity.name,
+      clientId,
+      description: opportunity.notes || `Converted from sales opportunity ${opportunity.id}.`,
+      budget: opportunity.estimatedContractValue,
+      startDate: new Date().toISOString().slice(0, 10),
+      dueDate: opportunity.expectedCloseDate,
+      department: opportunity.assignedTeam || 'Sales',
+      projectType: opportunity.projectType,
+      tags: ['Sales converted'],
+      location: {
+        address: opportunity.projectSize || 'To be confirmed',
+        city: '',
+        province: '',
+        postalCode: '',
+      },
+      opportunityId: opportunity.id,
+      opportunitySource: 'sales',
+    })
 
-  const markBillingPaid = (billing: ProgressBilling) => {
-    setBillings(current => current.map(item => item.id === billing.id ? { ...item, paidAmount: item.amount, remainingBalance: 0, status: 'Paid' } : item))
-    setNotice(`${billing.id} marked paid and synced to cash flow.`)
+    saveProjectManagementState(nextState)
+    setOpportunities(current => current.map(item => item.id === opportunity.id ? { ...item, probability: 100, stage: 'Awarded' } : item))
+    setNotice(`${opportunity.name} was created in Project Management.`)
   }
 
   const ensureClient = (name: string, manager: string, amount = 0, email = '', phone = '', address = '') => {
@@ -398,94 +542,128 @@ export default function SalesPage() {
     })
   }
 
+  const updateFilter = (key: keyof SalesFilters, value: string) => {
+    setSalesFilters(current => ({ ...current, [key]: value }))
+  }
+
+  const exportSalesData = () => {
+    const rows = visibleOpportunities.map(row => ({ section: 'Opportunity', ...row, stage: normalizeSalesStage(row.stage) }))
+    if (!rows.length) {
+      setNotice('No opportunity records to export for the current filters.')
+      return
+    }
+    downloadCsv('wiseflow-sales-opportunities.csv', rows)
+    setNotice(`${rows.length} opportunity record${rows.length === 1 ? '' : 's'} exported.`)
+  }
+
   return (
-    <div className="sales-page" style={{ fontFamily: font, display: 'grid', gap: 22, color: '#0f172a' }}>
-      <PageHeader
-        title="CRM & Sales"
-        subtitle={`Construction CRM, proposal management, project acquisition, contracts, and progress billing for ${activeCompany?.name || 'the selected company'}.`}
-        actions={(
-          <>
-            <ToolbarButton icon={<CalendarDays size={16} />} label="Current period" hasChevron />
-            <ToolbarButton icon={<Filter size={16} />} label="Filters" />
-            <div style={{ position: 'relative' }}>
-              <button onClick={() => setNewMenuOpen(value => !value)} style={primaryButton}><Plus size={16} /> New <ChevronDown size={14} /></button>
-              {newMenuOpen ? (
-                <div style={newMenu}>
-                  <button onClick={() => { setActiveTab('Leads'); setNewMenuOpen(false); setNotice(`Lead capture is ready for ${leadSources.slice(0, 3).join(', ')}, and other construction inquiry sources.`) }} style={newMenuItem}><UsersRound size={15} /> New lead</button>
-                  <button onClick={() => { setDrawerOpen(true); setForm({ ...emptyForm, salesRep: salesRepOptions[0] || '' }); setNewMenuOpen(false) }} style={newMenuItem}><HardHat size={15} /> New opportunity</button>
-                  <button onClick={() => { setActiveTab('Proposals & Quotations'); setNewMenuOpen(false); setNotice('Proposal builder is ready for BOQ, scope, and costing workflows.') }} style={newMenuItem}><PencilRuler size={15} /> New proposal</button>
+    <div className="sales-page" style={salesPage}>
+      <style>{salesThemeCss}</style>
+      <section className="sales-dashboard-hero">
+        <div className="sales-dashboard-inner">
+          <PageHeader
+            crumb="Sales / Opportunities"
+            title="Opportunities"
+            subtitle={`List, filter, and hand off sales opportunities for ${activeCompany?.name || 'the selected company'}.`}
+            actions={(
+              <>
+                <div style={{ position: 'relative' }}>
+                  <ToolbarButton icon={<CalendarDays size={16} />} label={period} hasChevron onClick={() => { setPeriodOpen(value => !value); setFiltersOpen(false) }} />
+                  {periodOpen ? (
+                    <div style={periodMenu}>
+                      {periodOptions.map(option => (
+                        <button key={option} type="button" onClick={() => { setPeriod(option); setPeriodOpen(false) }} style={menuOption(period === option)}>
+                          {option}
+                        </button>
+                      ))}
+                    </div>
+                  ) : null}
                 </div>
-              ) : null}
+                <button type="button" onClick={() => { setDrawerOpen(true); setForm(initialOpportunityForm(salesRepOptions[0] || '', clientDatabase[0])); setFiltersOpen(false) }} style={primaryButton}><Plus size={16} /> Opportunity</button>
+                <ToolbarButton icon={<Download size={16} />} label="Export" onClick={exportSalesData} />
+              </>
+            )}
+          />
+
+          <section className="sales-kpi-grid" aria-label="Sales pipeline summary">
+            {salesMetrics.map(metric => <SalesMetricCard key={metric.label} {...metric} />)}
+          </section>
+        </div>
+      </section>
+
+      <section className="sales-dashboard-content">
+        {notice ? <div className="sales-notice" style={successBox}>{notice}<button onClick={() => setNotice('')} style={dismissButton}><X size={14} /></button></div> : null}
+
+        {filtersOpen ? (
+          <section className="sales-filter-panel" style={filterPanel}>
+            <SelectField label="Stage" value={salesFilters.stage} onChange={value => updateFilter('stage', value)} options={['All', ...opportunityStages]} />
+            <SelectField label="Project Type" value={salesFilters.projectType} onChange={value => updateFilter('projectType', value)} options={['All', ...projectTypes]} />
+            <SelectField label="Sales Rep" value={salesFilters.salesRep} onChange={value => updateFilter('salesRep', value)} options={['All', ...salesRepOptions]} />
+            <SelectField label="Status" value={salesFilters.status} onChange={value => updateFilter('status', value)} options={salesStatusOptions} />
+            <div style={{ display: 'flex', alignItems: 'end' }}>
+              <button type="button" onClick={() => { setSalesFilters(emptyFilters); setPeriod('Current period') }} style={{ ...secondaryButton, width: '100%' }}>Reset filters</button>
             </div>
-            <ToolbarButton icon={<Download size={16} />} label="Export" />
-          </>
-        )}
-      />
+          </section>
+        ) : null}
 
-      {notice ? <div style={successBox}>{notice}<button onClick={() => setNotice('')} style={dismissButton}><X size={14} /></button></div> : null}
-
-      <WorkflowStrip />
-
-      <div className="sales-metric-grid" style={metricGrid}>
-        <MetricCard icon={<FileText size={23} />} label="Total Proposal Value" value={money(proposalValue)} detail={`${pendingProposalCount} pending proposals`} tone="#16a34a" />
-        <MetricCard icon={<Funnel size={23} />} label="Active Opportunities" value={String(activeOpportunityCount)} detail={`${money(forecast)} forecast pipeline`} tone="#2563eb" />
-        <MetricCard icon={<ShieldCheck size={23} />} label="Projects Won" value={String(wonProjects)} detail={`${conversion}% conversion rate`} tone="#7c3aed" />
-        <MetricCard icon={<MapPin size={23} />} label="Site Visits Scheduled" value={String(siteVisits.filter(item => item.status === 'Scheduled').length)} detail={`${siteVisits.filter(item => item.status === 'Completed').length} completed visits`} tone="#f59e0b" />
-        <MetricCard icon={<FileCheck2 size={23} />} label="Contracts Signed" value={String(signedContracts)} detail={`${money(contracts.reduce((sum, item) => sum + item.contractAmount, 0))} contract value`} tone="#14b8a6" />
-      </div>
-
-      <div className="sales-tabs" style={tabsStyle}>
-        {tabs.map(tab => <button key={tab} className={activeTab === tab ? 'is-active' : undefined} onClick={() => setActiveTab(tab)} style={tabStyle(activeTab === tab)}>{tab}</button>)}
-      </div>
-
-      {activeTab === 'Overview' ? (
-        <Overview
-          opportunities={opportunities}
-          siteVisits={siteVisits}
-          proposals={proposals}
-          contracts={contracts}
-          billings={billings}
-          clients={clients}
-          reps={repTotals}
-          categories={categoryTotals}
-          pipeline={pipeline}
-          onScheduleVisit={scheduleSiteVisit}
-          onConvertProposal={convertProposal}
-          onActivateContract={activateContract}
-        />
-      ) : (
-        <Panel title={activeTab} action={<SearchFilter search={query} setSearch={setQuery} />}>
-          {activeTab === 'Leads' && <LeadsTab leads={filtered.leads} onQualify={qualifyLead} />}
-          {activeTab === 'Opportunities' && <OpportunitiesTab opportunities={filtered.opportunities} onScheduleVisit={scheduleSiteVisit} />}
-          {activeTab === 'Site Visits' && <SiteVisitsTab visits={filtered.siteVisits} />}
-          {activeTab === 'Proposals & Quotations' && <ProposalsTab proposals={filtered.proposals} onSend={sendProposal} onConvert={convertProposal} />}
-          {activeTab === 'Contracts' && <ContractsTab contracts={filtered.contracts} onActivate={activateContract} />}
-          {activeTab === 'Progress Billing' && <ProgressBillingTab billings={filtered.billings} onMarkPaid={markBillingPaid} />}
-          {activeTab === 'Clients' && <ClientsTab clients={filtered.clients} />}
-          {activeTab === 'Sales Analytics' && <AnalyticsTab opportunities={opportunities} proposals={proposals} contracts={contracts} billings={billings} clients={clients} />}
+        <Panel
+          title="Opportunity List"
+          action={<ToolbarButton icon={<Filter size={16} />} label={activeFilterCount ? `Filters (${activeFilterCount})` : 'Filters'} onClick={() => { setFiltersOpen(value => !value); setPeriodOpen(false) }} />}
+        >
+          <div className="sales-opportunity-tabs" style={opportunityTabs}>
+            {opportunityListTabs.map(tab => (
+              <button key={tab.label} type="button" className={opportunityStatus === tab.label ? 'is-active' : undefined} onClick={() => setOpportunityStatus(tab.label)} style={opportunityTabStyle(opportunityStatus === tab.label)}>
+                {tab.label}<span>{tab.count}</span>
+              </button>
+            ))}
+          </div>
+          <div className="sales-opportunity-toolbar" style={opportunityToolbar}>
+            <label style={opportunityClientFilter}>
+              <select value={clientFilter} onChange={event => setClientFilter(event.target.value)} style={opportunitySelect}>
+                {clientFilterOptions.map(option => <option key={option} value={option}>{option === 'All' ? 'Clients' : option}</option>)}
+              </select>
+              <ChevronDown size={15} />
+            </label>
+            <SearchFilter search={query} setSearch={setQuery} />
+          </div>
+          <OpportunityTable opportunities={visibleOpportunities} onScheduleVisit={scheduleSiteVisit} onConvertProject={convertOpportunityToProject} />
         </Panel>
-      )}
-
-      <IntegrationRail />
+      </section>
 
       {drawerOpen ? (
         <div style={overlay}>
           <form onSubmit={createQuickOpportunity} style={drawer}>
             <div style={drawerHeader}>
               <div>
-                <h2 style={{ margin: 0, fontSize: 22, fontWeight: 900 }}>Create Project Opportunity</h2>
-                <p style={{ margin: '6px 0 0', color: '#64748b', fontSize: 13 }}>Start a construction acquisition record from consultation to proposal and contract award.</p>
+                <h2 style={{ margin: 0, fontSize: 22, fontWeight: 600, color: 'var(--sales-foreground)' }}>Create Project Opportunity</h2>
+                <p style={{ margin: '6px 0 0', color: 'var(--sales-muted)', fontSize: 13 }}>Create a sales opportunity and track it through the pipeline.</p>
               </div>
               <button type="button" onClick={() => setDrawerOpen(false)} style={iconButton}><X size={18} /></button>
             </div>
             <div style={formGrid}>
-              <TextField label="Client / Company" value={form.client} onChange={value => setForm(current => ({ ...current, client: value }))} required />
+              <OptionSelectField label="Client / Company" value={form.clientId} onChange={applyClientSelection} options={clientOptions} placeholder={clientOptions.length ? 'Select a client from Client Database' : 'No Client Database records yet'} required />
+              {selectedClient ? (
+                <div style={clientPreview}>
+                  <strong style={{ color: 'var(--sales-foreground)' }}>{clientDisplayName(selectedClient)}</strong>
+                  <span>{form.contactPerson || 'No contact person'}{form.email ? ` - ${form.email}` : ''}</span>
+                  <span>{form.phone || 'No phone number'}{form.location ? ` - ${form.location}` : ''}</span>
+                </div>
+              ) : (
+                <p style={fieldHint}>Clients come from the Client Database. Add a client there first, then select it here.</p>
+              )}
               <TextField label="Project Name" value={form.projectName} onChange={value => setForm(current => ({ ...current, projectName: value }))} required />
-              <TextField label="Estimated Contract Value" value={form.amount} onChange={value => setForm(current => ({ ...current, amount: value }))} type="number" prefix="$" required />
+              <TextField label="Estimated Contract Value" value={form.amount} onChange={value => setForm(current => ({ ...current, amount: value }))} type="number" prefix="PHP" required />
               <SelectField label="Project Type" value={form.projectType} onChange={value => setForm(current => ({ ...current, projectType: value }))} options={projectTypes} />
               <TextField label="Location / Site Address" value={form.location} onChange={value => setForm(current => ({ ...current, location: value }))} />
+              <TextField label="Contact Person" value={form.contactPerson} onChange={value => setForm(current => ({ ...current, contactPerson: value }))} />
+              <TextField label="Contact Email" value={form.email} onChange={value => setForm(current => ({ ...current, email: value }))} type="email" />
+              <TextField label="Contact Phone" value={form.phone} onChange={value => setForm(current => ({ ...current, phone: value }))} />
+              <SelectField label="Sales Stage" value={form.stage} onChange={value => setForm(current => ({ ...current, stage: value as OpportunityStage }))} options={opportunityStages} />
+              <TextField label="Probability (%)" value={form.probability} onChange={value => setForm(current => ({ ...current, probability: value }))} type="number" />
+              <TextField label="Assigned Team" value={form.assignedTeam} onChange={value => setForm(current => ({ ...current, assignedTeam: value }))} />
               <SelectField label="Sales Rep" value={form.salesRep} onChange={value => setForm(current => ({ ...current, salesRep: value }))} options={salesRepOptions} />
               <TextField label="Expected Closing Date" value={form.closeDate} onChange={value => setForm(current => ({ ...current, closeDate: value }))} type="date" />
+              <TextAreaField label="Opportunity Notes" value={form.notes} onChange={value => setForm(current => ({ ...current, notes: value }))} />
             </div>
             <div style={drawerFooter}>
               <button type="button" onClick={() => setDrawerOpen(false)} style={secondaryButton}>Cancel</button>
@@ -498,217 +676,40 @@ export default function SalesPage() {
   )
 }
 
-function Overview({ opportunities, siteVisits, proposals, contracts, billings, clients, reps, categories, pipeline, onScheduleVisit, onConvertProposal, onActivateContract }: {
-  opportunities: Opportunity[]
-  siteVisits: SiteVisit[]
-  proposals: Proposal[]
-  contracts: Contract[]
-  billings: ProgressBilling[]
-  clients: Client[]
-  reps: { label: string; amount: number; count: number }[]
-  categories: { label: string; amount: number; count: number }[]
-  pipeline: { stage: OpportunityStage; count: number; amount: number }[]
-  onScheduleVisit: (opportunity: Opportunity) => void
-  onConvertProposal: (proposal: Proposal) => void
-  onActivateContract: (contract: Contract) => void
-}) {
+function OpportunityTable({ opportunities, onScheduleVisit, onConvertProject }: { opportunities: Opportunity[]; onScheduleVisit: (opportunity: Opportunity) => void; onConvertProject: (opportunity: Opportunity) => void }) {
+  if (!opportunities.length) return <EmptyState title="No opportunities found" body="Change the filters or create a new opportunity." />
+
   return (
-    <>
-      <div className="sales-top-grid" style={topGrid}>
-        <Panel title="Proposal Pipeline" action={<select style={miniSelect}><option>This Quarter</option></select>}>
-          {pipeline.some(stage => stage.count > 0) ? <Pipeline stages={pipeline} /> : <EmptyState title="No proposal pipeline yet" body="Qualified project opportunities will appear in the construction acquisition funnel." />}
-        </Panel>
-        <Panel title="Revenue Forecast" action={<select style={miniSelect}><option>By Month</option></select>}>
-          {opportunities.length ? <ForecastChart opportunities={opportunities} /> : <EmptyState title="No forecast yet" body="Estimated contract values will build the revenue forecast." />}
-        </Panel>
-        <Panel title="Top Project Categories" action={<a style={viewAll}>View All</a>}>
-          {categories.length ? <CategoryRevenue categories={categories} /> : <EmptyState title="No category data yet" body="Project types will rank after opportunities are created." />}
-        </Panel>
-      </div>
-      <div className="sales-bottom-grid" style={bottomGrid}>
-        <div style={{ display: 'grid', gap: 16, minWidth: 0 }}>
-          <Panel title="Recent Opportunities" action={<a style={viewAll}>View All</a>}>
-            <OpportunitiesTab opportunities={opportunities.slice(0, 5)} onScheduleVisit={onScheduleVisit} compact />
-          </Panel>
-          <Panel title="Pending Quotations" action={<a style={viewAll}>View All</a>}>
-            <ProposalsTab proposals={proposals.filter(item => item.status !== 'Approved').slice(0, 4)} onSend={() => undefined} onConvert={onConvertProposal} compact />
-          </Panel>
-        </div>
-        <div style={{ display: 'grid', gap: 16, minWidth: 0 }}>
-          <Panel title="Upcoming Site Visits" action={<a style={viewAll}>View All</a>}>
-            <SiteVisitsTab visits={siteVisits.slice(0, 4)} compact />
-          </Panel>
-          <Panel title="Recent Contracts" action={<a style={viewAll}>View All</a>}>
-            <ContractsTab contracts={contracts.slice(0, 4)} onActivate={onActivateContract} compact />
-          </Panel>
-          <Panel title="Top Clients" action={<a style={viewAll}>View All</a>}>
-            {clients.length ? <div style={{ display: 'grid', gap: 12, padding: 16 }}>{clients.slice(0, 5).map(client => <MiniRow key={client.id} title={client.companyName} sub={client.contactPerson} value={money(client.totalContractValue)} />)}</div> : <EmptyState title="No client history yet" body="Clients are created from qualified leads, proposals, and contracts." />}
-          </Panel>
-        </div>
-      </div>
-      <div className="sales-top-grid" style={topGrid}>
-        <Panel title="Won vs Lost Projects"><WinLossChart opportunities={opportunities} /></Panel>
-        <Panel title="Lead Sources"><InsightList title="Lead Source Analysis" items={totalBy(opportunities, item => item.projectType, item => item.estimatedContractValue).map(item => [item.label, money(item.amount)])} /></Panel>
-        <Panel title="Proposal Conversion Rate"><ConversionSummary opportunities={opportunities} proposals={proposals} contracts={contracts} billings={billings} reps={reps} /></Panel>
-      </div>
-    </>
-  )
-}
-
-function WorkflowStrip() {
-  return (
-    <div className="sales-workflow-strip" style={workflowStrip}>
-      {workflowSteps.map((step, index) => (
-        <div key={step} className="sales-workflow-step" style={workflowStep}>
-          <span style={workflowNumber}>{index + 1}</span>
-          <span>{step}</span>
-        </div>
-      ))}
-    </div>
-  )
-}
-
-function LeadsTab({ leads, onQualify }: { leads: Lead[]; onQualify: (lead: Lead) => void }) {
-  if (!leads.length) return <EmptyState title="No construction leads yet" body="Capture inquiries from Facebook, website, referrals, walk-ins, LinkedIn, or advertisements." />
-  return <DataTable headers={['Lead Name', 'Company', 'Contact', 'Email', 'Phone', 'Project Type', 'Estimated Budget', 'Location', 'Source', 'Assigned Rep', 'Status', 'Created', 'Actions']}>
-    {leads.map(lead => <tr key={lead.id}>
-      <Cell strong>{lead.leadName}</Cell><Cell>{lead.companyName}</Cell><Cell>{lead.contactPerson}</Cell><Cell>{lead.email}</Cell><Cell>{lead.phone}</Cell><Cell>{lead.projectType}</Cell><Cell>{money(lead.estimatedBudget)}</Cell><Cell>{lead.location}</Cell><Cell>{lead.source}</Cell><Cell>{lead.salesRep}</Cell><Cell><Badge text={lead.status} /></Cell><Cell>{date(lead.createdDate)}</Cell>
-      <Cell>{lead.status !== 'Qualified' && lead.status !== 'Lost' ? <button onClick={() => onQualify(lead)} style={smallButton}>Qualify</button> : <button style={iconButton}><MoreHorizontal size={15} /></button>}</Cell>
-    </tr>)}
-  </DataTable>
-}
-
-function OpportunitiesTab({ opportunities, onScheduleVisit, compact }: { opportunities: Opportunity[]; onScheduleVisit: (opportunity: Opportunity) => void; compact?: boolean }) {
-  const [view, setView] = useState<'grid' | 'table'>('grid')
-  if (!opportunities.length) return <EmptyState title="No project opportunities yet" body="Create qualified project opportunities from consultations or inquiries." />
-  if (!compact && view === 'grid') {
-    return (
-      <div>
-        <div style={{ display: 'flex', justifyContent: 'flex-end', padding: '12px 14px 0' }}><ViewToggle value={view} onChange={setView} /></div>
-        <Kanban opportunities={opportunities} onScheduleVisit={onScheduleVisit} />
-      </div>
-    )
-  }
-  return <DataTable headers={compact ? ['Opportunity', 'Client', 'Value', 'Stage', 'Actions'] : ['Opportunity', 'Client', 'Project Type', 'Est. Contract Value', 'Project Size', 'Probability', 'Current Stage', 'Expected Close', 'Assigned Team', 'Sales Rep', 'Actions']}>
-    {opportunities.map(item => <tr key={item.id}>
-      <Cell strong>{item.name}</Cell><Cell>{item.client}</Cell>{!compact && <Cell>{item.projectType}</Cell>}<Cell>{money(item.estimatedContractValue)}</Cell>{!compact && <Cell>{item.projectSize}</Cell>}{!compact && <Cell>{item.probability}%</Cell>}<Cell><Badge text={item.stage} /></Cell>{!compact && <Cell>{date(item.expectedCloseDate)}</Cell>}{!compact && <Cell>{item.assignedTeam}</Cell>}{!compact && <Cell>{item.salesRep}</Cell>}
-      <Cell><ActionGroup actions={[['Site Visit', () => onScheduleVisit(item), MapPin]]} /></Cell>
-    </tr>)}
-  </DataTable>
-}
-
-function Kanban({ opportunities, onScheduleVisit }: { opportunities: Opportunity[]; onScheduleVisit: (opportunity: Opportunity) => void }) {
-  return <div className="sales-kanban" style={kanbanGrid}>{opportunityStages.map(stage => {
-    const rows = opportunities.filter(item => item.stage === stage)
-    return <section key={stage} style={kanbanColumn}>
-      <header style={kanbanHeader}><span>{stage}</span><b>{rows.length}</b></header>
-      {rows.length ? rows.map(item => <article key={item.id} style={kanbanCard}>
-        <strong>{item.name}</strong>
-        <span>{item.client}</span>
-        <b>{money(item.estimatedContractValue)}</b>
-        <small>{item.projectType} • {item.probability}%</small>
-        {!['Won', 'Lost'].includes(item.stage) ? <button onClick={() => onScheduleVisit(item)} style={smallButton}><MapPin size={13} /> Site Visit</button> : null}
-      </article>) : <p style={kanbanEmpty}>No projects</p>}
-    </section>
-  })}</div>
-}
-
-function SiteVisitsTab({ visits, compact }: { visits: SiteVisit[]; compact?: boolean }) {
-  if (!visits.length) return <EmptyState title="No site visits scheduled" body="Schedule inspections and consultations with assigned architects or engineers." />
-  return <DataTable headers={compact ? ['Client', 'Project', 'Schedule', 'Status'] : ['Client', 'Project', 'Site Address', 'Assigned Architect/Engineer', 'Schedule', 'Visit Status', 'Notes', 'Measurements', 'Checklist']}>
-    {visits.map(visit => <tr key={visit.id}>
-      <Cell strong>{visit.client}</Cell><Cell>{visit.project}</Cell>{!compact && <Cell>{visit.siteAddress}</Cell>}{!compact && <Cell>{visit.assignedProfessional}</Cell>}<Cell>{date(visit.schedule)}</Cell><Cell><Badge text={visit.status} /></Cell>{!compact && <Cell>{visit.notes}</Cell>}{!compact && <Cell>{visit.measurements}</Cell>}{!compact && <Cell>{visit.checklist}</Cell>}
-    </tr>)}
-  </DataTable>
-}
-
-function ProposalsTab({ proposals, onSend, onConvert, compact }: { proposals: Proposal[]; onSend: (proposal: Proposal) => void; onConvert: (proposal: Proposal) => void; compact?: boolean }) {
-  if (!proposals.length) return <EmptyState title="No proposals or quotations yet" body="Build project proposals with scope of work, BOQ, labor, materials, equipment, design fees, VAT, and payment terms." />
-  return <DataTable headers={compact ? ['Proposal #', 'Project', 'Total', 'Status', 'Actions'] : ['Proposal #', 'Client', 'Project', 'Scope of Work', 'BOQ', 'Labor', 'Materials', 'Equipment', 'Design Fees', 'VAT', 'Discount', 'Total', 'Timeline', 'Payment Terms', 'Valid Until', 'Status', 'Actions']}>
-    {proposals.map(proposal => <tr key={proposal.id}>
-      <Cell strong>{proposal.id}</Cell>{!compact && <Cell>{proposal.client}</Cell>}<Cell>{proposal.projectName}</Cell>{!compact && <Cell>{proposal.scopeOfWork}</Cell>}{!compact && <Cell>{proposal.boqSummary}</Cell>}{!compact && <Cell>{money(proposal.laborCost)}</Cell>}{!compact && <Cell>{money(proposal.materialCost)}</Cell>}{!compact && <Cell>{money(proposal.equipmentCost)}</Cell>}{!compact && <Cell>{money(proposal.designFees)}</Cell>}{!compact && <Cell>{money(proposal.vat)}</Cell>}{!compact && <Cell>{money(proposal.discount)}</Cell>}<Cell strong>{money(proposal.total)}</Cell>{!compact && <Cell>{proposal.timeline}</Cell>}{!compact && <Cell>{proposal.paymentTerms}</Cell>}{!compact && <Cell>{date(proposal.validUntil)}</Cell>}<Cell><Badge text={proposal.status} /></Cell>
-      <Cell><ActionGroup actions={[['Send', () => onSend(proposal), Send], ['PDF', () => undefined, Download], ['Contract', () => onConvert(proposal), FileCheck2], ['BOQ', () => undefined, ClipboardList]]} /></Cell>
-    </tr>)}
-  </DataTable>
-}
-
-function ContractsTab({ contracts, onActivate, compact }: { contracts: Contract[]; onActivate: (contract: Contract) => void; compact?: boolean }) {
-  if (!contracts.length) return <EmptyState title="No contracts yet" body="Approved proposals can be converted into contracts with signature, milestones, retention, and payment schedules." />
-  return <DataTable headers={compact ? ['Contract #', 'Project', 'Amount', 'Status', 'Actions'] : ['Contract #', 'Client', 'Project Name', 'Contract Amount', 'Downpayment', 'Retention', 'Start Date', 'Completion Date', 'Contract Status', 'Milestone Tracking', 'Actions']}>
-    {contracts.map(contract => <tr key={contract.id}>
-      <Cell strong>{contract.id}</Cell>{!compact && <Cell>{contract.client}</Cell>}<Cell>{contract.projectName}</Cell><Cell strong>{money(contract.contractAmount)}</Cell>{!compact && <Cell>{money(contract.downpayment)}</Cell>}{!compact && <Cell>{money(contract.retention)}</Cell>}{!compact && <Cell>{date(contract.startDate)}</Cell>}{!compact && <Cell>{date(contract.completionDate)}</Cell>}<Cell><Badge text={contract.status} /></Cell>{!compact && <Cell>{contract.milestoneTracking}</Cell>}
-      <Cell>{contract.status === 'Draft' || contract.status === 'Pending Signature' ? <ActionGroup actions={[['Activate', () => onActivate(contract), CheckCircle2], ['E-sign', () => undefined, FileCheck2]]} /> : <button style={iconButton}><MoreHorizontal size={15} /></button>}</Cell>
-    </tr>)}
-  </DataTable>
-}
-
-function ProgressBillingTab({ billings, onMarkPaid }: { billings: ProgressBilling[]; onMarkPaid: (billing: ProgressBilling) => void }) {
-  if (!billings.length) return <EmptyState title="No progress billing yet" body="Active contracts generate milestone billing such as downpayment, structural completion, finishing, and turnover." />
-  return <DataTable headers={['Billing #', 'Project', 'Billing Milestone', 'Amount', 'Due Date', 'Paid Amount', 'Remaining Balance', 'Payment Status', 'Actions']}>
-    {billings.map(billing => <tr key={billing.id}>
-      <Cell strong>{billing.id}</Cell><Cell>{billing.project}</Cell><Cell>{billing.milestone}</Cell><Cell strong>{money(billing.amount)}</Cell><Cell>{date(billing.dueDate)}</Cell><Cell>{money(billing.paidAmount)}</Cell><Cell>{money(billing.remainingBalance)}</Cell><Cell><Badge text={billing.status} /></Cell>
-      <Cell>{billing.status !== 'Paid' ? <button onClick={() => onMarkPaid(billing)} style={smallButton}>Mark paid</button> : <button style={iconButton}><MoreHorizontal size={15} /></button>}</Cell>
-    </tr>)}
-  </DataTable>
-}
-
-function ClientsTab({ clients }: { clients: Client[] }) {
-  if (!clients.length) return <EmptyState title="No construction clients yet" body="Client records collect communication history, proposal history, contracts, billings, and uploaded documents." />
-  return <DataTable headers={['Company Name', 'Contact Person', 'Email', 'Phone', 'Address', 'Active Projects', 'Total Contract Value', 'Last Interaction', 'Assigned Account Manager']}>
-    {clients.map(client => <tr key={client.id}>
-      <Cell strong>{client.companyName}</Cell><Cell>{client.contactPerson}</Cell><Cell>{client.email}</Cell><Cell>{client.phone}</Cell><Cell>{client.address}</Cell><Cell>{client.activeProjects}</Cell><Cell strong>{money(client.totalContractValue)}</Cell><Cell>{date(client.lastInteraction)}</Cell><Cell>{client.accountManager}</Cell>
-    </tr>)}
-  </DataTable>
-}
-
-function AnalyticsTab({ opportunities, proposals, contracts, billings, clients }: { opportunities: Opportunity[]; proposals: Proposal[]; contracts: Contract[]; billings: ProgressBilling[]; clients: Client[] }) {
-  const won = opportunities.filter(item => item.stage === 'Won').length
-  const avgProjectValue = contracts.reduce((sum, item) => sum + item.contractAmount, 0) / Math.max(contracts.length, 1)
-  const proposalApproval = Math.round((proposals.filter(item => item.status === 'Approved').length / Math.max(proposals.length, 1)) * 100)
-  const forecast = opportunities.filter(item => !['Won', 'Lost'].includes(item.stage)).reduce((sum, item) => sum + item.estimatedContractValue * (item.probability / 100), 0)
-  const byType = totalBy(opportunities, item => item.projectType, item => item.estimatedContractValue)
-  const byRep = totalBy(opportunities, item => item.salesRep, item => item.estimatedContractValue)
-  const byClient = totalBy(clients, item => item.companyName, item => item.totalContractValue)
-  return (
-    <div style={analyticsGrid}>
-      <InsightCard title="Average Project Value" value={money(avgProjectValue)} body="Average signed contract amount across active project wins." icon={Building2} />
-      <InsightCard title="Average Closing Time" value="32 days" body="Estimated from consultation to contract award." icon={CalendarDays} />
-      <InsightCard title="Proposal Approval Rate" value={`${proposalApproval}%`} body="Approved proposals against total proposal volume." icon={ClipboardCheck} />
-      <InsightCard title="Total Pipeline Value" value={money(opportunities.reduce((sum, item) => sum + item.estimatedContractValue, 0))} body="Full construction acquisition pipeline." icon={Funnel} />
-      <InsightCard title="Revenue Forecast" value={money(forecast)} body="Probability-weighted projected revenue." icon={BarChart3} />
-      <InsightCard title="Win / Loss Ratio" value={`${won}:${opportunities.filter(item => item.stage === 'Lost').length}`} body="Won and lost project opportunities." icon={ShieldCheck} />
-      <InsightList title="Revenue by Project Type" items={byType.map(item => [item.label, money(item.amount)])} />
-      <InsightList title="Sales Rep Performance" items={byRep.map(item => [item.label, money(item.amount)])} />
-      <InsightList title="Sales by Client" items={byClient.map(item => [item.label, money(item.amount)])} />
-      <InsightCard title="Progress Billing Health" value={money(billings.reduce((sum, item) => sum + item.remainingBalance, 0))} body="Remaining balance from milestone billing schedules." icon={ReceiptText} />
-    </div>
-  )
-}
-
-function IntegrationRail() {
-  const items = [
-    ['Financials', 'Progress billing, invoices, cash flow, retention, and contract payments stay connected.'],
-    ['Procurement', 'Approved BOQs can create purchase requests for materials and subcontractor packages.'],
-    ['Warehouse', 'Project materials can reserve stock and update site delivery requirements.'],
-    ['Project Management', 'Awarded contracts can create active construction projects automatically.'],
-    ['HR', 'Assigned architects, engineers, estimators, and site teams connect to workload and performance.'],
-    ['Documents', 'Proposals, drawings, BOQs, contracts, site photos, and handover files are attached per client.'],
-    ['Workflows', 'Approvals can route proposals, discounts, contract reviews, and billing milestones.'],
-  ]
-  const icons = [ReceiptText, ClipboardList, Warehouse, Hammer, UserRound, FileText, CheckCircle2]
-  return (
-    <section style={integrationPanel}>
-      <h2 style={panelTitle}>WiseFlow construction ERP integrations</h2>
-      <div style={integrationGrid}>
-        {items.map(([title, body], index) => {
-          const Icon = icons[index]
-          return <div key={title} style={integrationItem}>
-            <span style={softIcon(['#16a34a', '#2563eb', '#f59e0b', '#8b5cf6', '#14b8a6', '#0f172a', '#ef4444'][index], 36)}><Icon size={18} /></span>
-            <div><strong>{title}</strong><p>{body}</p></div>
-          </div>
-        })}
-      </div>
-    </section>
+    <DataTable headers={['Title', 'Client', 'Duration', 'Quotation', 'Budget', 'Status', 'Action']}>
+      {opportunities.map(opportunity => {
+        const stage = normalizeSalesStage(opportunity.stage)
+        return (
+          <tr key={opportunity.id}>
+            <Cell strong>
+              <span style={{ display: 'grid', gap: 3 }}>
+                <span>{opportunity.name}</span>
+                <small style={{ color: 'var(--sales-muted)', fontWeight: 500 }}>{opportunity.projectSize || opportunity.projectType}</small>
+              </span>
+            </Cell>
+            <Cell>
+              <span style={{ display: 'grid', gap: 3 }}>
+                <span>{opportunity.client}</span>
+                <small style={{ color: 'var(--sales-muted)', fontWeight: 500 }}>{opportunity.contactEmail || opportunity.salesRep || 'Unassigned'}</small>
+              </span>
+            </Cell>
+            <Cell>{dateRange(opportunity.expectedCloseDate)}</Cell>
+            <Cell>{money(opportunity.estimatedContractValue)}</Cell>
+            <Cell>{money(opportunity.estimatedContractValue * Math.max(opportunity.probability, 0) / 100)}</Cell>
+            <Cell><Badge text={stage === 'Not Awarded' ? 'Declined' : stage} /></Cell>
+            <Cell>
+              {stage === 'Lead' ? <button type="button" onClick={() => onScheduleVisit(opportunity)} style={smallButton}>Site Visit</button> : null}
+              {stage === 'Awarded' ? <button type="button" onClick={() => onConvertProject(opportunity)} style={smallButton}>Create Project</button> : null}
+              {!['Lead', 'Awarded'].includes(stage) ? <span style={{ color: 'var(--sales-muted)' }}>-</span> : null}
+            </Cell>
+          </tr>
+        )
+      })}
+    </DataTable>
   )
 }
 
@@ -727,73 +728,41 @@ function Cell({ children, strong }: { children: ReactNode; strong?: boolean }) {
   return <td style={{ ...tdStyle, fontWeight: strong ? 900 : 650 }}>{children}</td>
 }
 
-function ActionGroup({ actions }: { actions: [string, () => void, React.ComponentType<{ size?: number }>][] }) {
-  return <div style={{ display: 'flex', gap: 7, flexWrap: 'wrap' }}>{actions.map(([label, action, Icon]) => <button key={label} onClick={action} style={smallButton}><Icon size={13} />{label}</button>)}</div>
-}
-
 function Panel({ title, action, children }: { title: string; action?: ReactNode; children: ReactNode }) {
   return (
-    <section style={panel}>
-      <div style={panelHeader}><h2 style={panelTitle}>{title}</h2>{action}</div>
+    <section className="sales-panel" style={panel}>
+      <div className="sales-panel-header" style={panelHeader}><h2 style={panelTitle}>{title}</h2>{action}</div>
       {children}
     </section>
   )
 }
 
-function PageHeader({ title, subtitle, actions }: { title: string; subtitle: string; actions: ReactNode }) {
-  return <div style={pageHeader}><div><h1 style={h1}>{title}</h1><p style={subtitleStyle}>{subtitle}</p></div><div style={actionsWrap}>{actions}</div></div>
+function PageHeader({ crumb, title, subtitle, actions }: { crumb: string; title: string; subtitle: string; actions: ReactNode }) {
+  return (
+    <div className="sales-page-header" style={pageHeader}>
+      <div>
+        <div className="sales-breadcrumb" style={breadcrumb}>{crumb}</div>
+        <h1 style={h1}>{title}</h1>
+        <p style={subtitleStyle}>{subtitle}</p>
+      </div>
+      <div className="sales-header-actions" style={actionsWrap}>{actions}</div>
+    </div>
+  )
 }
 
-function MetricCard({ icon, label, value, detail, tone }: { icon: ReactNode; label: string; value: string; detail: string; tone: string }) {
-  return <div className="sales-metric-card" style={metricCard}><span className="sales-metric-icon" style={softIcon(tone)}>{icon}</span><div style={{ minWidth: 0 }}><div className="sales-stat-label" style={statLabel}>{label}</div><div className="sales-stat-value" style={statValue}>{value}</div><div className="sales-stat-detail" style={statDetail}>{detail}</div></div></div>
-}
-
-function ForecastChart({ opportunities }: { opportunities: Opportunity[] }) {
-  const monthly = buildMonthlyForecast(opportunities)
-  const max = Math.max(...monthly.map(item => item.amount), 1)
-  return <div style={{ padding: '8px 12px 24px' }}><div style={chartArea}>{monthly.map(item => <div key={item.label} style={chartColumn}><div style={{ ...bar, height: `${Math.max((item.amount / max) * 100, 12)}%` }} /><small style={chartLabel}>{item.label}</small></div>)}</div></div>
-}
-
-function Pipeline({ stages }: { stages: { stage: OpportunityStage; count: number; amount: number }[] }) {
-  const max = Math.max(...stages.map(item => item.amount), 1)
-  return <div className="sales-pipeline" style={pipelineGrid}>{stages.map((item, index) => <div key={item.stage} className="sales-pipeline-row" style={{ display: 'contents' }}>
-    <div style={pipelineLabel}><i style={legendDot(stageColors[index % stageColors.length])} />{item.stage}<strong>{item.count}</strong></div>
-    <span style={{ ...funnelBar, width: `${Math.max((item.amount / max) * 100, 18)}%`, background: stageColors[index % stageColors.length] }} />
-    <strong style={{ textAlign: 'right' }}>{money(item.amount)}</strong>
-  </div>)}</div>
-}
-
-function CategoryRevenue({ categories }: { categories: { label: string; amount: number; count: number }[] }) {
-  const total = categories.reduce((sum, item) => sum + item.amount, 0)
-  return <div className="category-revenue" style={categoryLayout}><div style={donut}><strong>{money(total)}</strong><span>Pipeline Value</span></div><div style={{ display: 'grid', gap: 12 }}>{categories.slice(0, 5).map((item, index) => <div key={item.label} style={categoryRow}><span><i style={legendDot(stageColors[index % stageColors.length])} />{item.label}</span><strong>{money(item.amount)}</strong></div>)}</div></div>
-}
-
-function WinLossChart({ opportunities }: { opportunities: Opportunity[] }) {
-  const won = opportunities.filter(item => item.stage === 'Won').length
-  const lost = opportunities.filter(item => item.stage === 'Lost').length
-  return <div style={{ padding: 18, display: 'grid', gap: 14 }}><MiniRow title="Won Projects" sub="Awarded contracts and project wins" value={String(won)} /><MiniRow title="Lost Projects" sub="Lost bids and inactive pursuits" value={String(lost)} /><MiniRow title="Open Pursuits" sub="Projects still in acquisition" value={String(opportunities.length - won - lost)} /></div>
-}
-
-function ConversionSummary({ opportunities, proposals, contracts, billings, reps }: { opportunities: Opportunity[]; proposals: Proposal[]; contracts: Contract[]; billings: ProgressBilling[]; reps: { label: string; amount: number; count: number }[] }) {
-  const conversion = Math.round((contracts.length / Math.max(proposals.length, 1)) * 100)
-  return <div style={{ padding: 18, display: 'grid', gap: 12 }}>
-    <MiniRow title="Proposal to Contract" sub={`${proposals.length} proposals / ${contracts.length} contracts`} value={`${conversion}%`} />
-    <MiniRow title="Projected Revenue" sub="Weighted opportunity forecast" value={money(opportunities.reduce((sum, item) => sum + item.estimatedContractValue * (item.probability / 100), 0))} />
-    <MiniRow title="Open Billing Balance" sub="Financials sync queue" value={money(billings.reduce((sum, item) => sum + item.remainingBalance, 0))} />
-    {reps.slice(0, 2).map(rep => <MiniRow key={rep.label} title={rep.label} sub={`${rep.count} opportunities`} value={money(rep.amount)} />)}
-  </div>
-}
-
-function MiniRow({ title, sub, value }: { title: string; sub: string; value: string }) {
-  return <div style={miniRow}><div style={{ minWidth: 0 }}><strong>{title}</strong><span>{sub}</span></div><b>{value}</b></div>
-}
-
-function InsightCard({ title, value, body, icon: Icon }: { title: string; value: string; body: string; icon: React.ComponentType<{ size?: number }> }) {
-  return <section style={insightCard}><span style={softIcon(green, 42)}><Icon size={20} /></span><div><h3>{title}</h3><strong>{value}</strong><p>{body}</p></div></section>
-}
-
-function InsightList({ title, items }: { title: string; items: [string, string][] }) {
-  return <section style={insightCard}><h3>{title}</h3>{items.length ? <div style={{ display: 'grid', gap: 10 }}>{items.slice(0, 5).map(([label, value]) => <div key={label} style={listRow}><span>{label}</span><strong>{value}</strong></div>)}</div> : <p style={{ margin: 0, color: '#64748b', fontSize: 13 }}>No data yet.</p>}</section>
+function SalesMetricCard({ label, value, detail, icon: Icon, color }: { label: string; value: string; detail: string; icon: LucideIcon; color: string }) {
+  return (
+    <article className="sales-metric-card">
+      <span className="sales-metric-icon" style={{ '--sales-metric-color': color } as CSSProperties}>
+        <Icon size={18} />
+      </span>
+      <span>
+        <small className="sales-stat-label">{label}</small>
+        <strong className="sales-stat-value">{value}</strong>
+        <small className="sales-stat-detail">{detail}</small>
+      </span>
+    </article>
+  )
 }
 
 function EmptyState({ title, body }: { title: string; body: string }) {
@@ -801,11 +770,11 @@ function EmptyState({ title, body }: { title: string; body: string }) {
 }
 
 function SearchFilter({ search, setSearch }: { search: string; setSearch: (value: string) => void }) {
-  return <label style={searchBox}><Search size={15} color="#64748b" /><input value={search} onChange={event => setSearch(event.target.value)} placeholder="Search CRM & Sales..." style={bareInput} /></label>
+  return <label className="sales-panel-search" style={searchBox}><Search size={15} /><input value={search} onChange={event => setSearch(event.target.value)} placeholder="Search CRM & Sales..." style={bareInput} /></label>
 }
 
-function ToolbarButton({ icon, label, hasChevron }: { icon: ReactNode; label: string; hasChevron?: boolean }) {
-  return <button style={secondaryButton}>{icon}{label}{hasChevron ? <ChevronDown size={14} /> : null}</button>
+function ToolbarButton({ icon, label, hasChevron, onClick }: { icon: ReactNode; label: string; hasChevron?: boolean; onClick?: () => void }) {
+  return <button type="button" onClick={onClick} style={secondaryButton}>{icon}{label}{hasChevron ? <ChevronDown size={14} /> : null}</button>
 }
 
 function TextField({ label, value, onChange, required, type = 'text', prefix }: { label: string; value: string; onChange: (value: string) => void; required?: boolean; type?: string; prefix?: string }) {
@@ -816,24 +785,36 @@ function SelectField({ label, value, onChange, options, required }: { label: str
   return <label style={fieldWrap}><span style={labelStyle}>{label}{required ? <b> *</b> : null}</span><select value={value} onChange={event => onChange(event.target.value)} style={inputStyle}>{options.map(option => <option key={option}>{option}</option>)}</select></label>
 }
 
-function ViewToggle({ value, onChange }: { value: 'grid' | 'table'; onChange: (value: 'grid' | 'table') => void }) {
+function OptionSelectField({ label, value, onChange, options, placeholder, required }: { label: string; value: string; onChange: (value: string) => void; options: { value: string; label: string }[]; placeholder?: string; required?: boolean }) {
   return (
-    <div className="sales-view-toggle" style={viewToggle}>
-      <button type="button" aria-label="Grid view" onClick={() => onChange('grid')} style={viewToggleButton(value === 'grid')}><LayoutGrid size={14} /></button>
-      <button type="button" aria-label="Table view" onClick={() => onChange('table')} style={viewToggleButton(value === 'table')}><List size={14} /></button>
-    </div>
+    <label style={fieldWrap}>
+      <span style={labelStyle}>{label}{required ? <b> *</b> : null}</span>
+      <select value={value} onChange={event => onChange(event.target.value)} style={inputStyle} disabled={!options.length} required={required}>
+        <option value="">{placeholder || 'Select an option'}</option>
+        {options.map(option => <option key={option.value} value={option.value}>{option.label}</option>)}
+      </select>
+    </label>
+  )
+}
+
+function TextAreaField({ label, value, onChange, required }: { label: string; value: string; onChange: (value: string) => void; required?: boolean }) {
+  return (
+    <label style={fieldWrap}>
+      <span style={labelStyle}>{label}{required ? <b> *</b> : null}</span>
+      <textarea value={value} onChange={event => onChange(event.target.value)} rows={4} style={{ ...inputStyle, height: 'auto', minHeight: 96, padding: '12px', resize: 'vertical' }} />
+    </label>
   )
 }
 
 function Badge({ text }: { text: string }) {
   const color = text.includes('Paid') || text === 'Won' || text === 'Qualified' || text === 'Active' || text === 'Approved' || text === 'Completed'
-    ? ['#dcfce7', '#15803d']
+    ? ['color-mix(in srgb, var(--sales-success) 13%, transparent)', 'var(--sales-success)']
     : text.includes('Lost') || text === 'Cancelled' || text === 'Overdue' || text === 'Rejected' || text === 'Terminated'
-      ? ['#fee2e2', '#dc2626']
+      ? ['color-mix(in srgb, var(--sales-danger) 13%, transparent)', 'var(--sales-danger)']
       : text.includes('Review') || text.includes('Negotiation') || text === 'Submitted' || text === 'Pending Signature'
-        ? ['#fef3c7', '#b45309']
-        : ['#dbeafe', '#1d4ed8']
-  return <span style={{ background: color[0], color: color[1], borderRadius: 999, padding: '4px 8px', fontSize: 11, fontWeight: 850, whiteSpace: 'nowrap' }}>{text}</span>
+        ? ['color-mix(in srgb, var(--sales-warning) 13%, transparent)', 'var(--sales-warning)']
+        : ['var(--sales-card-hover)', 'var(--sales-muted)']
+  return <span style={{ background: color[0], color: color[1], borderRadius: 999, padding: '4px 8px', fontSize: 11, fontWeight: 500, whiteSpace: 'nowrap', border: '1px solid var(--sales-border-soft)' }}>{text}</span>
 }
 
 function loadSalesWorkspace(companyId?: string): SalesWorkspaceData {
@@ -867,7 +848,7 @@ function companyScopedSalesData(companyId?: string, data?: SalesWorkspaceData): 
   const source = data || emptySalesWorkspace
   return {
     leads: source.leads.map(item => ({ ...item, companyId })),
-    opportunities: source.opportunities.map(item => ({ ...item, companyId })),
+    opportunities: source.opportunities.map(item => ({ ...item, stage: normalizeSalesStage(item.stage), companyId })),
     siteVisits: source.siteVisits.map(item => ({ ...item, companyId })),
     proposals: source.proposals.map(item => ({ ...item, companyId })),
     contracts: source.contracts.map(item => ({ ...item, companyId })),
@@ -881,78 +862,62 @@ function normalizeCompanyRows<T extends { companyId?: string }>(rows: T[] | unde
   return rows.map(row => ({ ...row, companyId })).filter(row => row.companyId === companyId)
 }
 
-function filterRows(data: SalesWorkspaceData, query: string) {
+function filterRows(data: SalesWorkspaceData, query: string, period: SalesPeriod, filters: SalesFilters) {
   const q = query.trim().toLowerCase()
-  const filter = <T,>(rows: T[]) => !q ? rows : rows.filter(row => JSON.stringify(row).toLowerCase().includes(q))
+  const filter = <T,>(rows: T[], dateOf: (row: T) => string, matches: (row: T) => boolean = () => true) => rows.filter(row => {
+    const searchMatch = !q || JSON.stringify(row).toLowerCase().includes(q)
+    return searchMatch && inSelectedPeriod(dateOf(row), period) && matches(row)
+  })
   return {
-    leads: filter(data.leads),
-    opportunities: filter(data.opportunities),
-    siteVisits: filter(data.siteVisits),
-    proposals: filter(data.proposals),
-    contracts: filter(data.contracts),
-    billings: filter(data.billings),
-    clients: filter(data.clients),
+    leads: filter(data.leads, row => row.createdDate, row => matchesOption(filters.projectType, row.projectType) && matchesOption(filters.salesRep, row.salesRep) && matchesOption(filters.status, row.status)),
+    opportunities: filter(data.opportunities, row => row.expectedCloseDate, row => matchesOption(filters.projectType, row.projectType) && matchesOption(filters.salesRep, row.salesRep) && matchesOption(filters.stage, normalizeSalesStage(row.stage))),
+    siteVisits: filter(data.siteVisits, row => row.schedule, row => matchesOption(filters.status, row.status)),
+    proposals: filter(data.proposals, row => row.validUntil, row => matchesOption(filters.status, row.status)),
+    contracts: filter(data.contracts, row => row.startDate || row.completionDate, row => matchesOption(filters.status, row.status)),
+    billings: filter(data.billings, row => row.dueDate, row => matchesOption(filters.status, row.status)),
+    clients: filter(data.clients, row => row.lastInteraction, row => matchesOption(filters.salesRep, row.accountManager)),
   }
 }
 
-function totalBy<T>(rows: T[], pick: (row: T) => string, amountOf: (row: T) => number) {
-  const map = new Map<string, { label: string; amount: number; count: number }>()
-  rows.forEach(row => {
-    const label = pick(row) || 'Unassigned'
-    const current = map.get(label) || { label, amount: 0, count: 0 }
-    current.amount += amountOf(row)
-    current.count += 1
-    map.set(label, current)
-  })
-  return Array.from(map.values()).sort((a, b) => b.amount - a.amount)
+function matchesOption(selected: string, value: string) {
+  return selected === 'All' || value === selected
 }
 
-function buildPipeline(opportunities: Opportunity[]) {
-  return opportunityStages.map(stage => {
-    const rows = opportunities.filter(item => item.stage === stage)
-    return { stage, count: rows.length, amount: rows.reduce((sum, item) => sum + item.estimatedContractValue, 0) }
-  })
+function inSelectedPeriod(value: string, period: SalesPeriod) {
+  if (period === 'All records') return true
+  const dateValue = new Date(`${value}T00:00:00`)
+  if (Number.isNaN(dateValue.getTime())) return false
+  const today = new Date()
+  if (period === 'Current period') {
+    return dateValue.getFullYear() === today.getFullYear() && dateValue.getMonth() === today.getMonth()
+  }
+  if (period === 'This year') return dateValue.getFullYear() === today.getFullYear()
+  const currentQuarter = Math.floor(today.getMonth() / 3)
+  return dateValue.getFullYear() === today.getFullYear() && Math.floor(dateValue.getMonth() / 3) === currentQuarter
 }
 
-function buildMonthlyForecast(opportunities: Opportunity[]) {
-  const formatter = new Intl.DateTimeFormat('en-US', { month: 'short' })
-  const totals = new Map<string, number>()
-  opportunities.forEach(opportunity => {
-    const parsed = new Date(`${opportunity.expectedCloseDate}T00:00:00`)
-    if (Number.isNaN(parsed.getTime())) return
-    const key = `${parsed.getFullYear()}-${String(parsed.getMonth() + 1).padStart(2, '0')}`
-    totals.set(key, (totals.get(key) || 0) + opportunity.estimatedContractValue * (opportunity.probability / 100))
-  })
-  return Array.from(totals.entries())
-    .sort(([a], [b]) => a.localeCompare(b))
-    .slice(-6)
-    .map(([key, amount]) => {
-      const [year, month] = key.split('-').map(Number)
-      return { label: formatter.format(new Date(year, month - 1, 1)), amount }
-    })
+function downloadCsv(filename: string, rows: Record<string, unknown>[]) {
+  if (typeof window === 'undefined') return
+  const headers = Array.from(rows.reduce((set, row) => {
+    Object.keys(row).forEach(key => set.add(key))
+    return set
+  }, new Set<string>()))
+  const lines = [
+    headers.join(','),
+    ...rows.map(row => headers.map(header => csvCell(row[header])).join(',')),
+  ]
+  const blob = new Blob([lines.join('\n')], { type: 'text/csv;charset=utf-8' })
+  const url = window.URL.createObjectURL(blob)
+  const link = document.createElement('a')
+  link.href = url
+  link.download = filename
+  link.click()
+  window.URL.revokeObjectURL(url)
 }
 
-function billingSchedule(contract: Contract, companyId?: string): ProgressBilling[] {
-  const rows = [
-    ['20% Downpayment', 0.2],
-    ['30% Structural Completion', 0.3],
-    ['30% Finishing', 0.3],
-    ['20% Turnover', 0.2],
-  ] as const
-  return rows.map(([milestone, percent], index) => {
-    const amount = contract.contractAmount * percent
-    return {
-      id: `${contract.id.replace('CON', 'BILL')}-${index + 1}`,
-      companyId,
-      project: contract.projectName,
-      milestone,
-      amount,
-      dueDate: addDays(contract.startDate, 30 * (index + 1)),
-      paidAmount: 0,
-      remainingBalance: amount,
-      status: index === 0 ? 'Sent' : 'Draft' as BillingStatus,
-    }
-  })
+function csvCell(value: unknown) {
+  const text = value === null || value === undefined ? '' : String(value)
+  return `"${text.replace(/"/g, '""')}"`
 }
 
 function getSalesRepOptions(company: CompanyRecord | null) {
@@ -966,6 +931,17 @@ function getSalesRepOptions(company: CompanyRecord | null) {
   return options.length ? options : ['Unassigned']
 }
 
+function clientDisplayName(client: ClientDatabaseRecord) {
+  return client.name || client.company || client.email || 'Unnamed client'
+}
+
+function uniqueClientId(baseId: string, clients: ClientDatabaseRecord[]) {
+  if (!clients.some(client => client.id === baseId)) return baseId
+  let suffix = 2
+  while (clients.some(client => client.id === `${baseId}-${suffix}`)) suffix += 1
+  return `${baseId}-${suffix}`
+}
+
 function nextCode(prefix: string, ids: string[]) {
   const next = ids.reduce((max, id) => {
     const number = Number(id.replace(/\D/g, ''))
@@ -975,7 +951,7 @@ function nextCode(prefix: string, ids: string[]) {
 }
 
 function money(value: number) {
-  return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 2 }).format(value || 0)
+  return new Intl.NumberFormat('en-PH', { style: 'currency', currency: 'PHP', maximumFractionDigits: 2 }).format(value || 0)
 }
 
 function date(value: string) {
@@ -983,81 +959,503 @@ function date(value: string) {
   return Number.isNaN(parsed.getTime()) ? value || '-' : parsed.toLocaleDateString('en-US', { month: 'short', day: '2-digit', year: 'numeric' })
 }
 
-function addDays(value: string, days: number) {
-  const parsed = new Date(`${value}T00:00:00`)
-  if (Number.isNaN(parsed.getTime())) return new Date().toISOString().slice(0, 10)
-  parsed.setDate(parsed.getDate() + days)
-  return parsed.toISOString().slice(0, 10)
+function dateRange(value: string) {
+  const formatted = date(value)
+  return formatted === '-' ? '-' : `${formatted} - ${formatted}`
 }
 
-const stageColors = ['#2563eb', '#60a5fa', '#8b5cf6', '#f59e0b', '#14b8a6', '#64748b', '#10b981', '#ef4444']
-const pageHeader: CSSProperties = { display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 18, flexWrap: 'wrap', minWidth: 0 }
-const h1: CSSProperties = { margin: 0, fontSize: 30, lineHeight: 1.08, fontWeight: 900, color: '#020617', letterSpacing: 0 }
-const subtitleStyle: CSSProperties = { margin: '7px 0 0', fontSize: 14, color: '#475569', fontWeight: 500, maxWidth: 760 }
-const actionsWrap: CSSProperties = { display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }
-const primaryButton: CSSProperties = { height: 38, border: '1px solid #16a34a', background: '#16a34a', color: '#fff', borderRadius: 8, padding: '0 15px', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 7, fontSize: 13, fontWeight: 850, cursor: 'pointer', textDecoration: 'none' }
-const secondaryButton: CSSProperties = { height: 38, border: '1px solid #dbe3ea', background: '#fff', color: '#0f172a', borderRadius: 8, padding: '0 14px', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 7, fontSize: 13, fontWeight: 800, cursor: 'pointer', textDecoration: 'none' }
-const workflowStrip: CSSProperties = { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(128px, 1fr))', gap: 10 }
-const workflowStep: CSSProperties = { minHeight: 48, border: '1px solid #dbe3ea', borderRadius: 8, background: '#fff', display: 'flex', alignItems: 'center', gap: 9, padding: '0 12px', fontSize: 12, fontWeight: 850 }
-const workflowNumber: CSSProperties = { width: 24, height: 24, borderRadius: 999, background: '#dcfce7', color: '#15803d', display: 'grid', placeItems: 'center', fontSize: 11, flex: '0 0 auto' }
-const metricGrid: CSSProperties = { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(210px, 1fr))', gap: 16, minWidth: 0 }
-const metricCard: CSSProperties = { minHeight: 118, background: '#fff', border: '1px solid #e2e8f0', borderRadius: 10, padding: 20, display: 'flex', alignItems: 'center', gap: 16, boxShadow: '0 12px 28px rgba(15,23,42,.04)', minWidth: 0 }
-const statLabel: CSSProperties = { color: '#475569', fontSize: 13, fontWeight: 750 }
-const statValue: CSSProperties = { color: '#020617', fontSize: 24, fontWeight: 900, marginTop: 6, overflowWrap: 'anywhere' }
-const statDetail: CSSProperties = { color: green, fontSize: 12, fontWeight: 750, marginTop: 8 }
-const tabsStyle: CSSProperties = { display: 'flex', gap: 26, borderBottom: '1px solid #e2e8f0', overflowX: 'auto', minWidth: 0 }
-const topGrid: CSSProperties = { display: 'grid', gridTemplateColumns: 'minmax(0, 1.25fr) minmax(0, 1fr) minmax(260px, .82fr)', gap: 16, minWidth: 0 }
-const bottomGrid: CSSProperties = { display: 'grid', gridTemplateColumns: 'minmax(0, 1.15fr) minmax(320px, .8fr)', gap: 16, minWidth: 0 }
-const panel: CSSProperties = { background: '#fff', border: '1px solid #e2e8f0', borderRadius: 10, boxShadow: '0 12px 28px rgba(15,23,42,.04)', overflow: 'hidden', minWidth: 0 }
-const panelHeader: CSSProperties = { minHeight: 58, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, padding: '0 18px', borderBottom: '1px solid #eef2f7', minWidth: 0 }
-const panelTitle: CSSProperties = { margin: 0, color: '#020617', fontSize: 15, fontWeight: 900 }
-const emptyState: CSSProperties = { minHeight: 154, display: 'grid', placeItems: 'center', alignContent: 'center', gap: 6, padding: 24, color: '#64748b', textAlign: 'center', fontSize: 13 }
+const salesThemeCss = `
+.sales-page {
+  --sales-background: var(--background);
+  --sales-sidebar: var(--sidebar);
+  --sales-card: var(--card);
+  --sales-card-hover: var(--card-hover);
+  --sales-card-subtle: var(--secondary);
+  --sales-border: var(--border);
+  --sales-border-soft: var(--border-soft);
+  --sales-foreground: var(--foreground);
+  --sales-muted: var(--muted-foreground);
+  --sales-placeholder: var(--placeholder);
+  --sales-primary: var(--primary);
+  --sales-primary-foreground: var(--primary-foreground);
+  --sales-input: var(--input);
+  --sales-input-border: var(--input-border);
+  --sales-success: var(--success);
+  --sales-warning: var(--warning);
+  --sales-danger: var(--danger);
+  --sales-shadow: var(--shadow-sm);
+  --sales-radius: var(--radius-card);
+  --sales-radius-sm: var(--radius-control);
+  --sales-space-3: 12px;
+  --sales-space-4: 16px;
+  --sales-space-5: 24px;
+  font-family: var(--font-body), "Geist Sans", "Geist Fallback", sans-serif !important;
+}
+.sales-page *,
+.sales-page *::before,
+.sales-page *::after {
+  box-sizing: border-box;
+  font-family: var(--font-body), "Geist Sans", "Geist Fallback", sans-serif !important;
+  letter-spacing: 0;
+}
+.sales-page h1,
+.sales-page h2,
+.sales-page h3,
+.sales-page strong,
+.sales-page b {
+  color: var(--sales-foreground) !important;
+}
+.sales-page p,
+.sales-page small,
+.sales-page span {
+  line-height: 1.45;
+}
+.sales-page button,
+.sales-page input,
+.sales-page select,
+.sales-page textarea {
+  font-family: var(--font-body), "Geist Sans", "Geist Fallback", sans-serif !important;
+}
+.sales-page button:hover,
+.sales-page a:hover {
+  transform: none !important;
+}
+.sales-page input::placeholder,
+.sales-page textarea::placeholder {
+  color: var(--sales-placeholder) !important;
+}
+.sales-page .sales-kpi-grid {
+  background: transparent !important;
+  border: 0 !important;
+  box-shadow: none !important;
+  padding: 0 !important;
+  overflow: visible !important;
+}
+.sales-page input:focus,
+.sales-page select:focus,
+.sales-page textarea:focus {
+  border-color: var(--sales-primary) !important;
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--sales-primary) 8%, transparent) !important;
+}
+.sales-page .sales-metric-card,
+.sales-page article {
+  background: var(--sales-card) !important;
+  border-color: var(--sales-border) !important;
+  color: var(--sales-foreground) !important;
+  box-shadow: var(--sales-shadow) !important;
+}
+.sales-page .sales-metric-card {
+  background: linear-gradient(145deg, rgba(255,255,255,0.055), rgba(255,255,255,0.012)) !important;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.035) !important;
+}
+.sales-page .sales-metric-card * {
+  color: inherit !important;
+}
+.sales-page .sales-metric-card svg {
+  stroke: currentColor !important;
+}
+.sales-page .sales-stat-label,
+.sales-page .sales-stat-detail {
+  color: var(--sales-muted) !important;
+}
+.sales-page .sales-stat-value,
+.sales-page .sales-metric-icon {
+  color: var(--sales-foreground) !important;
+}
+.sales-page .sales-metric-icon {
+  background: transparent !important;
+}
+.sales-page .sales-metric-card:hover,
+.sales-page article:hover {
+  background: var(--sales-card-hover) !important;
+}
+.sales-page .sales-metric-card:hover {
+  background: linear-gradient(145deg, rgba(255,255,255,0.075), rgba(255,255,255,0.02)) !important;
+}
+.sales-page table {
+  border-collapse: collapse !important;
+  border-spacing: 0 !important;
+}
+.sales-page tbody tr:hover td {
+  background: var(--sales-card-hover) !important;
+}
+.sales-page .sales-tabs.sales-tabs {
+  display: flex !important;
+  align-items: flex-end !important;
+  gap: 12px !important;
+  min-height: 50px !important;
+  border-bottom: 1px solid var(--sales-border) !important;
+  background: transparent !important;
+  box-shadow: none !important;
+  overflow-x: auto !important;
+}
+.sales-page .sales-tabs.sales-tabs button {
+  flex: 0 0 72px !important;
+  width: 72px !important;
+  min-width: 72px !important;
+  max-width: 72px !important;
+  min-height: 50px !important;
+  margin: 0 !important;
+  padding: 0 0 14px !important;
+  display: inline-flex !important;
+  align-items: flex-end !important;
+  justify-content: flex-start !important;
+  background: transparent !important;
+  border: 0 !important;
+  border-bottom: 2px solid transparent !important;
+  border-radius: 0 !important;
+  box-shadow: none !important;
+  color: var(--sales-muted) !important;
+  cursor: pointer;
+  font-size: 13px !important;
+  font-weight: 500 !important;
+  line-height: 1 !important;
+  text-align: left !important;
+  text-decoration: none !important;
+  transform: none !important;
+  white-space: nowrap !important;
+}
+.sales-page .sales-tabs.sales-tabs button:hover,
+.sales-page .sales-tabs.sales-tabs button:focus-visible {
+  color: var(--sales-foreground) !important;
+  border-bottom-color: transparent !important;
+  text-decoration: none !important;
+}
+.sales-page .sales-tabs.sales-tabs button.is-active,
+.sales-page .sales-tabs.sales-tabs button.is-active:hover,
+.sales-page .sales-tabs.sales-tabs button.is-active:focus-visible {
+  color: var(--sales-foreground) !important;
+  border-bottom-color: transparent !important;
+  font-weight: 500 !important;
+  text-decoration-line: underline !important;
+  text-decoration-color: var(--sales-foreground) !important;
+  text-decoration-thickness: 2px !important;
+  text-underline-offset: 16px !important;
+}
+.sales-page .sales-kanban {
+  width: 100% !important;
+  max-width: 100% !important;
+  display: flex !important;
+  overflow-x: auto !important;
+  overflow-y: hidden !important;
+  scrollbar-width: thin;
+  scrollbar-color: var(--sales-border) transparent;
+}
+.sales-page .sales-kanban > section {
+  flex: 0 0 220px !important;
+}
+.sales-page .sales-workflow-strip,
+.sales-page .sales-kpi-grid,
+.sales-page .sales-tabs,
+.sales-page .sales-tab-content {
+  width: 100% !important;
+  max-width: 100% !important;
+  min-width: 0 !important;
+}
+.sales-page .sales-workflow-step {
+  flex: 0 0 228px !important;
+  width: 228px !important;
+  max-width: 228px !important;
+}
+.sales-page .sales-panel-search {
+  flex: 0 0 280px !important;
+  width: 280px !important;
+  max-width: min(280px, 42vw) !important;
+  margin-left: auto !important;
+}
+.sales-page .sales-panel-search input {
+  width: 100% !important;
+}
+body .app-shell .main-content:has(> .sales-page),
+body .app-shell .main-content > .sales-page {
+  background: #f3f4f6 !important;
+}
+body .app-shell .main-content:has(> .sales-page) {
+  padding: 0 !important;
+}
+html[data-theme] body .app-shell .app-main .main-content > .sales-page,
+body .app-shell .app-main .main-content > .sales-page,
+body .app-shell .main-content > .sales-page {
+  width: 100% !important;
+  max-width: none !important;
+  margin: 0 !important;
+  padding: 0 !important;
+}
+.sales-page {
+  --sales-dashboard-inline-space: clamp(48px, 10.5vw, 176px);
+  --sales-dashboard-max-width: 1640px;
+}
+.sales-page .sales-dashboard-hero {
+  width: 100%;
+  margin: 0;
+  padding: 34px 0 64px;
+  background: linear-gradient(180deg, #d5f6e5 0%, #d5f6e5 46%, #f3f4f6 100%);
+  color: #0f172a;
+}
+.sales-page .sales-dashboard-inner,
+.sales-page .sales-dashboard-content {
+  width: min(var(--sales-dashboard-max-width), calc(100% - var(--sales-dashboard-inline-space)));
+  margin-inline: auto;
+}
+.sales-page .sales-dashboard-inner {
+  display: grid;
+  gap: 18px;
+}
+.sales-page .sales-dashboard-content {
+  display: grid;
+  align-content: start;
+  gap: 16px;
+  padding: 0 0 32px;
+}
+html[data-theme] .sales-page .sales-dashboard-hero .sales-page-header,
+html[data-theme] .sales-page .sales-dashboard-hero .sales-header-actions,
+.sales-page .sales-dashboard-hero .sales-page-header,
+.sales-page .sales-dashboard-hero .sales-header-actions {
+  background: transparent !important;
+  background-color: transparent !important;
+  border-color: transparent !important;
+  box-shadow: none !important;
+}
+.sales-page .sales-dashboard-hero h1,
+.sales-page .sales-dashboard-hero p,
+.sales-page .sales-dashboard-hero .sales-breadcrumb {
+  color: #0f172a !important;
+}
+.sales-page .sales-dashboard-hero p {
+  opacity: .94;
+}
+.sales-page .sales-header-actions > button,
+.sales-page .sales-header-actions > div > button {
+  min-height: 40px;
+  height: 40px;
+  border-radius: 6px !important;
+  box-shadow: none !important;
+}
+.sales-page .sales-header-actions > div > button,
+.sales-page .sales-header-actions > button:not(:first-of-type) {
+  background: rgba(255,255,255,.76) !important;
+  border-color: rgba(255,255,255,.92) !important;
+  color: #0f172a !important;
+}
+.sales-page .sales-header-actions > button:first-of-type {
+  background: #22c55e !important;
+  border-color: #22c55e !important;
+  color: #ffffff !important;
+}
+.sales-page .sales-header-actions > button:hover,
+.sales-page .sales-header-actions > div > button:hover {
+  background: #ffffff !important;
+  border-color: #ffffff !important;
+  color: #0f172a !important;
+}
+.sales-page .sales-kpi-grid {
+  display: grid !important;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 16px;
+}
+.sales-page .sales-dashboard-hero .sales-metric-card {
+  position: relative;
+  min-width: 0;
+  min-height: 112px;
+  overflow: hidden;
+  display: grid;
+  grid-template-columns: 42px minmax(0, 1fr);
+  align-items: start;
+  gap: 12px;
+  padding: 15px 16px;
+  border: 1px solid rgba(255,255,255,.92) !important;
+  border-radius: 6px;
+  background:
+    linear-gradient(135deg, rgba(255,255,255,.94), rgba(255,255,255,.62) 48%, rgba(255,255,255,.86)) !important;
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,1),
+    inset 0 -1px 0 rgba(255,255,255,.46),
+    0 18px 42px rgba(15,23,42,.08) !important;
+  backdrop-filter: blur(20px) saturate(190%);
+  -webkit-backdrop-filter: blur(20px) saturate(190%);
+}
+.sales-page .sales-dashboard-hero .sales-metric-card::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background:
+    linear-gradient(115deg, rgba(255,255,255,.92) 0%, rgba(255,255,255,.28) 34%, transparent 60%),
+    radial-gradient(circle at 12% 0%, rgba(255,255,255,.78), transparent 38%);
+  opacity: .88;
+}
+.sales-page .sales-dashboard-hero .sales-metric-card > * {
+  position: relative;
+  z-index: 1;
+}
+.sales-page .sales-metric-card > span:last-child {
+  min-width: 0;
+  display: grid;
+  gap: 5px;
+}
+.sales-page .sales-dashboard-hero .sales-metric-icon {
+  width: 40px;
+  height: 40px;
+  display: grid;
+  place-items: center;
+  border: 1px solid rgba(255,255,255,.92);
+  border-radius: 6px;
+  background: rgba(255,255,255,.62) !important;
+  color: var(--sales-metric-color, #0f172a) !important;
+}
+.sales-page .sales-dashboard-hero .sales-stat-label,
+.sales-page .sales-dashboard-hero .sales-stat-value,
+.sales-page .sales-dashboard-hero .sales-stat-detail {
+  overflow: hidden;
+  color: #0f172a !important;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.sales-page .sales-dashboard-hero .sales-stat-label,
+.sales-page .sales-dashboard-hero .sales-stat-detail {
+  font-size: 12px;
+  font-weight: 600;
+  opacity: .72;
+}
+.sales-page .sales-dashboard-hero .sales-stat-value {
+  font-size: 22px;
+  font-weight: 800;
+  line-height: 1.1;
+}
+.sales-page .sales-filter-panel,
+.sales-page .sales-notice,
+.sales-page .sales-panel {
+  box-shadow: 0 1px 2px rgba(15,23,42,.04) !important;
+}
+.sales-page .sales-panel {
+  border-color: #dbe2ea !important;
+  border-radius: 8px !important;
+  background: #ffffff !important;
+}
+.sales-page .sales-panel-header,
+.sales-page .sales-opportunity-tabs,
+.sales-page .sales-opportunity-toolbar {
+  background: #ffffff !important;
+}
+.sales-page .sales-opportunity-tabs {
+  border-bottom-color: #e5e7eb !important;
+}
+.sales-page .sales-opportunity-tabs button.is-active {
+  color: #0f172a !important;
+}
+.sales-page table th {
+  background: #f8fafc !important;
+  color: #475569 !important;
+  font-size: 12px !important;
+}
+.sales-page table td {
+  background: #ffffff !important;
+}
+.sales-page tbody tr:hover td {
+  background: #f8fafc !important;
+}
+@media (max-width: 1024px) {
+  .sales-page {
+    --sales-dashboard-inline-space: 32px;
+  }
+  .sales-page .sales-dashboard-hero {
+    padding: 26px 0 54px;
+  }
+  .sales-page .sales-kpi-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+@media (max-width: 640px) {
+  .sales-page {
+    --sales-dashboard-inline-space: 24px;
+  }
+  .sales-page .sales-dashboard-hero {
+    padding: 22px 0 46px;
+  }
+  .sales-page .sales-page-header {
+    display: grid !important;
+  }
+  .sales-page .sales-header-actions {
+    width: 100%;
+    display: grid !important;
+    grid-template-columns: 1fr;
+  }
+  .sales-page .sales-header-actions > button,
+  .sales-page .sales-header-actions > div,
+  .sales-page .sales-header-actions > div > button {
+    width: 100%;
+  }
+  .sales-page .sales-kpi-grid {
+    display: flex !important;
+    overflow-x: auto !important;
+    padding-bottom: 4px !important;
+    scroll-snap-type: x mandatory;
+  }
+  .sales-page .sales-dashboard-hero .sales-metric-card {
+    min-width: min(280px, 82vw);
+    scroll-snap-align: start;
+  }
+  .sales-page .sales-panel-search {
+    flex-basis: 100% !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    margin-left: 0 !important;
+  }
+  .sales-page [style*="grid-template-columns: repeat(6"] {
+    grid-template-columns: repeat(6, minmax(180px, 1fr)) !important;
+  }
+}
+`
+
+const salesPage: CSSProperties = {
+  fontFamily: font,
+  display: 'block',
+  color: 'var(--sales-foreground)',
+  background: '#f3f4f6',
+  minHeight: 'calc(100dvh - 56px)',
+  width: '100%',
+  padding: 0,
+  maxWidth: 'none',
+  margin: 0,
+  overflowX: 'hidden',
+  boxSizing: 'border-box',
+}
+const pageHeader: CSSProperties = { display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 'var(--sales-space-4)', flexWrap: 'wrap', minWidth: 0 }
+const breadcrumb: CSSProperties = { fontSize: 14, color: 'var(--sales-muted)', fontWeight: 500, marginBottom: 22 }
+const h1: CSSProperties = { margin: 0, fontSize: 31, lineHeight: '37px', fontWeight: 600, color: 'var(--sales-foreground)', letterSpacing: 0 }
+const subtitleStyle: CSSProperties = { margin: '12px 0 0', fontSize: 15, lineHeight: 1.5, color: 'var(--sales-muted)', fontWeight: 400, maxWidth: 760 }
+const actionsWrap: CSSProperties = { display: 'flex', alignItems: 'center', gap: 'var(--sales-space-3)', flexWrap: 'wrap' }
+const primaryButton: CSSProperties = { height: 42, border: '1px solid var(--sales-primary)', background: 'var(--sales-primary)', color: 'var(--sales-primary-foreground)', borderRadius: 'var(--sales-radius-sm)', padding: '0 14px', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 7, fontSize: 14, fontWeight: 500, cursor: 'pointer', textDecoration: 'none' }
+const secondaryButton: CSSProperties = { height: 40, border: '1px solid var(--sales-border)', background: 'var(--sales-card)', color: 'var(--sales-foreground)', borderRadius: 'var(--sales-radius-sm)', padding: '0 14px', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 7, fontSize: 14, fontWeight: 500, cursor: 'pointer', textDecoration: 'none' }
+const periodMenu: CSSProperties = { position: 'absolute', right: 0, top: 46, zIndex: 30, width: 190, background: 'var(--sales-card)', border: '1px solid var(--sales-border)', borderRadius: 'var(--sales-radius-sm)', padding: 6 }
+const menuOption = (active: boolean): CSSProperties => ({ width: '100%', border: 0, background: active ? 'var(--sales-card-hover)' : 'transparent', color: active ? 'var(--sales-foreground)' : 'var(--sales-muted)', borderRadius: 8, padding: '10px 11px', display: 'flex', alignItems: 'center', gap: 9, fontSize: 13, fontWeight: 500, cursor: 'pointer', textAlign: 'left' })
+const filterPanel: CSSProperties = { border: '1px solid var(--sales-border)', borderRadius: 'var(--sales-radius)', background: 'var(--sales-card)', padding: 20, display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: 'var(--sales-space-4)' }
+const panel: CSSProperties = { width: '100%', maxWidth: '100%', background: 'var(--sales-card)', border: '1px solid var(--sales-border)', borderRadius: 'var(--sales-radius)', overflow: 'hidden', minWidth: 0, boxSizing: 'border-box', contain: 'inline-size' }
+const panelHeader: CSSProperties = { minHeight: 58, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, padding: '0 18px', borderBottom: '1px solid var(--sales-border-soft)', minWidth: 0, overflow: 'hidden' }
+const panelTitle: CSSProperties = { margin: 0, color: 'var(--sales-foreground)', fontSize: 14, fontWeight: 600 }
+const emptyState: CSSProperties = { minHeight: 154, display: 'grid', placeItems: 'center', alignContent: 'center', gap: 6, padding: 24, color: 'var(--sales-muted)', textAlign: 'center', fontSize: 13 }
+const opportunityTabs: CSSProperties = { display: 'flex', gap: 22, padding: '0 16px', minHeight: 48, alignItems: 'flex-end', borderBottom: '1px solid var(--sales-border-soft)', overflowX: 'auto' }
+const opportunityTabStyle = (active: boolean): CSSProperties => ({ height: 48, border: 0, borderBottom: `2px solid ${active ? 'var(--sales-foreground)' : 'transparent'}`, background: 'transparent', color: active ? 'var(--sales-foreground)' : 'var(--sales-muted)', display: 'inline-flex', alignItems: 'center', gap: 8, padding: '0 0 13px', fontSize: 13, fontWeight: 600, whiteSpace: 'nowrap', cursor: 'pointer' })
+const opportunityToolbar: CSSProperties = { display: 'flex', alignItems: 'center', gap: 16, padding: 16, borderBottom: '1px solid var(--sales-border-soft)', flexWrap: 'wrap' }
+const opportunityClientFilter: CSSProperties = { height: 44, width: 200, border: '1px solid var(--sales-input-border)', borderRadius: 'var(--sales-radius-sm)', background: 'var(--sales-input)', color: 'var(--sales-foreground)', display: 'flex', alignItems: 'center', gap: 8, padding: '0 12px' }
+const opportunitySelect: CSSProperties = { minWidth: 0, flex: 1, border: 0, outline: 0, background: 'transparent', color: 'var(--sales-foreground)', fontSize: 14 }
 const tableStyle: CSSProperties = { width: '100%', borderCollapse: 'collapse', minWidth: 1040 }
-const thStyle: CSSProperties = { padding: '13px 14px', color: '#475569', background: '#f8fafc', fontSize: 11, fontWeight: 900, textAlign: 'left', whiteSpace: 'nowrap' }
-const tdStyle: CSSProperties = { padding: '13px 14px', borderTop: '1px solid #edf2f7', color: '#0f172a', fontSize: 12, whiteSpace: 'nowrap', verticalAlign: 'top' }
-const viewAll: CSSProperties = { color: '#2563eb', fontSize: 12, fontWeight: 800, textDecoration: 'none', whiteSpace: 'nowrap' }
-const viewToggle: CSSProperties = { display: 'inline-grid', gridTemplateColumns: '1fr 1fr', border: '1px solid #dbe3ea', borderRadius: 8, overflow: 'hidden', background: '#fff' }
-const viewToggleButton = (active: boolean): CSSProperties => ({ width: 30, height: 30, border: 0, borderRight: active ? 0 : '1px solid #e2e8f0', background: active ? '#16a34a' : '#fff', color: active ? '#fff' : '#475569', display: 'grid', placeItems: 'center', cursor: 'pointer' })
-const miniSelect: CSSProperties = { height: 34, border: '1px solid #dbe3ea', borderRadius: 8, padding: '0 10px', background: '#fff', color: '#334155', fontSize: 12, fontWeight: 750 }
-const searchBox: CSSProperties = { height: 34, width: 'min(260px, 48vw)', display: 'flex', alignItems: 'center', gap: 8, padding: '0 10px', border: '1px solid #dbe3ea', borderRadius: 8, background: '#fff' }
-const bareInput: CSSProperties = { border: 0, outline: 0, minWidth: 0, flex: 1, fontSize: 12, background: 'transparent', color: '#0f172a' }
-const smallButton: CSSProperties = { minHeight: 30, border: '1px solid #dbe3ea', background: '#fff', color: '#0f172a', borderRadius: 7, padding: '0 9px', display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 11, fontWeight: 850, cursor: 'pointer' }
-const iconButton: CSSProperties = { width: 34, height: 34, border: '1px solid #dbe3ea', borderRadius: 8, background: '#fff', color: '#334155', display: 'inline-grid', placeItems: 'center', cursor: 'pointer' }
-const chartArea: CSSProperties = { height: 230, display: 'grid', gridTemplateColumns: 'repeat(6, minmax(38px, 1fr))', gap: 16, alignItems: 'end', padding: '18px 10px 0', borderBottom: '1px solid #e2e8f0', background: 'repeating-linear-gradient(to top, transparent 0 44px, #eef2f7 45px)', overflowX: 'auto' }
-const chartColumn: CSSProperties = { height: '100%', display: 'grid', alignItems: 'end', justifyItems: 'center', position: 'relative' }
-const bar: CSSProperties = { width: 24, minHeight: 20, borderRadius: '7px 7px 0 0', background: 'linear-gradient(180deg, #22c55e, #15803d)' }
-const chartLabel: CSSProperties = { position: 'absolute', bottom: -24, color: '#64748b', fontSize: 11, fontWeight: 700 }
-const pipelineGrid: CSSProperties = { display: 'grid', gridTemplateColumns: 'minmax(120px, 170px) minmax(90px, 1fr) minmax(110px, 130px)', gap: 12, alignItems: 'center', padding: 18 }
-const pipelineLabel: CSSProperties = { display: 'grid', gap: 4, color: '#475569', fontSize: 12, fontWeight: 750 }
-const funnelBar: CSSProperties = { height: 28, borderRadius: 7, clipPath: 'polygon(8% 0, 92% 0, 80% 100%, 20% 100%)', justifySelf: 'center' }
-const categoryLayout: CSSProperties = { display: 'grid', gridTemplateColumns: '135px minmax(0, 1fr)', alignItems: 'center', gap: 18, padding: 18 }
-const donut: CSSProperties = { width: 126, height: 126, borderRadius: '50%', background: 'conic-gradient(#16a34a 0 40%, #2563eb 40% 70%, #8b5cf6 70% 90%, #f59e0b 90% 100%)', display: 'grid', placeItems: 'center', position: 'relative', color: '#0f172a', textAlign: 'center', fontSize: 11 }
-const categoryRow: CSSProperties = { display: 'flex', justifyContent: 'space-between', gap: 12, fontSize: 13, minWidth: 0 }
-const analyticsGrid: CSSProperties = { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: 16, padding: 18 }
-const insightCard: CSSProperties = { border: '1px solid #e2e8f0', borderRadius: 10, padding: 16, display: 'grid', gap: 10, alignContent: 'start' }
-const listRow: CSSProperties = { display: 'flex', justifyContent: 'space-between', gap: 12, color: '#475569', fontSize: 13 }
-const integrationPanel: CSSProperties = { background: '#fff', border: '1px solid #e2e8f0', borderRadius: 10, padding: 18 }
-const integrationGrid: CSSProperties = { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 14, marginTop: 14 }
-const integrationItem: CSSProperties = { display: 'flex', gap: 12, alignItems: 'flex-start', border: '1px solid #eef2f7', borderRadius: 9, padding: 12, color: '#475569', fontSize: 12 }
-const successBox: CSSProperties = { border: '1px solid #bbf7d0', background: '#f0fdf4', color: '#166534', borderRadius: 10, padding: '12px 14px', fontSize: 13, fontWeight: 800, display: 'flex', justifyContent: 'space-between', gap: 12 }
-const dismissButton: CSSProperties = { border: 0, background: 'transparent', color: '#166534', cursor: 'pointer', display: 'grid', placeItems: 'center' }
-const newMenu: CSSProperties = { position: 'absolute', right: 0, top: 44, zIndex: 10, width: 210, background: '#fff', border: '1px solid #e2e8f0', borderRadius: 8, boxShadow: '0 18px 40px rgba(15,23,42,.16)', padding: 6 }
-const newMenuItem: CSSProperties = { width: '100%', border: 0, background: 'transparent', borderRadius: 6, padding: '10px 11px', display: 'flex', alignItems: 'center', gap: 9, color: '#0f172a', fontSize: 13, fontWeight: 750, cursor: 'pointer' }
-const overlay: CSSProperties = { position: 'fixed', inset: 0, zIndex: 120, background: 'rgba(15,23,42,.28)', display: 'flex', justifyContent: 'flex-end' }
-const drawer: CSSProperties = { width: 'min(520px, 100vw)', height: '100%', background: '#fff', boxShadow: '-24px 0 50px rgba(15,23,42,.2)', display: 'grid', gridTemplateRows: 'auto 1fr auto', overflowY: 'auto' }
-const drawerHeader: CSSProperties = { display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 14, padding: 28, borderBottom: '1px solid #e2e8f0' }
+const thStyle: CSSProperties = { padding: '13px 14px', color: 'var(--sales-muted)', background: 'var(--sales-card)', fontSize: 13, fontWeight: 500, textAlign: 'left', whiteSpace: 'nowrap' }
+const tdStyle: CSSProperties = { padding: '13px 14px', borderTop: '1px solid var(--sales-border-soft)', color: 'var(--sales-foreground)', fontSize: 13, fontWeight: 400, whiteSpace: 'nowrap', verticalAlign: 'top' }
+const searchBox: CSSProperties = { height: 40, width: 280, maxWidth: '100%', flex: '0 0 280px', display: 'flex', alignItems: 'center', gap: 8, padding: '0 12px', border: '1px solid var(--sales-input-border)', borderRadius: 'var(--sales-radius-sm)', background: 'var(--sales-input)' }
+const bareInput: CSSProperties = { border: 0, outline: 0, minWidth: 0, flex: 1, fontSize: 14, background: 'transparent', color: 'var(--sales-foreground)' }
+const smallButton: CSSProperties = { minHeight: 30, border: '1px solid var(--sales-border)', background: 'var(--sales-card)', color: 'var(--sales-foreground)', borderRadius: 7, padding: '0 9px', display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 12, fontWeight: 500, cursor: 'pointer' }
+const iconButton: CSSProperties = { width: 34, height: 34, border: '1px solid var(--sales-border)', borderRadius: 8, background: 'var(--sales-card)', color: 'var(--sales-foreground)', display: 'inline-grid', placeItems: 'center', cursor: 'pointer' }
+const successBox: CSSProperties = { border: '1px solid color-mix(in srgb, var(--sales-success) 35%, var(--sales-border))', background: 'color-mix(in srgb, var(--sales-success) 10%, transparent)', color: 'var(--sales-success)', borderRadius: 'var(--sales-radius-sm)', padding: '12px 14px', fontSize: 13, fontWeight: 500, display: 'flex', justifyContent: 'space-between', gap: 12 }
+const dismissButton: CSSProperties = { border: 0, background: 'transparent', color: 'var(--sales-success)', cursor: 'pointer', display: 'grid', placeItems: 'center' }
+const overlay: CSSProperties = { position: 'fixed', inset: 0, zIndex: 120, background: 'rgba(0,0,0,.58)', display: 'flex', justifyContent: 'flex-end' }
+const drawer: CSSProperties = { width: 'min(520px, 100vw)', height: '100%', background: 'var(--sales-background)', color: 'var(--sales-foreground)', borderLeft: '1px solid var(--sales-border)', display: 'grid', gridTemplateRows: 'auto 1fr auto', overflowY: 'auto' }
+const drawerHeader: CSSProperties = { display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 14, padding: 28, borderBottom: '1px solid var(--sales-border)' }
 const formGrid: CSSProperties = { display: 'grid', gap: 16, padding: 28 }
 const fieldWrap: CSSProperties = { display: 'grid', gap: 8, minWidth: 0 }
-const labelStyle: CSSProperties = { color: '#334155', fontSize: 13, fontWeight: 850 }
-const inputStyle: CSSProperties = { width: '100%', height: 42, border: '1px solid #dbe3ea', borderRadius: 8, padding: '0 12px', color: '#0f172a', fontSize: 13, fontWeight: 650, outline: 'none', background: '#fff', boxSizing: 'border-box' }
-const prefixStyle: CSSProperties = { position: 'absolute', left: 12, top: 12, color: '#64748b', fontSize: 13, fontWeight: 850 }
-const drawerFooter: CSSProperties = { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, padding: 28, borderTop: '1px solid #e2e8f0' }
-const kanbanGrid: CSSProperties = { display: 'grid', gridTemplateColumns: 'repeat(4, minmax(230px, 1fr))', gap: 12, padding: 14, overflowX: 'auto' }
-const kanbanColumn: CSSProperties = { minHeight: 260, border: '1px solid #e2e8f0', borderRadius: 10, background: '#f8fafc', padding: 10, display: 'grid', gap: 10, alignContent: 'start' }
-const kanbanHeader: CSSProperties = { display: 'flex', justifyContent: 'space-between', alignItems: 'center', color: '#0f172a', fontSize: 12, fontWeight: 900 }
-const kanbanCard: CSSProperties = { background: '#fff', border: '1px solid #e2e8f0', borderRadius: 8, padding: 12, display: 'grid', gap: 7, fontSize: 12, color: '#475569', boxShadow: '0 8px 20px rgba(15,23,42,.04)' }
-const kanbanEmpty: CSSProperties = { margin: 0, color: '#94a3b8', fontSize: 12 }
-const miniRow: CSSProperties = { display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) auto', gap: 12, alignItems: 'center', border: '1px solid #eef2f7', borderRadius: 9, padding: 12, color: '#475569', fontSize: 12 }
-const softIcon = (color: string, size = 54): CSSProperties => ({ width: size, height: size, borderRadius: 14, background: `${color}16`, color, display: 'grid', placeItems: 'center', flex: '0 0 auto' })
-const tabStyle = (active: boolean): CSSProperties => ({ border: 0, background: 'transparent', padding: '8px 13px', margin: 0, color: active ? '#111827' : '#334155', borderBottom: active ? '2px solid #111827' : '2px solid transparent', borderRadius: 0, fontSize: 13, fontWeight: active ? 900 : 750, cursor: 'pointer', whiteSpace: 'nowrap' })
-const legendDot = (color: string): CSSProperties => ({ width: 8, height: 8, borderRadius: 999, background: color, display: 'inline-block', marginRight: 8 })
+const clientPreview: CSSProperties = { border: '1px solid var(--sales-border)', background: 'var(--sales-card)', borderRadius: 'var(--sales-radius-sm)', padding: 12, display: 'grid', gap: 5, color: 'var(--sales-muted)', fontSize: 12, fontWeight: 400 }
+const fieldHint: CSSProperties = { margin: 0, color: 'var(--sales-muted)', fontSize: 12, lineHeight: 1.45 }
+const labelStyle: CSSProperties = { color: 'var(--sales-muted)', fontSize: 13, fontWeight: 500 }
+const inputStyle: CSSProperties = { width: '100%', height: 48, border: '1px solid var(--sales-input-border)', borderRadius: 'var(--sales-radius-sm)', padding: '0 12px', color: 'var(--sales-foreground)', fontSize: 14, fontWeight: 400, outline: 'none', background: 'var(--sales-input)', boxSizing: 'border-box' }
+const prefixStyle: CSSProperties = { position: 'absolute', left: 12, top: 15, color: 'var(--sales-muted)', fontSize: 13, fontWeight: 500 }
+const drawerFooter: CSSProperties = { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, padding: 28, borderTop: '1px solid var(--sales-border)' }

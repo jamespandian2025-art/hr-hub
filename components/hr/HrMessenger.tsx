@@ -14,6 +14,7 @@ import {
   Video,
   X,
 } from 'lucide-react'
+import { uploadFileObject } from '@/lib/uploads/client'
 
 type Employee = {
   id: string
@@ -169,11 +170,11 @@ function parseAccount(): StoredAccount {
 }
 
 function isImageData(value?: string) {
-  return Boolean(value?.startsWith('data:image/'))
+  return Boolean(value && (value.startsWith('data:image/') || value.startsWith('/api/uploads') || /^https?:\/\//.test(value)))
 }
 
 function isAudioData(value?: string) {
-  return Boolean(value?.startsWith('data:audio/'))
+  return Boolean(value && (value.startsWith('data:audio/') || value.startsWith('/api/uploads') || /^https?:\/\//.test(value)))
 }
 
 export default function HrMessenger() {
@@ -338,7 +339,7 @@ export default function HrMessenger() {
     sendPayload({ type: 'emoji', label: '👍' }, '👍')
   }
 
-  const sendPhoto = (files: FileList | null) => {
+  const sendPhoto = async (files: FileList | null) => {
     const file = files?.[0]
     if (!file) return
     if (!file.type.startsWith('image/')) {
@@ -352,14 +353,14 @@ export default function HrMessenger() {
       return
     }
 
-    const reader = new FileReader()
-    reader.onload = () => {
-      const url = typeof reader.result === 'string' ? reader.result : ''
-      if (!url) return
-      sendPayload({ type: 'photo', url, name: file.name }, `[Photo: ${file.name}]`, [file.name])
+    try {
+      const uploaded = await uploadFileObject(file, 'chat-media')
+      sendPayload({ type: 'photo', url: uploaded.url, name: file.name }, `[Photo: ${file.name}]`, [file.name])
+    } catch {
+      setChatNotice('Could not upload this photo. Please try again.')
+    } finally {
       if (fileInputRef.current) fileInputRef.current.value = ''
     }
-    reader.readAsDataURL(file)
   }
 
   const stopRecording = () => {
@@ -402,12 +403,12 @@ export default function HrMessenger() {
           setRecording(false)
           return
         }
-        const reader = new FileReader()
-        reader.onload = () => {
-          const url = typeof reader.result === 'string' ? reader.result : ''
-          sendPayload({ type: 'voice', url, name: 'voice-note.webm', duration: `0:${String(durationSeconds).padStart(2, '0')}` }, '[Voice note]', ['voice-note.webm'])
-        }
-        reader.readAsDataURL(blob)
+        const file = new File([blob], 'voice-note.webm', { type: blob.type || 'audio/webm' })
+        uploadFileObject(file, 'chat-media').then(uploaded => {
+          sendPayload({ type: 'voice', url: uploaded.url, name: 'voice-note.webm', duration: `0:${String(durationSeconds).padStart(2, '0')}` }, '[Voice note]', ['voice-note.webm'])
+        }).catch(() => {
+          setChatNotice('Could not upload this voice note. Please try again.')
+        })
         stream.getTracks().forEach(track => track.stop())
         setRecording(false)
       }

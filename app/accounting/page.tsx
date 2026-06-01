@@ -8,6 +8,8 @@ import {
   ArrowUpRight,
   Banknote,
   Building2,
+  Calculator,
+  FileBarChart,
   FileText,
   Landmark,
   MoreHorizontal,
@@ -16,16 +18,10 @@ import {
   WalletCards,
 } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
-import { companyChangeEvent, getActiveCompany } from '@/lib/tenant/company'
+import StateFeedback from '@/components/StateFeedback'
+import { loadAccountingData as loadSharedAccountingData, subscribeAccountingData } from '@/lib/accounting/data'
 
 const font = 'var(--font-body)'
-
-const invoiceKeys = ['flowsys-invoices', 'flowsys-accounting-invoices', 'wiseflow-accounting-invoices']
-const billKeys = ['flowsys-bills', 'flowsys-accounting-bills', 'wiseflow-accounting-bills']
-const expenseKeys = ['flowsys-expenses', 'flowsys-accounting-expenses', 'wiseflow-accounting-expenses']
-const bankKeys = ['flowsys-bank-accounts', 'flowsys-accounting-bank-accounts', 'wiseflow-bank-accounts']
-const transactionKeys = ['flowsys-transactions', 'flowsys-accounting-transactions', 'wiseflow-accounting-transactions']
-const payrollKeys = ['flowsys-hr-payroll-records']
 
 type StoredRow = Record<string, unknown>
 
@@ -93,6 +89,13 @@ const quickActions: Array<{ title: string; body: string; icon: LucideIcon; href:
   { title: 'Bank Reconciliation', body: 'Reconcile accounts', icon: Landmark, href: '/accounting/banking' },
   { title: 'Chart of Accounts', body: 'Manage accounts', icon: PieChart, href: '/accounting/accounting' },
   { title: 'Financial Reports', body: 'View reports', icon: FileText, href: '/accounting/reports' },
+  { title: 'Withholding Tax', body: 'Calculate payroll tax', icon: Calculator, href: '/accounting/withholding-tax-calculator' },
+]
+
+const heroActions: Array<{ label: string; href: string; icon: LucideIcon; primary?: boolean }> = [
+  { label: 'New Invoice', href: '/accounting/invoices?new=1', icon: FileText, primary: true },
+  { label: 'Record Bill', href: '/accounting/bills?new=1', icon: ReceiptText },
+  { label: 'Reports', href: '/accounting/reports', icon: FileBarChart },
 ]
 
 const segmentColors = ['#2563eb', '#4f46e5', '#14b8a6', '#f59e0b', '#fb923c', '#9ca3af']
@@ -113,14 +116,7 @@ export default function AccountingOverviewPage() {
   useEffect(() => {
     const load = () => setData(loadAccountingData())
     load()
-    window.addEventListener('storage', load)
-    window.addEventListener(companyChangeEvent, load)
-    window.addEventListener('wiseflow-accounting-refresh', load)
-    return () => {
-      window.removeEventListener('storage', load)
-      window.removeEventListener(companyChangeEvent, load)
-      window.removeEventListener('wiseflow-accounting-refresh', load)
-    }
+    return subscribeAccountingData(load)
   }, [])
 
   const view = useMemo(() => buildAccountingView(data), [data])
@@ -129,177 +125,168 @@ export default function AccountingOverviewPage() {
     <div className="accounting-overview-page" style={{ fontFamily: font }}>
       <style>{accountingOverviewCss}</style>
 
-      <section className="accounting-metrics">
-        {view.metrics.map(metric => {
-          const Icon = metric.icon
-          return (
-            <div key={metric.title} className="accounting-card accounting-metric-card">
-              <span className="accounting-metric-icon" style={{ background: `${metric.tone}12`, color: metric.tone }}><Icon size={21} /></span>
-              <div className="accounting-metric-copy">
-                <div className="accounting-eyebrow">{metric.title}</div>
-                <div className="accounting-metric-value">{metric.value}</div>
-                <div className="accounting-metric-delta" style={{ color: metric.up === false ? '#ef4444' : '#16a34a' }}>
-                  {metric.up === false ? <ArrowDownLeft size={13} /> : metric.up ? <ArrowUpRight size={13} /> : null}
-                  {metric.delta}
-                </div>
-              </div>
+      <section className="accounting-dashboard-hero">
+        <div className="accounting-dashboard-inner">
+          <div className="accounting-hero-header">
+            <div className="accounting-hero-copy">
+              <div className="accounting-breadcrumb"><Link href="/dashboard">WiseFlow</Link><span>/</span><strong>Accounting</strong></div>
+              <h1>Accounting</h1>
+              <p>Monitor cash, receivables, payables, payroll costs, and financial controls for {data.companyName}.</p>
             </div>
-          )
-        })}
-      </section>
-
-      <section className="accounting-main-grid">
-        <Panel title="Cash Flow Overview" action={data.companyName}>
-          <div className="cash-flow-panel">
-            <div className="accounting-legend-row">
-              <Legend color="#16a34a" label="Cash Inflow" />
-              <Legend color="#ef4444" label="Cash Outflow" />
-              <Legend color="#2563eb" label="Net Cash Flow" />
+            <div className="accounting-hero-actions" aria-label="Accounting actions">
+              {heroActions.map(action => {
+                const Icon = action.icon
+                return (
+                  <Link key={action.label} href={action.href} className={action.primary ? 'accounting-hero-action is-primary' : 'accounting-hero-action'}>
+                    <Icon size={15} />
+                    {action.label}
+                  </Link>
+                )
+              })}
             </div>
-            {view.cashPoints.length ? (
-              <LineChart points={view.cashPoints} />
-            ) : (
-              <EmptyState message="No accounting transactions yet. Income, expenses, invoices, bills, and payroll entries will build the cash flow chart." />
-            )}
           </div>
-        </Panel>
 
-        <Panel title="Expense Breakdown" action={data.companyName}>
-          {view.expenseSegments.length ? (
-            <div className="expense-breakdown">
-              <DonutChart segments={view.expenseSegments} total={view.totalExpenses} />
-              <div className="expense-segments">
-                {view.expenseSegments.map(segment => (
-                  <Legend key={segment.label} color={segment.color} label={segment.label} value={`${percentage(segment.amount, view.totalExpenses)}%`} />
-                ))}
-              </div>
-            </div>
-          ) : (
-            <EmptyState message="No expense records yet. Vendor bills, expenses, and payroll costs will appear here." />
-          )}
-        </Panel>
-
-        <div className="accounting-side-stack">
-          <Panel title="Bank Accounts" link="/accounting/banking">
-            {view.bankAccounts.length ? (
-              <div className="bank-list">
-                {view.bankAccounts.map(bank => (
-                  <div key={bank.id} className="bank-row">
-                    <span className="bank-icon" style={{ background: bank.color }}><Building2 size={18} /></span>
-                    <span className="bank-copy">
-                      <strong>{bank.name}</strong>
-                      <small>{bank.accountMask}</small>
-                    </span>
-                    <strong>{formatCurrency(bank.balance)}</strong>
+          <section className="accounting-metrics" aria-label="Accounting overview metrics">
+            {view.metrics.map(metric => {
+              const Icon = metric.icon
+              return (
+                <div key={metric.title} className="accounting-metric-card">
+                  <span className="accounting-metric-icon" style={{ background: `${metric.tone}12`, color: metric.tone }}><Icon size={21} /></span>
+                  <div className="accounting-metric-copy">
+                    <div className="accounting-eyebrow">{metric.title}</div>
+                    <div className="accounting-metric-value">{metric.value}</div>
+                    <div className="accounting-metric-delta" style={{ color: metric.up === false ? '#ef4444' : '#16a34a' }}>
+                      {metric.up === false ? <ArrowDownLeft size={13} /> : metric.up ? <ArrowUpRight size={13} /> : null}
+                      {metric.delta}
+                    </div>
                   </div>
-                ))}
-                <Link href="/accounting/banking" className="accounting-add-link">+ Add Bank Account</Link>
-              </div>
-            ) : (
-              <EmptyState message="No bank accounts connected yet." />
-            )}
-          </Panel>
-
-          <Panel title="Overdue Invoices" link="/accounting/invoices">
-            <MiniRows rows={view.overdueInvoices} emptyMessage="No overdue invoices." />
-          </Panel>
-
-          <Panel title="Bills to Pay" link="/accounting/bills">
-            <MiniRows rows={view.billsToPay} emptyMessage="No vendor bills waiting for payment." />
-          </Panel>
+                </div>
+              )
+            })}
+          </section>
         </div>
       </section>
 
-      <section className="accounting-lower-grid">
-        <Panel title="Recent Transactions" link="/accounting/transactions">
-          {view.recentTransactions.length ? (
-            <div className="accounting-table-wrap">
-              <table className="accounting-table">
-                <thead>
-                  <tr>
-                    {['Date', 'Description', 'Category', 'Type', 'Amount', 'Status', ''].map(header => <th key={header}>{header}</th>)}
-                  </tr>
-                </thead>
-                <tbody>
-                  {view.recentTransactions.map(row => (
-                    <tr key={row.id}>
-                      <td data-label="Date">{formatDate(row.date)}</td>
-                      <td data-label="Description"><strong>{row.description}</strong><small>{row.secondary}</small></td>
-                      <td data-label="Category"><span className="accounting-pill">{row.category}</span></td>
-                      <td data-label="Type" className={`type-${row.type.toLowerCase()}`}>{row.type}</td>
-                      <td data-label="Amount" className={row.type === 'Expense' ? 'amount-negative' : ''}>{formatCurrency(row.amount)}</td>
-                      <td data-label="Status"><span className={`accounting-pill status-${statusSlug(row.status)}`}>{row.status}</span></td>
-                      <td data-label="Actions"><Link href="/accounting/transactions" aria-label={`Open transactions for ${row.description}`} className="accounting-more-button"><MoreHorizontal size={16} /></Link></td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+      <section className="accounting-dashboard-content">
+        <section className="accounting-main-grid">
+          <Panel title="Cash Flow Overview" action={data.companyName}>
+            <div className="cash-flow-panel">
+              <div className="accounting-legend-row">
+                <Legend color="#16a34a" label="Cash Inflow" />
+                <Legend color="#ef4444" label="Cash Outflow" />
+                <Legend color="#2563eb" label="Net Cash Flow" />
+              </div>
+              {view.cashPoints.length ? (
+                <LineChart points={view.cashPoints} />
+              ) : (
+                <EmptyState message="No accounting transactions yet. Income, expenses, invoices, bills, and payroll entries will build the cash flow chart." />
+              )}
             </div>
-          ) : (
-            <EmptyState message="No accounting activity yet. Created invoices, bills, payments, expenses, and payroll releases will appear here." />
-          )}
-        </Panel>
+          </Panel>
 
-        <Panel title="Quick Actions">
-          <div className="quick-actions-grid">
-            {quickActions.map(({ title, body, icon: Icon, href }) => (
-              <Link key={title} href={href} className="quick-action">
-                <span><Icon size={17} /></span>
-                <span><strong>{title}</strong><small>{body}</small></span>
-              </Link>
-            ))}
+          <Panel title="Expense Breakdown" action={data.companyName}>
+            {view.expenseSegments.length ? (
+              <div className="expense-breakdown">
+                <DonutChart segments={view.expenseSegments} total={view.totalExpenses} />
+                <div className="expense-segments">
+                  {view.expenseSegments.map(segment => (
+                    <Legend key={segment.label} color={segment.color} label={segment.label} value={`${percentage(segment.amount, view.totalExpenses)}%`} />
+                  ))}
+                </div>
+              </div>
+            ) : (
+              <EmptyState message="No expense records yet. Vendor bills, expenses, and payroll costs will appear here." />
+            )}
+          </Panel>
+
+          <div className="accounting-side-stack">
+            <Panel title="Bank Accounts" link="/accounting/banking">
+              {view.bankAccounts.length ? (
+                <div className="bank-list">
+                  {view.bankAccounts.map(bank => (
+                    <div key={bank.id} className="bank-row">
+                      <span className="bank-icon" style={{ background: bank.color }}><Building2 size={18} /></span>
+                      <span className="bank-copy">
+                        <strong>{bank.name}</strong>
+                        <small>{bank.accountMask}</small>
+                      </span>
+                      <strong>{formatCurrency(bank.balance)}</strong>
+                    </div>
+                  ))}
+                  <Link href="/accounting/banking" className="accounting-add-link">Add Bank Account</Link>
+                </div>
+              ) : (
+                <EmptyState message="No bank accounts connected yet." />
+              )}
+            </Panel>
+
+            <Panel title="Overdue Invoices" link="/accounting/invoices">
+              <MiniRows rows={view.overdueInvoices} emptyMessage="No overdue invoices." />
+            </Panel>
+
+            <Panel title="Bills to Pay" link="/accounting/bills">
+              <MiniRows rows={view.billsToPay} emptyMessage="No vendor bills waiting for payment." />
+            </Panel>
           </div>
-        </Panel>
+        </section>
+
+        <section className="accounting-lower-grid">
+          <Panel title="Recent Transactions" link="/accounting/transactions">
+            {view.recentTransactions.length ? (
+              <div className="accounting-table-wrap">
+                <table className="accounting-table">
+                  <thead>
+                    <tr>
+                      {['Date', 'Description', 'Category', 'Type', 'Amount', 'Status', ''].map(header => <th key={header}>{header}</th>)}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {view.recentTransactions.map(row => (
+                      <tr key={row.id}>
+                        <td data-label="Date">{formatDate(row.date)}</td>
+                        <td data-label="Description"><strong>{row.description}</strong><small>{row.secondary}</small></td>
+                        <td data-label="Category"><span className="accounting-pill">{row.category}</span></td>
+                        <td data-label="Type" className={`type-${row.type.toLowerCase()}`}>{row.type}</td>
+                        <td data-label="Amount" className={row.type === 'Expense' ? 'amount-negative' : ''}>{formatCurrency(row.amount)}</td>
+                        <td data-label="Status"><span className={`accounting-pill status-${statusSlug(row.status)}`}>{row.status}</span></td>
+                        <td data-label="Actions"><Link href="/accounting/transactions" aria-label={`Open transactions for ${row.description}`} className="accounting-more-button"><MoreHorizontal size={16} /></Link></td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            ) : (
+              <EmptyState message="No accounting activity yet. Created invoices, bills, payments, expenses, and payroll releases will appear here." />
+            )}
+          </Panel>
+
+          <Panel title="Quick Actions">
+            <div className="quick-actions-grid">
+              {quickActions.map(({ title, body, icon: Icon, href }) => (
+                <Link key={title} href={href} className="quick-action">
+                  <span><Icon size={17} /></span>
+                  <span><strong>{title}</strong><small>{body}</small></span>
+                </Link>
+              ))}
+            </div>
+          </Panel>
+        </section>
       </section>
     </div>
   )
 }
 
 function loadAccountingData(): AccountingData {
-  const activeCompany = getActiveCompany()
-  const companyId = activeCompany?.id
+  const shared = loadSharedAccountingData()
   return {
-    companyName: activeCompany?.name || 'Current company',
-    invoices: loadRows(invoiceKeys, companyId),
-    bills: loadRows(billKeys, companyId),
-    expenses: loadRows(expenseKeys, companyId),
-    bankAccounts: loadRows(bankKeys, companyId),
-    transactions: loadRows(transactionKeys, companyId),
-    payrollRecords: loadRows(payrollKeys, companyId),
+    companyName: shared.companyName,
+    invoices: shared.invoices as unknown as StoredRow[],
+    bills: shared.bills as unknown as StoredRow[],
+    expenses: shared.expenses,
+    bankAccounts: shared.bankAccounts as unknown as StoredRow[],
+    transactions: shared.transactions as unknown as StoredRow[],
+    payrollRecords: shared.payrollRecords,
   }
-}
-
-function loadRows(keys: string[], companyId?: string): StoredRow[] {
-  if (typeof window === 'undefined') return []
-  const seen = new Set<string>()
-  const rows: StoredRow[] = []
-
-  keys.flatMap(key => companyId ? [`${key}:${companyId}`, key] : [key]).forEach(key => {
-    if (seen.has(key)) return
-    seen.add(key)
-    try {
-      const parsed = JSON.parse(window.localStorage.getItem(key) || '[]') as unknown
-      if (Array.isArray(parsed)) {
-        parsed.forEach(item => {
-          if (item && typeof item === 'object') rows.push(item as StoredRow)
-        })
-      }
-    } catch {
-      // Ignore invalid legacy localStorage payloads.
-    }
-  })
-
-  return dedupeRows(rows)
-}
-
-function dedupeRows(rows: StoredRow[]) {
-  const seen = new Set<string>()
-  return rows.filter((row, index) => {
-    const key = String(row.id ?? row.invoiceNo ?? row.invoiceNumber ?? row.billNo ?? row.billNumber ?? row.reference ?? `${row.name ?? row.description ?? 'row'}-${index}`)
-    if (seen.has(key)) return false
-    seen.add(key)
-    return true
-  })
 }
 
 function buildAccountingView(data: AccountingData) {
@@ -562,7 +549,7 @@ function Legend({ color, label, value }: { color: string; label: string; value?:
 }
 
 function EmptyState({ message }: { message: string }) {
-  return <div className="accounting-empty">{message}</div>
+  return <StateFeedback className="accounting-empty" size="compact" title={message} />
 }
 
 function MiniRows({ rows, emptyMessage }: { rows: MiniRow[]; emptyMessage: string }) {
@@ -626,69 +613,252 @@ function DonutChart({ segments, total }: { segments: ExpenseSegment[]; total: nu
 }
 
 const accountingOverviewCss = `
-.accounting-overview-page { padding: 28px 28px 42px; color: #0f172a; }
-.accounting-card { background: #fff; border: 1px solid #e8edf4; border-radius: 8px; padding: 18px; box-shadow: 0 1px 2px rgba(15, 23, 42, .03); min-width: 0; }
-.accounting-metrics { display: grid; grid-template-columns: repeat(6, minmax(150px, 1fr)); gap: 14px; margin-bottom: 16px; }
-.accounting-metric-card { display: flex; align-items: center; gap: 12px; }
-.accounting-metric-icon { width: 44px; height: 44px; border-radius: 8px; display: grid; place-items: center; flex: 0 0 auto; }
-.accounting-metric-copy { min-width: 0; }
-.accounting-eyebrow { font-size: 12px; font-weight: 850; color: #475569; }
-.accounting-metric-value { margin-top: 8px; font-size: 22px; font-weight: 950; color: #111827; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.accounting-metric-delta { margin-top: 8px; display: flex; align-items: center; gap: 5px; font-size: 11.5px; font-weight: 850; }
-.accounting-main-grid { display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(360px, .75fr) 380px; gap: 16px; }
-.accounting-lower-grid { display: grid; grid-template-columns: minmax(0, 1fr) 380px; gap: 16px; margin-top: 16px; }
+.accounting-overview-page {
+  --accounting-dashboard-inline-space: clamp(16px, 2vw, 32px);
+  --accounting-dashboard-max-width: var(--wf-content-max, 1440px);
+  min-height: 100%;
+  color: #0f172a;
+  background: #f3f4f6;
+  padding: 24px var(--accounting-dashboard-inline-space) 32px;
+  overflow-x: hidden;
+}
+.accounting-dashboard-hero {
+  width: 100%;
+  margin: 0;
+  padding: 0;
+  background: transparent;
+  color: #0f172a;
+}
+.accounting-dashboard-inner,
+.accounting-dashboard-content {
+  width: min(100%, var(--accounting-dashboard-max-width));
+  margin-inline: auto;
+}
+.accounting-dashboard-inner,
+.accounting-dashboard-content {
+  display: grid;
+  align-content: start;
+}
+.accounting-dashboard-inner { gap: 16px; }
+.accounting-dashboard-content { gap: 16px; padding: 16px 0 0; }
+.accounting-hero-header {
+  display: grid;
+  grid-template-columns: minmax(280px, .82fr) minmax(340px, auto);
+  align-items: start;
+  gap: 18px;
+  padding: 0 0 2px;
+  background: transparent;
+}
+.accounting-hero-copy { min-width: 0; }
+.accounting-breadcrumb {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 14px;
+  color: #334155;
+  font-size: 13px;
+  font-weight: 500;
+}
+.accounting-breadcrumb a {
+  color: inherit;
+  text-decoration: none;
+}
+.accounting-breadcrumb strong { color: #0f172a; font-weight: 600; }
+.accounting-hero-copy h1 {
+  margin: 0;
+  color: #0f172a;
+  font-size: 30px;
+  line-height: 1.08;
+  font-weight: 750;
+  letter-spacing: 0;
+}
+.accounting-hero-copy p {
+  max-width: 760px;
+  margin: 8px 0 0;
+  color: #334155;
+  font-size: 14px;
+  line-height: 1.5;
+  font-weight: 400;
+}
+.accounting-hero-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.accounting-hero-action {
+  height: 38px;
+  min-width: 0;
+  border: 1px solid #d8dee7;
+  border-radius: 6px;
+  background: #ffffff;
+  color: #0f172a;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  padding: 0 13px;
+  font-size: 13px;
+  font-weight: 600;
+  text-decoration: none;
+  white-space: nowrap;
+  box-shadow: none;
+}
+.accounting-hero-action:hover {
+  background: #f8fafc;
+  border-color: #cbd5e1;
+}
+.accounting-hero-action.is-primary {
+  background: #22c55e;
+  border-color: #22c55e;
+  color: #ffffff;
+}
+.accounting-hero-action.is-primary:hover {
+  background: #16a34a;
+  border-color: #16a34a;
+  color: #ffffff;
+}
+.accounting-card {
+  background: #ffffff;
+  border: 1px solid #dbe2ea;
+  border-radius: 8px;
+  padding: 18px;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, .04);
+  min-width: 0;
+}
+.accounting-metrics {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 12px;
+}
+.accounting-metric-card {
+  position: relative;
+  overflow: hidden;
+  min-width: 0;
+  min-height: 104px;
+  display: grid;
+  grid-template-columns: 40px minmax(0, 1fr);
+  align-items: start;
+  gap: 12px;
+  padding: 14px 15px;
+  border: 1px solid #dbe2ea;
+  border-radius: 8px;
+  background: #ffffff;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, .04);
+}
+.accounting-metric-icon {
+  width: 38px;
+  height: 38px;
+  border: 1px solid #e5e7eb;
+  border-radius: 6px;
+  display: grid;
+  place-items: center;
+  flex: 0 0 auto;
+}
+.accounting-metric-copy {
+  min-width: 0;
+  display: grid;
+  gap: 5px;
+  max-width: 100%;
+}
+.accounting-eyebrow {
+  min-height: 28px;
+  overflow: visible;
+  color: #0f172a;
+  font-size: 11.5px;
+  line-height: 1.2;
+  font-weight: 600;
+  opacity: .72;
+  white-space: normal;
+}
+.accounting-metric-value {
+  overflow: hidden;
+  color: #0f172a;
+  font-size: 21px;
+  line-height: 1.1;
+  font-weight: 800;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.accounting-metric-delta {
+  min-width: 0;
+  margin-top: 0;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  color: #0f172a;
+  font-size: 12px;
+  font-weight: 600;
+  opacity: .72;
+}
+.accounting-metric-delta svg { flex: 0 0 auto; }
+.accounting-metric-delta { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.accounting-main-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.25fr) minmax(360px, .75fr) 380px;
+  gap: 16px;
+}
+.accounting-lower-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 380px;
+  gap: 16px;
+}
 .accounting-side-stack { display: grid; gap: 16px; align-content: start; }
 .accounting-panel-header { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 14px; }
-.accounting-panel-header h2 { margin: 0; font-size: 15px; font-weight: 950; color: #111827; }
-.accounting-panel-header a { color: #2563eb; text-decoration: none; font-size: 12px; font-weight: 900; }
-.accounting-panel-header span { border: 1px solid #e8edf4; background: #fff; border-radius: 6px; min-height: 30px; display: inline-flex; align-items: center; padding: 0 10px; color: #334155; font-size: 12px; font-weight: 850; max-width: 170px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.accounting-panel-header h2 { margin: 0; font-size: 15px; font-weight: 700; color: #111827; }
+.accounting-panel-header a { color: #0f172a; text-decoration: none; font-size: 12px; font-weight: 600; }
+.accounting-panel-header span { border: 1px solid #e5e7eb; background: #f8fafc; border-radius: 6px; min-height: 30px; display: inline-flex; align-items: center; padding: 0 10px; color: #334155; font-size: 12px; font-weight: 600; max-width: 170px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .cash-flow-panel { min-height: 300px; display: grid; grid-template-rows: auto 1fr; gap: 16px; }
-.accounting-legend-row { display: flex; flex-wrap: wrap; gap: 18px; color: #475569; font-size: 12px; font-weight: 800; }
+.accounting-legend-row { display: flex; flex-wrap: wrap; gap: 18px; color: #475569; font-size: 12px; font-weight: 600; }
 .accounting-legend { display: flex; align-items: center; gap: 9px; min-width: 0; }
 .accounting-legend > span:first-child { width: 8px; height: 8px; border-radius: 999px; flex: 0 0 auto; }
-.accounting-legend > span:nth-child(2) { flex: 1; min-width: 0; font-size: 12px; font-weight: 800; color: #334155; }
+.accounting-legend > span:nth-child(2) { flex: 1; min-width: 0; font-size: 12px; font-weight: 600; color: #334155; }
 .accounting-legend strong { font-size: 12px; }
 .cash-chart { min-height: 248px; position: relative; border-bottom: 1px solid #e5e7eb; border-left: 1px solid #e5e7eb; overflow: hidden; }
 .cash-chart > span { position: absolute; left: 0; right: 0; border-top: 1px solid #eef2f7; }
 .cash-chart svg { position: absolute; inset: 0 0 24px; width: 100%; height: calc(100% - 24px); }
-.cash-labels { position: absolute; left: 8px; right: 0; bottom: 0; display: flex; justify-content: space-between; color: #64748b; font-size: 10.5px; font-weight: 800; }
+.cash-labels { position: absolute; left: 8px; right: 0; bottom: 0; display: flex; justify-content: space-between; color: #64748b; font-size: 10.5px; font-weight: 700; }
 .expense-breakdown { display: grid; grid-template-columns: 170px 1fr; gap: 18px; align-items: center; min-height: 300px; }
 .expense-donut { width: 156px; height: 156px; border-radius: 50%; background: conic-gradient(var(--donut-gradient)); display: grid; place-items: center; }
 .expense-donut > div { width: 92px; height: 92px; border-radius: 50%; background: #fff; display: grid; place-items: center; text-align: center; padding: 8px; }
 .expense-donut strong { font-size: 16px; }
-.expense-donut span { font-size: 11px; color: #64748b; font-weight: 800; }
+.expense-donut span { font-size: 11px; color: #64748b; font-weight: 600; }
 .expense-segments { display: grid; gap: 12px; }
 .bank-list { display: grid; }
 .bank-row { display: grid; grid-template-columns: 42px minmax(0, 1fr) auto; gap: 12px; align-items: center; padding: 14px 0; border-bottom: 1px solid #eef2f7; }
 .bank-icon { width: 38px; height: 38px; border-radius: 8px; color: #fff; display: grid; place-items: center; }
 .bank-copy strong { display: block; font-size: 13.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.bank-copy small { color: #64748b; font-weight: 800; }
-.accounting-add-link { text-decoration: none; color: #2563eb; font-weight: 900; font-size: 13px; text-align: center; padding: 14px 0 0; }
+.bank-copy small { color: #64748b; font-weight: 600; }
+.accounting-add-link { text-decoration: none; color: #0f172a; font-weight: 600; font-size: 13px; text-align: center; padding: 14px 0 0; }
 .mini-rows { display: grid; gap: 12px; }
 .mini-rows > div:not(.mini-total) { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; gap: 12px; font-size: 12.5px; }
 .mini-rows span:first-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.mini-rows span:nth-child(2) { color: #64748b; font-weight: 800; }
+.mini-rows span:nth-child(2) { color: #64748b; font-weight: 600; }
 .mini-rows strong { color: #ef4444; }
 .mini-total { border-top: 1px solid #eef2f7; padding-top: 12px; display: flex; justify-content: space-between; font-size: 12.5px; }
-.accounting-table-wrap { overflow-x: auto; }
+.accounting-table-wrap { overflow-x: auto; border: 1px solid #e5e7eb; border-radius: 8px; background: #ffffff; }
 .accounting-table { width: 100%; border-collapse: collapse; min-width: 880px; }
-.accounting-table th { text-align: left; padding: 10px 12px; color: #64748b; font-size: 11px; text-transform: uppercase; font-weight: 900; }
+.accounting-table th { text-align: left; padding: 11px 12px; color: #475569; background: #f8fafc; font-size: 11px; text-transform: uppercase; font-weight: 700; }
 .accounting-table td { padding: 12px; font-size: 12.5px; color: #111827; vertical-align: middle; border-top: 1px solid #eef2f7; }
 .accounting-table td strong { display: block; }
 .accounting-table td small { display: block; color: #64748b; margin-top: 3px; }
-.accounting-pill { display: inline-flex; align-items: center; min-height: 22px; border-radius: 6px; background: #eef2ff; color: #4f46e5; padding: 0 8px; font-size: 11.5px; font-weight: 850; }
+.accounting-pill { display: inline-flex; align-items: center; min-height: 22px; border-radius: 6px; background: #eef2ff; color: #4f46e5; padding: 0 8px; font-size: 11.5px; font-weight: 700; }
 .status-paid, .status-completed, .status-released { background: #dcfce7; color: #15803d; }
 .status-overdue, .status-cancelled { background: #fee2e2; color: #dc2626; }
-.type-expense, .amount-negative { color: #ef4444 !important; font-weight: 900; }
-.type-income { color: #16a34a !important; font-weight: 900; }
-.type-transfer { color: #2563eb !important; font-weight: 900; }
+.type-expense, .amount-negative { color: #ef4444 !important; font-weight: 700; }
+.type-income { color: #16a34a !important; font-weight: 700; }
+.type-transfer { color: #2563eb !important; font-weight: 700; }
 .accounting-more-button { width: 32px; height: 30px; border-radius: 7px; border: 1px solid #eef2f7; background: #fff; color: #475569; display: grid; place-items: center; cursor: pointer; }
 .quick-actions-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
 .quick-action { min-height: 76px; border: 1px solid #eef2f7; border-radius: 8px; text-decoration: none; color: #111827; display: flex; align-items: center; gap: 12px; padding: 12px; }
 .quick-action > span:first-child { width: 36px; height: 36px; border-radius: 8px; background: #ecfdf3; color: #16a34a; display: grid; place-items: center; flex: 0 0 auto; }
-.quick-action strong { display: block; font-size: 13px; }
+.quick-action strong { display: block; font-size: 13px; font-weight: 700; }
 .quick-action small { display: block; color: #64748b; margin-top: 3px; }
-.accounting-empty { min-height: 160px; display: grid; place-items: center; text-align: center; color: #64748b; font-size: 13px; font-weight: 750; line-height: 1.45; padding: 20px; }
+.accounting-empty { min-height: 154px; display: grid; place-items: center; align-content: center; gap: 8px; text-align: center; color: #64748b; font-size: 13px; font-weight: 500; line-height: 1.45; padding: 22px; border: 1px dashed #dbe2ea; border-radius: 8px; background: #ffffff; }
+.accounting-empty .wf-state__icon { width: 52px; height: 52px; border: 1px solid #dbe2ea; border-radius: 8px; display: grid; place-items: center; background: #f8fafc; color: #0f172a; }
+.accounting-empty h1 { max-width: 360px; margin: 0; color: #0f172a; font-size: 13px; line-height: 1.35; font-weight: 650; }
+.accounting-empty p { margin: 0; color: #64748b; font-size: 12.5px; line-height: 1.4; }
 @media (max-width: 1320px) {
   .accounting-metrics { grid-template-columns: repeat(3, minmax(180px, 1fr)); }
   .accounting-main-grid { grid-template-columns: minmax(0, 1fr) minmax(320px, .8fr); }
@@ -696,23 +866,29 @@ const accountingOverviewCss = `
   .accounting-lower-grid { grid-template-columns: 1fr; }
 }
 @media (max-width: 1024px) {
-  .accounting-overview-page { padding: 22px; }
+  .accounting-overview-page { --accounting-dashboard-inline-space: 24px; padding-top: 22px; }
+  .accounting-hero-header { grid-template-columns: 1fr; }
+  .accounting-hero-actions { justify-content: flex-start; }
   .accounting-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .accounting-main-grid, .accounting-side-stack { grid-template-columns: 1fr; }
 }
 @media (max-width: 640px) {
-  .accounting-overview-page { padding: 16px; }
-  .accounting-metrics, .quick-actions-grid { grid-template-columns: 1fr; }
+  .accounting-overview-page { --accounting-dashboard-inline-space: 16px; padding-top: 18px; }
+  .accounting-hero-actions { display: grid; grid-template-columns: 1fr; width: 100%; }
+  .accounting-hero-action { width: 100%; }
+  .accounting-metrics { display: flex; overflow-x: auto; padding-bottom: 4px; scroll-snap-type: x mandatory; }
+  .accounting-metric-card { min-width: min(280px, 82vw); scroll-snap-align: start; }
+  .quick-actions-grid { grid-template-columns: 1fr; }
   .accounting-card { padding: 16px; }
   .accounting-metric-value { font-size: 20px; }
   .expense-breakdown { grid-template-columns: 1fr; justify-items: center; }
   .expense-segments { width: 100%; }
   .mini-rows > div:not(.mini-total) { grid-template-columns: 1fr; gap: 4px; }
-  .accounting-table-wrap { overflow: visible; }
+  .accounting-table-wrap { overflow: visible; border: 0; background: transparent; }
   .accounting-table, .accounting-table thead, .accounting-table tbody, .accounting-table tr, .accounting-table td { display: block; width: 100%; min-width: 0; }
   .accounting-table thead { display: none; }
-  .accounting-table tr { border: 1px solid #eef2f7; border-radius: 8px; margin-bottom: 12px; overflow: hidden; }
+  .accounting-table tr { border: 1px solid #eef2f7; border-radius: 8px; margin-bottom: 12px; overflow: hidden; background: #ffffff; }
   .accounting-table td { border-top: 0; display: grid; grid-template-columns: 105px minmax(0, 1fr); gap: 10px; padding: 10px 12px; }
-  .accounting-table td::before { content: attr(data-label); color: #64748b; font-size: 11px; font-weight: 900; text-transform: uppercase; }
+  .accounting-table td::before { content: attr(data-label); color: #64748b; font-size: 11px; font-weight: 700; text-transform: uppercase; }
 }
 `

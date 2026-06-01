@@ -208,10 +208,7 @@ export default function TeamsPage() {
                     >
                       <div
                         style={menuItem}
-                        onClick={() => {
-                          console.log('View', team.id)
-                          setActiveMenu(null)
-                        }}
+                        onClick={() => setActiveMenu(null)}
                         onMouseEnter={e => (e.currentTarget.style.background = '#f9fafb')}
                         onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
                       >
@@ -220,10 +217,7 @@ export default function TeamsPage() {
 
                       <div
                         style={menuItem}
-                        onClick={() => {
-                          console.log('Edit', team.id)
-                          setActiveMenu(null)
-                        }}
+                        onClick={() => setActiveMenu(null)}
                         onMouseEnter={e => (e.currentTarget.style.background = '#f9fafb')}
                         onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
                       >
@@ -232,10 +226,7 @@ export default function TeamsPage() {
 
                       <div
                         style={{ ...menuItem, color: '#ef4444', borderBottom: 'none' }}
-                        onClick={() => {
-                          console.log('Delete', team.id)
-                          setActiveMenu(null)
-                        }}
+                        onClick={() => setActiveMenu(null)}
                         onMouseEnter={e => (e.currentTarget.style.background = '#fef2f2')}
                         onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
                       >

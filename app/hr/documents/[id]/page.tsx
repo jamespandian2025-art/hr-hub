@@ -19,6 +19,7 @@ import {
   Trash2,
   Upload,
 } from 'lucide-react'
+import { uploadFileObject } from '@/lib/uploads/client'
 
 type HRDocument = {
   id: string
@@ -31,6 +32,9 @@ type HRDocument = {
   size?: string
   sizeBytes?: number
   dataUrl?: string
+  fileUrl?: string
+  objectKey?: string
+  storageProvider?: 'supabase' | 'local'
   category?: string
   uploadedByName?: string
   uploadedAt?: string
@@ -60,6 +64,9 @@ type HRDocumentVersion = {
   size?: string
   sizeBytes?: number
   dataUrl?: string
+  fileUrl?: string
+  objectKey?: string
+  storageProvider?: 'supabase' | 'local'
   uploadedById?: string
   uploadedByEmail?: string
   uploadedByName?: string
@@ -108,15 +115,6 @@ function parseStoredAccount(value: string | null): StoredAccount {
   }
 }
 
-function readFileAsDataUrl(file: File) {
-  return new Promise<string>((resolve, reject) => {
-    const reader = new FileReader()
-    reader.onload = () => resolve(String(reader.result || ''))
-    reader.onerror = reject
-    reader.readAsDataURL(file)
-  })
-}
-
 function formatFileSize(bytes: number) {
   if (bytes < 1024) return `${bytes} B`
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)} KB`
@@ -153,6 +151,14 @@ function typeTone(type: string) {
   return { bg: '#f1f5f9', text: '#475569' }
 }
 
+function documentAssetUrl(doc?: Pick<HRDocument, 'fileUrl' | 'dataUrl'> | null) {
+  return doc?.fileUrl || doc?.dataUrl || ''
+}
+
+function versionAssetUrl(version?: Pick<HRDocumentVersion, 'fileUrl' | 'dataUrl'> | null) {
+  return version?.fileUrl || version?.dataUrl || ''
+}
+
 export default function HRDocumentDetailsPage() {
   const params = useParams()
   const router = useRouter()
@@ -167,8 +173,8 @@ export default function HRDocumentDetailsPage() {
 
   useEffect(() => {
     const load = () => {
-      const active = loadStored<HRDocument[]>(documentsKey, []).filter(doc => Boolean(doc.dataUrl) && !doc.deletedAt)
-      const deleted = loadStored<HRDocument[]>(deletedDocumentsKey, []).filter(doc => Boolean(doc.dataUrl))
+      const active = loadStored<HRDocument[]>(documentsKey, []).filter(doc => Boolean(documentAssetUrl(doc) || doc.objectKey) && !doc.deletedAt)
+      const deleted = loadStored<HRDocument[]>(deletedDocumentsKey, []).filter(doc => Boolean(documentAssetUrl(doc) || doc.objectKey))
       const storedVersions = loadStored<HRDocumentVersion[]>(documentVersionsKey, [])
         .filter(version => version.documentId === id)
         .sort((first, second) => new Date(second.uploadedAt || 0).getTime() - new Date(first.uploadedAt || 0).getTime())
@@ -237,24 +243,27 @@ export default function HRDocumentDetailsPage() {
   const isPdf = document?.mimeType === 'application/pdf' || docType === 'PDF'
 
   function downloadDocument() {
-    if (!document?.dataUrl) return
+    const url = documentAssetUrl(document)
+    if (!url || !document) return
     const link = window.document.createElement('a')
-    link.href = document.dataUrl
+    link.href = url
     link.download = document.name
     link.click()
   }
 
   function downloadVersion(version: HRDocumentVersion) {
-    if (!version.dataUrl) return
+    const url = versionAssetUrl(version)
+    if (!url) return
     const link = window.document.createElement('a')
-    link.href = version.dataUrl
+    link.href = url
     link.download = version.name
     link.click()
   }
 
   function printDocument() {
-    if (!document?.dataUrl) return
-    const printWindow = window.open(document.dataUrl, '_blank', 'noopener,noreferrer')
+    const url = documentAssetUrl(document)
+    if (!url) return
+    const printWindow = window.open(url, '_blank', 'noopener,noreferrer')
     printWindow?.focus()
   }
 
@@ -276,20 +285,27 @@ export default function HRDocumentDetailsPage() {
       size: document.size,
       sizeBytes: document.sizeBytes,
       dataUrl: document.dataUrl,
+      fileUrl: document.fileUrl,
+      objectKey: document.objectKey,
+      storageProvider: document.storageProvider,
       uploadedById: document.uploadedById,
       uploadedByEmail: document.uploadedByEmail,
       uploadedByName: document.uploadedByName,
       uploadedAt: document.uploadedAt,
       notes: 'Previous file before replacement.',
     }
+    const uploaded = await uploadFileObject(file, 'hr-documents')
     const updated: HRDocument = {
       ...document,
-      name: file.name,
+      name: uploaded.name,
       type: fileExtension(file.name),
-      mimeType: file.type || 'application/octet-stream',
-      size: formatFileSize(file.size),
-      sizeBytes: file.size,
-      dataUrl: await readFileAsDataUrl(file),
+      mimeType: uploaded.mimeType,
+      size: formatFileSize(uploaded.sizeBytes),
+      sizeBytes: uploaded.sizeBytes,
+      dataUrl: undefined,
+      fileUrl: uploaded.url,
+      objectKey: uploaded.objectKey,
+      storageProvider: uploaded.storageProvider,
       uploadedById: account.userId || document.uploadedById,
       uploadedByEmail: account.email || document.uploadedByEmail,
       uploadedByName: account.fullName || account.name || document.uploadedByName,
@@ -300,7 +316,7 @@ export default function HRDocumentDetailsPage() {
     const nextVersions = [previousVersion, ...previousVersions]
     saveStored(documentsKey, active)
     saveStored(documentVersionsKey, nextVersions)
-    setAllDocuments(active.filter(doc => Boolean(doc.dataUrl) && !doc.deletedAt))
+    setAllDocuments(active.filter(doc => Boolean(documentAssetUrl(doc) || doc.objectKey) && !doc.deletedAt))
     setVersions(nextVersions.filter(version => version.documentId === document.id))
     setDocument(updated)
     if (replaceInputRef.current) replaceInputRef.current.value = ''
@@ -318,7 +334,7 @@ export default function HRDocumentDetailsPage() {
     const deleted = [trashed, ...deletedDocuments.filter(doc => doc.id !== document.id)]
     saveStored(documentsKey, active)
     saveStored(deletedDocumentsKey, deleted)
-    setAllDocuments(active.filter(doc => Boolean(doc.dataUrl) && !doc.deletedAt))
+    setAllDocuments(active.filter(doc => Boolean(documentAssetUrl(doc) || doc.objectKey) && !doc.deletedAt))
     setDeletedDocuments(deleted)
     setDocument(trashed)
   }
@@ -330,7 +346,7 @@ export default function HRDocumentDetailsPage() {
     const active = [restored, ...loadStored<HRDocument[]>(documentsKey, [])]
     saveStored(documentsKey, active)
     saveStored(deletedDocumentsKey, deleted)
-    setAllDocuments(active.filter(doc => Boolean(doc.dataUrl) && !doc.deletedAt))
+    setAllDocuments(active.filter(doc => Boolean(documentAssetUrl(doc) || doc.objectKey) && !doc.deletedAt))
     setDeletedDocuments(deleted)
     setDocument(restored)
   }
@@ -465,11 +481,11 @@ export default function HRDocumentDetailsPage() {
                   <button style={previewToolButtonStyle} onClick={printDocument} aria-label="Print preview"><Printer size={15} /></button>
                 </div>
                 <div style={previewCanvasStyle}>
-                  {isImage && document.dataUrl && (
+                  {isImage && documentAssetUrl(document) && (
                     // eslint-disable-next-line @next/next/no-img-element
-                    <img src={document.dataUrl} alt={document.name} style={previewImageStyle} />
+                    <img src={documentAssetUrl(document)} alt={document.name} style={previewImageStyle} />
                   )}
-                  {isPdf && document.dataUrl && <iframe src={document.dataUrl} title={document.name} style={previewFrameStyle} />}
+                  {isPdf && documentAssetUrl(document) && <iframe src={documentAssetUrl(document)} title={document.name} style={previewFrameStyle} />}
                   {!isImage && !isPdf && (
                     <EmptyPanel icon={FileText} title="Preview is not available." text="Download this document to view it with the right app." />
                   )}

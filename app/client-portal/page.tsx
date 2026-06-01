@@ -4,6 +4,7 @@ import { useMemo, useState } from 'react'
 import { CalendarDays, Check, FileText, FolderKanban, Image as ImageIcon, LayoutDashboard, ListPlus, LogOut, MessageSquare, Settings, ShieldCheck, WalletCards, Wrench, X } from 'lucide-react'
 import { useRouter } from 'next/navigation'
 import { logoutUser } from '@/lib/auth/logout'
+import { companyScopedKey, getActiveCompany } from '@/lib/tenant/company'
 
 const font = "var(--font-body)"
 const projectsKey = 'flowsys-projects'
@@ -16,7 +17,7 @@ const accountKey = 'flowsys-account'
 type ProjectStatus = 'Pending' | 'Ongoing' | 'Completed' | 'With issue'
 
 interface Project {
-  id: number
+  id: string | number
   name: string
   client: string
   location: string
@@ -35,7 +36,7 @@ interface Project {
 
 interface ProjectProgressUpdate {
   id: number
-  projectId: number
+  projectId: string | number
   phase: string
   title: string
   remarks: string
@@ -48,7 +49,7 @@ interface ProjectProgressUpdate {
 
 interface ProjectAttachment {
   id: number
-  projectId: number
+  projectId: string | number
   name: string
   size: number
   addedAt: string
@@ -65,7 +66,7 @@ type ChangeOrderStatus = 'Requested' | 'Priced' | 'Approved' | 'Rejected'
 
 interface ChangeOrder {
   id: number
-  projectId: number
+  projectId: string | number
   clientName: string
   title: string
   description: string
@@ -94,13 +95,31 @@ const loadStored = <T,>(key: string, fallback: T[]): T[] => {
   if (typeof window === 'undefined') return fallback
 
   try {
-    const stored = window.localStorage.getItem(key)
-    return stored ? (JSON.parse(stored) as T[]) : fallback
+    const activeCompany = getActiveCompany()
+    const scopedKey = companyScopedKey(key, activeCompany?.id)
+    const rows = [window.localStorage.getItem(scopedKey), scopedKey === key ? null : window.localStorage.getItem(key)]
+      .flatMap(stored => {
+        if (!stored) return []
+        const parsed = JSON.parse(stored) as unknown
+        return Array.isArray(parsed) ? parsed as T[] : []
+      })
+    return rows.length ? uniqueRows(rows) : fallback
   } catch {
     return fallback
   }
 }
 
+const uniqueRows = <T,>(rows: T[]) => {
+  const seen = new Set<string>()
+  return rows.filter((row, index) => {
+    const id = typeof row === 'object' && row && 'id' in row ? String((row as { id?: unknown }).id) : String(index)
+    if (seen.has(id)) return false
+    seen.add(id)
+    return true
+  })
+}
+
+const recordKey = (value: string | number | null | undefined) => String(value ?? '')
 const money = (value: number) => `PHP ${Number(value || 0).toLocaleString('en-PH')}.00`
 const shortMoney = (value: number) => `PHP ${Number(value || 0).toLocaleString('en-PH')}`
 const duration = (project: Project) => `${project.startDate || '-'} - ${project.endDate || '-'}`
@@ -139,19 +158,19 @@ export default function ClientPortalPage() {
   const clients = useMemo(() => Array.from(new Set(projects.map(project => project.client).filter(Boolean))), [projects])
   const [client, setClient] = useState(() => clients[0] || 'All clients')
   const clientProjects = projects.filter(project => client === 'All clients' || project.client === client)
-  const [selectedProjectId, setSelectedProjectId] = useState<number | null>(() => clientProjects[0]?.id || null)
-  const selectedProject = clientProjects.find(project => project.id === selectedProjectId) || clientProjects[0]
+  const [selectedProjectId, setSelectedProjectId] = useState<string | number | null>(() => clientProjects[0]?.id || null)
+  const selectedProject = clientProjects.find(project => recordKey(project.id) === recordKey(selectedProjectId)) || clientProjects[0]
   const projectUpdates = selectedProject
     ? progress
-        .filter(update => update.projectId === selectedProject.id && update.notifyClient)
+        .filter(update => recordKey(update.projectId) === recordKey(selectedProject.id) && update.notifyClient)
         .sort((a, b) => new Date(b.updateDate || b.createdAt).getTime() - new Date(a.updateDate || a.createdAt).getTime())
     : []
-  const projectAttachments = selectedProject ? attachments.filter(attachment => attachment.projectId === selectedProject.id) : []
+  const projectAttachments = selectedProject ? attachments.filter(attachment => recordKey(attachment.projectId) === recordKey(selectedProject.id)) : []
   const expenses = selectedProject ? selectedProject.materialCost + selectedProject.laborCost + selectedProject.overheadProfit + selectedProject.generalExpense : 0
   const completion = selectedProject?.status === 'Completed' ? 100 : selectedProject?.status === 'Ongoing' ? 55 : selectedProject?.status === 'With issue' ? 40 : 10
   const gallery = projectUpdates.flatMap(update => update.files.map(file => ({ file, phase: update.phase, date: update.updateDate }))).slice(0, 8)
   const paidPercent = selectedProject?.projectCost ? Math.min(100, Math.round((selectedProject.paidAmount / selectedProject.projectCost) * 100)) : 0
-  const projectChangeOrders = selectedProject ? changeOrders.filter(order => order.projectId === selectedProject.id) : []
+  const projectChangeOrders = selectedProject ? changeOrders.filter(order => recordKey(order.projectId) === recordKey(selectedProject.id)) : []
 
   const changeClient = (nextClient: string) => {
     setClient(nextClient)
@@ -283,7 +302,7 @@ export default function ClientPortalPage() {
               {clients.map(clientName => <option key={clientName}>{clientName}</option>)}
             </select>
             {clientProjects.length > 0 && (
-              <select value={selectedProject?.id || ''} onChange={event => setSelectedProjectId(Number(event.target.value))} style={selectStyle}>
+              <select value={selectedProject?.id || ''} onChange={event => setSelectedProjectId(event.target.value)} style={selectStyle}>
                 {clientProjects.map(project => <option key={project.id} value={project.id}>{project.name}</option>)}
               </select>
             )}

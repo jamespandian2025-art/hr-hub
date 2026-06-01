@@ -43,7 +43,7 @@ export default function DeletedTeamsPage() {
   }
 
   return (
-    <main style={{ fontFamily: font, padding: '0 20px 32px', minHeight: '100vh', background: '#f8fafc' }}>
+    <main style={{ fontFamily: font, padding: '0 20px 32px', minHeight: '100vh' }}>
       <div style={{ padding: '20px 0 18px', display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 14, flexWrap: 'wrap' }}>
         <div>
           <div style={{ fontSize: 12, color: '#64748b', marginBottom: 12 }}>HR Hub &gt; Teams &gt; Deleted Teams</div>

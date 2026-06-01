@@ -10,19 +10,19 @@ import {
   X,
 } from 'lucide-react'
 import CompanySwitcher from '@/components/CompanySwitcher'
-import { getProcurementRouteMeta, procurementWorkspaceMenu } from '@/config/procurement-menu'
+import { getProcurementRouteMeta, isProcurementRouteActive, procurementWorkspaceMenu } from '@/config/procurement-menu'
 
 const font = 'var(--font-body)'
 
 const sidebarColors = {
-  bg: '#030303',
-  surface: '#1f1f1f',
-  surfaceHover: '#151515',
-  border: '#242424',
-  text: 'rgb(237, 237, 237)',
-  muted: '#a1a1a1',
-  faint: '#737373',
-  icon: '#a1a1a1',
+  bg: '#ffffff',
+  surface: '#f1f5f9',
+  surfaceHover: '#f1f5f9',
+  border: '#e5e7eb',
+  text: '#0f172a',
+  muted: '#64748b',
+  faint: '#94a3b8',
+  icon: '#64748b',
   activeBg: '#dcfce7',
   activeText: '#052e16',
   activeIcon: '#16a34a',
@@ -42,8 +42,6 @@ export default function ProcurementShell({ children }: { children: React.ReactNo
     return () => window.removeEventListener('keydown', closeOnEscape)
   }, [])
 
-  const isActive = (href: string) => pathname === href || pathname.startsWith(`${href}/`)
-
   return (
     <div className="procurement-workspace-shell" style={{ fontFamily: font }}>
       <style>{procurementShellCss}</style>
@@ -54,7 +52,7 @@ export default function ProcurementShell({ children }: { children: React.ReactNo
         onClick={() => setSidebarOpen(false)}
       />
 
-      <aside className={`procurement-sidepanel${sidebarOpen ? ' is-open' : ''}`} style={{ background: '#000000' }}>
+      <aside className={`procurement-sidepanel${sidebarOpen ? ' is-open' : ''}`} style={{ background: '#ffffff' }}>
         <div className="procurement-sidebar-card" style={{ background: sidebarColors.bg, color: sidebarColors.text, borderColor: sidebarColors.border }}>
           <div className="procurement-sidebar-brand">
             <span className="procurement-sidebar-logo">P</span>
@@ -76,7 +74,7 @@ export default function ProcurementShell({ children }: { children: React.ReactNo
             <div className="procurement-sidebar-label">Workspace</div>
             {procurementWorkspaceMenu.map(item => {
               const Icon = item.icon
-              const active = isActive(item.href)
+              const active = isProcurementRouteActive(pathname, item.href)
               return (
                 <Link key={item.href} href={item.href} className={`procurement-nav-row${active ? ' active' : ''}`} onClick={() => setSidebarOpen(false)}>
                   <Icon size={16} />
@@ -120,7 +118,7 @@ const procurementShellCss = `
   min-height: 100vh;
   height: 100dvh;
   overflow: hidden;
-  background: #f7f9fc;
+  background: #f3f4f6;
   color: #0f172a;
   display: grid;
   grid-template-columns: 260px minmax(0, 1fr);
@@ -203,7 +201,7 @@ const procurementShellCss = `
   gap: 10px;
   border: 1px solid ${sidebarColors.border};
   border-radius: 8px;
-  background: #0b0b0b;
+  background: #ffffff;
   color: ${sidebarColors.text};
   font-size: 13px;
   font-weight: 850;

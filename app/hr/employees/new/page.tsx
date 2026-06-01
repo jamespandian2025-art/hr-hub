@@ -8,6 +8,12 @@ import {
   Copy, CreditCard, FileText, KeyRound, RefreshCw, Save, Trash2, Upload, User, Users, X,
 } from 'lucide-react'
 import { formatPhilippineMobileNumber, isValidPhilippineMobileNumber, philippineMobilePlaceholder } from '@/lib/hrms/philippinesPhone'
+import { createHrRecord } from '@/lib/hrms/client'
+import { withCsrfHeaders } from '@/lib/security/csrfClient'
+import { createPortalPasswordFields } from '@/lib/security/password'
+import { secureId, secureRandomString } from '@/lib/security/random'
+import { uploadFileObject } from '@/lib/uploads/client'
+import EmployeeProfileRightRail from '@/components/hr/EmployeeProfileRightRail'
 
 // â”€â”€â”€ Constants â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
@@ -86,6 +92,9 @@ interface UploadedDocument {
   size: string
   sizeBytes: number
   dataUrl: string
+  fileUrl?: string
+  objectKey?: string
+  storageProvider?: string
   uploadedAt: string
   employeeId?: string
 }
@@ -148,13 +157,7 @@ function createInitialForm(): FormState {
 }
 
 function randomToken(length: number) {
-  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789'
-  if (typeof window !== 'undefined' && window.crypto?.getRandomValues) {
-    const values = new Uint32Array(length)
-    window.crypto.getRandomValues(values)
-    return Array.from(values, value => chars[value % chars.length]).join('')
-  }
-  return Array.from({ length }, () => chars[Math.floor(Math.random() * chars.length)]).join('')
+  return secureRandomString(length)
 }
 
 function generatePortalPassword() {
@@ -168,9 +171,9 @@ type CredentialEmailResult = {
   message: string
 }
 
-async function openCredentialEmail(employee: { employeeId?: string; firstName?: string; lastName?: string; email?: string; portalEmail?: string; portalPassword?: string; jobTitle?: string }): Promise<CredentialEmailResult> {
+async function openCredentialEmail(employee: { employeeId?: string; firstName?: string; lastName?: string; email?: string; portalEmail?: string; temporaryPassword?: string; jobTitle?: string }): Promise<CredentialEmailResult> {
   const recipient = employee.email?.trim()
-  if (!recipient || !employee.portalEmail || !employee.portalPassword) {
+  if (!recipient || !employee.portalEmail || !employee.temporaryPassword) {
     return { sent: false, message: 'Missing employee work email, portal email, or temporary password.' }
   }
 
@@ -182,12 +185,12 @@ async function openCredentialEmail(employee: { employeeId?: string; firstName?: 
   try {
     const response = await fetch('/api/hr/employee-credentials', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: withCsrfHeaders({ 'Content-Type': 'application/json' }),
       body: JSON.stringify({
         recipient,
         employeeName,
         portalEmail: employee.portalEmail,
-        portalPassword: employee.portalPassword,
+        portalPassword: employee.temporaryPassword,
         loginUrl,
       }),
     })
@@ -203,7 +206,7 @@ async function openCredentialEmail(employee: { employeeId?: string; firstName?: 
   window.localStorage.setItem(credentialEmailKey, JSON.stringify([
     ...outbox,
     {
-      id: `credential_email_${Date.now()}`,
+      id: secureId('credential_email'),
       employeeId: employee.employeeId,
       employeeName,
       recipient,
@@ -225,15 +228,6 @@ function formatFileSize(bytes: number) {
 
 function fileExtension(name: string) {
   return name.includes('.') ? name.split('.').pop()?.toLowerCase() || 'file' : 'file'
-}
-
-function readFileAsDataUrl(file: File): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader()
-    reader.onload = () => resolve(String(reader.result || ''))
-    reader.onerror = () => reject(reader.error)
-    reader.readAsDataURL(file)
-  })
 }
 
 // â”€â”€â”€ Sub-components â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
@@ -422,9 +416,10 @@ export default function AddEmployeePage() {
       return
     }
     try {
-      setPhotoPreview(await readFileAsDataUrl(file))
+      const uploaded = await uploadFileObject(file, 'employee-profile-photos')
+      setPhotoPreview(uploaded.url)
     } catch {
-      setPhotoError('Could not read this image. Please try another file.')
+      setPhotoError('Could not upload this image. Please try another file.')
     }
   }
 
@@ -434,23 +429,27 @@ export default function AddEmployeePage() {
 
     const next: UploadedDocument[] = []
     for (const file of Array.from(files)) {
-      if (file.size > 1024 * 1024) {
-        setDocumentError('Each document must be 1MB or smaller while using local browser storage.')
+      if (file.size > 10 * 1024 * 1024) {
+        setDocumentError('Each document must be 10MB or smaller.')
         continue
       }
       try {
+        const uploaded = await uploadFileObject(file, 'employee-documents')
         next.push({
-          id: `doc_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+          id: secureId('doc', 6),
           name: file.name,
           type: fileExtension(file.name),
           mimeType: file.type || 'application/octet-stream',
           size: formatFileSize(file.size),
           sizeBytes: file.size,
-          dataUrl: await readFileAsDataUrl(file),
+          dataUrl: uploaded.url,
+          fileUrl: uploaded.url,
+          objectKey: uploaded.objectKey,
+          storageProvider: uploaded.storageProvider,
           uploadedAt: new Date().toISOString(),
         })
       } catch {
-        setDocumentError(`Could not read ${file.name}. Please try again.`)
+        setDocumentError(`Could not upload ${file.name}. Please try again.`)
       }
     }
 
@@ -467,6 +466,7 @@ export default function AddEmployeePage() {
     const empId = form.employeeId.trim() || generateEmpId(existing.map(e => e.employeeId))
     const now   = new Date().toISOString()
     const portalEmail = buildPortalEmail(form.firstName, form.lastName, empId)
+    const portalPasswordFields = await createPortalPasswordFields(portalPassword)
     const newEmp = {
       id: `emp_${Date.now()}`,
       employeeId: empId,
@@ -475,7 +475,7 @@ export default function AddEmployeePage() {
       lastName: form.lastName.trim(),
       email: form.email.trim(),
       portalEmail,
-      portalPassword,
+      ...portalPasswordFields,
       mustChangePassword: true,
       phone: form.phone.trim(),
       alternatePhone: form.alternatePhone.trim(),
@@ -519,6 +519,8 @@ export default function AddEmployeePage() {
       updatedAt: now,
     }
     try {
+      await createHrRecord<typeof newEmp>('employees', newEmp as unknown as Record<string, unknown>)
+
       const all = loadStored<Array<typeof newEmp>>('flowsys-hr-employees', [])
       const nextEmployees = [...all.filter(employee => employee.id !== newEmp.id), newEmp]
       window.localStorage.setItem('flowsys-hr-employees', JSON.stringify(nextEmployees))
@@ -543,7 +545,7 @@ export default function AddEmployeePage() {
 
       if (emailCredentials) {
         try {
-          const emailResult = await openCredentialEmail(newEmp)
+          const emailResult = await openCredentialEmail({ ...newEmp, temporaryPassword: portalPassword })
           if (!emailResult.sent && !warning) {
             warning = `Employee saved, but login details were not emailed. ${emailResult.message}`
           }
@@ -564,7 +566,9 @@ export default function AddEmployeePage() {
       console.error('Could not save employee', error)
       setSaveError(error instanceof DOMException && error.name === 'QuotaExceededError'
         ? 'The employee could not be saved because browser storage is full. Try a smaller profile photo or fewer documents, then save again.'
-        : 'The employee could not be saved. Please check the form and try again.')
+        : error instanceof Error
+          ? `The employee could not be saved to HR records. ${error.message}`
+          : 'The employee could not be saved to HR records. Please check the form and try again.')
       setSaving(false)
     }
   }
@@ -583,7 +587,10 @@ export default function AddEmployeePage() {
 
   // â”€â”€â”€ Render â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   return (
-    <main style={{ fontFamily: font, padding: '0 20px 40px', minHeight: '100vh', background: '#f8fafc' }}>
+    <main style={{ fontFamily: font, padding: '0 20px 40px', minHeight: '100vh' }}>
+
+      <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) 320px', gap: 16, alignItems: 'start', paddingTop: 4 }}>
+        <div style={{ minWidth: 0 }}>
 
       {/* Page header */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', paddingTop: 20, marginBottom: 20 }}>
@@ -685,12 +692,34 @@ export default function AddEmployeePage() {
         {/* Right panel: tabs */}
         <div style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: 12, boxShadow: '0 1px 4px rgba(0,0,0,0.04)', overflow: 'hidden' }}>
           {/* Tab bar */}
-          <div style={{ display: 'flex', borderBottom: '1px solid #e5e7eb', overflowX: 'auto' }}>
+          <div style={{ display: 'flex', alignItems: 'stretch', gap: 4, padding: '0 12px', overflowX: 'auto', boxShadow: 'inset 0 -1px 0 #e5e7eb' }}>
             {TABS.map(t => {
               const TIcon = t.Icon
+              const isActive = activeTab === t.id
               return (
-                <button key={t.id} onClick={() => setActiveTab(t.id)} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '12px 16px', border: 'none', borderBottom: `2px solid ${activeTab === t.id ? '#22c55e' : 'transparent'}`, background: 'transparent', color: activeTab === t.id ? '#22c55e' : '#6b7280', fontSize: 12, fontWeight: activeTab === t.id ? 600 : 400, cursor: 'pointer', whiteSpace: 'nowrap', fontFamily: font }}>
-                  <TIcon size={13} /> {t.label}
+                <button
+                  key={t.id}
+                  type="button"
+                  onClick={() => setActiveTab(t.id)}
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: 10,
+                    padding: '14px 18px',
+                    border: 'none',
+                    background: 'transparent',
+                    color: isActive ? '#0f172a' : '#475569',
+                    fontSize: 13,
+                    fontWeight: isActive ? 700 : 500,
+                    cursor: 'pointer',
+                    whiteSpace: 'nowrap',
+                    fontFamily: font,
+                    boxShadow: isActive ? 'inset 0 -2px 0 #0f172a' : 'none',
+                    transition: 'color 120ms ease, box-shadow 120ms ease',
+                  }}
+                >
+                  <TIcon size={15} strokeWidth={isActive ? 2.2 : 1.8} />
+                  <span>{t.label}</span>
                 </button>
               )
             })}
@@ -1042,6 +1071,10 @@ export default function AddEmployeePage() {
             )}
           </div>
         </div>
+      </div>
+
+        </div>
+        <EmployeeProfileRightRail />
       </div>
     </main>
   )

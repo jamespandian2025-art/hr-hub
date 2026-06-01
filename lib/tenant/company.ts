@@ -1,11 +1,18 @@
 'use client'
 
+import { getSupabaseBrowserClient } from '@/lib/auth/supabaseClient'
+import { withCsrfHeaders } from '@/lib/security/csrfClient'
+
 export type CompanyRole =
   | 'Owner'
   | 'Admin'
   | 'Finance'
   | 'HR'
+  | 'Employee'
+  | 'Team Manager'
   | 'Project Manager'
+  | 'Support'
+  | 'Client'
   | 'Sales'
   | 'Warehouse'
   | 'Procurement'
@@ -94,6 +101,17 @@ export function rolePermissions(role: CompanyRole): CompanyPermission[] {
   return ['dashboard']
 }
 
+export function authRoleForCompanyRole(role?: string) {
+  if (role === 'Admin') return 'Admin'
+  if (role === 'Finance') return 'Finance'
+  if (role === 'HR') return 'HR'
+  if (role === 'Employee') return 'Employee'
+  if (role === 'Team Manager') return 'Team Manager'
+  if (role === 'Project Manager') return 'Project Manager'
+  if (role === 'Client') return 'Client'
+  return 'Support'
+}
+
 export function loadCompanies(): CompanyRecord[] {
   if (typeof window === 'undefined') return []
   try {
@@ -171,9 +189,45 @@ export function createCompany(name: string, options: Partial<Pick<CompanyRecord,
 
 export function setActiveCompanyId(companyId: string) {
   const actor = getCurrentActor()
-  const company = loadCompanies().find(item => item.id === companyId)
-  if (!company || !isCompanyMember(company, actor.email)) return null
+  const companies = loadCompanies()
+  const target = companies.find(item => item.id === companyId)
+  if (!target) return null
+
+  const previousId = getStoredActiveCompanyId()
+
+  // If the actor isn't a member of this workspace yet, auto-enroll them.
+  // The UI lists every known company and labels non-member entries "Continue",
+  // which signals "join + switch." Without this step, clicking Continue is a
+  // no-op because both setActiveCompanyId and getActiveCompany re-check
+  // membership and bounce the actor back to their default workspace.
+  let company = target
+  if (actor.email && !isCompanyMember(target, actor.email)) {
+    const joinedMember: CompanyMember = {
+      id: `mem-${Date.now()}`,
+      email: actor.email.toLowerCase(),
+      name: actor.fullName || actor.name,
+      role: 'Admin',
+      permissions: allPermissions,
+      status: 'Active',
+      joinedAt: new Date().toISOString(),
+    }
+    company = { ...target, members: [...target.members, joinedMember] }
+    saveCompanies(companies.map(item => item.id === companyId ? company : item))
+  }
+
   persistActiveCompany(company)
+
+  // After switching, every piece of company-scoped data lives under a new
+  // namespace in localStorage (see lib/tenant/storageScope.ts). Components
+  // mounted before the switch loaded the previous workspace's data into
+  // their state — there's no general way to tell them to re-fetch. A page
+  // reload is the safest way to guarantee the whole app re-reads from the
+  // new namespace. We skip the reload if the user clicked their currently-
+  // active workspace (no actual switch).
+  if (typeof window !== 'undefined' && previousId && previousId !== company.id) {
+    window.setTimeout(() => window.location.reload(), 60)
+  }
+
   return company
 }
 
@@ -226,6 +280,55 @@ export function inviteCompanyMember(companyId: string, email: string, role: Comp
   return invited
 }
 
+export function findPendingCompanyInvitation(email: string) {
+  const normalizedEmail = email.trim().toLowerCase()
+  if (!normalizedEmail) return null
+  for (const company of loadCompanies()) {
+    const member = company.members.find(item => item.status === 'Pending' && item.email.toLowerCase() === normalizedEmail)
+    if (member) return { company, member }
+  }
+  return null
+}
+
+export function acceptCompanyInvitation(email: string, name?: string) {
+  const normalizedEmail = email.trim().toLowerCase()
+  if (!normalizedEmail) return null
+  const companies = loadCompanies()
+  let acceptedCompany: CompanyRecord | null = null
+  let acceptedMember: CompanyMember | null = null
+  const nextCompanies: CompanyRecord[] = []
+
+  for (const company of companies) {
+    const member = company.members.find(item => item.status === 'Pending' && item.email.toLowerCase() === normalizedEmail)
+    if (!member) {
+      nextCompanies.push(company)
+      continue
+    }
+
+    const nextMember: CompanyMember = {
+      ...member,
+      name: name?.trim() || member.name,
+      status: 'Active',
+      joinedAt: new Date().toISOString(),
+    }
+    const nextCompany = {
+      ...company,
+      members: company.members.map(item => item.id === member.id ? nextMember : item),
+    }
+    acceptedCompany = nextCompany
+    acceptedMember = nextMember
+    nextCompanies.push(nextCompany)
+  }
+
+  saveCompanies(nextCompanies)
+  if (acceptedCompany && acceptedMember) {
+    window.localStorage.setItem(activeCompanyKey, acceptedCompany.id)
+    dispatchCompanyChange(acceptedCompany)
+    return { company: acceptedCompany, member: acceptedMember }
+  }
+  return null
+}
+
 export function removeCompanyMember(companyId: string, memberId: string) {
   let active: CompanyRecord | undefined
   const companies = loadCompanies().map(company => {
@@ -256,6 +359,30 @@ export function dispatchCompanyChange(company: CompanyRecord) {
   if (typeof window === 'undefined') return
   window.dispatchEvent(new CustomEvent(companyChangeEvent, { detail: company }))
   window.dispatchEvent(new Event('storage'))
+}
+
+export async function bootstrapCompanyOnServer(input: { companyName?: string; companyId?: string; companyType?: string }) {
+  const authHeaders: Record<string, string> = {}
+  const supabase = getSupabaseBrowserClient()
+  if (supabase) {
+    const { data } = await supabase.auth.getSession().catch(() => ({ data: { session: null } }))
+    const token = data.session?.access_token
+    if (token) authHeaders.Authorization = `Bearer ${token}`
+  }
+
+  const response = await fetch('/api/tenant/bootstrap', {
+    method: 'POST',
+    headers: withCsrfHeaders({
+      'Content-Type': 'application/json',
+      ...authHeaders,
+    }),
+    body: JSON.stringify(input),
+  })
+  const payload = await response.json().catch(() => null) as { ok?: boolean; company?: CompanyRecord; error?: string } | null
+  if (!response.ok || !payload?.ok || !payload.company) {
+    throw new Error(payload?.error || 'Could not prepare the company workspace.')
+  }
+  return payload.company
 }
 
 function makeCompany(name: string, options: { ownerEmail: string; ownerName?: string; type?: string; id?: string }): CompanyRecord {

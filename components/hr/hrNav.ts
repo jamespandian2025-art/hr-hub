@@ -4,7 +4,6 @@ import {
   CheckCircle2,
   ClipboardCheck,
   FileText,
-  HandCoins,
   LayoutDashboard,
   Settings,
   ShieldCheck,
@@ -62,12 +61,6 @@ export const HR_NAV_ITEMS: HrNavItem[] = [
     href: '/hr/payroll',
     description: 'Payroll runs and payslip status',
     icon: Wallet,
-  },
-  {
-    label: 'Loan Requests',
-    href: '/hr/loan-requests',
-    description: 'Loans, cash advances, and payroll deductions',
-    icon: HandCoins,
   },
   {
     label: 'Documents',

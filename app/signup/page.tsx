@@ -2,9 +2,11 @@
 
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import { FormEvent, useEffect, useState } from 'react'
+import { FormEvent, useEffect, useMemo, useState } from 'react'
 import { Building2, Eye, EyeOff, Lock, Mail, ShieldCheck, User } from 'lucide-react'
 import { getSupabaseBrowserClient, hasSupabaseConfig } from '@/lib/auth/supabaseClient'
+import { establishServerSession } from '@/lib/auth/sessionClient'
+import { constantTimeEqual } from '@/lib/security/constantTime'
 import {
   accountKey,
   type AccountRole,
@@ -18,44 +20,32 @@ import {
   onboardingKey,
   sessionKey,
   validatePasswordStrength,
+  verifyPassword,
 } from '@/lib/auth/localAuth'
+import {
+  acceptCompanyInvitation,
+  activeCompanyKey,
+  authRoleForCompanyRole,
+  bootstrapCompanyOnServer,
+  findPendingCompanyInvitation,
+} from '@/lib/tenant/company'
 
-function routeForRole(role?: AccountRole) {
-  if (role === 'Client') return '/client-portal'
-  if (role === 'Finance') return '/financials/loan-management'
-  if (role === 'HR') return '/hr/overview'
-  return '/dashboard'
+const devDemoAdminEmail = 'wiseflow.demo@gmail.com'
+
+function initialInviteEmail() {
+  if (typeof window === 'undefined') return ''
+  return new URLSearchParams(window.location.search).get('invite')?.trim().toLowerCase() || ''
 }
 
 function hasAdminOwner(authUsers: AuthUser[]) {
-  if (authUsers.some(user => user.role === 'Admin')) return true
+  if (authUsers.some(user => user.role === 'Admin' && user.email.toLowerCase() !== devDemoAdminEmail)) return true
 
   try {
     const accountRaw = window.localStorage.getItem(accountKey)
-    const account = accountRaw ? (JSON.parse(accountRaw) as { role?: AccountRole; roleLocked?: boolean }) : null
-    return account?.role === 'Admin' && account.roleLocked === true
+    const account = accountRaw ? (JSON.parse(accountRaw) as { email?: string; role?: AccountRole; roleLocked?: boolean }) : null
+    return account?.role === 'Admin' && account.roleLocked === true && account.email?.toLowerCase() !== devDemoAdminEmail
   } catch {
     return false
-  }
-}
-
-function existingSessionRoute() {
-  try {
-    if (window.localStorage.getItem(logoutIntentKey)) return null
-
-    const sessionRaw = window.localStorage.getItem(sessionKey)
-    if (!sessionRaw) return null
-
-    const accountRaw = window.localStorage.getItem(accountKey)
-    const account = accountRaw ? (JSON.parse(accountRaw) as { role?: AccountRole; onboardingComplete?: boolean }) : {}
-    const session = JSON.parse(sessionRaw) as { role?: AccountRole }
-    const stored = window.localStorage.getItem(onboardingKey)
-    const onboarding = stored ? JSON.parse(stored) as { complete?: boolean } : null
-
-    if (!onboarding?.complete && !account.onboardingComplete) return '/onboarding'
-    return routeForRole(session.role || account.role)
-  } catch {
-    return null
   }
 }
 
@@ -70,34 +60,62 @@ export default function SignupPage() {
   const [confirmPassword, setConfirmPassword] = useState('')
   const [showPassword, setShowPassword] = useState(false)
   const [error, setError] = useState('')
+  const pendingInvite = useMemo(() => findPendingCompanyInvitation(email), [email])
+  const accountRole = (pendingInvite ? authRoleForCompanyRole(pendingInvite.member.role) : role) as AccountRole
+  const targetCompanyName = pendingInvite?.company.name || company
 
   useEffect(() => {
-    const route = existingSessionRoute()
-    if (route) router.replace(route)
-  }, [router])
+    const invitedEmail = initialInviteEmail()
+    if (!invitedEmail) return
+    const id = window.setTimeout(() => setEmail(invitedEmail), 0)
+    return () => window.clearTimeout(id)
+  }, [])
 
-  const saveUser = (user: AuthUser, companyName: string, accountRole: AccountRole) => {
+  const saveUser = async (user: AuthUser, companyName: string, nextAccountRole: AccountRole, invited = false) => {
     const nextUsers = [...users.filter(item => item.email.toLowerCase() !== user.email.toLowerCase()), user]
     setUsers(nextUsers)
     saveAuthUsers(nextUsers)
-    window.localStorage.setItem(sessionKey, JSON.stringify({ userId: user.id, email: user.email, provider: user.provider, role: accountRole }))
+    const acceptedInvite = invited ? acceptCompanyInvitation(user.email, user.name) : null
+    const accountCompany = acceptedInvite?.company.name || companyName || user.name || 'WiseFlow Company'
+    const accountCompanyId = acceptedInvite?.company.id
+    window.localStorage.setItem(sessionKey, JSON.stringify({ userId: user.id, email: user.email, provider: user.provider, role: nextAccountRole }))
     window.localStorage.setItem(
       accountKey,
       JSON.stringify({
         user: publicUser(user),
-        company: companyName || user.name || 'WiseFlow Company',
+        company: accountCompany,
+        companyId: accountCompanyId,
         email: user.email,
-        role: accountRole,
-        roleLocked: true,
-        theme: 'WiseFlow Light',
+        role: nextAccountRole,
+        roleLocked: !invited && nextAccountRole === 'Admin',
+        onboardingComplete: invited,
+        theme: 'Bright',
         density: 'Comfortable',
         emailNotifications: true,
         desktopNotifications: false,
         invitations: [],
       })
     )
-    window.localStorage.removeItem('flowsys-onboarding')
-    router.push('/onboarding')
+    if (invited) {
+      window.localStorage.setItem(onboardingKey, JSON.stringify({ complete: true, step: 4 }))
+    } else {
+      window.localStorage.removeItem(onboardingKey)
+    }
+    await establishServerSession({ userId: user.id, email: user.email, name: user.name, provider: user.provider, role: nextAccountRole })
+    const bootstrappedCompany = await bootstrapCompanyOnServer({
+      companyName: accountCompany,
+      companyId: accountCompanyId,
+      companyType: 'Operating Company',
+    })
+    const accountRaw = window.localStorage.getItem(accountKey)
+    const account = accountRaw ? JSON.parse(accountRaw) as Record<string, unknown> : {}
+    window.localStorage.setItem(accountKey, JSON.stringify({
+      ...account,
+      company: bootstrappedCompany.name,
+      companyId: bootstrappedCompany.id,
+    }))
+    window.localStorage.setItem(activeCompanyKey, bootstrappedCompany.id)
+    router.push(invited ? '/choose-account' : '/onboarding')
   }
 
   useEffect(() => {
@@ -128,40 +146,73 @@ export default function SignupPage() {
         return
       }
 
-      if (hasAdminOwner(currentUsers)) {
-        setError('An Admin owner already exists. Please log in or ask the Admin to invite you.')
-        await supabase.auth.signOut()
-        return
+    const googleInvite = findPendingCompanyInvitation(userEmail)
+    const googleRole = (googleInvite ? authRoleForCompanyRole(googleInvite.member.role) : 'Admin') as AccountRole
+
+    if (hasAdminOwner(currentUsers) && !googleInvite) {
+      setError('An Admin owner already exists. Please log in or ask the Admin to invite you.')
+      await supabase.auth.signOut()
+      return
       }
+
+      await supabase.auth.updateUser({
+        data: {
+          role: googleRole,
+          full_name: userName,
+          name: userName,
+          company_name: googleInvite?.company.name || userName || 'WiseFlow Company',
+        },
+      }).catch(() => undefined)
 
       const googleUser: AuthUser = {
         id: currentUsers.reduce((max, user) => Math.max(max, user.id), 0) + 1,
         name: userName,
         email: userEmail,
         provider: 'gmail',
-        role: 'Admin',
+        role: googleRole,
       }
       const nextUsers = [...currentUsers, googleUser]
       setUsers(nextUsers)
       saveAuthUsers(nextUsers)
-      window.localStorage.setItem(sessionKey, JSON.stringify({ userId: googleUser.id, email: googleUser.email, provider: googleUser.provider, role: 'Admin' }))
+      const acceptedInvite = googleInvite ? acceptCompanyInvitation(userEmail, userName) : null
+      window.localStorage.setItem(sessionKey, JSON.stringify({ userId: googleUser.id, email: googleUser.email, provider: googleUser.provider, role: googleRole }))
       window.localStorage.setItem(
         accountKey,
         JSON.stringify({
           user: publicUser(googleUser),
-          company: userName || 'WiseFlow Company',
+          company: acceptedInvite?.company.name || userName || 'WiseFlow Company',
+          companyId: acceptedInvite?.company.id,
           email: googleUser.email,
-          role: 'Admin',
-          roleLocked: true,
-          theme: 'WiseFlow Light',
+          role: googleRole,
+          roleLocked: !googleInvite && googleRole === 'Admin',
+          onboardingComplete: Boolean(googleInvite),
+          theme: 'Bright',
           density: 'Comfortable',
           emailNotifications: true,
           desktopNotifications: false,
           invitations: [],
         })
       )
-      window.localStorage.removeItem('flowsys-onboarding')
-      router.push('/onboarding')
+      if (googleInvite) {
+        window.localStorage.setItem(onboardingKey, JSON.stringify({ complete: true, step: 4 }))
+      } else {
+        window.localStorage.removeItem(onboardingKey)
+      }
+      await establishServerSession({ userId: googleUser.id, email: googleUser.email, name: googleUser.name, provider: googleUser.provider, role: googleRole })
+      const bootstrappedCompany = await bootstrapCompanyOnServer({
+        companyName: acceptedInvite?.company.name || userName || 'WiseFlow Company',
+        companyId: acceptedInvite?.company.id,
+        companyType: 'Operating Company',
+      })
+      const accountRawAfterBootstrap = window.localStorage.getItem(accountKey)
+      const accountAfterBootstrap = accountRawAfterBootstrap ? JSON.parse(accountRawAfterBootstrap) as Record<string, unknown> : {}
+      window.localStorage.setItem(accountKey, JSON.stringify({
+        ...accountAfterBootstrap,
+        company: bootstrappedCompany.name,
+        companyId: bootstrappedCompany.id,
+      }))
+      window.localStorage.setItem(activeCompanyKey, bootstrappedCompany.id)
+      router.push(googleInvite ? '/choose-account' : '/onboarding')
     }
 
     void finishGoogleSignup()
@@ -184,7 +235,7 @@ export default function SignupPage() {
       return
     }
 
-    if (password !== confirmPassword) {
+    if (!constantTimeEqual(password, confirmPassword)) {
       setError('Passwords do not match.')
       return
     }
@@ -195,29 +246,64 @@ export default function SignupPage() {
       return
     }
 
-    if (users.some(user => user.email.toLowerCase() === trimmedEmail)) {
-      setError('An account with this email already exists. Please log in instead.')
+    const existingUser = users.find(user => user.email.toLowerCase() === trimmedEmail)
+    if (existingUser) {
+      const existingPasswordMatches = await verifyPassword(existingUser, password)
+      setError(existingPasswordMatches
+        ? 'This account already exists. Use Log in with this password.'
+        : 'An account with this email already exists. Try logging in or use account recovery.')
       return
     }
 
-    if (hasAdminOwner(users)) {
+    if (hasAdminOwner(users) && !pendingInvite) {
       setError('An Admin owner already exists. Please log in or ask the Admin to invite you.')
       return
     }
 
-    const passwordFields = await createPasswordFields(password)
-    saveUser(
-      {
-        id: users.reduce((max, user) => Math.max(max, user.id), 0) + 1,
-        name: name.trim() || company.trim() || 'WiseFlow User',
-        email: trimmedEmail,
-        ...passwordFields,
-        provider: 'email',
-        role,
-      },
-      company.trim(),
-      role,
-    )
+    try {
+      const supabase = getSupabaseBrowserClient()
+      if (supabase && hasSupabaseConfig()) {
+        const { data, error: signupError } = await supabase.auth.signUp({
+          email: trimmedEmail,
+          password,
+          options: {
+            data: {
+              role: accountRole,
+              full_name: name.trim() || company.trim() || 'WiseFlow User',
+              name: name.trim() || company.trim() || 'WiseFlow User',
+              company_name: targetCompanyName.trim() || 'WiseFlow Company',
+            },
+          },
+        })
+
+        if (signupError) {
+          setError(signupError.message || 'Supabase could not create this account.')
+          return
+        }
+
+        if (!data.session) {
+          setError('Check your email to confirm the Supabase account, then log in to finish setup.')
+          return
+        }
+      }
+
+      const passwordFields = await createPasswordFields(password)
+      await saveUser(
+        {
+          id: users.reduce((max, user) => Math.max(max, user.id), 0) + 1,
+          name: name.trim() || company.trim() || 'WiseFlow User',
+          email: trimmedEmail,
+          ...passwordFields,
+          provider: 'email',
+          role: accountRole,
+        },
+        targetCompanyName.trim(),
+        accountRole,
+        Boolean(pendingInvite),
+      )
+    } catch (signupError) {
+      setError(signupError instanceof Error ? signupError.message : 'Account setup could not be completed.')
+    }
   }
 
   const socialSignup = (provider: 'gmail' | 'facebook') => {
@@ -226,7 +312,7 @@ export default function SignupPage() {
       return
     }
 
-    if (hasAdminOwner(users)) {
+    if (hasAdminOwner(users) && !pendingInvite) {
       setError('An Admin owner already exists. Please log in or ask the Admin to invite you.')
       return
     }
@@ -272,22 +358,22 @@ export default function SignupPage() {
       <section style={{ display: 'grid', placeItems: 'center', padding: '40px 24px' }}>
         <div style={{ width: 'min(460px, 100%)', background: '#fff', border: '1px solid #e5e7eb', borderRadius: 18, padding: 28, boxShadow: '0 24px 70px rgba(15,23,42,0.12)' }}>
           <div style={{ marginBottom: 22 }}>
-            <div style={{ fontSize: 26, color: '#111827', fontWeight: 600, marginBottom: 8 }}>Create account</div>
-            <div style={{ fontSize: 13, color: '#64748b', lineHeight: 1.6 }}>Create the secure Admin owner account first. HR and Finance accounts should be invited or assigned by Admin.</div>
+            <div style={{ fontSize: 26, color: '#111827', fontWeight: 600, marginBottom: 8 }}>{pendingInvite ? 'Accept invitation' : 'Create account'}</div>
+            <div style={{ fontSize: 13, color: '#64748b', lineHeight: 1.6 }}>{pendingInvite ? `Join ${pendingInvite.company.name} as ${pendingInvite.member.role}.` : 'Create the secure Admin owner account first. HR and Finance accounts should be invited or assigned by Admin.'}</div>
           </div>
 
           <form onSubmit={signup} style={{ display: 'grid', gap: 14 }}>
             {error && <div style={alertStyle}>{error}</div>}
             <Field icon={<User size={17} color="#64748b" />} label="Name"><input value={name} onChange={event => setName(event.target.value)} placeholder="Your name" required style={inputStyle} /></Field>
-            <Field icon={<Building2 size={17} color="#64748b" />} label="Company"><input value={company} onChange={event => setCompany(event.target.value)} placeholder="Company name" required style={inputStyle} /></Field>
+            <Field icon={<Building2 size={17} color="#64748b" />} label="Company"><input value={pendingInvite?.company.name || company} onChange={event => setCompany(event.target.value)} placeholder="Company name" required={!pendingInvite} readOnly={Boolean(pendingInvite)} style={inputStyle} /></Field>
             <Field icon={<Mail size={17} color="#64748b" />} label="Gmail address"><input value={email} onChange={event => setEmail(event.target.value)} type="email" placeholder="you@gmail.com" required style={inputStyle} /></Field>
             <label style={fieldGroupStyle}>
               <span style={labelStyle}>Workspace role</span>
               <div style={inputWrapStyle}>
                 <ShieldCheck size={17} color="#64748b" />
-                <input value="Admin owner" readOnly style={inputStyle} />
+                <input value={pendingInvite ? pendingInvite.member.role : 'Admin owner'} readOnly style={inputStyle} />
               </div>
-              <span style={hintStyle}>Finance and HR are sensitive roles. Admin assigns them after workspace setup.</span>
+              <span style={hintStyle}>{pendingInvite ? 'This role comes from your pending invitation.' : 'Finance and HR are sensitive roles. Admin assigns them after workspace setup.'}</span>
             </label>
             <label style={fieldGroupStyle}>
               <span style={labelStyle}>Password</span>
@@ -299,7 +385,7 @@ export default function SignupPage() {
               <span style={hintStyle}>Use uppercase, lowercase, number, and symbol. Do not use your name or email.</span>
             </label>
             <Field icon={<Lock size={17} color="#64748b" />} label="Confirm password"><input value={confirmPassword} onChange={event => setConfirmPassword(event.target.value)} type={showPassword ? 'text' : 'password'} placeholder="Repeat password" required style={inputStyle} /></Field>
-            <button type="submit" style={primaryButtonStyle}>Create account</button>
+            <button type="submit" style={primaryButtonStyle}>{pendingInvite ? 'Accept invitation' : 'Create account'}</button>
           </form>
 
           <div style={{ display: 'grid', gridTemplateColumns: '1fr auto 1fr', gap: 12, alignItems: 'center', margin: '20px 0', color: '#94a3b8', fontSize: 12, fontWeight: 600 }}>

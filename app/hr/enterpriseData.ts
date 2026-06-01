@@ -1,5 +1,7 @@
 'use client'
 
+import { secureId } from '@/lib/security/random'
+
 export type AuditAction =
   | 'payroll.edit'
   | 'payroll.export'
@@ -115,7 +117,7 @@ export function appendAuditLog(entry: Omit<AuditLogEntry, 'id' | 'createdAt' | '
   if (typeof window === 'undefined') return
   const actor = readCurrentActor()
   const next: AuditLogEntry = {
-    id: `AUD-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+    id: secureId('AUD', 5),
     actorName: entry.actorName || actor.actorName,
     actorRole: entry.actorRole || actor.actorRole,
     createdAt: new Date().toISOString(),

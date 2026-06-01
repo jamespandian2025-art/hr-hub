@@ -305,12 +305,37 @@ function taskAssigneeNames(task: AssignedTask) {
   return Array.from(new Set([...(task.assignees || []), task.assignee].filter(Boolean)))
 }
 
+let customColumnIdCounter = 0
+
+function nextCustomColumnId() {
+  customColumnIdCounter += 1
+  return `col_${Date.now()}_${customColumnIdCounter}`
+}
+
+function RichTextToolbarSeparator() {
+  return <div style={{ width: 1, height: 18, background: '#ddd', margin: '0 3px', alignSelf: 'center', flexShrink: 0 }} />
+}
+
+function RichTextToolbarButton({ icon, title, action }: { icon: ReactNode; title: string; action: () => void }) {
+  return (
+    <button
+      title={title}
+      onMouseDown={e => { e.preventDefault(); action() }}
+      style={{ border: 'none', background: 'transparent', cursor: 'pointer', color: '#555', display: 'grid', placeItems: 'center', width: 26, height: 26, borderRadius: 4, transition: 'background 0.1s, color 0.1s', flexShrink: 0 }}
+      onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.background = '#e8e8e8'; (e.currentTarget as HTMLButtonElement).style.color = '#111' }}
+      onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.background = 'transparent'; (e.currentTarget as HTMLButtonElement).style.color = '#555' }}
+    >{icon}</button>
+  )
+}
+
 export default function TasksPage() {
   const [storageReady, setStorageReady] = useState(false)
   const [tasks, setTasks] = useState<AssignedTask[]>([])
   const [projects, setProjects] = useState<ProjectRecord[]>([])
   const [changeOrders, setChangeOrders] = useState<ChangeOrderRecord[]>([])
   const [comments, setComments] = useState<TaskComment[]>([])
+  const [customColumns, setCustomColumns] = useState<CustomColumn[]>([])
+  const [account, setAccount] = useState<AccountRecord>({})
   const [status, setStatus] = useState<'All' | TaskStatus>('All')
   const [viewMode, setViewMode] = useState<ViewMode>('List')
   const [quickFilter, setQuickFilter] = useState<'all' | 'mine' | 'overdue' | 'today' | 'draft'>('all')
@@ -342,23 +367,29 @@ export default function TasksPage() {
   const [assignee, setAssignee] = useState('All')
 
   useEffect(() => {
-    setTasks(loadStored<AssignedTask[]>(tasksStorageKey, []))
-    setProjects(loadStored<ProjectRecord[]>(projectsStorageKey, []))
-    setChangeOrders(loadStored<ChangeOrderRecord[]>(changeOrdersStorageKey, []))
-    setComments(loadStored<TaskComment[]>(taskCommentsStorageKey, []))
-    setCustomColumns(loadStored<CustomColumn[]>(customColumnsStorageKey, []))
-    const currentTasks = loadStored<AssignedTask[]>(tasksStorageKey, [])
-    const currentAccount = loadStored<AccountRecord>(accountStorageKey, {})
-    const currentName = currentAccount.fullName || currentAccount.name
-    if (currentName && currentTasks.some(task => task.assignee.toLowerCase() === currentName.toLowerCase())) {
-      setAssignee(currentName)
-    }
-    const pendingView = window.sessionStorage.getItem('flowsys-workspace-pending-view') as ViewMode | null
-    if (pendingView) {
-      setViewMode(pendingView)
-      window.sessionStorage.removeItem('flowsys-workspace-pending-view')
-    }
-    setStorageReady(true)
+    const timer = window.setTimeout(() => {
+      const currentTasks = loadStored<AssignedTask[]>(tasksStorageKey, [])
+      const currentAccount = loadStored<AccountRecord>(accountStorageKey, {})
+      const currentName = currentAccount.fullName || currentAccount.name
+
+      setTasks(currentTasks)
+      setProjects(loadStored<ProjectRecord[]>(projectsStorageKey, []))
+      setChangeOrders(loadStored<ChangeOrderRecord[]>(changeOrdersStorageKey, []))
+      setComments(loadStored<TaskComment[]>(taskCommentsStorageKey, []))
+      setCustomColumns(loadStored<CustomColumn[]>(customColumnsStorageKey, []))
+      setAccount(currentAccount)
+      if (currentName && currentTasks.some(task => task.assignee.toLowerCase() === currentName.toLowerCase())) {
+        setAssignee(currentName)
+      }
+      const pendingView = window.sessionStorage.getItem('flowsys-workspace-pending-view') as ViewMode | null
+      if (pendingView) {
+        setViewMode(pendingView)
+        window.sessionStorage.removeItem('flowsys-workspace-pending-view')
+      }
+      setStorageReady(true)
+    }, 0)
+
+    return () => window.clearTimeout(timer)
   }, [])
 
   useEffect(() => {
@@ -376,7 +407,6 @@ export default function TasksPage() {
     window.localStorage.setItem(taskCommentsStorageKey, JSON.stringify(comments))
   }, [comments, storageReady])
 
-  const [customColumns, setCustomColumns] = useState<CustomColumn[]>([])
   useEffect(() => {
     if (!storageReady) return
     window.localStorage.setItem(customColumnsStorageKey, JSON.stringify(customColumns))
@@ -417,12 +447,6 @@ export default function TasksPage() {
     setSpacePrivate(false)
     setShowSpaceModal(false)
   }
-
-  const [account, setAccount] = useState<AccountRecord>({})
-
-  useEffect(() => {
-    setAccount(loadStored<AccountRecord>(accountStorageKey, {}))
-  }, [])
 
   const projectById = useMemo(() => new Map(projects.map(project => [project.id, project])), [projects])
   const changeOrderById = useMemo(() => new Map(changeOrders.map(order => [order.id, order])), [changeOrders])
@@ -1135,10 +1159,10 @@ export default function TasksPage() {
                 {/* Tab bar: BOARD | LIST | TABLE | REPORT */}
                 <div style={{ display: 'flex', alignItems: 'flex-end', gap: 0, overflowX: 'auto', marginTop: 10 }}>
                   {([
-                    ['Board', 'Board', <Columns3 size={13} />],
-                    ['List',  'List',  <ListTodo size={13} />],
-                    ['Grid',  'Table', <Grid2X2 size={13} />],
-                    ['Reminders', 'Report', <CalendarDays size={13} />],
+                    ['Board', 'Board', <Columns3 key="board" size={13} />],
+                    ['List',  'List',  <ListTodo key="list" size={13} />],
+                    ['Grid',  'Table', <Grid2X2 key="grid" size={13} />],
+                    ['Reminders', 'Report', <CalendarDays key="reminders" size={13} />],
                   ] as [ViewMode, string, React.ReactNode][]).map(([mode, label, icon]) => {
                     const active = viewMode === mode
                     return (
@@ -1892,64 +1916,52 @@ function GuidelineEditor({
     if (url) exec('insertImage', url)
   }
 
-  const Sep = () => <div style={{ width: 1, height: 18, background: '#ddd', margin: '0 3px', alignSelf: 'center', flexShrink: 0 }} />
-
-  const Btn = ({ icon, title, action }: { icon: ReactNode; title: string; action: () => void }) => (
-    <button
-      title={title}
-      onMouseDown={e => { e.preventDefault(); action() }}
-      style={{ border: 'none', background: 'transparent', cursor: 'pointer', color: '#555', display: 'grid', placeItems: 'center', width: 26, height: 26, borderRadius: 4, transition: 'background 0.1s, color 0.1s', flexShrink: 0 }}
-      onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.background = '#e8e8e8'; (e.currentTarget as HTMLButtonElement).style.color = '#111' }}
-      onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.background = 'transparent'; (e.currentTarget as HTMLButtonElement).style.color = '#555' }}
-    >{icon}</button>
-  )
-
   return (
     <div style={{ border: `1.5px solid ${borderColor}`, borderRadius: 7, overflow: 'hidden' }}>
       {/* -- Toolbar -- */}
       <div style={{ padding: '4px 8px', borderBottom: '1px solid #eee', display: 'flex', alignItems: 'center', gap: 1, background: '#fafafa', flexWrap: 'wrap' }}>
 
         {/* Group 1 — inline formatting */}
-        <Btn icon={<Bold size={13} />}          title="Bold"          action={() => exec('bold')} />
-        <Btn icon={<Italic size={13} />}        title="Italic"        action={() => exec('italic')} />
-        <Btn icon={<Underline size={13} />}     title="Underline"     action={() => exec('underline')} />
-        <Btn icon={<Strikethrough size={13} />} title="Strikethrough" action={() => exec('strikeThrough')} />
+        <RichTextToolbarButton icon={<Bold size={13} />}          title="Bold"          action={() => exec('bold')} />
+        <RichTextToolbarButton icon={<Italic size={13} />}        title="Italic"        action={() => exec('italic')} />
+        <RichTextToolbarButton icon={<Underline size={13} />}     title="Underline"     action={() => exec('underline')} />
+        <RichTextToolbarButton icon={<Strikethrough size={13} />} title="Strikethrough" action={() => exec('strikeThrough')} />
 
-        <Sep />
+        <RichTextToolbarSeparator />
 
         {/* Group 2 — headings + lists */}
-        <Btn icon={<Heading1 size={14} />}     title="Heading 1"      action={() => exec('formatBlock', 'H1')} />
-        <Btn icon={<Heading2 size={14} />}     title="Heading 2"      action={() => exec('formatBlock', 'H2')} />
-        <Btn icon={<ListOrdered size={13} />}  title="Ordered list"   action={() => exec('insertOrderedList')} />
-        <Btn icon={<List size={13} />}         title="Bullet list"    action={() => exec('insertUnorderedList')} />
+        <RichTextToolbarButton icon={<Heading1 size={14} />}     title="Heading 1"      action={() => exec('formatBlock', 'H1')} />
+        <RichTextToolbarButton icon={<Heading2 size={14} />}     title="Heading 2"      action={() => exec('formatBlock', 'H2')} />
+        <RichTextToolbarButton icon={<ListOrdered size={13} />}  title="Ordered list"   action={() => exec('insertOrderedList')} />
+        <RichTextToolbarButton icon={<List size={13} />}         title="Bullet list"    action={() => exec('insertUnorderedList')} />
 
-        <Sep />
+        <RichTextToolbarSeparator />
 
         {/* Group 3 — alignment + block */}
-        <Btn icon={<AlignJustify size={13} />} title="Justify"    action={() => exec('justifyFull')} />
-        <Btn icon={<Quote size={13} />}        title="Blockquote" action={() => exec('formatBlock', 'BLOCKQUOTE')} />
-        <Btn icon={<Code size={13} />}         title="Code block" action={() => exec('formatBlock', 'PRE')} />
-        <Btn icon={<Link size={13} />}         title="Insert link"  action={insertLink} />
-        <Btn icon={<Image size={13} />}        title="Insert image" action={insertImage} />
+        <RichTextToolbarButton icon={<AlignJustify size={13} />} title="Justify"    action={() => exec('justifyFull')} />
+        <RichTextToolbarButton icon={<Quote size={13} />}        title="Blockquote" action={() => exec('formatBlock', 'BLOCKQUOTE')} />
+        <RichTextToolbarButton icon={<Code size={13} />}         title="Code block" action={() => exec('formatBlock', 'PRE')} />
+        <RichTextToolbarButton icon={<Link size={13} />}         title="Insert link"  action={insertLink} />
+        <RichTextToolbarButton icon={<Image size={13} />}        title="Insert image" action={insertImage} />
 
-        <Sep />
+        <RichTextToolbarSeparator />
 
         {/* Group 4 — color + clear */}
         <div style={{ position: 'relative', display: 'inline-flex' }}>
-          <Btn icon={<Baseline size={13} />} title="Text color" action={() => fgColorRef.current?.click()} />
+          <RichTextToolbarButton icon={<Baseline size={13} />} title="Text color" action={() => fgColorRef.current?.click()} />
           <input ref={fgColorRef} type="color" defaultValue="#000000"
             style={{ position: 'absolute', opacity: 0, width: 0, height: 0, pointerEvents: 'none' }}
             onChange={e => { editorRef.current?.focus(); document.execCommand('foreColor', false, e.target.value); emit() }}
           />
         </div>
         <div style={{ position: 'relative', display: 'inline-flex' }}>
-          <Btn icon={<Highlighter size={13} />} title="Highlight color" action={() => bgColorRef.current?.click()} />
+          <RichTextToolbarButton icon={<Highlighter size={13} />} title="Highlight color" action={() => bgColorRef.current?.click()} />
           <input ref={bgColorRef} type="color" defaultValue="#ffff00"
             style={{ position: 'absolute', opacity: 0, width: 0, height: 0, pointerEvents: 'none' }}
             onChange={e => { editorRef.current?.focus(); document.execCommand('hiliteColor', false, e.target.value); emit() }}
           />
         </div>
-        <Btn icon={<RemoveFormatting size={13} />} title="Clear formatting" action={() => exec('removeFormat')} />
+        <RichTextToolbarButton icon={<RemoveFormatting size={13} />} title="Clear formatting" action={() => exec('removeFormat')} />
       </div>
 
       {/* -- Editable area -- */}
@@ -2339,7 +2351,7 @@ function AddStageModal({
                   >
                     <option value="done">Before the Done stage</option>
                     {existingStages.filter(s => s.type === 'normal').map(s => (
-                      <option key={s.id} value={s.id}>After "{s.name}"</option>
+                      <option key={s.id} value={s.id}>{`After "${s.name}"`}</option>
                     ))}
                     <option value="end">At the end</option>
                   </select>
@@ -4156,7 +4168,7 @@ function FieldRow({ icon, label, onClick }: { icon: string; label: string; onCli
 
 function FieldsCreateTab({ search, onAdd }: { search: string; onAdd: (col: CustomColumn) => void }) {
   const createCol = (label: string, type: ColumnFieldType) =>
-    onAdd({ id: `col_${Date.now()}`, name: label, type, width: 150 })
+    onAdd({ id: nextCustomColumnId(), name: label, type, width: 150 })
   const term = search.toLowerCase()
   const filteredSuggested = SUGGESTED_FIELDS.filter(f => f.label.toLowerCase().includes(term))
   const filteredAll = ALL_FIELD_TYPES.filter(f => f.label.toLowerCase().includes(term))
@@ -4180,7 +4192,7 @@ function FieldsCreateTab({ search, onAdd }: { search: string; onAdd: (col: Custo
 
 function FieldsExistingTab({ customColumns, onRemove }: { customColumns: CustomColumn[]; onRemove: (id: string) => void }) {
   if (customColumns.length === 0)
-    return <div style={{ padding: '16px 14px', color: '#555', fontSize: 13, fontFamily: font }}>No custom columns yet. Create one from the "Create new" tab.</div>
+    return <div style={{ padding: '16px 14px', color: '#555', fontSize: 13, fontFamily: font }}>{'No custom columns yet. Create one from the "Create new" tab.'}</div>
   return (
     <>
       {customColumns.map(col => (

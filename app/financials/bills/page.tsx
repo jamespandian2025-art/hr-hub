@@ -2,9 +2,9 @@
 
 import { useEffect, useState } from 'react'
 import { usePathname, useRouter, useSearchParams } from 'next/navigation'
+import { listBusinessRecords, replaceBusinessCollection } from '@/lib/business/client'
 
 const font = "var(--font-body)"
-const billsStorageKey = 'flowsys-bills'
 
 interface Bill {
   id: number
@@ -31,17 +31,6 @@ const categoryColors: Record<string, string> = {
   'General expense': '#6c63ff',
 }
 
-const loadBills = () => {
-  if (typeof window === 'undefined') return []
-
-  try {
-    const stored = window.localStorage.getItem(billsStorageKey)
-    return stored ? (JSON.parse(stored) as Bill[]) : []
-  } catch {
-    return []
-  }
-}
-
 const tabs = ['All', 'Unpaid', 'Paid']
 
 const formatCurrency = (value: number) => `PHP ${value.toLocaleString('en-PH')}.00`
@@ -64,7 +53,8 @@ export default function BillsPage() {
   const [search, setSearch] = useState('')
   const [selected, setSelected] = useState<number[]>([])
   const [showSummary, setShowSummary] = useState(true)
-  const [bills, setBills] = useState<Bill[]>(loadBills)
+  const [bills, setBills] = useState<Bill[]>([])
+  const [loaded, setLoaded] = useState(false)
   const [selectedBillId, setSelectedBillId] = useState<number | null>(null)
   const [editingId, setEditingId] = useState<number | null>(null)
 
@@ -79,8 +69,18 @@ export default function BillsPage() {
   const [notes, setNotes] = useState('')
 
   useEffect(() => {
-    window.localStorage.setItem(billsStorageKey, JSON.stringify(bills))
-  }, [bills])
+    // Only mark as loaded on a SUCCESSFUL fetch. If the GET fails we must not
+    // flip `loaded`, otherwise the persist effect below would immediately
+    // replace the server collection with the empty initial state and wipe it.
+    listBusinessRecords<Bill>('accounting-bills')
+      .then(rows => { setBills(rows); setLoaded(true) })
+      .catch(() => undefined)
+  }, [])
+
+  useEffect(() => {
+    if (!loaded) return
+    void replaceBusinessCollection('accounting-bills', bills).catch(() => undefined)
+  }, [bills, loaded])
 
 
   const resetForm = () => {

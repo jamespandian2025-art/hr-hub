@@ -18,7 +18,13 @@ import {
   LoanRequest,
 } from '@/app/hr/loan-requests/loanData'
 import { buildEmployeeTaxBreakdown, deductionBreakdownTotal, defaultPayrollFrequency, PayrollFrequency, roundPayrollMoney } from '@/app/hr/payroll/taxRules'
+import { updateHrRecord } from '@/lib/hrms/client'
 import { formatPhilippineMobileNumber, isValidPhilippineMobileNumber, philippineMobilePlaceholder } from '@/lib/hrms/philippinesPhone'
+import { withCsrfHeaders } from '@/lib/security/csrfClient'
+import { createPortalPasswordFields } from '@/lib/security/password'
+import { secureId, secureRandomString } from '@/lib/security/random'
+import { uploadFileObject } from '@/lib/uploads/client'
+import EmployeeProfileRightRail from '@/components/hr/EmployeeProfileRightRail'
 
 // â”€â”€â”€ Types â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
@@ -26,7 +32,9 @@ interface Employee {
   id: string; employeeId: string
   firstName: string; middleName?: string; lastName: string
   email: string; phone: string; alternatePhone?: string
-  portalEmail?: string; portalPassword?: string; mustChangePassword?: boolean
+  portalEmail?: string; portalPasswordHash?: string; portalPasswordSalt?: string; portalPasswordAlgorithm?: 'pbkdf2-sha256'; portalPasswordUpdatedAt?: string
+  /** Legacy local records only. New records store portal password hashes instead. */
+  portalPassword?: string; mustChangePassword?: boolean
   dateOfBirth?: string; gender?: string; maritalStatus?: string
   nationality?: string; religion?: string; languages?: string[]
   address?: string; photo?: string
@@ -43,7 +51,7 @@ interface Employee {
   createdAt: string; updatedAt: string
 }
 
-interface Document { id: string; name: string; type: string; mimeType?: string; size?: string; dataUrl?: string; uploadedAt: string; employeeId: string }
+interface Document { id: string; name: string; type: string; mimeType?: string; size?: string; dataUrl?: string; fileUrl?: string; objectKey?: string; storageProvider?: string; uploadedAt: string; employeeId: string }
 interface LeaveRequest { id: string; employeeId: string; leaveType: string; startDate: string; endDate: string; days: number; status: string; createdAt: string }
 interface PayrollDeductionBreakdown { sss: number; philHealth: number; pagIbig: number; tax: number; loanOrCashAdvance?: number }
 interface PayrollAllowanceLine { allowanceId: string; type: string; amount: number; date?: string; purpose?: string }
@@ -119,22 +127,16 @@ function buildPortalEmail(employee: Employee) {
 }
 
 function randomToken(length: number) {
-  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789'
-  if (typeof window !== 'undefined' && window.crypto?.getRandomValues) {
-    const values = new Uint32Array(length)
-    window.crypto.getRandomValues(values)
-    return Array.from(values, value => chars[value % chars.length]).join('')
-  }
-  return Array.from({ length }, () => chars[Math.floor(Math.random() * chars.length)]).join('')
+  return secureRandomString(length)
 }
 
 function generatePortalPassword() {
   return `WF-${randomToken(4)}-${randomToken(4)}`
 }
 
-async function openCredentialEmail(employee: Employee): Promise<CredentialEmailResult> {
+async function openCredentialEmail(employee: Employee & { temporaryPassword?: string }): Promise<CredentialEmailResult> {
   const recipient = employee.email?.trim()
-  if (!recipient || !employee.portalEmail || !employee.portalPassword) {
+  if (!recipient || !employee.portalEmail || !employee.temporaryPassword) {
     return { sent: false, fallback: false, message: 'Missing employee work email, portal email, or temporary password.' }
   }
 
@@ -145,12 +147,12 @@ async function openCredentialEmail(employee: Employee): Promise<CredentialEmailR
   try {
     const response = await fetch('/api/hr/employee-credentials', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: withCsrfHeaders({ 'Content-Type': 'application/json' }),
       body: JSON.stringify({
         recipient,
         employeeName: fullName(employee) || 'Employee',
         portalEmail: employee.portalEmail,
-        portalPassword: employee.portalPassword,
+        portalPassword: employee.temporaryPassword,
         loginUrl,
       }),
     })
@@ -170,7 +172,7 @@ async function openCredentialEmail(employee: Employee): Promise<CredentialEmailR
   window.localStorage.setItem(credentialEmailKey, JSON.stringify([
     ...outbox,
     {
-      id: `credential_email_${Date.now()}`,
+      id: secureId('credential_email'),
       employeeId: employee.employeeId,
       employeeName: fullName(employee),
       recipient,
@@ -232,15 +234,6 @@ function timeAgo(d: Date) {
   if (days >= 1) return `${days}d ago`; if (hrs >= 1) return `${hrs}h ago`; if (mins >= 1) return `${mins}m ago`; return 'just now'
 }
 
-function readFileAsDataUrl(file: File): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader()
-    reader.onload = () => resolve(String(reader.result || ''))
-    reader.onerror = () => reject(reader.error)
-    reader.readAsDataURL(file)
-  })
-}
-
 function fileExtension(name: string) {
   return name.includes('.') ? name.split('.').pop()?.toLowerCase() || 'file' : 'file'
 }
@@ -286,7 +279,7 @@ function createDefaultAttendanceRecord(employee: Employee): AttendanceRecord {
     ? employee.attendanceStatus
     : 'Present'
   return {
-    id: `att_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+    id: secureId('att', 6),
     employeeId: employee.id,
     date: toInputDate(new Date()),
     status,
@@ -680,24 +673,35 @@ export default function EmployeeProfilePage() {
     setCredentialNoticeTone('success')
     setCredentialNotice('Sending login details...')
 
+    const temporaryPassword = generatePortalPassword()
+    const portalPasswordFields = await createPortalPasswordFields(temporaryPassword)
     const updatedEmployee = {
       ...employee,
       portalEmail: employee.portalEmail || buildPortalEmail(employee),
-      portalPassword: employee.portalPassword || generatePortalPassword(),
+      portalPassword: undefined,
+      ...portalPasswordFields,
       mustChangePassword: true,
       updatedAt: new Date().toISOString(),
     }
 
-    const allEmployees = loadStored<Employee[]>('flowsys-hr-employees', [])
-    window.localStorage.setItem('flowsys-hr-employees', JSON.stringify(allEmployees.map(item => {
-      const isSameRecord = item.id === updatedEmployee.id || item.employeeId === updatedEmployee.employeeId
-      return isSameRecord ? updatedEmployee : item
-    })))
-    setEmployee(updatedEmployee)
     try {
-      const result = await openCredentialEmail(updatedEmployee)
+      await updateHrRecord<Employee>('employees', updatedEmployee.id, updatedEmployee as unknown as Record<string, unknown>)
+
+      const allEmployees = loadStored<Employee[]>('flowsys-hr-employees', [])
+      window.localStorage.setItem('flowsys-hr-employees', JSON.stringify(allEmployees.map(item => {
+        const isSameRecord = item.id === updatedEmployee.id || item.employeeId === updatedEmployee.employeeId
+        return isSameRecord ? updatedEmployee : item
+      })))
+      setEmployee(updatedEmployee)
+      const result = await openCredentialEmail({ ...updatedEmployee, temporaryPassword })
       setCredentialNoticeTone(result.sent ? 'success' : result.fallback ? 'warning' : 'error')
       setCredentialNotice(result.message)
+    } catch (error) {
+      console.error('Could not update employee login details', error)
+      setCredentialNoticeTone('error')
+      setCredentialNotice(error instanceof Error
+        ? `Login details were not sent because HR records could not be updated. ${error.message}`
+        : 'Login details were not sent because HR records could not be updated. Please try again.')
     } finally {
       setSendingLogin(false)
     }
@@ -736,23 +740,27 @@ export default function EmployeeProfilePage() {
     if (!employee || !files?.length) return
     const nextDocs: Document[] = []
     for (const file of Array.from(files)) {
-      if (file.size > 1024 * 1024) {
-        setUploadError('Each document must be 1MB or smaller while using local browser storage.')
+      if (file.size > 10 * 1024 * 1024) {
+        setUploadError('Each document must be 10MB or smaller.')
         continue
       }
       try {
+        const uploaded = await uploadFileObject(file, 'employee-documents')
         nextDocs.push({
-          id: `doc_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+          id: secureId('doc', 6),
           name: file.name,
           type: fileExtension(file.name),
           mimeType: file.type || 'application/octet-stream',
           size: fileSize(file.size),
-          dataUrl: await readFileAsDataUrl(file),
+          dataUrl: uploaded.url,
+          fileUrl: uploaded.url,
+          objectKey: uploaded.objectKey,
+          storageProvider: uploaded.storageProvider,
           uploadedAt: new Date().toISOString(),
           employeeId: employee.id,
         })
       } catch {
-        setUploadError(`Could not read ${file.name}. Please try again.`)
+        setUploadError(`Could not upload ${file.name}. Please try again.`)
       }
     }
     if (nextDocs.length) {
@@ -776,7 +784,7 @@ export default function EmployeeProfilePage() {
       return
     }
     const nextRecord: AttendanceRecord = {
-      id: `att_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+      id: secureId('att', 6),
       employeeId: employee.id,
       date: attendanceDraft.date,
       status: attendanceDraft.status,
@@ -860,7 +868,7 @@ export default function EmployeeProfilePage() {
 
   // â”€â”€â”€ Render â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   return (
-    <main style={{ fontFamily: font, padding: '0 20px 40px', minHeight: '100vh', background: '#f8fafc' }}>
+    <main style={{ fontFamily: font, padding: '0 20px 40px', minHeight: '100vh' }}>
 
       {/* Top action bar */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingTop: 16, marginBottom: 14 }}>
@@ -880,87 +888,101 @@ export default function EmployeeProfilePage() {
         </div>
       </div>
 
-      {/* Employee header card */}
-      <div style={{ ...cardStyle, padding: '20px 24px', marginBottom: 14 }}>
-        <div style={{ display: 'flex', gap: 20, alignItems: 'flex-start', flexWrap: 'wrap' }}>
-          {/* Avatar */}
-          <div style={{ width: 80, height: 80, borderRadius: '50%', background: '#22c55e', display: 'grid', placeItems: 'center', flexShrink: 0, fontSize: 26, fontWeight: 700, color: '#fff', overflow: 'hidden' }}>
-            {employee.photo ? (
-              <span
-                role="img"
-                aria-label={name}
-                style={{ width: '100%', height: '100%', backgroundImage: `url(${employee.photo})`, backgroundSize: 'cover', backgroundPosition: 'center' }}
-              />
-            ) : (
-              initials(name)
-            )}
+      {/* Dashboard layout: main column + right rail */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) 320px', gap: 16, alignItems: 'start' }}>
+        <div style={{ minWidth: 0, display: 'grid', gap: 14 }}>
+
+      {/* Profile dashboard card */}
+      <div style={{ ...cardStyle, padding: '24px 26px', display: 'grid', gridTemplateColumns: 'auto minmax(0, 1fr)', gap: 24, alignItems: 'center' }}>
+        <div style={{ width: 112, height: 112, borderRadius: 18, background: '#22c55e', display: 'grid', placeItems: 'center', flexShrink: 0, fontSize: 34, fontWeight: 800, color: '#fff', overflow: 'hidden', boxShadow: '0 10px 28px rgba(34, 197, 94, 0.18)' }}>
+          {employee.photo ? (
+            <span role="img" aria-label={name} style={{ width: '100%', height: '100%', backgroundImage: `url(${employee.photo})`, backgroundSize: 'cover', backgroundPosition: 'center' }} />
+          ) : initials(name)}
+        </div>
+        <div style={{ minWidth: 0 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', marginBottom: 6 }}>
+            <h2 style={{ margin: 0, fontSize: 22, fontWeight: 800, color: '#0f172a', letterSpacing: '-0.01em' }}>{name}</h2>
+            <span style={{ fontSize: 11, fontWeight: 700, padding: '3px 10px', borderRadius: 99, background: sb.bg, color: sb.text }}>{employee.employmentStatus}</span>
           </div>
-          {/* Name + details */}
-          <div style={{ flex: 1, minWidth: 200 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', marginBottom: 4 }}>
-              <h2 style={{ margin: 0, fontSize: 20, fontWeight: 700, color: '#111827' }}>{name}</h2>
-              <span style={{ fontSize: 11, fontWeight: 700, padding: '3px 10px', borderRadius: 99, background: sb.bg, color: sb.text }}>{employee.employmentStatus}</span>
-            </div>
-            <div style={{ fontSize: 13, color: '#6b7280', marginBottom: 8 }}>
-              {employee.jobTitle}
-              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, marginLeft: 10, background: '#dbeafe', color: '#1d4ed8', fontSize: 11, fontWeight: 600, padding: '2px 8px', borderRadius: 99 }}>
-                {employee.employeeId}
+          <div style={{ color: '#475569', fontSize: 13, fontWeight: 600, marginBottom: 12 }}>
+            {employee.jobTitle || 'Team member'}
+            <span style={{ color: '#94a3b8', fontWeight: 500 }}>{employee.dateOfJoining ? ` • ${Math.max(0, Math.floor((nowMs - new Date(employee.dateOfJoining).getTime()) / 86400000))} days on the team` : ''}</span>
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 10, fontSize: 13, color: '#0f172a' }}>
+            {employee.phone && (
+              <span style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
+                <Phone size={14} color="#64748b" />
+                <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{employee.phone}</span>
               </span>
-            </div>
-            <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap', fontSize: 12, color: '#6b7280' }}>
-              <span style={{ display: 'flex', alignItems: 'center', gap: 5 }}><Briefcase size={12} /> {employee.department}</span>
-              <span style={{ display: 'flex', alignItems: 'center', gap: 5 }}><Users size={12} /> {employee.team}</span>
-              <span style={{ display: 'flex', alignItems: 'center', gap: 5 }}><Mail size={12} /> {employee.email}</span>
-              {employee.phone && <span style={{ display: 'flex', alignItems: 'center', gap: 5 }}><Phone size={12} /> {employee.phone}</span>}
-            </div>
-          </div>
-          {/* Right info blocks */}
-          <div style={{ display: 'flex', gap: 24, flexWrap: 'wrap', fontSize: 12, flexShrink: 0 }}>
-            {employee.reportsTo && (
-              <div>
-                <div style={{ color: '#9ca3af', marginBottom: 4, fontWeight: 500 }}>Reporting Manager</div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                  <div style={{ width: 28, height: 28, borderRadius: '50%', background: '#e5e7eb', display: 'grid', placeItems: 'center', fontSize: 10, fontWeight: 700, color: '#374151' }}>
-                    {initials(employee.reportsTo)}
-                  </div>
-                  <div>
-                    <div style={{ fontWeight: 600, color: '#111827', fontSize: 13 }}>{employee.reportsTo}</div>
-                  </div>
-                </div>
-              </div>
             )}
-            <div>
-              <div style={{ color: '#9ca3af', marginBottom: 4, fontWeight: 500 }}>Employment Type</div>
-              <div style={{ fontWeight: 600, color: '#111827', fontSize: 13 }}>{employee.employeeType}</div>
-            </div>
+            {employee.email && (
+              <span style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
+                <Mail size={14} color="#64748b" />
+                <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{employee.email}</span>
+              </span>
+            )}
             {employee.workLocation && (
-              <div>
-                <div style={{ color: '#9ca3af', marginBottom: 4, fontWeight: 500 }}>Work Location</div>
-                <div style={{ fontWeight: 600, color: '#111827', fontSize: 13, display: 'flex', alignItems: 'center', gap: 4 }}>
-                  <MapPin size={12} /> {employee.workLocation}
-                </div>
-              </div>
+              <span style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
+                <MapPin size={14} color="#64748b" />
+                <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{employee.workLocation}</span>
+              </span>
             )}
-            <div>
-              <div style={{ color: '#9ca3af', marginBottom: 4, fontWeight: 500 }}>Date of Joining</div>
-              <div style={{ fontWeight: 600, color: '#111827', fontSize: 13 }}>{formatDate(employee.dateOfJoining)}</div>
-            </div>
-            {probationEnd && (
-              <div>
-                <div style={{ color: '#9ca3af', marginBottom: 4, fontWeight: 500 }}>Probation Ends</div>
-                <div style={{ fontWeight: 600, color: '#111827', fontSize: 13 }}>
-                  {probationEnd.date}
-                  {probationEnd.daysLeft > 0 && <span style={{ fontSize: 11, color: '#f59e0b', marginLeft: 6 }}>({probationEnd.daysLeft} days left)</span>}
-                </div>
-              </div>
-            )}
-            <div>
-              <div style={{ color: '#9ca3af', marginBottom: 4, fontWeight: 500 }}>Work Email</div>
-              <div style={{ fontWeight: 600, color: '#111827', fontSize: 13 }}>{employee.email || '-'}</div>
-            </div>
+            <span style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
+              <Briefcase size={14} color="#64748b" />
+              <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{employee.department || 'Unassigned'}{employee.team ? ` • ${employee.team}` : ''}</span>
+            </span>
           </div>
         </div>
       </div>
+
+      {/* Stat tiles: Attendance / Leaves / Payroll YTD */}
+      {(() => {
+        const yearStart = new Date(new Date().getFullYear(), 0, 1).getTime()
+        const monthStart = new Date(new Date().getFullYear(), new Date().getMonth(), 1).getTime()
+        const monthAttendance = attendanceRecords.filter(record => {
+          const stamp = new Date(record.date).getTime()
+          return Number.isFinite(stamp) && stamp >= monthStart
+        })
+        const presentDays = monthAttendance.filter(record => record.status === 'Present' || record.status === 'Late').length
+        const attendanceRate = monthAttendance.length ? Math.round((presentDays / monthAttendance.length) * 100) : 0
+
+        const yearLeaves = leaves.filter(leave => {
+          const stamp = new Date(leave.createdAt).getTime()
+          return Number.isFinite(stamp) && stamp >= yearStart
+        })
+        const approvedLeaveDays = yearLeaves
+          .filter(leave => String(leave.status).toLowerCase() === 'approved')
+          .reduce((sum, leave) => sum + (Number(leave.days) || 0), 0)
+        const pendingLeaves = yearLeaves.filter(leave => String(leave.status).toLowerCase() === 'pending').length
+
+        const ytdNet = payrollRecords
+          .filter(record => {
+            const stamp = new Date(record.paidAt || record.createdAt).getTime()
+            return Number.isFinite(stamp) && stamp >= yearStart
+          })
+          .reduce((sum, record) => sum + (Number(record.net) || 0), 0)
+
+        const tiles = [
+          { label: 'Attendance this month', value: `${attendanceRate}%`, hint: `${presentDays} of ${monthAttendance.length || 0} workdays`, bar: attendanceRate, tone: '#22c55e' },
+          { label: 'Leaves taken (YTD)', value: `${approvedLeaveDays}`, hint: `${pendingLeaves} pending request${pendingLeaves === 1 ? '' : 's'}`, bar: Math.min(100, approvedLeaveDays * 5), tone: '#0ea5e9' },
+          { label: 'Payroll YTD (net)', value: money(ytdNet), hint: `${payrollRecords.length} payslip${payrollRecords.length === 1 ? '' : 's'} on record`, bar: payrollRecords.length ? 78 : 0, tone: '#f43f5e' },
+        ]
+
+        return (
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 14 }}>
+            {tiles.map(tile => (
+              <article key={tile.label} style={{ ...cardStyle, padding: '18px 20px 16px' }}>
+                <div style={{ color: '#64748b', fontSize: 11, fontWeight: 700, letterSpacing: '0.04em', textTransform: 'uppercase', marginBottom: 8 }}>{tile.label}</div>
+                <div style={{ color: '#0f172a', fontSize: 26, fontWeight: 800, letterSpacing: '-0.01em', lineHeight: 1 }}>{tile.value}</div>
+                <div style={{ color: '#475569', fontSize: 12, fontWeight: 500, marginTop: 6 }}>{tile.hint}</div>
+                <div style={{ height: 4, marginTop: 12, borderRadius: 99, background: '#f1f5f9', overflow: 'hidden' }}>
+                  <div style={{ width: `${tile.bar}%`, height: '100%', background: tile.tone, borderRadius: 99 }} />
+                </div>
+              </article>
+            ))}
+          </div>
+        )
+      })()}
 
       {/* Tabs */}
       <div style={{ display: 'flex', gap: 2, borderBottom: '1px solid #e5e7eb', marginBottom: 16, background: '#fff', padding: '0 8px', borderRadius: '12px 12px 0 0', border: '1px solid #e5e7eb', overflowX: 'auto' }}>
@@ -996,8 +1018,8 @@ export default function EmployeeProfilePage() {
               ['Nationality',       employee.nationality || 'â€”'],
               ['Phone Number',      employee.phone || 'â€”'],
               ['Work Email',        employee.email || '-'],
-              ['Portal Login Email', employee.portalEmail || 'Not generated'],
-              ['Temporary Password', employee.portalPassword || 'Not generated'],
+                ['Portal Login Email', employee.portalEmail || 'Not generated'],
+                ['Password Status', employee.portalPasswordHash ? (employee.mustChangePassword ? 'Temporary password issued - change required' : 'Password set') : employee.portalPassword ? 'Legacy temporary password - resend login to secure it' : 'Not generated'],
               ['Emergency Contact', employee.emergencyContactName ? `${employee.emergencyContactName}${employee.emergencyContactRelationship ? ` (${employee.emergencyContactRelationship})` : ''}\n${employee.emergencyContactPhone || ''}` : 'â€”'],
             ].map(([label, value]) => (
               <div key={label} style={{ display: 'grid', gridTemplateColumns: '130px 1fr', gap: 8, padding: '6px 0', borderBottom: '1px solid #f9fafb' }}>
@@ -1079,8 +1101,8 @@ export default function EmployeeProfilePage() {
                       <div style={{ fontSize: 12, fontWeight: 500, color: '#111827', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{doc.name}</div>
                       <div style={{ fontSize: 10, color: '#9ca3af' }}>{doc.type.toUpperCase()} â€¢ Uploaded on {formatDate(doc.uploadedAt)}</div>
                     </div>
-                    {doc.dataUrl ? (
-                      <a href={doc.dataUrl} download={doc.name} style={{ color: '#9ca3af', display: 'grid', placeItems: 'center' }} aria-label={`Download ${doc.name}`}><Download size={14} /></a>
+                    {doc.fileUrl || doc.dataUrl ? (
+                      <a href={doc.fileUrl || doc.dataUrl} download={doc.name} style={{ color: '#9ca3af', display: 'grid', placeItems: 'center' }} aria-label={`Download ${doc.name}`}><Download size={14} /></a>
                     ) : (
                       <button style={{ border: 'none', background: 'transparent', cursor: 'pointer', color: '#9ca3af' }}><Download size={14} /></button>
                     )}
@@ -1529,8 +1551,8 @@ export default function EmployeeProfilePage() {
                       <div style={{ fontSize: 13, fontWeight: 500, color: '#111827', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{doc.name}</div>
                       <div style={{ fontSize: 11, color: '#9ca3af' }}>{doc.type.toUpperCase()} â€¢ {formatDate(doc.uploadedAt)}</div>
                     </div>
-                    {doc.dataUrl ? (
-                      <a href={doc.dataUrl} download={doc.name} style={{ color: '#9ca3af', display: 'grid', placeItems: 'center' }} aria-label={`Download ${doc.name}`}><Download size={14} /></a>
+                    {doc.fileUrl || doc.dataUrl ? (
+                      <a href={doc.fileUrl || doc.dataUrl} download={doc.name} style={{ color: '#9ca3af', display: 'grid', placeItems: 'center' }} aria-label={`Download ${doc.name}`}><Download size={14} /></a>
                     ) : (
                       <button style={{ border: 'none', background: 'transparent', cursor: 'pointer', color: '#9ca3af' }}><Download size={14} /></button>
                     )}
@@ -1678,6 +1700,10 @@ export default function EmployeeProfilePage() {
           </div>
         </div>
       )}
+
+        </div>
+        <EmployeeProfileRightRail currentEmployeeId={employee.id} teamHint={employee.team} />
+      </div>
 
     </main>
   )

@@ -1,4 +1,4 @@
-export type HrRoleBucket = 'admin' | 'finance' | 'hr' | 'manager' | 'employee'
+export type HrRoleBucket = 'admin' | 'finance' | 'hr' | 'manager' | 'employee' | 'client' | 'none'
 
 export type HrCollection =
   | 'employees'
@@ -32,20 +32,20 @@ const collectionAccess: Record<HrCollection, Partial<Record<HrAction, HrRoleBuck
     delete: ['admin', 'hr'],
   },
   'loan-requests': {
-    read: ['admin', 'finance', 'hr', 'employee'],
+    read: ['admin', 'finance', 'employee'],
     create: ['admin', 'finance', 'employee'],
     update: ['admin', 'finance'],
     delete: ['admin', 'finance'],
   },
   'allowance-requests': {
-    read: ['admin', 'finance', 'hr', 'manager', 'employee'],
+    read: ['admin', 'finance', 'manager', 'employee'],
     create: ['admin', 'finance', 'employee'],
     update: ['admin', 'finance'],
     delete: ['admin', 'finance'],
   },
   'payroll-records': {
     read: ['admin', 'finance', 'hr', 'employee'],
-    create: ['admin', 'finance'],
+    create: ['admin', 'hr'],
     update: ['admin', 'finance'],
     delete: ['admin', 'finance'],
   },
@@ -65,10 +65,12 @@ export const hrCollections = Object.keys(collectionAccess) as HrCollection[]
 export function roleBucket(role?: string): HrRoleBucket {
   const normalized = String(role || '').toLowerCase()
   if (/\b(admin|owner|superuser)\b/.test(normalized)) return 'admin'
+  if (/\b(client|customer)\b/.test(normalized)) return 'client'
   if (/\b(finance|accounting|accountant|payroll|treasury)\b/.test(normalized)) return 'finance'
   if (/\b(hr|human resources|people operations)\b/.test(normalized)) return 'hr'
   if (/\b(manager|supervisor|lead|head|director)\b/.test(normalized)) return 'manager'
-  return 'employee'
+  if (/\b(employee|staff|worker|crew|team member)\b/.test(normalized)) return 'employee'
+  return 'none'
 }
 
 export function isHrCollection(input: string): input is HrCollection {

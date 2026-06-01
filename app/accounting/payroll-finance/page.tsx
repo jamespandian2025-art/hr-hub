@@ -9,7 +9,6 @@ import {
   CheckCircle2,
   Coins,
   FileText,
-  Filter,
   Landmark,
   MoreHorizontal,
   Play,
@@ -35,6 +34,20 @@ import {
 } from '@/app/hr/loan-requests/loanData'
 import { AllowanceRequest, allowanceRequestKey, loadStored as loadEnterpriseStored, saveStored as saveEnterpriseStored } from '@/app/hr/enterpriseData'
 import { listHrRecords, updateHrRecord } from '@/lib/hrms/client'
+import {
+  attendanceDeductionTotal,
+  formatAttendanceCount,
+  paidAttendanceDays,
+  type PayrollAttendanceSummary,
+} from '@/app/hr/payroll/attendanceRules'
+import {
+  dateFromPayrollInput,
+  defaultPayrollSchedule,
+  getPayrollPeriod,
+  payrollRunDateInput,
+  payrollScheduleKey,
+  type PayrollScheduleSettings,
+} from '@/app/hr/payroll/payrollSchedule'
 
 const font = 'var(--font-body)'
 
@@ -61,6 +74,7 @@ type PayrollRecord = {
   }
   allowanceLines?: Array<{ allowanceId: string; type: string; amount: number; date?: string; purpose?: string }>
   loanDeductions?: Array<{ loanId: string; type: string; amount: number }>
+  attendanceSummary?: PayrollAttendanceSummary
   net: number
   status: PayrollStatus
   source?: 'payroll-run'
@@ -70,7 +84,7 @@ type PayrollRecord = {
 
 const payrollRecordKey = 'flowsys-hr-payroll-records'
 const financeRefreshEvent = 'wiseflow:finance-requests-changed'
-const payrollTabs = ['Payroll Overview', 'Employees', 'Earnings', 'Deductions', 'Taxes & Contributions', 'Payments', 'Journal Entries', 'Payroll History'] as const
+const payrollTabs = ['Payroll Overview', 'Employee Requests', 'Employees', 'Earnings', 'Deductions', 'Taxes & Contributions', 'Payments', 'Journal Entries', 'Payroll History'] as const
 type PayrollTab = typeof payrollTabs[number]
 
 function money(value: number) {
@@ -112,7 +126,7 @@ function latestFirst<T extends { createdAt?: string; paidAt?: string }>(rows: T[
 }
 
 function groupPayrollRuns(records: PayrollRecord[]) {
-  const map = new Map<string, { period: string; payDate: string; employees: number; grossPay: number; deductions: number; netPay: number; status: PayrollStatus; createdAt: string }>()
+  const map = new Map<string, { period: string; payDate: string; employees: number; grossPay: number; deductions: number; netPay: number; attendanceDeductions: number; paidDays: number; absentDays: number; hasAttendanceSummary: boolean; status: PayrollStatus; createdAt: string }>()
   records.forEach(record => {
     const period = record.period || 'Unassigned period'
     const current = map.get(period) || {
@@ -122,6 +136,10 @@ function groupPayrollRuns(records: PayrollRecord[]) {
       grossPay: 0,
       deductions: 0,
       netPay: 0,
+      attendanceDeductions: 0,
+      paidDays: 0,
+      absentDays: 0,
+      hasAttendanceSummary: false,
       status: 'Paid' as PayrollStatus,
       createdAt: record.createdAt || '',
     }
@@ -133,6 +151,10 @@ function groupPayrollRuns(records: PayrollRecord[]) {
       grossPay: current.grossPay + Number(record.gross || 0),
       deductions: current.deductions + Number(record.deductions || 0),
       netPay: current.netPay + Number(record.net || 0),
+      attendanceDeductions: current.attendanceDeductions + attendanceDeductionTotal(record.attendanceSummary),
+      paidDays: current.paidDays + paidAttendanceDays(record.attendanceSummary),
+      absentDays: current.absentDays + Number(record.attendanceSummary?.absentDays || 0),
+      hasAttendanceSummary: current.hasAttendanceSummary || Boolean(record.attendanceSummary),
       status: nextStatus,
       createdAt: record.createdAt || current.createdAt,
     })
@@ -191,7 +213,10 @@ export default function PayrollFinancePage() {
   const [loanRequests, setLoanRequests] = useState<LoanRequest[]>([])
   const [allowanceRequests, setAllowanceRequests] = useState<AllowanceRequest[]>([])
   const [payrollRecords, setPayrollRecords] = useState<PayrollRecord[]>([])
+  const [schedule, setSchedule] = useState<PayrollScheduleSettings>(defaultPayrollSchedule)
+  const [financeRunDate, setFinanceRunDate] = useState('')
   const [notice, setNotice] = useState('')
+  const [selectedPeriod, setSelectedPeriod] = useState('')
 
   useEffect(() => {
     let cancelled = false
@@ -219,6 +244,9 @@ export default function PayrollFinancePage() {
       } catch {
         if (!cancelled) setAllowanceRequests(current => localAllowances.length > 0 || current.length === 0 ? localAllowances : current)
       }
+      const storedSchedule = { ...defaultPayrollSchedule, ...loadStored<Partial<PayrollScheduleSettings>>(payrollScheduleKey, {}) }
+      setSchedule(storedSchedule)
+      setFinanceRunDate(current => current || payrollRunDateInput(storedSchedule))
       setPayrollRecords(loadAllStoredRows<PayrollRecord>(payrollRecordKey, loadStored))
     }
 
@@ -239,23 +267,38 @@ export default function PayrollFinancePage() {
   const activeEmployees = useMemo(() => employees.filter(isActiveEmployee), [employees])
   const payrollRows = useMemo(() => latestFirst(payrollRecords.filter(record => record.source === 'payroll-run')), [payrollRecords])
   const payrollRuns = useMemo(() => groupPayrollRuns(payrollRows), [payrollRows])
+  const availablePeriods = useMemo(() => payrollRuns.map(run => run.period), [payrollRuns])
   const latestPeriod = payrollRuns[0]?.period || ''
-  const currentPayrollRecords = useMemo(() => latestPeriod ? payrollRows.filter(record => record.period === latestPeriod) : [], [latestPeriod, payrollRows])
+  const financeRunDateValue = financeRunDate || payrollRunDateInput(schedule)
+  const financeRun = useMemo(
+    () => getPayrollPeriod(schedule, dateFromPayrollInput(financeRunDateValue)),
+    [financeRunDateValue, schedule],
+  )
+  const activePeriod = selectedPeriod && availablePeriods.includes(selectedPeriod)
+    ? selectedPeriod
+    : availablePeriods.includes(financeRun.label)
+      ? financeRun.label
+      : latestPeriod
+  const currentPayrollRecords = useMemo(() => activePeriod ? payrollRows.filter(record => record.period === activePeriod) : [], [activePeriod, payrollRows])
   const pendingFinanceLoans = useMemo(() => loanRequests.filter(request => request.status === 'Pending' && loanApprovalState(request).canFinanceDecide), [loanRequests])
   const pendingFinanceAllowances = useMemo(() => allowanceRequests.filter(request => ['Pending', 'Manager Approved'].includes(request.status) && request.financeDecision !== 'Rejected'), [allowanceRequests])
   const payrollReadyLoans = useMemo(() => loanRequests.filter(request => request.status === 'Approved' && request.approvalStep === 'payroll'), [loanRequests])
   const payrollReadyAllowances = useMemo(() => allowanceRequests.filter(request => request.status === 'Finance Approved' && !request.payrollPeriod), [allowanceRequests])
-  const finalPayrollQueue = useMemo(() => payrollRecords.filter(record => record.source === 'payroll-run' && record.status !== 'Paid'), [payrollRecords])
-  const payrollNetPending = finalPayrollQueue.reduce((sum, record) => sum + Number(record.net || 0), 0)
+  const finalPayrollQueue = useMemo(() => payrollRows.filter(record => record.status !== 'Paid' && (!activePeriod || record.period === activePeriod)), [activePeriod, payrollRows])
+  const requestInboxCount = pendingFinanceLoans.length + pendingFinanceAllowances.length
   const grossPay = currentPayrollRecords.reduce((sum, record) => sum + Number(record.gross || 0), 0)
   const totalDeductions = currentPayrollRecords.reduce((sum, record) => sum + Number(record.deductions || 0), 0)
   const netPay = currentPayrollRecords.reduce((sum, record) => sum + Number(record.net || 0), 0)
+  const paidDays = currentPayrollRecords.reduce((sum, record) => sum + paidAttendanceDays(record.attendanceSummary), 0)
+  const absentDays = currentPayrollRecords.reduce((sum, record) => sum + Number(record.attendanceSummary?.absentDays || 0), 0)
+  const attendanceDeductions = currentPayrollRecords.reduce((sum, record) => sum + attendanceDeductionTotal(record.attendanceSummary), 0)
   const employerContributions = 0
   const totalPayrollCost = grossPay + employerContributions
   const grossCostPercent = totalPayrollCost ? (grossPay / totalPayrollCost) * 100 : 0
   const employerCostPercent = totalPayrollCost ? (employerContributions / totalPayrollCost) * 100 : 0
   const netPayPercent = grossPay ? (netPay / grossPay) * 100 : 0
   const deductionPercent = grossPay ? (totalDeductions / grossPay) * 100 : 0
+  const activePayrollRun = useMemo(() => payrollRuns.find(run => run.period === activePeriod), [activePeriod, payrollRuns])
   const monthlyPayroll = useMemo(() => buildPayrollTrend(payrollRuns), [payrollRuns])
   const maxPayrollValue = Math.max(1, ...monthlyPayroll.flatMap(month => [month.gross, month.net]))
   const complianceItems = useMemo(() => buildComplianceRows(currentPayrollRecords), [currentPayrollRecords])
@@ -273,23 +316,30 @@ export default function PayrollFinancePage() {
       gross: Number(record?.gross || 0),
       deductions: Number(record?.deductions || 0),
       net: Number(record?.net || 0),
+      paidDays: record?.attendanceSummary ? paidAttendanceDays(record.attendanceSummary) : null,
+      absentDays: record?.attendanceSummary ? record.attendanceSummary.absentDays : null,
       status: record?.status || 'Pending',
       requestCount: employeeLoans.length + employeeAllowances.length,
     }
   }), [activeEmployees, allowanceRequests, currentPayrollRecords, loanRequests])
-  const earningRows = useMemo(() => payrollRows.map(record => {
+  const earningRows = useMemo(() => currentPayrollRecords.map(record => {
     const allowanceTotal = (record.allowanceLines || []).reduce((sum, line) => sum + Number(line.amount || 0), 0)
+    const attendanceDeduction = attendanceDeductionTotal(record.attendanceSummary)
     return {
       id: record.id,
       employeeName: employeeNameFor(employees, record.employeeId),
       period: record.period,
       basePay: Math.max(0, Number(record.gross || 0) - allowanceTotal),
+      scheduledBasicPay: Number(record.attendanceSummary?.scheduledBasicPay || Math.max(0, Number(record.gross || 0) - allowanceTotal)),
+      paidDays: record.attendanceSummary ? paidAttendanceDays(record.attendanceSummary) : null,
+      absentDays: record.attendanceSummary ? record.attendanceSummary.absentDays : null,
+      attendanceDeduction,
       allowanceTotal,
       gross: Number(record.gross || 0),
       status: record.status,
     }
-  }), [employees, payrollRows])
-  const deductionRows = useMemo(() => payrollRows.map(record => {
+  }), [currentPayrollRecords, employees])
+  const deductionRows = useMemo(() => currentPayrollRecords.map(record => {
     const statutory = ['sss', 'philHealth', 'pagIbig', 'tax']
       .reduce((sum, key) => sum + Number(record.deductionBreakdown?.[key as keyof NonNullable<PayrollRecord['deductionBreakdown']>] || 0), 0)
     const loanTotal = Number(record.deductionBreakdown?.loanOrCashAdvance || 0) || (record.loanDeductions || []).reduce((sum, line) => sum + Number(line.amount || 0), 0)
@@ -303,8 +353,8 @@ export default function PayrollFinancePage() {
       total: Number(record.deductions || 0),
       status: record.status,
     }
-  }), [employees, payrollRows])
-  const paymentRows = useMemo(() => payrollRows.map(record => ({
+  }), [currentPayrollRecords, employees])
+  const paymentRows = useMemo(() => currentPayrollRecords.map(record => ({
     id: record.id,
     employeeName: employeeNameFor(employees, record.employeeId),
     period: record.period,
@@ -312,32 +362,49 @@ export default function PayrollFinancePage() {
     status: record.status,
     paidAt: record.paidAt,
     record,
-  })), [employees, payrollRows])
-  const journalRows = useMemo(() => payrollRuns.flatMap(run => [
+  })), [currentPayrollRecords, employees])
+  const journalRows = useMemo(() => (activePayrollRun ? [activePayrollRun] : []).flatMap(run => [
     { id: `${run.period}-gross`, period: run.period, account: 'Payroll Expense', debit: run.grossPay, credit: 0, status: run.status },
     { id: `${run.period}-deductions`, period: run.period, account: 'Payroll Deductions Payable', debit: 0, credit: run.deductions, status: run.status },
     { id: `${run.period}-net`, period: run.period, account: 'Salary Payable', debit: 0, credit: run.netPay, status: run.status },
-  ]), [payrollRuns])
+  ]), [activePayrollRun])
   const payrollTasks: PayrollTask[] = [
-    { title: 'Review Employee Requests', detail: `${pendingFinanceLoans.length + pendingFinanceAllowances.length} loan, cash advance, or allowance request${pendingFinanceLoans.length + pendingFinanceAllowances.length === 1 ? '' : 's'} waiting for Finance`, status: pendingFinanceLoans.length + pendingFinanceAllowances.length ? 'In Progress' : 'Completed' },
+    { title: 'Review Employee Requests', detail: `${requestInboxCount} loan, cash advance, or allowance request${requestInboxCount === 1 ? '' : 's'} waiting for Finance`, status: requestInboxCount ? 'In Progress' : 'Completed' },
     { title: 'HR Final Payroll Review', detail: `${payrollReadyLoans.length + payrollReadyAllowances.length} approved request${payrollReadyLoans.length + payrollReadyAllowances.length === 1 ? '' : 's'} ready for HR payroll`, status: payrollReadyLoans.length + payrollReadyAllowances.length ? 'Pending' : 'Upcoming' },
     { title: 'Finance Approval & Pay Release', detail: `${finalPayrollQueue.length} payroll record${finalPayrollQueue.length === 1 ? '' : 's'} waiting for approval or release`, status: finalPayrollQueue.length ? 'Pending' : 'Upcoming' },
   ]
   const metrics = [
-    { title: 'Total Payroll Cost', value: money(totalPayrollCost), detail: periodLabel(latestPeriod), icon: Banknote, tone: '#16a34a', up: totalPayrollCost > 0 },
+    { title: 'Total Payroll Cost', value: money(totalPayrollCost), detail: periodLabel(activePeriod), icon: Banknote, tone: '#16a34a', up: totalPayrollCost > 0 },
     { title: 'Gross Pay', value: money(grossPay), detail: `${currentPayrollRecords.length || activeEmployees.length} employee${(currentPayrollRecords.length || activeEmployees.length) === 1 ? '' : 's'}`, icon: UserRound, tone: '#2563eb' },
     { title: 'Deductions', value: money(totalDeductions), detail: grossPay ? `${((totalDeductions / grossPay) * 100).toFixed(1)}% of gross pay` : 'No payroll deductions yet', icon: Coins, tone: '#7c3aed' },
-    { title: 'Requests Waiting', value: String(pendingFinanceLoans.length + pendingFinanceAllowances.length), detail: 'Employee requests for Finance review', icon: Landmark, tone: '#f59e0b' },
+    { title: 'Attendance Adjustments', value: money(attendanceDeductions), detail: `${formatAttendanceCount(paidDays)} paid, ${formatAttendanceCount(absentDays)} absent`, icon: CalendarDays, tone: '#f97316' },
+    { title: 'Requests Waiting', value: String(requestInboxCount), detail: 'Employee requests for Finance review', icon: Landmark, tone: '#f59e0b' },
     { title: 'Net Pay', value: money(netPay), detail: grossPay ? `${((netPay / grossPay) * 100).toFixed(1)}% of gross pay` : 'No final payroll yet', icon: FileText, tone: '#ef4444' },
   ]
 
   const showPeriodSummary = () => {
-    setNotice(latestPeriod ? `Showing payroll finance records for ${periodLabel(latestPeriod)}.` : 'No payroll period has been created yet.')
+    setNotice(activePeriod ? `Showing payroll finance records for ${periodLabel(activePeriod)}.` : 'No payroll period has been created yet.')
   }
 
-  const showFinanceFilters = () => {
+  const chooseFinanceRunDate = (value: string) => {
+    const nextRun = getPayrollPeriod(schedule, dateFromPayrollInput(value))
+    setFinanceRunDate(value)
+    if (availablePeriods.includes(nextRun.label)) {
+      setSelectedPeriod(nextRun.label)
+      setNotice(`Showing payroll generated for ${formatDate(`${nextRun.runDate}T00:00:00`)}: ${nextRun.label}.`)
+    } else {
+      setSelectedPeriod('')
+      setNotice(`No HR payroll exists yet for ${nextRun.label}. HR can generate it from Payroll using that date.`)
+    }
+  }
+
+  const reviewIncomingPayroll = () => {
     setActiveTab('Payments')
-    setNotice('Use the Payments tab to approve or release payroll records by status.')
+    if (finalPayrollQueue.length) {
+      setNotice(`HR sent ${finalPayrollQueue.length} payroll record${finalPayrollQueue.length === 1 ? '' : 's'} for ${periodLabel(activePeriod)}. Review, approve, and release pay from the Payments tab.`)
+    } else {
+      setNotice(activePeriod ? `No HR payroll is waiting for Finance approval for ${periodLabel(activePeriod)}.` : 'No final payroll has been sent from HR yet.')
+    }
   }
 
   const inspectPayrollRun = (period: string) => {
@@ -404,26 +471,67 @@ export default function PayrollFinancePage() {
     setNotice(`${request.customType || request.type} allowance for ${request.employeeName || 'employee'} ${decision.toLowerCase()} by Finance.`)
   }
 
+  function renderEmployeeRequestInbox(placement: 'overview' | 'tab') {
+    const className = placement === 'overview'
+      ? 'payroll-card payroll-inbox-card payroll-overview-inbox'
+      : 'payroll-card payroll-inbox-card payroll-tab-card'
+
+    return (
+      <section className={className}>
+        <div className="payroll-panel-header">
+          <div>
+            <h2>Employee Request Inbox</h2>
+            <p className="payroll-section-subtitle">Live requests submitted from the Employee portal for Finance review.</p>
+          </div>
+          <strong className="payroll-inbox-count">{requestInboxCount} waiting</strong>
+        </div>
+        <div className="payroll-request-grid payroll-request-grid-top">
+          <section>
+            <h3>Loans & Cash Advances</h3>
+            <LoanRequestList
+              requests={loanRequests}
+              employees={employees}
+              onApprove={(request, financeTerms) => saveLoanDecision(request, 'Approved', financeTerms)}
+              onReject={request => saveLoanDecision(request, 'Rejected')}
+            />
+          </section>
+          <section>
+            <h3>Allowances</h3>
+            <AllowanceRequestList
+              requests={allowanceRequests}
+              onApprove={request => saveAllowanceDecision(request, 'Approved')}
+              onReject={request => saveAllowanceDecision(request, 'Rejected')}
+            />
+          </section>
+        </div>
+      </section>
+    )
+  }
+
   function renderTabContent() {
+    if (activeTab === 'Employee Requests') return renderEmployeeRequestInbox('tab')
+
     if (activeTab === 'Employees') {
       return (
         <section className="payroll-card payroll-tab-card">
           <h2>Employees</h2>
           <div className="payroll-table-wrap">
             <table className="payroll-table">
-              <thead><tr>{['Employee', 'Department', 'Position', 'Gross Pay', 'Deductions', 'Net Pay', 'Requests', 'Status'].map(col => <th key={col}>{col}</th>)}</tr></thead>
+              <thead><tr>{['Employee', 'Department', 'Position', 'Paid Days', 'Absent', 'Gross Pay', 'Deductions', 'Net Pay', 'Requests', 'Status'].map(col => <th key={col}>{col}</th>)}</tr></thead>
               <tbody>{employeePayrollRows.length ? employeePayrollRows.map(row => (
                 <tr key={row.employee.id}>
                   <td data-label="Employee"><strong>{row.name}</strong><small>{row.code}</small></td>
                   <td data-label="Department">{row.department}</td>
                   <td data-label="Position">{row.jobTitle}</td>
+                  <td data-label="Paid Days">{row.paidDays === null ? '-' : formatAttendanceCount(row.paidDays)}</td>
+                  <td data-label="Absent">{row.absentDays === null ? '-' : formatAttendanceCount(row.absentDays)}</td>
                   <td data-label="Gross Pay">{money(row.gross)}</td>
                   <td data-label="Deductions">{money(row.deductions)}</td>
                   <td data-label="Net Pay">{money(row.net)}</td>
                   <td data-label="Requests">{row.requestCount}</td>
                   <td data-label="Status"><StatusPill value={row.status} /></td>
                 </tr>
-              )) : <tr><td colSpan={8}><div className="payroll-empty">No employee records available yet.</div></td></tr>}</tbody>
+              )) : <tr><td colSpan={10}><div className="payroll-empty">No employee records available yet.</div></td></tr>}</tbody>
             </table>
           </div>
         </section>
@@ -436,17 +544,21 @@ export default function PayrollFinancePage() {
           <h2>Earnings</h2>
           <div className="payroll-table-wrap">
             <table className="payroll-table">
-              <thead><tr>{['Employee', 'Period', 'Base Pay', 'Allowances', 'Gross Pay', 'Status'].map(col => <th key={col}>{col}</th>)}</tr></thead>
+              <thead><tr>{['Employee', 'Period', 'Scheduled Basic', 'Paid Days', 'Absent', 'Attendance Deduction', 'Base Pay', 'Allowances', 'Gross Pay', 'Status'].map(col => <th key={col}>{col}</th>)}</tr></thead>
               <tbody>{earningRows.length ? earningRows.map(row => (
                 <tr key={row.id}>
                   <td data-label="Employee">{row.employeeName}</td>
                   <td data-label="Period">{row.period}</td>
+                  <td data-label="Scheduled Basic">{money(row.scheduledBasicPay)}</td>
+                  <td data-label="Paid Days">{row.paidDays === null ? '-' : formatAttendanceCount(row.paidDays)}</td>
+                  <td data-label="Absent">{row.absentDays === null ? '-' : formatAttendanceCount(row.absentDays)}</td>
+                  <td data-label="Attendance Deduction">{money(row.attendanceDeduction)}</td>
                   <td data-label="Base Pay">{money(row.basePay)}</td>
                   <td data-label="Allowances">{money(row.allowanceTotal)}</td>
                   <td data-label="Gross Pay">{money(row.gross)}</td>
                   <td data-label="Status"><StatusPill value={row.status} /></td>
                 </tr>
-              )) : <tr><td colSpan={6}><div className="payroll-empty">No earnings data yet. HR payroll records will populate this tab.</div></td></tr>}</tbody>
+              )) : <tr><td colSpan={10}><div className="payroll-empty">No earnings data yet. HR payroll records will populate this tab.</div></td></tr>}</tbody>
             </table>
           </div>
         </section>
@@ -547,7 +659,7 @@ export default function PayrollFinancePage() {
       return (
         <section className="payroll-grid payroll-lower-grid">
           <RecentPayrollRuns payrollRuns={payrollRuns} onInspect={inspectPayrollRun} />
-          <CompliancePanel complianceItems={complianceItems} latestPeriod={latestPeriod} />
+          <CompliancePanel complianceItems={complianceItems} latestPeriod={activePeriod} />
         </section>
       )
     }
@@ -556,7 +668,15 @@ export default function PayrollFinancePage() {
   }
 
   return (
-    <div className="payroll-page" style={{ fontFamily: font }}>
+    <div
+      className="payroll-page"
+      style={{
+        fontFamily: font,
+        minHeight: 'calc(100dvh - 76px)',
+        background: '#101010',
+        color: '#fafafa',
+      }}
+    >
       <style>{payrollCss}</style>
       <div className="payroll-header">
         <div>
@@ -564,10 +684,38 @@ export default function PayrollFinancePage() {
           <p className="payroll-subtitle">Manage payroll processing, salary expenses, deductions, and compliance.</p>
         </div>
         <div className="payroll-actions">
-          <button type="button" onClick={showPeriodSummary}><CalendarDays size={15} /> Period</button>
-          <button type="button" onClick={showPeriodSummary}><CalendarDays size={15} /> {periodLabel(latestPeriod)} <ChevronDown size={14} /></button>
-          <button type="button" onClick={showFinanceFilters}><Filter size={15} /> Filters</button>
-          <Link href="/hr/payroll" className="is-primary"><Play size={15} /> Open HR Payroll <ChevronDown size={13} /></Link>
+          <label className="payroll-date-input">
+            <CalendarDays size={15} />
+            <span>Generation date</span>
+            <input
+              aria-label="Payroll generation date"
+              type="date"
+              value={financeRunDateValue}
+              onChange={event => chooseFinanceRunDate(event.target.value)}
+            />
+          </label>
+          <label className="payroll-period-select">
+            <CalendarDays size={15} />
+            <span>Payroll period</span>
+            <strong>{periodLabel(activePeriod)}</strong>
+            <select
+              aria-label="Payroll period"
+              value={activePeriod}
+              onChange={event => {
+                setSelectedPeriod(event.target.value)
+                setNotice(event.target.value ? `Showing payroll finance records for ${periodLabel(event.target.value)}.` : 'No payroll period selected.')
+              }}
+              disabled={!availablePeriods.length}
+            >
+              {availablePeriods.length ? availablePeriods.map(period => (
+                <option key={period} value={period}>{periodLabel(period)}</option>
+              )) : <option value="">No HR payroll yet</option>}
+            </select>
+            <ChevronDown size={14} />
+          </label>
+          <button type="button" className="is-primary" onClick={reviewIncomingPayroll}>
+            <Play size={15} /> {finalPayrollQueue.length ? `Review HR Payroll (${finalPayrollQueue.length})` : 'Awaiting HR Payroll'} <ChevronDown size={13} />
+          </button>
         </div>
       </div>
 
@@ -589,37 +737,13 @@ export default function PayrollFinancePage() {
 
       {notice && <div className="payroll-notice"><span>{notice}</span><button type="button" onClick={() => setNotice('')}>Dismiss</button></div>}
 
-      <section className="payroll-card payroll-inbox-card">
-        <div className="payroll-panel-header">
-          <div>
-            <h2>Employee Request Inbox</h2>
-            <p className="payroll-section-subtitle">Live requests submitted from the Employee portal for Finance review.</p>
-          </div>
-          <strong className="payroll-inbox-count">{pendingFinanceLoans.length + pendingFinanceAllowances.length} waiting</strong>
-        </div>
-        <div className="payroll-request-grid payroll-request-grid-top">
-          <section>
-            <h3>Loans & Cash Advances</h3>
-            <LoanRequestList
-              requests={loanRequests}
-              employees={employees}
-              onApprove={(request, financeTerms) => saveLoanDecision(request, 'Approved', financeTerms)}
-              onReject={request => saveLoanDecision(request, 'Rejected')}
-            />
-          </section>
-          <section>
-            <h3>Allowances</h3>
-            <AllowanceRequestList
-              requests={allowanceRequests}
-              onApprove={request => saveAllowanceDecision(request, 'Approved')}
-              onReject={request => saveAllowanceDecision(request, 'Rejected')}
-            />
-          </section>
-        </div>
-      </section>
-
       <nav className="payroll-tabs" aria-label="Payroll finance sections">
-        {payrollTabs.map(tab => <button key={tab} type="button" onClick={() => setActiveTab(tab)} className={activeTab === tab ? 'is-active' : undefined}>{tab}</button>)}
+        {payrollTabs.map(tab => (
+          <button key={tab} type="button" onClick={() => setActiveTab(tab)} className={activeTab === tab ? 'is-active' : undefined}>
+            {tab}
+            {tab === 'Employee Requests' && requestInboxCount > 0 ? <span className="payroll-tab-badge">{requestInboxCount}</span> : null}
+          </button>
+        ))}
       </nav>
 
       {activeTab === 'Payroll Overview' ? (
@@ -683,39 +807,11 @@ export default function PayrollFinancePage() {
         </div>
       </section>
 
-      <section className="payroll-card payroll-flow-card">
-        <div className="payroll-panel-header">
-          <div>
-            <h2>Employee Requests & Finance Approval</h2>
-            <p className="payroll-section-subtitle">Employee request → Finance approval → HR final payroll review → Finance approval and pay release.</p>
-          </div>
-          <Link href="/hr/payroll">Open HR Payroll</Link>
-        </div>
-        <div className="payroll-flow-steps">
-          {[
-            ['1', 'Employee Requests', `${loanRequests.length + allowanceRequests.length} total`],
-            ['2', 'Finance Approves', `${pendingFinanceLoans.length + pendingFinanceAllowances.length} waiting`],
-            ['3', 'HR Final Payroll', `${payrollReadyLoans.length + payrollReadyAllowances.length} ready for payroll`],
-            ['4', 'Finance Release Pay', money(payrollNetPending)],
-          ].map(([step, title, detail]) => (
-            <div key={step}>
-              <b>{step}</b>
-              <strong>{title}</strong>
-              <small>{detail}</small>
-            </div>
-          ))}
-        </div>
-        <div className="payroll-request-grid">
-          <section>
-            <h3>Final Payroll Queue</h3>
-            <PayrollQueue records={finalPayrollQueue} employees={employees} onApprove={approveFinalPayroll} onRelease={releasePay} />
-          </section>
-        </div>
-      </section>
+      {renderEmployeeRequestInbox('overview')}
 
       <section className="payroll-grid payroll-lower-grid">
         <RecentPayrollRuns payrollRuns={payrollRuns} onInspect={inspectPayrollRun} />
-        <CompliancePanel complianceItems={complianceItems} latestPeriod={latestPeriod} />
+        <CompliancePanel complianceItems={complianceItems} latestPeriod={activePeriod} />
       </section>
         </>
       ) : renderTabContent()}
@@ -854,52 +950,20 @@ function AllowanceRequestList({ requests, onApprove, onReject }: { requests: All
   )
 }
 
-function PayrollQueue({ records, employees, onApprove, onRelease }: { records: PayrollRecord[]; employees: Employee[]; onApprove: (record: PayrollRecord) => void; onRelease: (record: PayrollRecord) => void }) {
-  if (!records.length) return <div className="payroll-empty">No HR payroll records waiting for Finance approval.</div>
-  return (
-    <div className="payroll-request-list">
-      {records.map(record => {
-        const employee = employees.find(item => item.id === record.employeeId || item.employeeId === record.employeeId)
-        const name = fullName(employee) || record.employeeId
-        return (
-          <article key={record.id}>
-            <div className="request-card-head">
-              <span>
-                <strong>{name}</strong>
-                <small>{record.period}</small>
-              </span>
-              <StatusPill value={record.status === 'Approved' ? 'Pending' : record.status === 'Pending' ? 'In Progress' : record.status} />
-            </div>
-            <div className="request-card-body">
-              <span><small>Gross</small><strong>{money(record.gross)}</strong></span>
-              <span><small>Deductions</small><strong>{money(record.deductions)}</strong></span>
-              <span><small>Net Pay</small><strong>{money(record.net)}</strong></span>
-              <span><small>Status</small><strong>{record.status}</strong></span>
-            </div>
-            <div className="request-actions">
-              {record.status === 'Pending' || record.status === 'Processing' ? <button type="button" className="approve" onClick={() => onApprove(record)}><ShieldCheck size={14} /> Approve final payroll</button> : null}
-              {record.status === 'Approved' ? <button type="button" className="approve" onClick={() => onRelease(record)}><Banknote size={14} /> Release pay</button> : null}
-            </div>
-          </article>
-        )
-      })}
-    </div>
-  )
-}
-
 function RecentPayrollRuns({ payrollRuns, onInspect }: { payrollRuns: ReturnType<typeof groupPayrollRuns>; onInspect: (period: string) => void }) {
   return (
     <div className="payroll-card">
       <h2>Recent Payroll Runs</h2>
       <div className="payroll-table-wrap">
         <table className="payroll-table">
-          <thead><tr>{['Pay Period', 'Pay Date', 'Employees', 'Gross Pay', 'Deductions', 'Net Pay', 'Total Cost', 'Status', 'Actions'].map(col => <th key={col}>{col}</th>)}</tr></thead>
+          <thead><tr>{['Pay Period', 'Pay Date', 'Employees', 'Attendance', 'Gross Pay', 'Deductions', 'Net Pay', 'Total Cost', 'Status', 'Actions'].map(col => <th key={col}>{col}</th>)}</tr></thead>
           <tbody>
             {payrollRuns.length ? payrollRuns.map(run => (
               <tr key={run.period}>
                 <td data-label="Pay Period">{run.period}</td>
                 <td data-label="Pay Date">{formatDate(run.payDate)}</td>
                 <td data-label="Employees">{run.employees}</td>
+                <td data-label="Attendance">{run.hasAttendanceSummary ? `${formatAttendanceCount(run.paidDays)} paid / ${formatAttendanceCount(run.absentDays)} absent` : 'No attendance data'}</td>
                 <td data-label="Gross Pay">{money(run.grossPay)}</td>
                 <td data-label="Deductions">{money(run.deductions)}</td>
                 <td data-label="Net Pay">{money(run.netPay)}</td>
@@ -907,7 +971,7 @@ function RecentPayrollRuns({ payrollRuns, onInspect }: { payrollRuns: ReturnType
                 <td data-label="Status"><StatusPill value={run.status} /></td>
                 <td data-label="Actions"><button type="button" className="payroll-icon-button" aria-label={`Inspect payroll run ${run.period}`} onClick={() => onInspect(run.period)}><MoreHorizontal size={15} /></button></td>
               </tr>
-            )) : <tr><td colSpan={9}><div className="payroll-empty">No payroll runs yet. When HR sends final payroll, it will appear here for Finance approval and pay release.</div></td></tr>}
+            )) : <tr><td colSpan={10}><div className="payroll-empty">No payroll runs yet. When HR sends final payroll, it will appear here for Finance approval and pay release.</div></td></tr>}
           </tbody>
         </table>
       </div>
@@ -939,18 +1003,27 @@ function CompliancePanel({ complianceItems, latestPeriod }: { complianceItems: A
 }
 
 const payrollCss = `
-.payroll-page { padding: 26px 28px 40px; color: #0f172a; }
+.payroll-page { min-height: calc(100dvh - 76px); padding: 26px 28px 40px; background: #101010; color: #fafafa; }
 .payroll-header { display: flex; justify-content: space-between; align-items: flex-start; gap: 18px; margin-bottom: 24px; }
 .payroll-title { margin: 0; font-size: 28px; line-height: 1.1; font-weight: 950; }
 .payroll-subtitle { margin: 8px 0 0; color: #334155; font-size: 13.5px; }
 .payroll-actions { display: flex; gap: 12px; flex-wrap: wrap; justify-content: flex-end; }
-.payroll-actions button, .payroll-actions a, .payroll-panel-header button, .payroll-pagination button { min-height: 38px; border-radius: 8px; border: 1px solid #e8edf4; background: #fff; color: #0f172a; display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 0 12px; font-size: 12.5px; font-weight: 850; cursor: pointer; text-decoration: none; }
+.payroll-actions button, .payroll-actions a, .payroll-actions label, .payroll-panel-header button, .payroll-pagination button { min-height: 38px; border-radius: 8px; border: 1px solid #e8edf4; background: #fff; color: #0f172a; display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 0 12px; font-size: 12.5px; font-weight: 850; cursor: pointer; text-decoration: none; }
 .payroll-actions .is-primary { border-color: #16a34a; background: #16a34a; color: #fff; font-weight: 950; }
-.payroll-metrics { display: grid; grid-template-columns: repeat(5, minmax(170px, 1fr)); gap: 18px; margin-bottom: 18px; }
+.payroll-date-input { min-width: 238px; }
+.payroll-date-input span { color: #475569; font-weight: 900; white-space: nowrap; }
+.payroll-date-input input { border: 0; background: transparent; color: #0f172a; font: inherit; font-size: 12px; font-weight: 900; outline: none; min-width: 112px; }
+.payroll-period-select { position: relative; min-width: 224px; }
+.payroll-period-select span { color: #475569; font-weight: 900; }
+.payroll-period-select strong { color: #0f172a; max-width: 130px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.payroll-period-select select { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; cursor: pointer; }
+.payroll-period-select select:disabled { cursor: not-allowed; }
+.payroll-metrics { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 18px; margin-bottom: 18px; }
 .payroll-card { background: #fff; border: 1px solid #e8edf4; border-radius: 8px; padding: 18px; box-shadow: 0 1px 2px rgba(15, 23, 42, .03); }
 .payroll-notice { display: flex; justify-content: space-between; gap: 12px; align-items: center; border: 1px solid #bbf7d0; background: #f0fdf4; color: #166534; border-radius: 8px; padding: 12px 14px; margin-bottom: 16px; font-size: 13px; font-weight: 900; }
 .payroll-notice button { border: 0; background: transparent; color: #166534; font-weight: 900; cursor: pointer; }
 .payroll-inbox-card { margin-bottom: 16px; }
+.payroll-overview-inbox { margin-top: 16px; }
 .payroll-inbox-count { min-height: 30px; border-radius: 999px; background: #dcfce7; color: #15803d; display: inline-flex; align-items: center; padding: 0 12px; font-size: 12px; font-weight: 950; white-space: nowrap; }
 .payroll-request-grid-top { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; }
 .payroll-metric-card { min-height: 100px; display: flex; align-items: center; }
@@ -959,22 +1032,18 @@ const payrollCss = `
 .payroll-value { display: block; color: #0f172a; font-size: 23px; margin-top: 8px; white-space: nowrap; }
 .payroll-detail { display: block; font-size: 11.5px; font-weight: 900; margin-top: 8px; }
 .payroll-tabs { display: flex; gap: 32px; border-bottom: 1px solid #e8edf4; padding-left: 14px; overflow-x: auto; }
-.payroll-tabs button { border: 0; border-bottom: 2px solid transparent; background: transparent; color: #0f172a; min-height: 48px; padding: 0; font-size: 12.5px; font-weight: 900; cursor: pointer; white-space: nowrap; }
+.payroll-tabs button { border: 0; border-bottom: 2px solid transparent; background: transparent; color: #0f172a; min-height: 48px; padding: 0; font-size: 12.5px; font-weight: 900; cursor: pointer; white-space: nowrap; display: inline-flex; align-items: center; gap: 8px; }
 .payroll-tabs .is-active { color: #16a34a; border-bottom-color: #16a34a; }
+.payroll-tab-badge { min-width: 20px; height: 20px; border-radius: 999px; background: #0f172a; color: #fff; display: inline-flex; align-items: center; justify-content: center; padding: 0 6px; font-size: 11px; line-height: 1; font-weight: 950; }
 .payroll-tab-card { margin-top: 16px; }
 .payroll-grid { display: grid; grid-template-columns: minmax(0, 1.2fr) minmax(360px, .9fr) minmax(330px, .8fr); gap: 16px; margin-top: 16px; }
 .payroll-lower-grid { grid-template-columns: minmax(0, 1fr) 420px; }
-.payroll-flow-card { margin-top: 16px; }
 .payroll-section-subtitle { margin: 6px 0 0; color: #64748b; font-size: 12.5px; font-weight: 650; }
-.payroll-flow-steps { display: grid; grid-template-columns: repeat(4, minmax(160px, 1fr)); gap: 12px; margin-bottom: 16px; }
-.payroll-flow-steps div { border: 1px solid #e8edf4; background: #f8fafc; border-radius: 8px; padding: 13px; display: grid; grid-template-columns: 30px minmax(0, 1fr); gap: 4px 10px; align-items: center; }
-.payroll-flow-steps b { width: 30px; height: 30px; border-radius: 999px; background: #dcfce7; color: #15803d; display: grid; place-items: center; grid-row: span 2; font-size: 12px; }
-.payroll-flow-steps strong { color: #0f172a; font-size: 13px; }
-.payroll-flow-steps small { color: #64748b; font-size: 12px; font-weight: 800; }
 .payroll-request-grid { display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(320px, .85fr); gap: 16px; }
 .payroll-request-grid section { border: 1px solid #e8edf4; border-radius: 8px; overflow: hidden; min-width: 0; }
 .payroll-request-grid h3 { margin: 0; padding: 14px 16px; border-bottom: 1px solid #eef2f7; font-size: 15px; font-weight: 950; }
 .payroll-request-list { display: grid; gap: 12px; padding: 14px; max-height: 520px; overflow: auto; }
+.payroll-overview-inbox .payroll-request-list { max-height: 260px; }
 .payroll-request-list article { border: 1px solid #e8edf4; border-radius: 8px; background: #fff; padding: 14px; display: grid; gap: 12px; }
 .request-card-head { display: flex; justify-content: space-between; gap: 12px; align-items: flex-start; }
 .request-card-head strong { display: block; color: #0f172a; font-size: 13.5px; }
@@ -1055,6 +1124,62 @@ const payrollCss = `
 .compliance-status { grid-column: 3; justify-self: end; margin-top: -4px; }
 .payroll-compliance-list small { display: block; color: #64748b; margin-top: 4px; }
 .payroll-calendar-link { min-height: 44px; background: #f8fafc; border-radius: 8px; margin-top: 16px; display: flex; align-items: center; justify-content: center; gap: 10px; color: #2563eb; text-decoration: none; font-size: 13px; font-weight: 900; }
+.accounting-theme-dark .payroll-page,
+html[data-theme='dark'] .payroll-page {
+  background: #101010 !important;
+  background-color: #101010 !important;
+  color: #fafafa !important;
+}
+.accounting-theme-dark .payroll-page :is(.payroll-card, .payroll-request-grid section, .payroll-request-list article, .loan-term-review, .payroll-flow-steps div, .payroll-table-wrap),
+html[data-theme='dark'] .payroll-page :is(.payroll-card, .payroll-request-grid section, .payroll-request-list article, .loan-term-review, .payroll-flow-steps div, .payroll-table-wrap) {
+  background: #101010 !important;
+  background-color: #101010 !important;
+  border-color: #333333 !important;
+  color: #fafafa !important;
+  box-shadow: none !important;
+}
+.accounting-theme-dark .payroll-page :is(.payroll-title, .payroll-value, .payroll-period-select strong, .payroll-date-input input, .payroll-flow-steps strong, .request-card-head strong, .request-card-body strong, .loan-term-review-copy strong, .loan-term-review span strong, .payroll-breakdown-list b, .payroll-breakdown-list strong, .payroll-tabs button, .payroll-table td, .payroll-panel-header h2, .payroll-card h2),
+html[data-theme='dark'] .payroll-page :is(.payroll-title, .payroll-value, .payroll-period-select strong, .payroll-date-input input, .payroll-flow-steps strong, .request-card-head strong, .request-card-body strong, .loan-term-review-copy strong, .loan-term-review span strong, .payroll-breakdown-list b, .payroll-breakdown-list strong, .payroll-tabs button, .payroll-table td, .payroll-panel-header h2, .payroll-card h2) {
+  color: #fafafa !important;
+}
+.accounting-theme-dark .payroll-page :is(.payroll-subtitle, .payroll-period-select span, .payroll-date-input span, .payroll-label, .payroll-section-subtitle, .payroll-flow-steps small, .request-card-head small, .request-card-body small, .payroll-request-list p, .loan-term-review-copy small, .loan-term-review span small, .loan-term-review label span, .payroll-empty, .payroll-donut small, .payroll-breakdown-list small, .payroll-month small, .payroll-compliance-list small),
+html[data-theme='dark'] .payroll-page :is(.payroll-subtitle, .payroll-period-select span, .payroll-date-input span, .payroll-label, .payroll-section-subtitle, .payroll-flow-steps small, .request-card-head small, .request-card-body small, .payroll-request-list p, .loan-term-review-copy small, .loan-term-review span small, .loan-term-review label span, .payroll-empty, .payroll-donut small, .payroll-breakdown-list small, .payroll-month small, .payroll-compliance-list small) {
+  color: #c7c7cf !important;
+}
+.accounting-theme-dark .payroll-page :is(.payroll-actions button, .payroll-actions a, .payroll-actions label, .payroll-panel-header button, .payroll-pagination button, .request-actions button, .payroll-icon-button, .loan-term-review input, .loan-term-review select, .payroll-date-input input, .payroll-calendar-link),
+html[data-theme='dark'] .payroll-page :is(.payroll-actions button, .payroll-actions a, .payroll-actions label, .payroll-panel-header button, .payroll-pagination button, .request-actions button, .payroll-icon-button, .loan-term-review input, .loan-term-review select, .payroll-date-input input, .payroll-calendar-link) {
+  background: #161616 !important;
+  background-color: #161616 !important;
+  border-color: #333333 !important;
+  color: #fafafa !important;
+}
+.accounting-theme-dark .payroll-page :is(.payroll-actions .is-primary, .request-actions .approve, .payroll-inline-action, .payroll-pagination .is-active),
+html[data-theme='dark'] .payroll-page :is(.payroll-actions .is-primary, .request-actions .approve, .payroll-inline-action, .payroll-pagination .is-active) {
+  background: #16a34a !important;
+  border-color: #16a34a !important;
+  color: #ffffff !important;
+}
+.accounting-theme-dark .payroll-page :is(.payroll-table th),
+html[data-theme='dark'] .payroll-page :is(.payroll-table th) {
+  background: #181818 !important;
+  color: #c7c7cf !important;
+  border-color: #333333 !important;
+}
+.accounting-theme-dark .payroll-page :is(.payroll-table td, .request-card-body, .request-actions, .payroll-request-grid h3, .payroll-bars, .payroll-task-list div, .payroll-compliance-list div),
+html[data-theme='dark'] .payroll-page :is(.payroll-table td, .request-card-body, .request-actions, .payroll-request-grid h3, .payroll-bars, .payroll-task-list div, .payroll-compliance-list div) {
+  border-color: #333333 !important;
+}
+.accounting-theme-dark .payroll-page .payroll-donut span,
+html[data-theme='dark'] .payroll-page .payroll-donut span {
+  background: #101010 !important;
+  background-color: #101010 !important;
+  color: #fafafa !important;
+}
+.accounting-theme-dark .payroll-page .payroll-table tr,
+html[data-theme='dark'] .payroll-page .payroll-table tr {
+  background: #101010 !important;
+  background-color: #101010 !important;
+}
 @media (max-width: 1280px) {
   .payroll-page { padding: 22px; }
   .payroll-header { flex-direction: column; }

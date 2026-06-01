@@ -1,5 +1,6 @@
 create table if not exists public.clients (
   id text primary key,
+  company_id text,
   name text not null,
   company text,
   email text not null,
@@ -38,23 +39,44 @@ create table if not exists public.clients (
   updated_at timestamptz not null default now()
 );
 
+alter table public.clients
+  add column if not exists company_id text;
+
+create index if not exists clients_company_id_created_at_idx
+  on public.clients (company_id, created_at desc);
+
 alter table public.clients enable row level security;
 
-create policy "Allow authenticated users to read clients"
+drop policy if exists "Allow authenticated users to read clients" on public.clients;
+drop policy if exists "Allow authenticated users to write clients" on public.clients;
+drop policy if exists "Allow authenticated users to update clients" on public.clients;
+drop policy if exists "Company members can read clients" on public.clients;
+drop policy if exists "Company members can insert clients" on public.clients;
+drop policy if exists "Company members can update clients" on public.clients;
+drop policy if exists "Company members can delete clients" on public.clients;
+
+-- Requires scripts/supabase-multi-company.sql so public.is_company_member(company_id)
+-- is available before these tenant-scoped policies are applied.
+create policy "Company members can read clients"
   on public.clients for select
   to authenticated
-  using (true);
+  using (company_id is not null and public.is_company_member(company_id));
 
-create policy "Allow authenticated users to write clients"
+create policy "Company members can insert clients"
   on public.clients for insert
   to authenticated
-  with check (true);
+  with check (company_id is not null and public.is_company_member(company_id));
 
-create policy "Allow authenticated users to update clients"
+create policy "Company members can update clients"
   on public.clients for update
   to authenticated
-  using (true)
-  with check (true);
+  using (company_id is not null and public.is_company_member(company_id))
+  with check (company_id is not null and public.is_company_member(company_id));
+
+create policy "Company members can delete clients"
+  on public.clients for delete
+  to authenticated
+  using (company_id is not null and public.is_company_member(company_id));
 
 create or replace function public.set_updated_at()
 returns trigger

@@ -11,7 +11,7 @@ export type PayrollTaxBreakdown = {
   nonTaxableAllowances?: number
 }
 
-export const defaultPayrollFrequency: PayrollFrequency = 'monthly'
+export const defaultPayrollFrequency: PayrollFrequency = 'semi-monthly'
 
 export function roundPayrollMoney(value: number) {
   return Math.max(0, Math.round(Number(value || 0) * 100) / 100)
@@ -26,9 +26,11 @@ const periodsPerYear: Record<PayrollFrequency, number> = {
 
 export const philippinePayroll2026 = {
   sss: {
-    employeeRate: 0.045,
-    employerRate: 0.095,
-    monthlySalaryCreditCeiling: 30000,
+    employeeRate: 0.05,
+    employerRate: 0.1,
+    monthlySalaryCreditFloor: 5000,
+    monthlySalaryCreditCeiling: 35000,
+    monthlySalaryCreditStep: 500,
   },
   philHealth: {
     premiumRate: 0.05,
@@ -39,6 +41,8 @@ export const philippinePayroll2026 = {
   },
   pagIbig: {
     employeeRate: 0.02,
+    employeeLowSalaryRate: 0.01,
+    lowSalaryThreshold: 1500,
     employerRate: 0.02,
     monthlyCompensationCeiling: 10000,
     employeeMonthlyMaximum: 200,
@@ -46,6 +50,40 @@ export const philippinePayroll2026 = {
   },
   bonusTaxExemptionAnnualLimit: 90000,
 } as const
+
+export type WithholdingTaxBracket = {
+  upper: number
+  baseTax: number
+  excessOver: number
+  rate: number
+}
+
+export const philippineWithholdingTaxTables2023Onward: Partial<Record<PayrollFrequency, WithholdingTaxBracket[]>> = {
+  monthly: [
+    { upper: 20833, baseTax: 0, excessOver: 0, rate: 0 },
+    { upper: 33332, baseTax: 0, excessOver: 20833, rate: 0.15 },
+    { upper: 66666, baseTax: 1875, excessOver: 33333, rate: 0.2 },
+    { upper: 166666, baseTax: 8541.8, excessOver: 66667, rate: 0.25 },
+    { upper: 666666, baseTax: 33541.8, excessOver: 166667, rate: 0.3 },
+    { upper: Number.POSITIVE_INFINITY, baseTax: 183541.8, excessOver: 666667, rate: 0.35 },
+  ],
+  'semi-monthly': [
+    { upper: 10417, baseTax: 0, excessOver: 0, rate: 0 },
+    { upper: 16666, baseTax: 0, excessOver: 10417, rate: 0.15 },
+    { upper: 33332, baseTax: 937.5, excessOver: 16667, rate: 0.2 },
+    { upper: 83332, baseTax: 4270.7, excessOver: 33333, rate: 0.25 },
+    { upper: 333332, baseTax: 16770.7, excessOver: 83333, rate: 0.3 },
+    { upper: Number.POSITIVE_INFINITY, baseTax: 91770.7, excessOver: 333333, rate: 0.35 },
+  ],
+  weekly: [
+    { upper: 4808, baseTax: 0, excessOver: 0, rate: 0 },
+    { upper: 7691, baseTax: 0, excessOver: 4808, rate: 0.15 },
+    { upper: 15384, baseTax: 432.6, excessOver: 7692, rate: 0.2 },
+    { upper: 38461, baseTax: 1971.2, excessOver: 15385, rate: 0.25 },
+    { upper: 153845, baseTax: 7740.45, excessOver: 38462, rate: 0.3 },
+    { upper: Number.POSITIVE_INFINITY, baseTax: 42355.65, excessOver: 153846, rate: 0.35 },
+  ],
+}
 
 export function payrollPeriodsPerMonth(frequency: PayrollFrequency = defaultPayrollFrequency) {
   return (periodsPerYear[frequency] || periodsPerYear[defaultPayrollFrequency]) / 12
@@ -62,18 +100,28 @@ export function calculateAnnualWithholdingTax(annualTaxableIncome: number) {
 }
 
 export function calculateMonthlyWithholdingTax2026(monthlyTaxableIncome: number) {
-  const taxable = Math.max(0, Number(monthlyTaxableIncome || 0))
-  if (taxable <= 20833) return 0
-  if (taxable <= 33332) return (taxable - 20833) * 0.15
-  if (taxable <= 66666) return 1875 + (taxable - 33333) * 0.2
-  if (taxable <= 166666) return 8541.8 + (taxable - 66667) * 0.25
-  if (taxable <= 666666) return 33541.8 + (taxable - 166667) * 0.3
-  return 183541.8 + (taxable - 666667) * 0.35
+  return calculateWithholdingTax(monthlyTaxableIncome, 'monthly')
+}
+
+export function withholdingTaxBracketFor(periodTaxablePay: number, frequency: PayrollFrequency) {
+  const taxable = roundPayrollMoney(periodTaxablePay)
+  const table = philippineWithholdingTaxTables2023Onward[frequency]
+  if (!table) return null
+  return table.find(item => taxable <= item.upper) || table[table.length - 1]
+}
+
+export function calculateWithholdingTaxFromTable(periodTaxablePay: number, frequency: PayrollFrequency) {
+  const taxable = roundPayrollMoney(periodTaxablePay)
+  const bracket = withholdingTaxBracketFor(taxable, frequency)
+  if (!bracket) return null
+  return roundPayrollMoney(bracket.baseTax + Math.max(0, taxable - bracket.excessOver) * bracket.rate)
 }
 
 export function calculateWithholdingTax(periodTaxablePay: number, frequency: PayrollFrequency = defaultPayrollFrequency) {
-  const monthlyEquivalent = Number(periodTaxablePay || 0) * payrollPeriodsPerMonth(frequency)
-  return roundPayrollMoney(calculateMonthlyWithholdingTax2026(monthlyEquivalent) / payrollPeriodsPerMonth(frequency))
+  const tableTax = calculateWithholdingTaxFromTable(periodTaxablePay, frequency)
+  if (tableTax !== null) return tableTax
+  const periodsPerYearCount = periodsPerYear[frequency] || periodsPerYear[defaultPayrollFrequency]
+  return roundPayrollMoney(calculateAnnualWithholdingTax(Number(periodTaxablePay || 0) * periodsPerYearCount) / periodsPerYearCount)
 }
 
 export function deductionBreakdownTotal(breakdown: Partial<PayrollTaxBreakdown>) {
@@ -98,21 +146,38 @@ export function buildProfileContributionBreakdown(profileDeduction: number) {
 export function calculateStatutoryContributions2026(monthlyBasicSalary: number, frequency: PayrollFrequency = defaultPayrollFrequency) {
   const basic = Math.max(0, Number(monthlyBasicSalary || 0))
   const divisor = payrollPeriodsPerMonth(frequency)
-  const sssMonthly = Math.min(basic, philippinePayroll2026.sss.monthlySalaryCreditCeiling) * philippinePayroll2026.sss.employeeRate
+  const sssMonthly = monthlySalaryCreditForSssEmployee(basic) * philippinePayroll2026.sss.employeeRate
   const philHealthBase = basic > 0
     ? Math.min(Math.max(basic, philippinePayroll2026.philHealth.monthlySalaryFloor), philippinePayroll2026.philHealth.monthlySalaryCeiling)
     : 0
   const philHealthMonthly = philHealthBase * philippinePayroll2026.philHealth.employeeShareRate
-  const pagIbigMonthly = Math.min(
-    Math.min(basic, philippinePayroll2026.pagIbig.monthlyCompensationCeiling) * philippinePayroll2026.pagIbig.employeeRate,
-    philippinePayroll2026.pagIbig.employeeMonthlyMaximum,
-  )
+  const pagIbigMonthly = calculatePagIbigEmployeeShare2026(basic)
 
   return {
     sss: roundPayrollMoney(sssMonthly / divisor),
     philHealth: roundPayrollMoney(philHealthMonthly / divisor),
     pagIbig: roundPayrollMoney(pagIbigMonthly / divisor),
   }
+}
+
+export function monthlySalaryCreditForSssEmployee(monthlyBasicSalary: number) {
+  const basic = Math.max(0, Number(monthlyBasicSalary || 0))
+  if (basic <= 0) return 0
+  const { monthlySalaryCreditFloor, monthlySalaryCreditCeiling, monthlySalaryCreditStep } = philippinePayroll2026.sss
+  const nearestCredit = Math.floor((basic + monthlySalaryCreditStep / 2) / monthlySalaryCreditStep) * monthlySalaryCreditStep
+  return Math.min(monthlySalaryCreditCeiling, Math.max(monthlySalaryCreditFloor, nearestCredit))
+}
+
+export function calculatePagIbigEmployeeShare2026(monthlyBasicSalary: number) {
+  const basic = Math.max(0, Number(monthlyBasicSalary || 0))
+  if (basic <= 0) return 0
+  const rate = basic <= philippinePayroll2026.pagIbig.lowSalaryThreshold
+    ? philippinePayroll2026.pagIbig.employeeLowSalaryRate
+    : philippinePayroll2026.pagIbig.employeeRate
+  return roundPayrollMoney(Math.min(
+    Math.min(basic, philippinePayroll2026.pagIbig.monthlyCompensationCeiling) * rate,
+    philippinePayroll2026.pagIbig.employeeMonthlyMaximum,
+  ))
 }
 
 export function calculateTaxableBonusPortion(yearToDateBonusAnd13thMonth: number, currentBonusOr13thMonth: number) {
@@ -151,9 +216,10 @@ export function buildPhilippinePayrollBreakdown2026({
 }
 
 export function buildEmployeeTaxBreakdown(gross: number, _profileDeduction: number, frequency: PayrollFrequency = defaultPayrollFrequency): PayrollTaxBreakdown {
+  const periodGross = Number(gross || 0)
   return buildPhilippinePayrollBreakdown2026({
-    monthlyBasicSalary: Number(gross || 0),
-    periodTaxableEarnings: Number(gross || 0),
+    monthlyBasicSalary: periodGross * payrollPeriodsPerMonth(frequency),
+    periodTaxableEarnings: periodGross,
     periodNonTaxableAllowances: 0,
     frequency,
   })

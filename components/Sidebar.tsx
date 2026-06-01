@@ -10,6 +10,7 @@ import {
   ChevronLeft,
   ChevronRight,
   ClipboardList,
+  DatabaseZap,
   FolderKanban,
   HandCoins,
   LayoutDashboard,
@@ -22,15 +23,15 @@ import {
 const font = "var(--font-body)"
 const displayFont = "var(--font-body)"
 const sidebarColors = {
-  bg: '#000000',
-  surface: '#1f1f1f',
-  surfaceHover: '#1a1a1a',
-  border: '#242424',
-  text: 'rgb(237, 237, 237)',
-  muted: '#a1a1a1',
-  faint: '#737373',
-  icon: '#a1a1a1',
-  activeRing: 'transparent',
+  bg: 'var(--sidebar)',
+  surface: 'var(--sidebar-active)',
+  surfaceHover: 'var(--sidebar-hover)',
+  border: 'var(--sidebar-border, var(--border))',
+  divider: 'var(--sidebar-divider, color-mix(in srgb, var(--sidebar-muted) 18%, transparent))',
+  text: 'var(--sidebar-foreground)',
+  muted: 'var(--sidebar-muted)',
+  faint: 'var(--sidebar-section, var(--muted-foreground))',
+  icon: 'var(--sidebar-icon, var(--sidebar-muted))',
 }
 
 type NavSubItem = {
@@ -104,31 +105,24 @@ const navSections: NavSection[] = [
       },
       {
         label: 'Warehouse',
+        href: '/warehouse',
         icon: Warehouse,
-        match: ['/warehouse-inventory', '/resources/inventory'],
-        children: [
-          { label: 'Overview',        href: '/resources/inventory' },
-          { label: 'Inventory',       href: '/resources/inventory' },
-          { label: 'Stock Movements', href: '/warehouse/stock-movements' },
-          { label: 'Receiving Logs',  href: '/warehouse/receiving-logs' },
-          { label: 'Transfers',       href: '/warehouse/transfers' },
-          { label: 'Adjustments',     href: '/warehouse/adjustments' },
-          { label: 'Locations',       href: '/warehouse/locations' },
-          { label: 'Low Stock',       href: '/warehouse/low-stock' },
-        ],
+        match: ['/warehouse', '/warehouse-inventory', '/resources/inventory'],
+        newTab: true,
       },
     ],
   },
   {
     section: 'PRODUCTIVITY',
     items: [
-      {
-        label: 'Workflows',
-        icon: ClipboardList,
-        match: ['/tasks', '/to-do'],
+        {
+          label: 'Workflows',
+          href: '/workflows/my-workflows',
+          icon: ClipboardList,
+          match: ['/tasks', '/to-do', '/workflows'],
         children: [
-          { label: 'My Tasks',      href: '/tasks',                  badge: 'tasks' },
-          { label: 'My To-dos',     href: '/to-do',                  badge: 'todos' },
+          { label: 'My Tasks',      href: '/workflows/my-jobs',      badge: 'tasks', match: ['/tasks'] },
+          { label: 'My To-dos',     href: '/workflows/my-to-dos',    badge: 'todos', match: ['/to-do'] },
           { label: 'My Workflows',  href: '/workflows/my-workflows', badge: 'workflows' },
           { label: 'All Workflows', href: '/workflows/all-workflows' },
           { label: 'Draft Jobs',    href: '/workflows/draft-jobs',   badge: 'drafts' },
@@ -141,6 +135,7 @@ const navSections: NavSection[] = [
     section: 'SETTINGS',
     items: [
       { label: 'Settings',       href: '/settings',       icon: Settings },
+      { label: 'Datasets',       href: '/datasets',       icon: DatabaseZap },
       { label: 'Design System',  href: '/design-system',  icon: BookOpen },
     ],
   },
@@ -402,7 +397,7 @@ export default function Sidebar({ collapsed, onToggle }: { collapsed: boolean; o
               <div
                 style={{
                   height: 1,
-                  background: sidebarColors.border,
+                  background: sidebarColors.divider,
                   margin: '10px 10px 10px',
                 }}
               />
@@ -442,10 +437,10 @@ export default function Sidebar({ collapsed, onToggle }: { collapsed: boolean; o
                         alignItems: 'center',
                         justifyContent: collapsed ? 'center' : 'flex-start',
                         gap: collapsed ? 0 : 10,
-                        padding: collapsed ? '9px 0' : '8px 10px',
-                        margin: '0 8px 2px',
+                        padding: collapsed ? '10px 0' : '10px 12px',
+                        margin: '0 8px 4px',
                         cursor: 'pointer',
-                        borderRadius: 0,
+                        borderRadius: 10,
                         background: groupActive
                           ? sidebarColors.surface
                           : isHovered
@@ -453,7 +448,7 @@ export default function Sidebar({ collapsed, onToggle }: { collapsed: boolean; o
                           : 'transparent',
                         boxShadow: 'none',
                         color: groupActive || isHovered ? sidebarColors.text : sidebarColors.muted,
-                        fontWeight: groupActive ? 600 : 500,
+                        fontWeight: groupActive ? 750 : 600,
                         fontSize: 14,
                         fontFamily: font,
                         border: 'none',
@@ -534,7 +529,7 @@ export default function Sidebar({ collapsed, onToggle }: { collapsed: boolean; o
                               top: 4,
                               bottom: 8,
                               width: 1,
-                              background: sidebarColors.border,
+                              background: sidebarColors.divider,
                               borderRadius: 1,
                             }}
                           />
@@ -561,9 +556,9 @@ export default function Sidebar({ collapsed, onToggle }: { collapsed: boolean; o
                                     display: 'flex',
                                     alignItems: 'center',
                                     gap: 8,
-                                    padding: '6px 10px 6px 12px',
-                                    margin: '0 0 1px',
-                                    borderRadius: 0,
+                                    padding: '8px 10px 8px 12px',
+                                    margin: '0 0 2px',
+                                    borderRadius: 8,
                                     background: childActive
                                       ? sidebarColors.surface
                                       : childHovered
@@ -571,7 +566,7 @@ export default function Sidebar({ collapsed, onToggle }: { collapsed: boolean; o
                                       : 'transparent',
                                     boxShadow: 'none',
                                     color: childActive || childHovered ? sidebarColors.text : sidebarColors.muted,
-                                    fontWeight: childActive ? 500 : 400,
+                                    fontWeight: childActive ? 700 : 550,
                                     fontSize: 14,
                                     fontFamily: font,
                                     cursor: 'pointer',
@@ -611,10 +606,10 @@ export default function Sidebar({ collapsed, onToggle }: { collapsed: boolean; o
                       alignItems: 'center',
                       justifyContent: collapsed ? 'center' : 'flex-start',
                       gap: collapsed ? 0 : 10,
-                      padding: collapsed ? '9px 0' : '8px 10px',
-                      margin: collapsed ? '0 8px 2px' : '0 8px 2px',
+                      padding: collapsed ? '10px 0' : '10px 12px',
+                      margin: collapsed ? '0 8px 4px' : '0 8px 4px',
                       cursor: 'pointer',
-                      borderRadius: 0,
+                      borderRadius: 10,
                       background: groupActive
                         ? sidebarColors.surface
                         : isHovered
@@ -622,7 +617,7 @@ export default function Sidebar({ collapsed, onToggle }: { collapsed: boolean; o
                         : 'transparent',
                       boxShadow: 'none',
                       color: groupActive || isHovered ? sidebarColors.text : sidebarColors.muted,
-                      fontWeight: groupActive ? 600 : 500,
+                      fontWeight: groupActive ? 750 : 600,
                       fontSize: 14,
                       fontFamily: font,
                       transition: 'background 150ms ease, color 150ms ease',
@@ -652,7 +647,7 @@ export default function Sidebar({ collapsed, onToggle }: { collapsed: boolean; o
               <div
                 style={{
                   height: 1,
-                  background: sidebarColors.border,
+                  background: sidebarColors.divider,
                   margin: '10px 16px 0',
                 }}
               />

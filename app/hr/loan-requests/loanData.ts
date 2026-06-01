@@ -8,6 +8,7 @@ import {
   saveStored,
 } from '@/app/employee/employeeData'
 import { appendAuditLog as logSensitiveAction } from '@/app/hr/enterpriseData'
+import { secureId } from '@/lib/security/random'
 
 export type LoanRequestType = 'Personal Loan' | 'Cash Loan' | 'Emergency Loan' | 'Cash Advance' | 'Loan'
 export type LoanRequestStatus = 'Pending' | 'Approved' | 'Rejected' | 'Processed' | 'Cancelled'
@@ -260,7 +261,7 @@ export function decideLoanRequest(request: LoanRequest, employee: Employee | und
   const now = new Date().toISOString()
   const state = loanApprovalState(request)
   const log = (nextDecision: LoanApprovalDecision): LoanApprovalLog => ({
-    id: `LOG-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+    id: secureId('LOG', 4),
     actor,
     decision: nextDecision,
     createdAt: now,

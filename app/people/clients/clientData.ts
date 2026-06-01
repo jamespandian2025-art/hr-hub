@@ -1,10 +1,12 @@
 'use client'
 
-import { getSupabaseBrowserClient, hasSupabaseConfig } from '@/lib/auth/supabaseClient'
-import { companyScopedKey, getActiveCompany } from '@/lib/tenant/company'
+import { clearLegacyBusinessRows, deleteBusinessRecord, listBusinessRecords, readLegacyBusinessRows, upsertBusinessRecord } from '@/lib/business/client'
+import { createHrRecord, listHrRecords } from '@/lib/hrms/client'
+import { getActiveCompany } from '@/lib/tenant/company'
 
 export type ClientStatus = 'Active' | 'Inactive'
-export type ClientSource = 'supabase' | 'local' | 'unavailable'
+export type ClientSource = 'server' | 'legacy' | 'unavailable'
+export type ClientType = 'Commercial' | 'Residential'
 
 export interface ClientContact {
   id: string
@@ -36,6 +38,8 @@ export interface ClientNote {
 export interface ClientRecord {
   id: string
   companyId?: string
+  clientType?: ClientType
+  photo?: string
   name: string
   company: string
   email: string
@@ -78,12 +82,12 @@ export interface ClientLoadResult {
 }
 
 export const clientsStorageKey = 'flowsys-clients'
-export const accountManagers = ['James Pandian', 'Sarah Johnson', 'Michael Chen', 'Priya Sharma', 'Daniel Lee']
 
 type ClientRow = Record<string, unknown>
 
 const emptyInvoices = { total: 0, paid: 0, unpaid: 0, overdue: 0 }
 const legacyDemoClientIds = new Set(['horizon-technologies', 'brightline-corp', 'greenpath-solutions', 'delta-analytics', 'sunrise-builders'])
+const employeesStorageKey = 'flowsys-hr-employees'
 
 export function slugify(value: string) {
   const slug = value
@@ -108,6 +112,64 @@ export function formatPeso(value: number) {
   return `PHP ${value.toLocaleString('en-PH', { maximumFractionDigits: 0 })}`
 }
 
+export async function loadAccountManagers() {
+  if (typeof window === 'undefined') return []
+
+  const legacyEmployees = readStoredRows(employeesStorageKey)
+  const serverEmployees = await listHrRecords<ClientRow>('employees').catch(() => [])
+  const names = [...serverEmployees, ...legacyEmployees]
+    .filter(isActiveEmployee)
+    .map(employeeAccountManagerName)
+
+  return Array.from(new Set(names.map(name => name.trim()).filter(Boolean))).sort((a, b) => a.localeCompare(b))
+}
+
+export async function addAccountManagerRecord(name: string) {
+  if (typeof window === 'undefined') return ''
+
+  const managerName = name.trim().replace(/\s+/g, ' ')
+  if (!managerName) return ''
+
+  const legacyEmployees = readStoredRows(employeesStorageKey)
+  const serverEmployees = await listHrRecords<ClientRow>('employees').catch(() => [])
+  const employees = [...serverEmployees, ...legacyEmployees]
+  const existingName = employees
+    .map(employeeAccountManagerName)
+    .find(storedName => storedName.trim().toLowerCase() === managerName.toLowerCase())
+
+  if (existingName) return existingName.trim()
+
+  const now = new Date().toISOString()
+  const nameParts = managerName.split(/\s+/).filter(Boolean)
+  const firstName = nameParts[0] || managerName
+  const lastName = nameParts.slice(1).join(' ') || managerName
+  const employeeId = nextEmployeeId(employees)
+  const record = await createHrRecord<ClientRow>('employees', {
+    id: `emp_${slugify(managerName)}_${Date.now()}`,
+    employeeId,
+    fullName: managerName,
+    firstName,
+    middleName: '',
+    lastName,
+    email: '',
+    phone: '',
+    department: 'Sales',
+    team: 'Client Management',
+    jobTitle: 'Account Manager',
+    employeeType: 'Full Time',
+    employeeRole: 'Team Manager',
+    employmentStatus: 'Active',
+    dateOfJoining: now.slice(0, 10),
+    workLocation: 'Head Office',
+    createdAt: now,
+    updatedAt: now,
+    source: 'client-account-manager',
+  })
+
+  window.dispatchEvent(new Event('wiseflow-project-management-refresh'))
+  return employeeAccountManagerName(record) || managerName
+}
+
 export function buildEmptyClient(overrides: Partial<ClientRecord> & Pick<ClientRecord, 'id' | 'name' | 'email' | 'phone' | 'industry' | 'companyType' | 'billingAddress' | 'accountManager'>): ClientRecord {
   const now = new Date()
   const createdAt = overrides.createdAt || now.toISOString().slice(0, 10)
@@ -116,6 +178,8 @@ export function buildEmptyClient(overrides: Partial<ClientRecord> & Pick<ClientR
 
   return {
     companyId: activeCompany?.id,
+    clientType: 'Commercial',
+    photo: '',
     company: website.replace(/^https?:\/\//, '') || `${slugify(overrides.name)}.com`,
     website,
     status: 'Active',
@@ -145,20 +209,17 @@ export function buildEmptyClient(overrides: Partial<ClientRecord> & Pick<ClientR
   }
 }
 
-export function loadLocalClients() {
+function loadLegacyClients() {
   if (typeof window === 'undefined') return []
   const activeCompany = getActiveCompany()
-  const scopedKey = companyScopedKey(clientsStorageKey, activeCompany?.id)
 
   try {
-    const stored = window.localStorage.getItem(scopedKey)
-    const parsed = stored ? (JSON.parse(stored) as unknown[]) : []
+    const parsed = readLegacyBusinessRows<unknown>([clientsStorageKey])
     const clients = parsed
       .filter(isClientRecord)
       .filter(client => !legacyDemoClientIds.has(client.id))
       .map(client => ({ ...client, companyId: client.companyId || activeCompany?.id }))
       .filter(client => !activeCompany?.id || client.companyId === activeCompany.id)
-    if (clients.length !== parsed.length) saveClientsLocally(clients)
     return clients
   } catch {
     return []
@@ -166,58 +227,44 @@ export function loadLocalClients() {
 }
 
 export async function loadClients(): Promise<ClientLoadResult> {
-  const localClients = loadLocalClients()
-  const supabase = getSupabaseBrowserClient()
+  const legacyClients = loadLegacyClients()
 
-  if (!supabase || !hasSupabaseConfig()) {
+  try {
+    const serverRows = await listBusinessRecords<ClientRecord>('clients')
+    const serverClients = serverRows.filter(isClientRecord)
+
+    if (serverClients.length || !legacyClients.length) {
+      return { clients: serverClients, source: 'server' }
+    }
+
+    const migratedClients = await Promise.all(legacyClients.map(client => upsertBusinessRecord<ClientRecord>('clients', client)))
+    clearLegacyBusinessRows([clientsStorageKey])
+    return { clients: migratedClients.filter(isClientRecord), source: 'server' }
+  } catch (error) {
+    if (process.env.NODE_ENV !== 'production' && legacyClients.length) {
+      return {
+        clients: legacyClients,
+        source: 'legacy',
+        error: error instanceof Error ? error.message : 'Business records API is unavailable.',
+      }
+    }
+
     return {
-      clients: localClients,
-      source: localClients.length ? 'local' : 'unavailable',
-      error: 'Supabase is not configured.',
+      clients: [],
+      source: 'unavailable',
+      error: error instanceof Error ? error.message : 'Business records API is unavailable.',
     }
   }
-
-  const { data, error } = await supabase
-    .from('clients')
-    .select('*')
-    .eq('company_id', getActiveCompany()?.id || '')
-    .order('created_at', { ascending: false })
-
-  if (error) {
-    return {
-      clients: localClients,
-      source: localClients.length ? 'local' : 'unavailable',
-      error: error.message,
-    }
-  }
-
-  const clients = (data || []).map(rowToClient).filter(isClientRecord)
-  saveClientsLocally(clients)
-  return { clients, source: 'supabase' }
 }
 
 export async function saveClient(client: ClientRecord): Promise<{ client: ClientRecord; source: ClientSource; error?: string }> {
-  const supabase = getSupabaseBrowserClient()
+  const savedClient = await upsertBusinessRecord<ClientRecord>('clients', client)
+  return { client: savedClient, source: 'server' }
+}
 
-  if (supabase && hasSupabaseConfig()) {
-    const { data, error } = await supabase
-      .from('clients')
-      .upsert(clientToRow(client), { onConflict: 'id' })
-      .select()
-      .single()
-
-    if (!error && data) {
-      const savedClient = rowToClient(data)
-      upsertLocalClient(savedClient)
-      return { client: savedClient, source: 'supabase' }
-    }
-
-    upsertLocalClient(client)
-    return { client, source: 'local', error: error?.message || 'Supabase save failed.' }
-  }
-
-  upsertLocalClient(client)
-  return { client, source: 'local', error: 'Supabase is not configured.' }
+export async function deleteClient(id: string): Promise<{ source: ClientSource; error?: string }> {
+  await deleteBusinessRecord('clients', id)
+  return { source: 'server' }
 }
 
 export async function findClient(rawId: string | string[] | undefined): Promise<{ client?: ClientRecord; source: ClientSource; error?: string }> {
@@ -230,111 +277,13 @@ export async function findClient(rawId: string | string[] | undefined): Promise<
   }
 }
 
-export function saveClientsLocally(clients: ClientRecord[]) {
-  if (typeof window === 'undefined') return
-  const activeCompany = getActiveCompany()
-  const scopedClients = clients.map(client => ({ ...client, companyId: client.companyId || activeCompany?.id }))
-  window.localStorage.setItem(companyScopedKey(clientsStorageKey, activeCompany?.id), JSON.stringify(scopedClients))
-}
-
-function upsertLocalClient(client: ClientRecord) {
-  const clients = loadLocalClients()
-  const nextClients = clients.some(existing => existing.id === client.id)
-    ? clients.map(existing => existing.id === client.id ? client : existing)
-    : [client, ...clients]
-
-  saveClientsLocally(nextClients)
-}
-
-function rowToClient(row: ClientRow): ClientRecord {
-  const metadata = objectValue(row.metadata)
-
-  return buildEmptyClient({
-    id: stringValue(row.id),
-    companyId: stringValue(row.company_id, getActiveCompany()?.id),
-    name: stringValue(row.name),
-    company: stringValue(row.company, stringValue(row.website)),
-    email: stringValue(row.email),
-    phone: stringValue(row.phone),
-    website: stringValue(row.website),
-    industry: stringValue(row.industry),
-    status: statusValue(row.status),
-    companySize: stringValue(row.company_size, stringValue(metadata.companySize, '-')),
-    companyType: stringValue(row.company_type, stringValue(metadata.companyType)),
-    annualRevenue: stringValue(row.annual_revenue, stringValue(metadata.annualRevenue, '-')),
-    taxId: stringValue(row.tax_id, stringValue(metadata.taxId, '-')),
-    billingAddress: stringValue(row.billing_address, stringValue(metadata.billingAddress)),
-    accountManager: stringValue(row.account_manager, stringValue(metadata.accountManager)),
-    accountManagerAvatar: stringValue(row.account_manager_avatar, stringValue(metadata.accountManagerAvatar)),
-    defaultCurrency: stringValue(row.default_currency, stringValue(metadata.defaultCurrency, 'PHP - Philippine Peso')),
-    paymentTerms: stringValue(row.payment_terms, stringValue(metadata.paymentTerms, '-')),
-    tags: stringArray(row.tags),
-    description: stringValue(row.description, stringValue(metadata.description, 'No client description added yet.')),
-    createdAt: stringValue(row.created_at, stringValue(metadata.createdAt, new Date().toISOString())).slice(0, 10),
-    lastContact: stringValue(row.last_contact, stringValue(metadata.lastContact, '-')),
-    totalProjects: numberValue(row.total_projects),
-    activeProjects: numberValue(row.active_projects),
-    completedProjects: numberValue(row.completed_projects),
-    onHoldProjects: numberValue(row.on_hold_projects),
-    totalRevenue: numberValue(row.total_revenue),
-    paidRevenue: numberValue(row.paid_revenue),
-    outstandingRevenue: numberValue(row.outstanding_revenue),
-    invoices: invoiceValue(row.invoices),
-    contracts: numberValue(row.contracts),
-    documents: numberValue(row.documents),
-    contacts: arrayValue<ClientContact>(row.contacts),
-    activities: arrayValue<ClientActivity>(row.activities),
-    notes: arrayValue<ClientNote>(row.notes),
-  })
-}
-
-function clientToRow(client: ClientRecord) {
-  return {
-    id: client.id,
-    company_id: client.companyId || getActiveCompany()?.id,
-    name: client.name,
-    company: client.company,
-    email: client.email,
-    phone: client.phone,
-    website: client.website,
-    industry: client.industry,
-    status: client.status,
-    company_size: client.companySize,
-    company_type: client.companyType,
-    annual_revenue: client.annualRevenue,
-    tax_id: client.taxId,
-    billing_address: client.billingAddress,
-    account_manager: client.accountManager,
-    account_manager_avatar: client.accountManagerAvatar || null,
-    default_currency: client.defaultCurrency,
-    payment_terms: client.paymentTerms,
-    tags: client.tags,
-    description: client.description,
-    created_at: client.createdAt,
-    last_contact: client.lastContact,
-    total_projects: client.totalProjects,
-    active_projects: client.activeProjects,
-    completed_projects: client.completedProjects,
-    on_hold_projects: client.onHoldProjects,
-    total_revenue: client.totalRevenue,
-    paid_revenue: client.paidRevenue,
-    outstanding_revenue: client.outstandingRevenue,
-    invoices: client.invoices,
-    contracts: client.contracts,
-    documents: client.documents,
-    contacts: client.contacts,
-    activities: client.activities,
-    notes: client.notes,
-    metadata: {
-      companySize: client.companySize,
-      companyType: client.companyType,
-      annualRevenue: client.annualRevenue,
-      taxId: client.taxId,
-      billingAddress: client.billingAddress,
-      accountManager: client.accountManager,
-      defaultCurrency: client.defaultCurrency,
-      paymentTerms: client.paymentTerms,
-    },
+function readStoredRows(key: string): ClientRow[] {
+  if (typeof window === 'undefined') return []
+  try {
+    const parsed = JSON.parse(window.localStorage.getItem(key) || '[]') as unknown
+    return Array.isArray(parsed) ? parsed.filter(isObjectRecord) : []
+  } catch {
+    return []
   }
 }
 
@@ -357,32 +306,29 @@ function stringValue(value: unknown, fallback = '') {
   return typeof value === 'string' && value.trim() ? value : fallback
 }
 
-function numberValue(value: unknown) {
-  return typeof value === 'number' && Number.isFinite(value) ? value : 0
+function employeeAccountManagerName(row: ClientRow) {
+  return stringValue(row.fullName) ||
+    [stringValue(row.firstName), stringValue(row.middleName), stringValue(row.lastName)].filter(Boolean).join(' ') ||
+    stringValue(row.name) ||
+    stringValue(row.displayName) ||
+    stringValue(row.email)
 }
 
-function objectValue(value: unknown): Record<string, unknown> {
-  return value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {}
+function isActiveEmployee(row: ClientRow) {
+  const status = stringValue(row.employmentStatus) || stringValue(row.status)
+  if (!status) return true
+  return !/\b(inactive|terminated|resigned|awol|retired|deleted)\b/i.test(status)
 }
 
-function arrayValue<T>(value: unknown): T[] {
-  return Array.isArray(value) ? value as T[] : []
+function nextEmployeeId(rows: ClientRow[]) {
+  const numbers = rows
+    .map(row => stringValue(row.employeeId))
+    .map(employeeId => Number.parseInt(employeeId.replace(/^EMP-/i, ''), 10))
+    .filter(Number.isFinite)
+  const next = numbers.length ? Math.max(...numbers) + 1 : 1
+  return `EMP-${String(next).padStart(4, '0')}`
 }
 
-function stringArray(value: unknown) {
-  return Array.isArray(value) ? value.filter(item => typeof item === 'string') : []
-}
-
-function statusValue(value: unknown): ClientStatus {
-  return value === 'Inactive' ? 'Inactive' : 'Active'
-}
-
-function invoiceValue(value: unknown) {
-  const invoices = objectValue(value)
-  return {
-    total: numberValue(invoices.total),
-    paid: numberValue(invoices.paid),
-    unpaid: numberValue(invoices.unpaid),
-    overdue: numberValue(invoices.overdue),
-  }
+function isObjectRecord(value: unknown): value is ClientRow {
+  return Boolean(value && typeof value === 'object' && !Array.isArray(value))
 }

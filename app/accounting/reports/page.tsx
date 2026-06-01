@@ -286,7 +286,15 @@ export default function ReportsPage() {
   }
 
   return (
-    <div className="reports-page" style={{ fontFamily: font }}>
+    <div
+      className="reports-page"
+      style={{
+        fontFamily: font,
+        minHeight: 'calc(100dvh - 76px)',
+        background: '#101010',
+        color: '#fafafa',
+      }}
+    >
       <style>{reportsCss}</style>
       <div className="reports-header">
         <div>
@@ -320,18 +328,20 @@ export default function ReportsPage() {
         {reportTabs.map(tab => <button type="button" key={tab} className={activeTab === tab ? 'is-active' : undefined} onClick={() => setActiveTab(tab)}>{tab}</button>)}
       </nav>
 
-      {filtersOpen && (
-        <section className="reports-filter-panel" aria-label="Report filters">
-          <label>Report category<select value={activeCategory} onChange={event => setActiveCategory(event.target.value)}>{reportCategories.map(category => <option key={category.name}>{category.name}</option>)}</select></label>
-          <label>Report group<select value={activeTab} onChange={event => setActiveTab(event.target.value as ReportTab)}>{reportTabs.map(tab => <option key={tab}>{tab}</option>)}</select></label>
-          <label>Search reports<input value={reportSearch} onChange={event => setReportSearch(event.target.value)} placeholder="Search report categories" /></label>
-          <button type="button" onClick={resetReportView}>Reset filters</button>
-        </section>
-      )}
+      <div className="reports-filter-slot">
+        {filtersOpen && (
+          <section className="reports-filter-panel" aria-label="Report filters">
+            <label>Report category<select value={activeCategory} onChange={event => setActiveCategory(event.target.value)}>{reportCategories.map(category => <option key={category.name}>{category.name}</option>)}</select></label>
+            <label>Report group<select value={activeTab} onChange={event => setActiveTab(event.target.value as ReportTab)}>{reportTabs.map(tab => <option key={tab}>{tab}</option>)}</select></label>
+            <label>Search reports<input value={reportSearch} onChange={event => setReportSearch(event.target.value)} placeholder="Search report categories" /></label>
+            <button type="button" onClick={resetReportView}>Reset filters</button>
+          </section>
+        )}
+      </div>
 
       <section className="reports-layout">
         <section className="reports-card reports-browser" aria-label="Browse reports">
-          <h2>Browse Reports</h2>
+          <h2>Report Library</h2>
           <label><Search size={15} color="#64748b" /><input value={reportSearch} onChange={event => setReportSearch(event.target.value)} placeholder="Search reports..." /></label>
           <div className="reports-category-list">
             {visibleCategories.map(category => {
@@ -362,51 +372,15 @@ export default function ReportsPage() {
             {openedReport ? <button type="button" onClick={() => setOpenedReportName('')}><X size={14} /> Close report</button> : <button type="button" onClick={() => setActiveQuickAction('custom')}><Plus size={14} /> New report</button>}
           </section>
 
-          <section className="reports-top-panels">
-            <div className="reports-card">
-              <div className="reports-panel-header"><h2>Profit & Loss Summary</h2><button type="button" onClick={toggleChartGrouping}>{chartGrouping} <ChevronDown size={14} /></button></div>
-              <div className="reports-chart">
-                <div className="reports-chart-legend"><span className="revenue" /> Revenue <span className="expenses" /> Expenses <span className="profit" /> Net Profit</div>
-                {monthlyReports.length ? (
-                  <div className="reports-bars" style={{ gridTemplateColumns: `repeat(${Math.min(Math.max(monthlyReports.length, 1), 6)}, minmax(56px, 1fr))` }}>
-                    {monthlyReports.map(month => (
-                      <div key={month.label} className="reports-month">
-                        <div className="reports-bar-group">
-                          <span className="revenue-bar" style={{ height: chartPercent(month.revenue) }} />
-                          <span className="expense-bar" style={{ height: chartPercent(month.expenses) }} />
-                          <span className="profit-bar" style={{ height: chartPercent(Math.max(month.profit, 0)) }} />
-                        </div>
-                        <small>{month.label}</small>
-                      </div>
-                    ))}
-                  </div>
-                ) : (
-                  <div className="reports-empty-chart">No revenue or expense records yet.</div>
-                )}
-              </div>
-              <button type="button" className="reports-full-link" onClick={() => setActiveCategory('Financial Statements')}>View Full Report</button>
-            </div>
-
-            <div className="reports-card">
-              <h2>Expense by Category</h2>
-              <div className="reports-expense-breakdown">
-                <div className="reports-donut" style={{ background: `conic-gradient(${donutGradient})` }}>
-                  <span><strong>{money(totalExpense, data.currency)}</strong><small>Total Expenses</small></span>
+          <section className="reports-workspace-grid">
+            <section className="reports-card reports-report-list">
+              <div className="reports-panel-header">
+                <div>
+                  <h2>{activeTab === 'Scheduled Reports' ? 'Scheduled Reports' : `${selectedCategory.name} Reports`}</h2>
+                  <p>{activeTab === 'Scheduled Reports' ? 'Reports that will run automatically.' : 'Open, download, or schedule reports generated from live accounting records.'}</p>
                 </div>
-                <div className="reports-expense-list">
-                  {expenseCategories.map(item => (
-                    <p key={item.name}><span style={{ background: item.color }} /> {item.name} <strong>{((item.value / Math.max(totalExpense, 1)) * 100).toFixed(1)}% ({money(item.value, data.currency)})</strong></p>
-                  ))}
-                  {!expenseCategories.length && <p>No expense records yet.</p>}
-                </div>
+                <button type="button" onClick={() => setActiveCategory('Management Reports')}>View Management</button>
               </div>
-              <button type="button" className="reports-full-link" onClick={() => setActiveCategory('Purchasing Reports')}>View Full Report</button>
-            </div>
-          </section>
-
-          <section className="reports-lower-panels">
-            <div className="reports-card">
-              <div className="reports-panel-header"><h2>{activeTab === 'Scheduled Reports' ? 'Scheduled Reports' : `${selectedCategory.name} Reports`}</h2><button type="button" onClick={() => setActiveCategory('Management Reports')}>View Management</button></div>
               {actionNotice && <div className="reports-action-notice">{actionNotice}</div>}
               {openedReport && (
                 <section className="reports-open-preview" aria-label="Open report preview">
@@ -483,24 +457,59 @@ export default function ReportsPage() {
                 )}
               </div>
               <div className="reports-pagination"><strong>Showing {(activeTab === 'Scheduled Reports' ? scheduledReports : activeCategoryReports).length ? 1 : 0} to {(activeTab === 'Scheduled Reports' ? scheduledReports : activeCategoryReports).length} of {(activeTab === 'Scheduled Reports' ? scheduledReports : activeCategoryReports).length} reports</strong><div><button type="button" disabled>{'<'}</button><button type="button" className="is-active">1</button><button type="button" disabled>{'>'}</button><span className="reports-page-size">{Math.max((activeTab === 'Scheduled Reports' ? scheduledReports : activeCategoryReports).length, 1)} / page <ChevronDown size={14} /></span></div></div>
-            </div>
+            </section>
 
             <section className="reports-side-stack" aria-label="Report tools">
-              <div className="reports-card">
-                <div className="reports-panel-header"><h2>Scheduled Reports</h2><button type="button" onClick={() => setActiveTab('Scheduled Reports')}>View All</button></div>
-                <div className="reports-scheduled-list">
-                  {scheduledReports.map(item => (
-                    <div key={item.title}>
-                      <CalendarDays size={18} />
-                      <span><strong>{item.title}</strong><small>{item.cadence}</small></span>
-                      <StatusPill />
-                      <button type="button" className="reports-inline-icon" onClick={() => setActiveQuickAction('designer')}><MoreHorizontal size={15} /></button>
-                    </div>
-                  ))}
-                  {!scheduledReports.length && <p className="reports-empty-note">No scheduled reports yet.</p>}
+              <div className="reports-card reports-preview-card">
+                <div className="reports-panel-header">
+                  <div>
+                    <h2>{openedReport ? 'Report Preview' : 'Live Summary'}</h2>
+                    <p>{openedReport ? openedReport.category : 'A quick read of the selected report area.'}</p>
+                  </div>
+                  <button type="button" onClick={toggleChartGrouping}>{chartGrouping} <ChevronDown size={14} /></button>
                 </div>
+                {openedReport ? (
+                  <div className="reports-preview-state">
+                    <SelectedCategoryIcon size={24} />
+                    <strong>{openedReport.name}</strong>
+                    <span>{openedReport.generatedOn} • {openedReport.format}</span>
+                    <button type="button" onClick={() => downloadReport(openedReport)}>Download report</button>
+                  </div>
+                ) : (
+                  <>
+                    <div className="reports-chart is-compact">
+                      <div className="reports-chart-legend"><span className="revenue" /> Revenue <span className="expenses" /> Expenses <span className="profit" /> Net Profit</div>
+                      {monthlyReports.length ? (
+                        <div className="reports-bars" style={{ gridTemplateColumns: `repeat(${Math.min(Math.max(monthlyReports.length, 1), 6)}, minmax(42px, 1fr))` }}>
+                          {monthlyReports.map(month => (
+                            <div key={month.label} className="reports-month">
+                              <div className="reports-bar-group">
+                                <span className="revenue-bar" style={{ height: chartPercent(month.revenue) }} />
+                                <span className="expense-bar" style={{ height: chartPercent(month.expenses) }} />
+                                <span className="profit-bar" style={{ height: chartPercent(Math.max(month.profit, 0)) }} />
+                              </div>
+                              <small>{month.label}</small>
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <div className="reports-empty-chart">No revenue or expense records yet.</div>
+                      )}
+                    </div>
+                    <div className="reports-expense-breakdown is-compact">
+                      <div className="reports-donut" style={{ background: `conic-gradient(${donutGradient})` }}>
+                        <span><strong>{money(totalExpense, data.currency)}</strong><small>Total Expenses</small></span>
+                      </div>
+                      <div className="reports-expense-list">
+                        {expenseCategories.slice(0, 3).map(item => (
+                          <p key={item.name}><span style={{ background: item.color }} /> {item.name} <strong>{((item.value / Math.max(totalExpense, 1)) * 100).toFixed(1)}%</strong></p>
+                        ))}
+                        {!expenseCategories.length && <p>No expense records yet.</p>}
+                      </div>
+                    </div>
+                  </>
+                )}
               </div>
-
               <div className="reports-card">
                 <h2>Quick Actions</h2>
                 <input ref={importInputRef} type="file" accept=".json,.csv,.xlsx,.xls" hidden onChange={event => handleImport(event.target.files?.[0])} />
@@ -523,17 +532,9 @@ export default function ReportsPage() {
                     )
                   })}
                 </div>
-                {activeQuickAction && (
+                {activeQuickAction && activeQuickAction !== 'custom' && (
                   <div className="reports-action-panel">
                     <button type="button" className="reports-action-close" onClick={() => setActiveQuickAction(null)} aria-label="Close quick action"><X size={14} /></button>
-                    {activeQuickAction === 'custom' && (
-                      <form onSubmit={event => { event.preventDefault(); createCustomReport() }}>
-                        <strong>Create Custom Report</strong>
-                        <label>Report name<input value={customReportName} onChange={event => setCustomReportName(event.target.value)} placeholder={`${selectedCategory.name} report`} /></label>
-                        <label>Source category<select value={activeCategory} onChange={event => setActiveCategory(event.target.value)}>{reportCategories.map(category => <option key={category.name}>{category.name}</option>)}</select></label>
-                        <button type="submit">Create report</button>
-                      </form>
-                    )}
                     {activeQuickAction === 'designer' && (
                       <form onSubmit={event => event.preventDefault()}>
                         <strong>Report Designer</strong>
@@ -551,16 +552,52 @@ export default function ReportsPage() {
                   </div>
                 )}
               </div>
+              <div className="reports-card">
+                <div className="reports-panel-header"><h2>Scheduled</h2><button type="button" onClick={() => setActiveTab('Scheduled Reports')}>View All</button></div>
+                <div className="reports-scheduled-list">
+                  {scheduledReports.map(item => (
+                    <div key={item.title}>
+                      <CalendarDays size={18} />
+                      <span><strong>{item.title}</strong><small>{item.cadence}</small></span>
+                      <StatusPill />
+                      <button type="button" className="reports-inline-icon" onClick={() => setActiveQuickAction('designer')}><MoreHorizontal size={15} /></button>
+                    </div>
+                  ))}
+                  {!scheduledReports.length && <p className="reports-empty-note">No scheduled reports yet.</p>}
+                </div>
+              </div>
             </section>
           </section>
         </main>
       </section>
+      {activeQuickAction === 'custom' && (
+        <div className="reports-modal-backdrop" role="presentation" onMouseDown={() => setActiveQuickAction(null)}>
+          <section className="reports-modal" role="dialog" aria-modal="true" aria-labelledby="create-report-title" onMouseDown={event => event.stopPropagation()}>
+            <div className="reports-modal-header">
+              <div>
+                <h2 id="create-report-title">Create Custom Report</h2>
+                <p>Build a report definition from the selected accounting category.</p>
+              </div>
+              <button type="button" onClick={() => setActiveQuickAction(null)} aria-label="Close create report form"><X size={17} /></button>
+            </div>
+            <form className="reports-modal-form" onSubmit={event => { event.preventDefault(); createCustomReport() }}>
+              <label>Report name<input autoFocus value={customReportName} onChange={event => setCustomReportName(event.target.value)} placeholder={`${selectedCategory.name} report`} /></label>
+              <label>Source category<select value={activeCategory} onChange={event => setActiveCategory(event.target.value)}>{reportCategories.map(category => <option key={category.name}>{category.name}</option>)}</select></label>
+              <label>Report group<select value={activeTab} onChange={event => setActiveTab(event.target.value as ReportTab)}>{reportTabs.map(tab => <option key={tab}>{tab}</option>)}</select></label>
+              <div className="reports-modal-actions">
+                <button type="button" onClick={() => setActiveQuickAction(null)}>Cancel</button>
+                <button type="submit"><Plus size={14} /> Create report</button>
+              </div>
+            </form>
+          </section>
+        </div>
+      )}
     </div>
   )
 }
 
 const reportsCss = `
-.reports-page { padding: 26px 28px 40px; color: #0f172a; width: 100%; max-width: 100%; overflow-x: hidden; }
+.reports-page { min-height: calc(100dvh - 76px); padding: 26px 28px 40px; background: #101010; color: #fafafa; width: 100%; max-width: 100%; overflow-x: hidden; }
 .reports-header { display: flex; justify-content: space-between; align-items: flex-start; gap: 18px; margin-bottom: 24px; }
 .reports-title { margin: 0; font-size: 28px; line-height: 1.1; font-weight: 950; }
 .reports-subtitle { margin: 8px 0 0; color: #334155; font-size: 13.5px; }
@@ -569,6 +606,7 @@ const reportsCss = `
 .reports-page-size { cursor: default; }
 .reports-pagination button:disabled { color: #94a3b8; cursor: not-allowed; }
 .reports-actions button.is-active { background: #ecfdf3; border-color: #bbf7d0; color: #15803d; }
+.reports-filter-slot { min-height: 16px; }
 .reports-filter-panel { margin: 14px 0 0; border: 1px solid #e8edf4; border-radius: 8px; background: #fff; padding: 14px; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; align-items: end; }
 .reports-filter-panel label { display: grid; gap: 6px; color: #334155; font-size: 11.5px; font-weight: 900; }
 .reports-filter-panel input, .reports-filter-panel select { width: 100%; min-height: 38px; border: 1px solid #dbe3ef; border-radius: 8px; background: #fff; color: #0f172a; padding: 0 10px; font: inherit; font-size: 12.5px; outline: 0; }
@@ -586,8 +624,8 @@ const reportsCss = `
 .reports-detail { display: block; font-size: 11px; font-weight: 900; margin-top: 8px; }
 .reports-tabs { display: flex; gap: 32px; border-bottom: 1px solid #e8edf4; padding-left: 14px; overflow-x: auto; }
 .reports-tabs button { border: 0; border-bottom: 2px solid transparent; background: transparent; color: #0f172a; min-height: 48px; padding: 0; font-size: 12.5px; font-weight: 900; cursor: pointer; white-space: nowrap; }
-.reports-tabs .is-active { color: #16a34a; border-bottom-color: #16a34a; }
-.reports-layout { display: grid; grid-template-columns: 330px minmax(0, 1fr); gap: 16px; margin-top: 16px; align-items: start; }
+.reports-tabs .is-active { color: #0f172a; border-bottom-color: #0f172a; }
+.reports-layout { display: grid; grid-template-columns: minmax(250px, 300px) minmax(0, 1fr); gap: 16px; margin-top: 0; align-items: start; }
 .reports-browser { display: flex; flex-direction: column; gap: 14px; }
 .reports-card h2, .reports-panel-header h2 { margin: 0; font-size: 16px; font-weight: 950; }
 .reports-browser label { min-height: 38px; border: 1px solid #e8edf4; border-radius: 8px; display: flex; align-items: center; gap: 10px; padding: 0 12px; }
@@ -608,19 +646,24 @@ const reportsCss = `
 .reports-selected h2 { margin: 0; font-size: 16px; font-weight: 950; }
 .reports-selected p { margin: 4px 0 0; color: #64748b; font-size: 12.5px; font-weight: 750; }
 .reports-selected button { min-height: 36px; border: 1px solid #bbf7d0; border-radius: 8px; background: #f0fdf4; color: #15803d; display: inline-flex; align-items: center; gap: 8px; padding: 0 12px; font-size: 12px; font-weight: 900; cursor: pointer; }
-.reports-top-panels { display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(360px, .9fr); gap: 16px; }
-.reports-lower-panels { display: grid; grid-template-columns: minmax(0, 1fr) 360px; gap: 16px; }
+.reports-workspace-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(310px, 360px); gap: 16px; align-items: start; }
+.reports-report-list { min-height: 520px; }
 .reports-side-stack { display: grid; gap: 16px; }
 .reports-panel-header { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-bottom: 16px; }
+.reports-panel-header > div { min-width: 0; }
+.reports-panel-header p { margin: 4px 0 0; color: #64748b; font-size: 12px; font-weight: 700; }
 .reports-panel-header a, .reports-full-link { color: #2563eb; font-size: 12px; font-weight: 900; text-decoration: none; }
 .reports-full-link { display: block; margin: 10px 0 0 auto; border: 0; background: transparent; padding: 0; cursor: pointer; text-align: right; }
 .reports-chart { min-height: 240px; display: grid; grid-template-rows: auto 1fr; gap: 12px; overflow: hidden; }
+.reports-chart.is-compact { min-height: 190px; }
 .reports-chart-legend { display: flex; justify-content: center; gap: 24px; font-size: 12px; font-weight: 850; flex-wrap: wrap; }
 .reports-chart-legend span { width: 18px; height: 7px; border-radius: 999px; display: inline-block; margin-right: -16px; }
 .reports-chart-legend .revenue { background: #16a34a; }
 .reports-chart-legend .expenses { background: #ef4444; }
 .reports-chart-legend .profit { background: #2563eb; }
 .reports-bars { min-height: 196px; display: grid; gap: 18px; align-items: end; border-left: 1px solid #eef2f7; border-bottom: 1px solid #eef2f7; padding: 18px 8px 0; overflow: hidden; }
+.reports-chart.is-compact .reports-bars { min-height: 140px; gap: 10px; }
+.reports-chart.is-compact .reports-empty-chart { min-height: 140px; }
 .reports-month { height: 100%; display: grid; grid-template-rows: 1fr 24px; align-items: end; text-align: center; }
 .reports-bar-group { height: 100%; display: flex; align-items: end; justify-content: center; gap: 6px; overflow: hidden; }
 .reports-bar-group span { width: 14px; max-height: 100%; min-height: 3px; border-radius: 4px 4px 0 0; }
@@ -630,11 +673,17 @@ const reportsCss = `
 .reports-month small { color: #334155; font-size: 11px; }
 .reports-empty-chart { min-height: 196px; border: 1px dashed #cbd5e1; border-radius: 8px; display: grid; place-items: center; color: #64748b; font-size: 13px; font-weight: 850; text-align: center; padding: 20px; }
 .reports-expense-breakdown { display: grid; grid-template-columns: 210px minmax(0, 1fr); gap: 26px; align-items: center; min-height: 240px; }
+.reports-expense-breakdown.is-compact { grid-template-columns: 96px minmax(0, 1fr); min-height: auto; gap: 16px; margin-top: 16px; padding-top: 16px; border-top: 1px solid #eef2f7; }
 .reports-donut { width: 180px; height: 180px; border-radius: 50%; display: grid; place-items: center; }
+.reports-expense-breakdown.is-compact .reports-donut { width: 96px; height: 96px; }
 .reports-donut span { width: 112px; height: 112px; border-radius: 50%; background: #fff; display: grid; place-items: center; text-align: center; }
+.reports-expense-breakdown.is-compact .reports-donut span { width: 62px; height: 62px; padding: 6px; }
 .reports-donut strong { font-size: 18px; }
+.reports-expense-breakdown.is-compact .reports-donut strong { font-size: 11px; overflow-wrap: anywhere; }
 .reports-donut small { color: #64748b; font-size: 12px; font-weight: 850; }
+.reports-expense-breakdown.is-compact .reports-donut small { font-size: 9px; }
 .reports-expense-list { display: grid; gap: 16px; }
+.reports-expense-breakdown.is-compact .reports-expense-list { gap: 10px; }
 .reports-expense-list p { margin: 0; display: grid; grid-template-columns: 12px minmax(0, 1fr); gap: 10px; font-size: 13px; }
 .reports-expense-list span { width: 12px; height: 12px; border-radius: 4px; margin-top: 2px; }
 .reports-expense-list strong { display: block; color: #334155; margin-top: 3px; }
@@ -681,12 +730,100 @@ const reportsCss = `
 .reports-action-panel input, .reports-action-panel select { width: 100%; min-height: 38px; border: 1px solid #dbe3ef; border-radius: 8px; background: #fff; color: #0f172a; padding: 0 10px; font: inherit; font-size: 12.5px; outline: 0; }
 .reports-action-panel button:not(.reports-action-close) { min-height: 38px; border: 1px solid #16a34a; border-radius: 8px; background: #16a34a; color: #fff; padding: 0 12px; font-size: 12.5px; font-weight: 900; cursor: pointer; }
 .reports-empty-note { margin: 0; min-height: 120px; border: 1px dashed #cbd5e1; border-radius: 8px; color: #64748b; display: grid; place-items: center; text-align: center; padding: 18px; font-size: 13px; font-weight: 850; }
+.reports-preview-state { min-height: 260px; border: 1px dashed #cbd5e1; border-radius: 8px; display: grid; place-items: center; align-content: center; gap: 9px; text-align: center; color: #64748b; }
+.reports-preview-state svg { color: #16a34a; }
+.reports-preview-state strong { color: #0f172a; font-size: 15px; }
+.reports-preview-state span { font-size: 12px; font-weight: 800; }
+.reports-preview-state button { min-height: 36px; border: 1px solid #16a34a; border-radius: 8px; background: #16a34a; color: #fff; padding: 0 12px; font-size: 12px; font-weight: 900; cursor: pointer; }
+.reports-modal-backdrop { position: fixed; inset: 0; z-index: 1600; background: rgba(15, 23, 42, .42); display: flex; justify-content: flex-end; }
+.reports-modal { width: min(520px, 100%); height: 100%; background: #fff; box-shadow: -20px 0 60px rgba(15, 23, 42, .22); display: flex; flex-direction: column; }
+.reports-modal-header { padding: 24px; border-bottom: 1px solid #e8edf4; display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; }
+.reports-modal-header h2 { margin: 0; color: #0f172a; font-size: 22px; line-height: 1.1; font-weight: 950; }
+.reports-modal-header p { margin: 8px 0 0; color: #64748b; font-size: 13px; font-weight: 700; }
+.reports-modal-header button { width: 38px; height: 38px; border: 1px solid #dbe3ef; border-radius: 8px; background: #fff; display: grid; place-items: center; cursor: pointer; flex: 0 0 auto; }
+.reports-modal-form { padding: 24px; display: grid; gap: 16px; overflow-y: auto; }
+.reports-modal-form label { display: grid; gap: 7px; color: #334155; font-size: 12px; font-weight: 900; }
+.reports-modal-form input, .reports-modal-form select { width: 100%; min-height: 44px; border: 1px solid #dbe3ef; border-radius: 8px; background: #fff; color: #0f172a; padding: 0 12px; font: inherit; font-size: 13px; outline: 0; }
+.reports-modal-form input:focus, .reports-modal-form select:focus { border-color: #16a34a; box-shadow: 0 0 0 3px rgba(22, 163, 74, .12); }
+.reports-modal-actions { margin-top: auto; display: grid; grid-template-columns: 1fr 1fr; gap: 12px; padding-top: 10px; }
+.reports-modal-actions button { min-height: 42px; border-radius: 8px; border: 1px solid #dbe3ef; background: #fff; color: #0f172a; font-size: 13px; font-weight: 900; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; gap: 8px; }
+.reports-modal-actions button:last-child { border-color: #16a34a; background: #16a34a; color: #fff; }
+.accounting-theme-dark .reports-page,
+html[data-theme='dark'] .reports-page {
+  background: #101010 !important;
+  background-color: #101010 !important;
+  color: #fafafa !important;
+}
+.accounting-theme-dark .reports-page :is(.reports-card, .reports-browser, .reports-side-stack, .reports-side-stack .reports-card, .reports-report-list, .reports-table-wrap, .reports-row-menu, .reports-filter-panel, .reports-action-panel, .reports-open-preview, .reports-custom-card, .reports-empty-note, .reports-preview-state),
+html[data-theme='dark'] .reports-page :is(.reports-card, .reports-browser, .reports-side-stack, .reports-side-stack .reports-card, .reports-report-list, .reports-table-wrap, .reports-row-menu, .reports-filter-panel, .reports-action-panel, .reports-open-preview, .reports-custom-card, .reports-empty-note, .reports-preview-state) {
+  background: #101010 !important;
+  background-color: #101010 !important;
+  border-color: #333333 !important;
+  color: #fafafa !important;
+  box-shadow: none !important;
+}
+.accounting-theme-dark .reports-page :is(.reports-title, .reports-value, .reports-card h2, .reports-panel-header h2, .reports-browser h2, .reports-browser strong, .reports-side-stack h2, .reports-side-stack strong, .reports-tabs button, .reports-selected h2, .reports-table td, .reports-expense-list strong, .reports-preview-state strong, .reports-open-preview h3, .reports-action-panel strong),
+html[data-theme='dark'] .reports-page :is(.reports-title, .reports-value, .reports-card h2, .reports-panel-header h2, .reports-browser h2, .reports-browser strong, .reports-side-stack h2, .reports-side-stack strong, .reports-tabs button, .reports-selected h2, .reports-table td, .reports-expense-list strong, .reports-preview-state strong, .reports-open-preview h3, .reports-action-panel strong) {
+  color: #fafafa !important;
+}
+.accounting-theme-dark .reports-page :is(.reports-subtitle, .reports-label, .reports-browser small, .reports-browser p, .reports-side-stack small, .reports-category-list small, .reports-empty-small, .reports-custom-card p, .reports-selected p, .reports-panel-header p, .reports-month small, .reports-empty-chart, .reports-donut small, .reports-scheduled-list small, .reports-quick-list small, .reports-action-panel p, .reports-action-panel label, .reports-open-preview p, .reports-empty-note, .reports-preview-state span),
+html[data-theme='dark'] .reports-page :is(.reports-subtitle, .reports-label, .reports-browser small, .reports-browser p, .reports-side-stack small, .reports-category-list small, .reports-empty-small, .reports-custom-card p, .reports-selected p, .reports-panel-header p, .reports-month small, .reports-empty-chart, .reports-donut small, .reports-scheduled-list small, .reports-quick-list small, .reports-action-panel p, .reports-action-panel label, .reports-open-preview p, .reports-empty-note, .reports-preview-state span) {
+  color: #c7c7cf !important;
+}
+.accounting-theme-dark .reports-page :is(.reports-actions button, .reports-panel-header button, .reports-pagination button, .reports-page-size, .reports-browser label, .reports-category-list button, .reports-custom-card button, .reports-selected button, .reports-icon-button, .reports-row-menu button, .reports-open-preview button, .reports-filter-panel button, .reports-filter-panel input, .reports-filter-panel select, .reports-action-panel input, .reports-action-panel select, .reports-action-close, .reports-quick-list button),
+html[data-theme='dark'] .reports-page :is(.reports-actions button, .reports-panel-header button, .reports-pagination button, .reports-page-size, .reports-browser label, .reports-category-list button, .reports-custom-card button, .reports-selected button, .reports-icon-button, .reports-row-menu button, .reports-open-preview button, .reports-filter-panel button, .reports-filter-panel input, .reports-filter-panel select, .reports-action-panel input, .reports-action-panel select, .reports-action-close, .reports-quick-list button) {
+  background: #161616 !important;
+  background-color: #161616 !important;
+  border-color: #333333 !important;
+  color: #fafafa !important;
+}
+.accounting-theme-dark .reports-page :is(.reports-browser input),
+html[data-theme='dark'] .reports-page :is(.reports-browser input) {
+  color: #fafafa !important;
+}
+.accounting-theme-dark .reports-page :is(.reports-browser input::placeholder, .reports-filter-panel input::placeholder, .reports-action-panel input::placeholder),
+html[data-theme='dark'] .reports-page :is(.reports-browser input::placeholder, .reports-filter-panel input::placeholder, .reports-action-panel input::placeholder) {
+  color: #8f8f98 !important;
+}
+.accounting-theme-dark .reports-page :is(.reports-table th),
+html[data-theme='dark'] .reports-page :is(.reports-table th) {
+  background: #181818 !important;
+  background-color: #181818 !important;
+  color: #c7c7cf !important;
+  border-color: #333333 !important;
+}
+.accounting-theme-dark .reports-page :is(.reports-table td, .reports-tabs, .reports-bars, .reports-expense-breakdown.is-compact, .reports-scheduled-list div),
+html[data-theme='dark'] .reports-page :is(.reports-table td, .reports-tabs, .reports-bars, .reports-expense-breakdown.is-compact, .reports-scheduled-list div) {
+  border-color: #333333 !important;
+}
+.accounting-theme-dark .reports-page :is(.reports-donut span, .reports-table tr),
+html[data-theme='dark'] .reports-page :is(.reports-donut span, .reports-table tr) {
+  background: #101010 !important;
+  background-color: #101010 !important;
+  color: #fafafa !important;
+}
+.accounting-theme-dark .reports-page :is(.reports-actions button.is-active, .reports-category-list button.is-active, .reports-quick-list button.is-open),
+html[data-theme='dark'] .reports-page :is(.reports-actions button.is-active, .reports-category-list button.is-active, .reports-quick-list button.is-open) {
+  background: #143524 !important;
+  border-color: #2f7a4b !important;
+  color: #b8f7cf !important;
+}
+.accounting-theme-dark .reports-page :is(.reports-selected button, .reports-action-panel button:not(.reports-action-close), .reports-preview-state button, .reports-pagination .is-active, .reports-open-preview button:first-child),
+html[data-theme='dark'] .reports-page :is(.reports-selected button, .reports-action-panel button:not(.reports-action-close), .reports-preview-state button, .reports-pagination .is-active, .reports-open-preview button:first-child) {
+  background: #16a34a !important;
+  border-color: #16a34a !important;
+  color: #ffffff !important;
+}
+.accounting-theme-dark .reports-page .reports-row-menu button:hover,
+html[data-theme='dark'] .reports-page .reports-row-menu button:hover {
+  background: #222222 !important;
+}
 @media (max-width: 1280px) {
   .reports-page { padding: 22px; }
   .reports-header { flex-direction: column; }
   .reports-actions { width: 100%; justify-content: flex-start; }
   .reports-metrics { grid-template-columns: repeat(3, minmax(180px, 1fr)); }
-  .reports-layout, .reports-top-panels, .reports-lower-panels { grid-template-columns: 1fr; }
+  .reports-layout, .reports-workspace-grid { grid-template-columns: 1fr; }
   .reports-browser { order: 0; }
   .reports-side-stack { grid-template-columns: 1fr 1fr; }
   .reports-filter-panel { grid-template-columns: repeat(2, minmax(0, 1fr)); }
@@ -694,6 +831,7 @@ const reportsCss = `
 @media (max-width: 900px) {
   .reports-metrics, .reports-side-stack { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .reports-expense-breakdown { grid-template-columns: 1fr; justify-items: center; }
+  .reports-expense-breakdown.is-compact { grid-template-columns: 96px minmax(0, 1fr); justify-items: stretch; }
   .reports-pagination { flex-direction: column; align-items: flex-start; }
 }
 @media (max-width: 640px) {
@@ -701,12 +839,14 @@ const reportsCss = `
   .reports-title { font-size: 24px; }
   .reports-actions, .reports-metrics, .reports-side-stack { display: grid; grid-template-columns: 1fr; }
   .reports-filter-panel { grid-template-columns: 1fr; }
+  .reports-layout, .reports-workspace-grid { grid-template-columns: 1fr; }
   .reports-selected { grid-template-columns: 38px minmax(0, 1fr); }
   .reports-selected button { grid-column: 1 / -1; justify-content: center; }
   .reports-value { font-size: 20px; }
   .reports-tabs { margin-left: -16px; margin-right: -16px; padding-left: 16px; padding-right: 16px; }
   .reports-card { padding: 14px; }
   .reports-bars { overflow-x: auto; grid-template-columns: repeat(6, 44px); }
+  .reports-expense-breakdown.is-compact { grid-template-columns: 1fr; justify-items: center; }
   .reports-table-wrap { overflow: visible; }
   .reports-table, .reports-table thead, .reports-table tbody, .reports-table tr, .reports-table td { display: block; width: 100%; min-width: 0; }
   .reports-table thead { display: none; }
@@ -718,5 +858,7 @@ const reportsCss = `
   .reports-open-preview div:last-child { justify-content: flex-start; }
   .reports-scheduled-list div, .reports-quick-list button { grid-template-columns: 32px minmax(0, 1fr); }
   .reports-scheduled-list .reports-status, .reports-scheduled-list svg:last-child, .reports-quick-list svg:last-child { grid-column: 2; justify-self: start; }
+  .reports-modal { width: 100%; }
+  .reports-modal-actions { grid-template-columns: 1fr; }
 }
 `

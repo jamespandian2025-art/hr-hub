@@ -7,14 +7,15 @@ import {
   ArrowRight,
   BarChart3,
   CalendarDays,
+  ChevronDown,
   Clock3,
   FilePlus2,
   FileText,
   Filter,
   GitCompareArrows,
-  MoreHorizontal,
   PackagePlus,
   PieChart,
+  Plus,
   ReceiptText,
   ShoppingCart,
   Truck,
@@ -22,7 +23,6 @@ import {
   UsersRound,
 } from 'lucide-react'
 import { companyChangeEvent, companyScopedKey, getActiveCompany } from '@/lib/tenant/company'
-import { procurementGuideNotes, procurementLifecycleSteps, type ProcurementLifecycleKey } from '@/config/procurement-workflow'
 
 const font = "var(--font-body)"
 const suppliersKey = 'flowsys-suppliers'
@@ -115,6 +115,8 @@ const emptyProcurement: ProcurementState = {
 
 export default function ProcurementOverviewPage() {
   const [data, setData] = useState<ProcurementState>(emptyProcurement)
+  const [showOverviewFilters, setShowOverviewFilters] = useState(false)
+  const [showCreateMenu, setShowCreateMenu] = useState(false)
   const dateRangeLabel = useMemo(() => currentMonthRangeLabel(), [])
 
   useEffect(() => {
@@ -181,20 +183,30 @@ export default function ProcurementOverviewPage() {
   const hasPurchaseRequests = data.purchaseRequests.length > 0
   const hasSpend = stats.totalSpend > 0
   const hasSuppliersBySpend = topSuppliers.length > 0
-  const lifecycleCounts = useMemo<Record<ProcurementLifecycleKey, number>>(() => ({
-    purchaseRequests: data.purchaseRequests.length,
-    rfqs: data.rfqs.length,
-    supplierComparison: stats.comparisonReady,
-    awardedSuppliers: stats.awardedRfqs,
-    purchaseOrders: data.purchaseOrders.length,
-    receiving: data.receiving.length,
-    warehouseInventory: stats.inventoryUpdates,
-  }), [data.purchaseOrders.length, data.purchaseRequests.length, data.receiving.length, data.rfqs.length, stats.awardedRfqs, stats.comparisonReady, stats.inventoryUpdates])
+  const hasSuppliers = data.suppliers.length > 0
+  const hasInventoryItems = data.pricebook.length > 0
+  const hasRfqs = data.rfqs.length > 0
+  const setupItems = useMemo(() => ([
+    { label: 'Add suppliers', complete: hasSuppliers, href: '/supplier-database', action: 'Add Supplier' },
+    { label: 'Import inventory/items', complete: hasInventoryItems, href: '/procurement/pricebook', action: 'Import Items' },
+    { label: 'Create first purchase request', complete: hasPurchaseRequests, href: '/procurement/purchase-requests', action: 'Create Purchase Request' },
+    { label: 'Create first RFQ', complete: hasRfqs, href: '/procurement/rfqs', action: 'Create RFQ' },
+    { label: 'Create first purchase order', complete: hasPurchaseOrders, href: '/procurement/purchase-orders', action: 'Create Purchase Order' },
+  ]), [hasInventoryItems, hasPurchaseOrders, hasPurchaseRequests, hasRfqs, hasSuppliers])
+  const nextSetupItem = setupItems.find(item => !item.complete)
+  const createOptions = [
+    { label: 'Purchase Request', href: '/procurement/purchase-requests', icon: FilePlus2 },
+    { label: 'RFQ', href: '/procurement/rfqs', icon: ReceiptText },
+    { label: 'Quotation', href: '/procurement/quotations', icon: FileText },
+    { label: 'Purchase Order', href: '/procurement/purchase-orders', icon: ShoppingCart },
+    { label: 'Receiving', href: '/procurement/receiving', icon: Truck },
+    { label: 'Pricebook Item', href: '/procurement/pricebook', icon: PackagePlus },
+  ]
 
   return (
-    <div style={{ padding: '28px 28px 42px', fontFamily: font }}>
+    <div className="procurement-overview-page" style={{ fontFamily: font }}>
       <style>{overviewCss}</style>
-      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 18, marginBottom: 24 }}>
+      <div className="procurement-overview-head">
         <div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, color: '#64748b', fontSize: 13, marginBottom: 8 }}>
             <span>Procurement</span>
@@ -207,63 +219,75 @@ export default function ProcurementOverviewPage() {
             </span>
             <div>
               <h1 style={{ margin: 0, fontSize: 28, lineHeight: 1.15, color: '#0f172a', letterSpacing: '-0.02em' }}>Procurement Overview</h1>
-              <p style={{ margin: '8px 0 0', color: '#64748b', fontSize: 14 }}>Command center for purchase requests, RFQs, supplier comparison, purchase orders, receiving, and procurement analytics.</p>
+              <p style={{ margin: '8px 0 0', color: '#64748b', fontSize: 14 }}>Track requests, suppliers, purchase orders, receiving, and spend from one calm workspace.</p>
             </div>
           </div>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
-          <button type="button" style={toolbarButtonStyle}>{dateRangeLabel} <CalendarDays size={15} /></button>
-          <button type="button" style={toolbarButtonStyle}><Filter size={15} /> Filters</button>
-          <button type="button" aria-label="More options" style={iconToolbarButtonStyle}><MoreHorizontal size={18} /></button>
+          <span style={toolbarStaticStyle}>{dateRangeLabel} <CalendarDays size={15} /></span>
+          <button type="button" style={toolbarButtonStyle} aria-expanded={showOverviewFilters} onClick={() => setShowOverviewFilters(value => !value)}><Filter size={15} /> Filters</button>
+          <div className="procurement-primary-wrap">
+            <Link href={nextSetupItem?.href || '/procurement/purchase-requests'} className="procurement-primary-action">
+              <Plus size={16} /> {nextSetupItem?.action || 'Create Purchase Request'}
+            </Link>
+            <button type="button" className="procurement-primary-caret" aria-label="More create options" aria-expanded={showCreateMenu} onClick={() => setShowCreateMenu(value => !value)}>
+              <ChevronDown size={15} />
+            </button>
+            {showCreateMenu && (
+              <div className="procurement-create-menu">
+                {createOptions.map(option => {
+                  const Icon = option.icon
+                  return (
+                    <Link key={option.href} href={option.href} onClick={() => setShowCreateMenu(false)}>
+                      <Icon size={15} />
+                      {option.label}
+                    </Link>
+                  )
+                })}
+              </div>
+            )}
+          </div>
         </div>
       </div>
+
+      {showOverviewFilters && (
+        <section className="procurement-overview-filter-panel" aria-label="Procurement overview filters">
+          <div>
+            <strong>Current scope</strong>
+            <span>Active company records for {dateRangeLabel}</span>
+          </div>
+          <Link href="/procurement/purchase-requests">Pending requests: {stats.pendingRequests}</Link>
+          <Link href="/procurement/rfqs">Expiring quotations: {stats.expiringQuotations}</Link>
+          <Link href="/procurement/receiving">Overdue deliveries: {stats.overdueDeliveries}</Link>
+          <Link href="/procurement/pricebook">Price changes: {stats.priceChanges}</Link>
+        </section>
+      )}
 
       <div className="procurement-overview-metrics">
-        <MetricCard title="Total Spend" value={formatCurrency(stats.totalSpend)} empty={stats.totalSpend === 0} icon={ReceiptText} tone="green" />
-        <MetricCard title="Purchase Orders" value={String(data.purchaseOrders.length)} empty={data.purchaseOrders.length === 0} icon={FileText} tone="blue" />
-        <MetricCard title="Pending Requests" value={String(stats.pendingRequests)} empty={stats.pendingRequests === 0} icon={FilePlus2} tone="purple" />
-        <MetricCard title="Active Suppliers" value={String(stats.activeSuppliers)} empty={stats.activeSuppliers === 0} icon={UsersRound} tone="green" />
-        <MetricCard title="Avg. Lead Time" value={stats.avgLeadTime ? `${stats.avgLeadTime.toFixed(1)} days` : '0'} empty={stats.avgLeadTime === 0} icon={Clock3} tone="orange" />
-        <SideCard title="Recent Activities" action="View all">
-          <EmptyState icon={BellIcon} title="No activities yet" body="Activities will appear here once there is procurement activity." compact />
-        </SideCard>
+        <MetricCard title="Total Spend" value={formatCurrency(stats.totalSpend)} helper={stats.totalSpend === 0 ? 'Spend starts after POs are created' : 'From saved purchase orders'} empty={stats.totalSpend === 0} icon={ReceiptText} tone="green" />
+        <MetricCard title="Purchase Orders" value={String(data.purchaseOrders.length)} helper={data.purchaseOrders.length === 0 ? 'Approved orders will be tracked here' : 'Supplier commitments on file'} empty={data.purchaseOrders.length === 0} icon={FileText} tone="blue" />
+        <MetricCard title="Pending Requests" value={String(stats.pendingRequests)} helper={stats.pendingRequests === 0 ? 'Requests awaiting review appear here' : 'Awaiting procurement review'} empty={stats.pendingRequests === 0} icon={FilePlus2} tone="purple" />
+        <MetricCard title="Active Suppliers" value={String(stats.activeSuppliers)} helper={stats.activeSuppliers === 0 ? 'Add suppliers before sourcing' : 'Available for sourcing'} empty={stats.activeSuppliers === 0} icon={UsersRound} tone="green" />
+        <MetricCard title="Avg. Lead Time" value={stats.avgLeadTime ? `${stats.avgLeadTime.toFixed(1)} days` : '0'} helper={stats.avgLeadTime === 0 ? 'Calculated from received orders' : 'Based on delivery records'} empty={stats.avgLeadTime === 0} icon={Clock3} tone="orange" />
       </div>
 
-      <Panel title="Enterprise Procurement Lifecycle" action={<Link href="/procurement/vendor-comparison" style={viewAllStyle}>Open supplier comparison</Link>}>
-        <LifecycleFlow counts={lifecycleCounts} />
-        <div className="procurement-guide-notes" aria-label="Procurement guide notes">
-          {procurementGuideNotes.map(note => <span key={note}>{note}</span>)}
-        </div>
-      </Panel>
-
       <div className="procurement-overview-grid">
-        <div style={{ display: 'grid', gap: 16 }}>
-          <div className="procurement-overview-chart-grid">
-            <Panel title="Spend Overview" action={<button type="button" style={smallSelectStyle}>Monthly</button>}>
-              {hasSpend ? (
-                <MiniSummary label="Total Spend" value={formatCurrency(stats.totalSpend)} href="/procurement/purchase-orders" link="View full report" />
-              ) : (
-                <EmptyState icon={BarChart3} title="No spend data yet" body="Spend data will appear here once purchase orders are created." action="View report" href="/procurement/purchase-orders" />
-              )}
-            </Panel>
-            <Panel title="Spend by Category">
-              <EmptyState icon={PieChart} title="No category data yet" body="Category breakdown will appear here once you have spend data." action="View all categories" href="/procurement/pricebook" />
-            </Panel>
-            <Panel title="PO Status">
-              {hasPurchaseOrders ? (
-                <StatusList records={data.purchaseOrders.map(order => order.status || 'Draft')} />
-              ) : (
-                <EmptyState icon={ShoppingCart} title="No purchase orders yet" body="Purchase order status summary will appear here." action="View all purchase orders" href="/procurement/purchase-orders" />
-              )}
-            </Panel>
-          </div>
+        <div className="procurement-main-column">
+          <Panel title="Workspace Snapshot" action={<span style={smallSelectStyle}>Monthly</span>}>
+            <div className="procurement-snapshot-grid">
+              <SnapshotTile icon={BarChart3} label="Spend this period" value={formatCurrency(stats.totalSpend)} helper={hasSpend ? 'From saved purchase orders' : 'No spend recorded yet'} href="/procurement/purchase-orders" />
+              <SnapshotTile icon={ShoppingCart} label="Purchase order status" value={hasPurchaseOrders ? `${data.purchaseOrders.length} active` : 'None yet'} helper={hasPurchaseOrders ? 'Grouped by current status' : 'Create a PO after approval or RFQ'} href="/procurement/purchase-orders" />
+              <SnapshotTile icon={PieChart} label="Category data" value={hasInventoryItems ? `${data.pricebook.length} items` : 'Needs items'} helper={hasInventoryItems ? 'Ready for category reporting' : 'Import pricebook items first'} href="/procurement/pricebook" />
+            </div>
+            {hasPurchaseOrders && <StatusList records={data.purchaseOrders.map(order => order.status || 'Draft')} />}
+          </Panel>
 
           <div className="procurement-overview-two-col">
             <Panel title="Recent Purchase Orders" action={<Link href="/procurement/purchase-orders" style={viewAllStyle}>View all</Link>}>
-              {hasPurchaseOrders ? <OrderList orders={data.purchaseOrders.slice(0, 5)} /> : <EmptyState icon={FileText} title="No purchase orders yet" body="Your recent purchase orders will appear here." compact />}
+              {hasPurchaseOrders ? <OrderList orders={data.purchaseOrders.slice(0, 5)} /> : <EmptyState icon={FileText} title="No purchase orders yet" body="Approved supplier commitments and direct procurement orders will appear in this list." action="Create Purchase Order" href="/procurement/purchase-orders" compact />}
             </Panel>
             <Panel title="Pending Requests" action={<Link href="/procurement/purchase-requests" style={viewAllStyle}>View all</Link>}>
-              {hasPurchaseRequests ? <RequestList requests={data.purchaseRequests.filter(request => isPendingStatus(request.status)).slice(0, 5)} /> : <EmptyState icon={Clock3} title="No pending requests" body="Pending purchase requests will appear here." compact />}
+              {hasPurchaseRequests ? <RequestList requests={data.purchaseRequests.filter(request => isPendingStatus(request.status)).slice(0, 5)} /> : <EmptyState icon={Clock3} title="No pending requests" body="Submitted purchase requests awaiting review will appear here." action="Create Purchase Request" href="/procurement/purchase-requests" compact />}
             </Panel>
           </div>
 
@@ -277,9 +301,9 @@ export default function ProcurementOverviewPage() {
           </Panel>
         </div>
 
-        <div style={{ display: 'grid', gap: 16, alignSelf: 'start' }}>
+        <div className="procurement-side-column">
           <SideCard title="Quick Actions">
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+            <div className="procurement-quick-actions">
               <QuickAction href="/procurement/purchase-requests" icon={FilePlus2} label="New Purchase Request" />
               <QuickAction href="/procurement/purchase-orders" icon={FileText} label="New Purchase Order" />
               <QuickAction href="/procurement/rfqs" icon={ReceiptText} label="New RFQ / Quotation" />
@@ -290,7 +314,7 @@ export default function ProcurementOverviewPage() {
             </div>
           </SideCard>
 
-          <SideCard title="Top Suppliers by Spend" action="View all">
+          <SideCard title="Top Suppliers by Spend" action="View all" actionHref="/supplier-database">
             {hasSuppliersBySpend ? (
               <div style={{ display: 'grid', gap: 12 }}>
                 {topSuppliers.map(([supplier, total]) => (
@@ -301,8 +325,12 @@ export default function ProcurementOverviewPage() {
                 ))}
               </div>
             ) : (
-              <EmptyState icon={UsersRound} title="No supplier data yet" body="Top suppliers by spend will appear here." compact />
+              <EmptyState icon={UsersRound} title={hasSuppliers ? 'No supplier spend yet' : 'No suppliers added yet'} body={hasSuppliers ? 'Top suppliers by spend will appear after purchase orders are linked to suppliers.' : 'Add at least one supplier before creating RFQs or comparing quotations.'} action={hasSuppliers ? undefined : 'Add Supplier'} href={hasSuppliers ? undefined : '/supplier-database'} compact />
             )}
+          </SideCard>
+
+          <SideCard title="Recent Activity" action="View all" actionHref="/procurement/approvals">
+            <EmptyState icon={BellIcon} title="No activity yet" body="Approvals, RFQs, purchase orders, and receiving updates will appear here." compact />
           </SideCard>
         </div>
       </div>
@@ -310,44 +338,32 @@ export default function ProcurementOverviewPage() {
   )
 }
 
-function LifecycleFlow({ counts }: { counts: Record<ProcurementLifecycleKey, number> }) {
+function MetricCard({ title, value, helper, empty, icon: Icon, tone }: { title: string; value: string; helper: string; empty: boolean; icon: React.ComponentType<IconProps>; tone: keyof typeof tones }) {
+  const color = tones[tone]
   return (
-    <div className="procurement-lifecycle">
-      {procurementLifecycleSteps.map((step, index) => {
-        const Icon = step.icon
-        return (
-          <Link key={step.key} href={step.href} className="procurement-lifecycle-step">
-            <span className="procurement-lifecycle-index">{index + 1}</span>
-            <span className="procurement-lifecycle-icon"><Icon size={18} /></span>
-            <strong>{step.label}</strong>
-            <small>{step.description}</small>
-            <b>{counts[step.key]} records</b>
-          </Link>
-        )
-      })}
+    <div className="procurement-metric-card" style={cardStyle}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+        <span style={{ width: 38, height: 38, borderRadius: 11, background: color.bg, color: color.text, display: 'grid', placeItems: 'center', flexShrink: 0 }}><Icon size={19} /></span>
+        <div style={{ color: '#64748b', fontSize: 12.5, fontWeight: 700 }}>{title}</div>
+      </div>
+      <div style={{ color: '#0f172a', fontSize: 26, fontWeight: 900, marginTop: 12, lineHeight: 1 }}>{value}</div>
+      <div style={{ color: empty ? '#94a3b8' : '#16a34a', fontSize: 11, marginTop: 8, lineHeight: 1.35, maxWidth: '74%' }}>{helper}</div>
+      <Sparkline color={color.text} />
     </div>
   )
 }
 
-function MetricCard({ title, value, empty, icon: Icon, tone }: { title: string; value: string; empty: boolean; icon: React.ComponentType<IconProps>; tone: keyof typeof tones }) {
-  const color = tones[tone]
+function Sparkline({ color }: { color: string }) {
   return (
-    <div style={cardStyle}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 13 }}>
-        <span style={{ width: 48, height: 48, borderRadius: 13, background: color.bg, color: color.text, display: 'grid', placeItems: 'center' }}><Icon size={22} /></span>
-        <div>
-          <div style={{ color: '#64748b', fontSize: 12, fontWeight: 700 }}>{title}</div>
-          <div style={{ color: '#0f172a', fontSize: 24, fontWeight: 850, marginTop: 5, lineHeight: 1 }}>{value}</div>
-          <div style={{ color: empty ? '#64748b' : '#16a34a', fontSize: 12, marginTop: 8 }}>{empty ? 'No data yet' : 'From saved records'}</div>
-        </div>
-      </div>
-    </div>
+    <svg className="procurement-metric-spark" width={76} height={26} viewBox="0 0 72 22" fill="none" preserveAspectRatio="none" aria-hidden="true">
+      <polyline points="0,18 12,15 24,16 36,10 48,12 60,6 72,9" stroke={color} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
   )
 }
 
 function Panel({ title, action, children }: { title: string; action?: React.ReactNode; children: React.ReactNode }) {
   return (
-    <section style={cardStyle}>
+    <section className="procurement-panel" style={cardStyle}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, marginBottom: 16 }}>
         <h2 style={{ margin: 0, fontSize: 15, fontWeight: 850, color: '#0f172a' }}>{title}</h2>
         {action}
@@ -357,12 +373,12 @@ function Panel({ title, action, children }: { title: string; action?: React.Reac
   )
 }
 
-function SideCard({ title, action, children }: { title: string; action?: string; children: React.ReactNode }) {
+function SideCard({ title, action, actionHref, children }: { title: string; action?: string; actionHref?: string; children: React.ReactNode }) {
   return (
-    <section style={cardStyle}>
+    <section className="procurement-panel" style={cardStyle}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, marginBottom: 16 }}>
         <h2 style={{ margin: 0, fontSize: 14, fontWeight: 850, color: '#0f172a' }}>{title}</h2>
-        {action && <span style={{ color: '#2563eb', fontSize: 12, fontWeight: 800 }}>{action}</span>}
+        {action && actionHref ? <Link href={actionHref} style={viewAllStyle}>{action}</Link> : action && <span style={{ color: '#2563eb', fontSize: 12, fontWeight: 800 }}>{action}</span>}
       </div>
       {children}
     </section>
@@ -371,13 +387,13 @@ function SideCard({ title, action, children }: { title: string; action?: string;
 
 function EmptyState({ icon: Icon, title, body, action, href, compact = false }: { icon: React.ComponentType<IconProps>; title: string; body: string; action?: string; href?: string; compact?: boolean }) {
   const content = (
-    <div style={{ minHeight: compact ? 126 : 210, display: 'grid', placeItems: 'center', textAlign: 'center', padding: compact ? '14px 6px' : '24px 12px' }}>
+    <div className={`procurement-empty-state${compact ? ' compact' : ''}`}>
       <div>
-        <span style={{ width: compact ? 64 : 78, height: compact ? 64 : 78, borderRadius: 999, background: '#f1f5f9', color: '#94a3b8', display: 'inline-grid', placeItems: 'center', marginBottom: 14 }}>
-          <Icon size={compact ? 30 : 36} />
+        <span className="procurement-empty-icon">
+          <Icon size={compact ? 26 : 32} />
         </span>
-        <div style={{ fontSize: 14, fontWeight: 850, color: '#0f172a' }}>{title}</div>
-        <p style={{ margin: '8px auto 0', maxWidth: 250, fontSize: 12, lineHeight: 1.55, color: '#64748b' }}>{body}</p>
+        <div className="procurement-empty-title">{title}</div>
+        <p>{body}</p>
         {action && href && (
           <Link href={href} style={{ ...emptyActionStyle, marginTop: 16 }}>
             {action} <ArrowRight size={14} />
@@ -389,13 +405,16 @@ function EmptyState({ icon: Icon, title, body, action, href, compact = false }: 
   return content
 }
 
-function MiniSummary({ label, value, link, href }: { label: string; value: string; link: string; href: string }) {
+function SnapshotTile({ icon: Icon, label, value, helper, href }: { icon: React.ComponentType<IconProps>; label: string; value: string; helper: string; href: string }) {
   return (
-    <div style={{ minHeight: 210, display: 'flex', flexDirection: 'column', justifyContent: 'flex-end' }}>
-      <div style={{ color: '#64748b', fontSize: 12, fontWeight: 700 }}>{label}</div>
-      <div style={{ color: '#0f172a', fontSize: 22, fontWeight: 850, marginTop: 4 }}>{value}</div>
-      <Link href={href} style={inlineLinkStyle}>{link} <ArrowRight size={14} /></Link>
-    </div>
+    <Link href={href} className="procurement-snapshot-tile">
+      <span><Icon size={18} /></span>
+      <div>
+        <small>{label}</small>
+        <strong>{value}</strong>
+        <p>{helper}</p>
+      </div>
+    </Link>
   )
 }
 
@@ -406,7 +425,7 @@ function StatusList({ records }: { records: string[] }) {
     return acc
   }, {})
   return (
-    <div style={{ display: 'grid', gap: 11, minHeight: 210, alignContent: 'center' }}>
+    <div style={{ display: 'grid', gap: 11, minHeight: 172, alignContent: 'center' }}>
       {Object.entries(counts).map(([status, count]) => (
         <div key={status} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: 13 }}>
           <span style={{ color: '#475569', fontWeight: 700 }}>{status}</span>
@@ -467,9 +486,10 @@ function InsightCard({ icon: Icon, title, value, body, href, link, tone }: { ico
 
 function QuickAction({ href, icon: Icon, label }: { href: string; icon: React.ComponentType<IconProps>; label: string }) {
   return (
-    <Link href={href} style={{ minHeight: 70, border: '1px solid #eef2f7', borderRadius: 10, textDecoration: 'none', color: '#0f172a', display: 'grid', placeItems: 'center', gap: 5, textAlign: 'center', padding: 10, fontSize: 11, fontWeight: 800, background: '#fff' }}>
-      <Icon size={18} color="#2563eb" />
-      {label}
+    <Link href={href} className="procurement-quick-action">
+      <span><Icon size={17} /></span>
+      <strong>{label}</strong>
+      <ArrowRight size={14} />
     </Link>
   )
 }
@@ -489,7 +509,8 @@ function readStored<T extends { id?: string | number; companyId?: string }>(key:
     const scopedKey = companyId ? companyScopedKey(key, companyId) : key
     const scoped = parseRows<T>(window.localStorage.getItem(scopedKey))
     const global = parseRows<T>(window.localStorage.getItem(key))
-    const rows = scoped.length ? [...scoped, ...global] : global
+    const scopedGlobal = scoped.length ? global.filter(row => row.companyId === companyId) : global
+    const rows = scoped.length ? [...scoped, ...scopedGlobal] : scopedGlobal
     const unique = uniqueRows(rows)
     return unique.filter(row => !companyId || !row.companyId || row.companyId === companyId)
   } catch {
@@ -593,11 +614,9 @@ const toolbarButtonStyle: React.CSSProperties = {
   cursor: 'pointer',
 }
 
-const iconToolbarButtonStyle: React.CSSProperties = {
+const toolbarStaticStyle: React.CSSProperties = {
   ...toolbarButtonStyle,
-  width: 42,
-  padding: 0,
-  justifyContent: 'center',
+  cursor: 'default',
 }
 
 const smallSelectStyle: React.CSSProperties = {
@@ -609,6 +628,8 @@ const smallSelectStyle: React.CSSProperties = {
   padding: '0 12px',
   fontSize: 12,
   fontWeight: 800,
+  display: 'inline-flex',
+  alignItems: 'center',
 }
 
 const viewAllStyle: React.CSSProperties = {
@@ -645,17 +666,156 @@ const emptyActionStyle: React.CSSProperties = {
 }
 
 const overviewCss = `
+.procurement-overview-page {
+  padding: 24px 28px 42px;
+}
+.procurement-overview-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 18px;
+  margin-bottom: 20px;
+}
+.procurement-setup-card {
+  background: #fff;
+  border: 1px solid #bbf7d0;
+  border-radius: 16px;
+  padding: 16px;
+  box-shadow: 0 14px 34px rgba(15, 23, 42, 0.045);
+  display: grid;
+  grid-template-columns: minmax(220px, 1.1fr) minmax(160px, .55fr) minmax(260px, 1.35fr) auto;
+  align-items: center;
+  gap: 16px;
+  margin-bottom: 16px;
+}
+.procurement-setup-main {
+  display: flex;
+  align-items: center;
+  gap: 13px;
+  min-width: 0;
+}
+.procurement-setup-icon {
+  width: 44px;
+  height: 44px;
+  border-radius: 13px;
+  background: #ecfdf3;
+  color: #16a34a;
+  display: grid;
+  place-items: center;
+  flex: 0 0 auto;
+}
+.procurement-setup-kicker {
+  color: #16a34a;
+  font-size: 11px;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+.procurement-setup-main h2 {
+  margin: 3px 0 0;
+  color: #0f172a;
+  font-size: 16px;
+  font-weight: 900;
+}
+.procurement-setup-main p {
+  margin: 6px 0 0;
+  color: #64748b;
+  font-size: 12px;
+  line-height: 1.4;
+}
+.procurement-setup-progress {
+  display: grid;
+  gap: 8px;
+}
+.procurement-setup-progress div {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+}
+.procurement-setup-progress strong {
+  color: #0f172a;
+  font-size: 18px;
+  font-weight: 900;
+}
+.procurement-setup-progress div span {
+  color: #64748b;
+  font-size: 11px;
+  font-weight: 800;
+}
+.procurement-setup-progress > span {
+  height: 8px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: #e2e8f0;
+}
+.procurement-setup-progress i {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: #16a34a;
+}
+.procurement-setup-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+}
+.procurement-setup-item {
+  min-height: 30px;
+  border: 1px solid #e8edf4;
+  border-radius: 999px;
+  padding: 0 10px;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  color: #475569;
+  background: #f8fafc;
+  text-decoration: none;
+  font-size: 11px;
+  font-weight: 850;
+}
+.procurement-setup-item svg {
+  color: #cbd5e1;
+}
+.procurement-setup-item.complete {
+  border-color: #bbf7d0;
+  color: #166534;
+  background: #f0fdf4;
+}
+.procurement-setup-item.complete svg {
+  color: #16a34a;
+}
+.procurement-setup-cta {
+  min-height: 38px;
+  border-radius: 10px;
+  background: #16a34a;
+  color: #fff;
+  padding: 0 14px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  text-decoration: none;
+  font-size: 12px;
+  font-weight: 900;
+  white-space: nowrap;
+  box-shadow: 0 10px 22px rgba(22, 163, 74, .18);
+}
 .procurement-overview-metrics {
   display: grid;
-  grid-template-columns: repeat(5, minmax(150px, 1fr)) 280px;
-  gap: 16px;
+  grid-template-columns: repeat(5, minmax(150px, 1fr));
+  gap: 14px;
   align-items: stretch;
+  margin-bottom: 16px;
+}
+.procurement-metric-card {
+  min-height: 108px;
+  display: flex;
+  align-items: center;
 }
 .procurement-overview-grid {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 280px;
+  grid-template-columns: minmax(0, 1fr) 300px;
   gap: 16px;
-  margin-top: 16px;
 }
 .procurement-overview-chart-grid {
   display: grid;
@@ -674,37 +834,57 @@ const overviewCss = `
 }
 .procurement-lifecycle {
   display: grid;
-  grid-template-columns: repeat(7, minmax(120px, 1fr));
-  gap: 10px;
+  grid-template-columns: repeat(7, minmax(118px, 1fr));
+  gap: 12px;
 }
 .procurement-lifecycle-step {
   position: relative;
-  min-height: 172px;
+  min-height: 148px;
   border: 1px solid #e8edf4;
   border-radius: 14px;
-  background: #fbfdff;
+  background: linear-gradient(180deg, #fff 0%, #fbfdff 100%);
   color: #0f172a;
   text-decoration: none;
-  padding: 14px;
+  padding: 12px;
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 7px;
+  transition: border-color .16s ease, box-shadow .16s ease, transform .16s ease;
+}
+.procurement-lifecycle-step:hover {
+  border-color: #86efac;
+  box-shadow: 0 16px 32px rgba(22, 163, 74, .11);
+  transform: translateY(-2px);
 }
 .procurement-lifecycle-step::after {
-  content: "";
+  content: ">";
   position: absolute;
-  top: 28px;
-  right: -11px;
-  width: 12px;
-  height: 2px;
-  background: #cbd5e1;
+  top: 32px;
+  right: -16px;
+  z-index: 2;
+  width: 20px;
+  height: 20px;
+  border-radius: 999px;
+  background: #fff;
+  color: #16a34a;
+  border: 1px solid #bbf7d0;
+  display: grid;
+  place-items: center;
+  font-size: 13px;
+  font-weight: 900;
+  box-shadow: 0 4px 12px rgba(15, 23, 42, .06);
 }
 .procurement-lifecycle-step:last-child::after {
   display: none;
 }
+.procurement-lifecycle-step.recommended {
+  border-color: #22c55e;
+  background: #f0fdf4;
+  box-shadow: 0 16px 34px rgba(22, 163, 74, .14);
+}
 .procurement-lifecycle-index {
-  width: 24px;
-  height: 24px;
+  width: 22px;
+  height: 22px;
   border-radius: 999px;
   background: #dcfce7;
   color: #16a34a;
@@ -714,8 +894,8 @@ const overviewCss = `
   font-weight: 950;
 }
 .procurement-lifecycle-icon {
-  width: 36px;
-  height: 36px;
+  width: 32px;
+  height: 32px;
   border-radius: 10px;
   background: #f0fdf4;
   color: #16a34a;
@@ -728,19 +908,71 @@ const overviewCss = `
 }
 .procurement-lifecycle small {
   color: #64748b;
-  font-size: 11px;
-  line-height: 1.35;
+  font-size: 10.5px;
+  line-height: 1.3;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
 }
 .procurement-lifecycle b {
   margin-top: auto;
   color: #0f172a;
   font-size: 12px;
 }
+.procurement-lifecycle em {
+  align-self: flex-start;
+  border-radius: 999px;
+  background: #dcfce7;
+  color: #166534;
+  padding: 4px 7px;
+  font-size: 10px;
+  font-style: normal;
+  font-weight: 900;
+}
+.procurement-empty-state {
+  min-height: 172px;
+  display: grid;
+  place-items: center;
+  text-align: center;
+  padding: 20px 12px;
+}
+.procurement-empty-state.compact {
+  min-height: 128px;
+  padding: 14px 6px;
+}
+.procurement-empty-icon {
+  width: 68px;
+  height: 68px;
+  border-radius: 999px;
+  background: #f0fdf4;
+  color: #16a34a;
+  display: inline-grid;
+  place-items: center;
+  margin-bottom: 12px;
+  box-shadow: inset 0 0 0 1px #bbf7d0;
+}
+.procurement-empty-state.compact .procurement-empty-icon {
+  width: 54px;
+  height: 54px;
+}
+.procurement-empty-title {
+  color: #0f172a;
+  font-size: 14px;
+  font-weight: 900;
+}
+.procurement-empty-state p {
+  margin: 8px auto 0;
+  max-width: 270px;
+  color: #64748b;
+  font-size: 12px;
+  line-height: 1.55;
+}
 .procurement-guide-notes {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
-  margin-top: 14px;
+  margin-top: 12px;
 }
 .procurement-guide-notes span {
   border: 1px solid #bbf7d0;
@@ -751,18 +983,82 @@ const overviewCss = `
   font-size: 11px;
   font-weight: 850;
 }
+.procurement-quick-actions {
+  display: grid;
+  gap: 8px;
+}
+.procurement-quick-action {
+  min-height: 46px;
+  border: 1px solid #eef2f7;
+  border-radius: 12px;
+  text-decoration: none;
+  color: #0f172a;
+  display: grid;
+  grid-template-columns: 34px minmax(0, 1fr) 16px;
+  align-items: center;
+  gap: 9px;
+  padding: 8px 10px;
+  font-size: 12px;
+  font-weight: 850;
+  background: #fff;
+  transition: border-color .16s ease, background .16s ease, transform .16s ease;
+}
+.procurement-quick-action:hover {
+  border-color: #bbf7d0;
+  background: #f8fffb;
+  transform: translateY(-1px);
+}
+.procurement-quick-action span {
+  width: 34px;
+  height: 34px;
+  border-radius: 10px;
+  display: grid;
+  place-items: center;
+  color: #16a34a;
+  background: #dcfce7;
+}
+.procurement-quick-action strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.procurement-quick-action > svg {
+  color: #94a3b8;
+}
 @media (max-width: 1400px) {
+  .procurement-setup-card {
+    grid-template-columns: minmax(240px, 1fr) minmax(160px, .55fr);
+  }
+  .procurement-setup-list,
+  .procurement-setup-cta {
+    grid-column: span 1;
+  }
   .procurement-overview-metrics {
     grid-template-columns: repeat(3, minmax(180px, 1fr));
   }
   .procurement-lifecycle {
-    grid-template-columns: repeat(4, minmax(150px, 1fr));
+    grid-auto-flow: column;
+    grid-auto-columns: minmax(168px, 1fr);
+    grid-template-columns: none;
+    overflow-x: auto;
+    padding: 2px 2px 10px;
+    scroll-snap-type: x proximity;
   }
-  .procurement-lifecycle-step::after {
-    display: none;
+  .procurement-lifecycle-step {
+    scroll-snap-align: start;
   }
 }
 @media (max-width: 1120px) {
+  .procurement-setup-card {
+    grid-template-columns: 1fr;
+  }
+  .procurement-setup-list,
+  .procurement-setup-cta {
+    grid-column: auto;
+  }
+  .procurement-setup-cta {
+    justify-self: start;
+  }
   .procurement-overview-grid,
   .procurement-overview-chart-grid {
     grid-template-columns: 1fr;
@@ -772,11 +1068,367 @@ const overviewCss = `
   }
 }
 @media (max-width: 760px) {
+  .procurement-overview-page {
+    padding: 18px 14px 32px;
+  }
+  .procurement-overview-head {
+    display: grid;
+  }
   .procurement-overview-metrics,
   .procurement-overview-two-col,
-  .procurement-insight-grid,
-  .procurement-lifecycle {
+  .procurement-insight-grid {
     grid-template-columns: 1fr;
+  }
+  .procurement-setup-list {
+    display: grid;
+  }
+  .procurement-setup-item,
+  .procurement-setup-cta {
+    width: 100%;
+  }
+  .procurement-lifecycle {
+    grid-auto-flow: row;
+    grid-auto-columns: auto;
+    grid-template-columns: 1fr;
+    overflow-x: visible;
+    padding: 0;
+  }
+  .procurement-lifecycle-step::after {
+    content: "v";
+    top: auto;
+    right: auto;
+    bottom: -17px;
+    left: 24px;
+  }
+  .procurement-lifecycle-step:last-child::after {
+    display: none;
+  }
+  .procurement-lifecycle small {
+    -webkit-line-clamp: 3;
+  }
+}
+
+/* Calmer overview pass: fewer competing boxes, clearer task hierarchy. */
+.procurement-overview-page {
+  padding: 24px 28px 40px;
+  background: #f8fafc;
+}
+.procurement-primary-wrap {
+  display: inline-flex;
+  align-items: stretch;
+  border-radius: 10px;
+  overflow: visible;
+  position: relative;
+  box-shadow: 0 10px 22px rgba(22, 163, 74, 0.18);
+}
+.procurement-primary-action {
+  min-height: 42px;
+  border-radius: 10px 0 0 10px;
+  background: #16a34a;
+  color: #fff;
+  padding: 0 16px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  text-decoration: none;
+  font-size: 13px;
+  font-weight: 900;
+  white-space: nowrap;
+}
+.procurement-primary-action:hover {
+  background: #15913f;
+}
+.procurement-primary-caret {
+  min-height: 42px;
+  width: 38px;
+  border-radius: 0 10px 10px 0;
+  border: 0 !important;
+  border-left: 1px solid rgba(255, 255, 255, 0.24) !important;
+  background: #16a34a !important;
+  color: #fff !important;
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+}
+.procurement-primary-caret:hover {
+  background: #15913f !important;
+}
+.procurement-create-menu {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  z-index: 40;
+  width: 210px;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  background: #fff;
+  box-shadow: 0 18px 42px rgba(15, 23, 42, .16);
+  padding: 6px;
+  display: grid;
+  gap: 2px;
+}
+.procurement-create-menu a {
+  min-height: 36px;
+  border-radius: 8px;
+  color: #0f172a;
+  text-decoration: none;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 0 10px;
+  font-size: 12px;
+  font-weight: 850;
+}
+.procurement-create-menu a:hover {
+  background: #f8fafc;
+}
+.procurement-create-menu svg {
+  color: #16a34a;
+}
+.procurement-overview-filter-panel {
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  background: #fff;
+  padding: 12px;
+  margin: -6px 0 16px;
+  display: grid;
+  grid-template-columns: minmax(240px, 1fr) repeat(4, auto);
+  gap: 10px;
+  align-items: center;
+}
+.procurement-overview-filter-panel div {
+  min-width: 0;
+}
+.procurement-overview-filter-panel strong {
+  display: block;
+  color: #0f172a;
+  font-size: 12px;
+  font-weight: 900;
+}
+.procurement-overview-filter-panel span {
+  display: block;
+  color: #64748b;
+  font-size: 11px;
+  margin-top: 3px;
+}
+.procurement-overview-filter-panel a {
+  min-height: 32px;
+  border: 1px solid #e2e8f0;
+  border-radius: 999px;
+  color: #334155;
+  background: #f8fafc;
+  text-decoration: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 11px;
+  font-size: 11px;
+  font-weight: 850;
+  white-space: nowrap;
+}
+.procurement-overview-filter-panel a:hover {
+  border-color: #bbf7d0;
+  color: #166534;
+  background: #f0fdf4;
+}
+.procurement-metric-spark {
+  position: absolute;
+  right: 16px;
+  bottom: 14px;
+  opacity: 0.85;
+}
+.procurement-setup-card {
+  border-color: #e2e8f0;
+  border-radius: 12px;
+  grid-template-columns: minmax(240px, 1fr) minmax(180px, .45fr) auto;
+  box-shadow: none;
+}
+.procurement-setup-list {
+  display: none;
+}
+.procurement-setup-cta {
+  background: #0f172a;
+  box-shadow: none;
+}
+.procurement-overview-metrics {
+  grid-template-columns: repeat(5, minmax(140px, 1fr));
+  gap: 10px;
+}
+.procurement-metric-card {
+  min-height: 116px;
+  display: block;
+  position: relative;
+  overflow: hidden;
+}
+.procurement-overview-grid {
+  grid-template-columns: minmax(0, 1fr) 280px;
+}
+.procurement-main-column,
+.procurement-side-column {
+  display: grid;
+  gap: 16px;
+  align-self: start;
+}
+.procurement-panel {
+  overflow: hidden;
+}
+.procurement-insight-grid {
+  gap: 10px;
+}
+.procurement-lifecycle {
+  gap: 0;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  overflow: hidden;
+  background: #fff;
+}
+.procurement-lifecycle-step {
+  min-height: 126px;
+  border: 0;
+  border-right: 1px solid #e2e8f0;
+  border-radius: 0;
+  background: #fff;
+  gap: 6px;
+  box-shadow: none;
+}
+.procurement-lifecycle-step:hover {
+  border-color: #e2e8f0;
+  background: #f8fafc;
+  box-shadow: none;
+  transform: none;
+}
+.procurement-lifecycle-step::after {
+  content: ">";
+  top: 50%;
+  right: -7px;
+  width: 14px;
+  height: 18px;
+  margin-top: -9px;
+  color: #94a3b8;
+  border-color: #e2e8f0;
+  font-size: 11px;
+  box-shadow: none;
+}
+.procurement-lifecycle-step:last-child {
+  border-right: 0;
+}
+.procurement-lifecycle-step.recommended {
+  background: #f8fafc;
+  border-color: #e2e8f0;
+  box-shadow: inset 0 0 0 2px #0f172a;
+}
+.procurement-lifecycle-index {
+  width: 20px;
+  height: 20px;
+}
+.procurement-lifecycle-icon {
+  width: 30px;
+  height: 30px;
+}
+.procurement-lifecycle strong {
+  font-size: 12px;
+}
+.procurement-lifecycle b {
+  font-size: 11px;
+}
+.procurement-empty-state {
+  min-height: 150px;
+}
+.procurement-empty-icon {
+  width: 56px;
+  height: 56px;
+}
+.procurement-snapshot-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+.procurement-snapshot-tile {
+  min-height: 112px;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  padding: 14px;
+  display: grid;
+  grid-template-columns: 36px minmax(0, 1fr);
+  gap: 12px;
+  text-decoration: none;
+  color: #0f172a;
+  background: #fff;
+}
+.procurement-snapshot-tile > span {
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  display: grid;
+  place-items: center;
+  color: #0f172a;
+  background: #f1f5f9;
+}
+.procurement-snapshot-tile small {
+  display: block;
+  color: #64748b;
+  font-size: 11px;
+  font-weight: 800;
+}
+.procurement-snapshot-tile strong {
+  display: block;
+  color: #0f172a;
+  font-size: 18px;
+  font-weight: 900;
+  margin-top: 5px;
+}
+.procurement-snapshot-tile p {
+  margin: 7px 0 0;
+  color: #64748b;
+  font-size: 11px;
+  line-height: 1.35;
+}
+.procurement-quick-action {
+  min-height: 44px;
+  border-radius: 10px;
+}
+@media (max-width: 1400px) {
+  .procurement-setup-card {
+    grid-template-columns: minmax(240px, 1fr) minmax(160px, .55fr) auto;
+  }
+  .procurement-lifecycle {
+    grid-auto-flow: column;
+    grid-auto-columns: minmax(160px, 1fr);
+    grid-template-columns: none;
+    overflow-x: auto;
+    padding: 0;
+  }
+  .procurement-lifecycle-step {
+    scroll-snap-align: start;
+  }
+}
+@media (max-width: 1120px) {
+  .procurement-overview-grid,
+  .procurement-snapshot-grid,
+  .procurement-overview-filter-panel {
+    grid-template-columns: 1fr;
+  }
+}
+@media (max-width: 760px) {
+  .procurement-overview-page {
+    padding: 18px 14px 32px;
+  }
+  .procurement-primary-action,
+  .procurement-setup-cta {
+    width: 100%;
+  }
+  .procurement-overview-metrics,
+  .procurement-snapshot-grid {
+    grid-template-columns: 1fr;
+  }
+  .procurement-lifecycle-step {
+    border-right: 0;
+    border-bottom: 1px solid #e2e8f0;
+  }
+  .procurement-lifecycle-step::after {
+    content: "";
+    display: none;
   }
 }
 `

@@ -8,7 +8,6 @@ import {
   CalendarDays,
   Download,
   Eye,
-  Filter,
   Flag,
   Grid2X2,
   LineChart,
@@ -374,18 +373,6 @@ export default function HRPerformancePage() {
           <span>To month</span>
           <input type="month" value={toMonth} onChange={event => setToMonth(event.target.value)} style={monthInputStyle} />
         </label>
-        <button
-          type="button"
-          onClick={() => {
-            const year = new Date().getFullYear()
-            setFromMonth(`${year}-01`)
-            setToMonth(`${year}-12`)
-          }}
-          style={secondaryButtonStyle}
-        >
-          <CalendarDays size={15} /> January to December
-        </button>
-        <strong style={{ color: '#0f172a', fontSize: 13 }}>{periodLabel(fromMonth, toMonth)}</strong>
       </div>
 
       <div style={tabsStyle}>
@@ -477,7 +464,6 @@ export default function HRPerformancePage() {
             <SelectFilter value={location} onChange={setLocation} label="Location" options={['All Locations']} />
           </>
         )}
-        <button style={secondaryButtonStyle} disabled><Filter size={15} /> Filters</button>
         <div style={viewToggleStyle}>
           <button onClick={() => setViewMode('list')} style={viewButtonStyle(viewMode === 'list')} aria-label="List view"><List size={16} /></button>
           <button onClick={() => setViewMode('grid')} style={viewButtonStyle(viewMode === 'grid')} aria-label="Grid view"><Grid2X2 size={16} /></button>
@@ -1150,7 +1136,7 @@ const periodBarStyle = { marginBottom: 16, padding: 14, background: '#fff', bord
 const monthFieldStyle = { display: 'grid', gap: 5, color: '#64748b', fontSize: 11, fontWeight: 800 }
 const monthInputStyle = { minHeight: 40, border: '1px solid #e5e7eb', borderRadius: 8, background: '#fff', color: '#0f172a', padding: '0 12px', fontSize: 13, fontFamily: font }
 const tabsStyle = { display: 'flex', gap: 26, borderBottom: '1px solid #e5e7eb', overflowX: 'auto' as const, marginBottom: 18 }
-const tabStyle = (active: boolean) => ({ border: 'none', background: 'transparent', padding: '13px 0', borderBottom: active ? '2px solid #22c55e' : '2px solid transparent', color: active ? '#16a34a' : '#334155', fontSize: 13, fontWeight: 800, cursor: 'pointer', fontFamily: font, whiteSpace: 'nowrap' as const })
+const tabStyle = (active: boolean) => ({ border: 'none', background: 'transparent', padding: '13px 0', borderBottom: active ? '2px solid #111827' : '2px solid transparent', color: active ? '#111827' : '#334155', fontSize: 13, fontWeight: 800, cursor: 'pointer', fontFamily: font, whiteSpace: 'nowrap' as const })
 const searchBoxStyle = { minHeight: 40, minWidth: 330, border: '1px solid #e5e7eb', borderRadius: 8, background: '#fff', padding: '0 12px', display: 'flex', alignItems: 'center', gap: 8, color: '#0f172a', fontSize: 13, fontFamily: font }
 const plainInputStyle = { border: 'none', outline: 'none', background: 'transparent', width: '100%', font: 'inherit' }
 const secondaryButtonStyle = { minHeight: 40, border: '1px solid #e5e7eb', borderRadius: 8, background: '#fff', color: '#0f172a', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 8, padding: '0 14px', fontSize: 13, fontWeight: 800, cursor: 'pointer', fontFamily: font }

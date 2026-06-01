@@ -336,7 +336,8 @@ function loadRows(key: string, companyId: string) {
   const scopedKey = companyId ? companyScopedKey(key, companyId) : key
   const scoped = parseRows(window.localStorage.getItem(scopedKey))
   const global = parseRows(window.localStorage.getItem(key))
-  const rows = scoped.length ? [...scoped, ...global] : global
+  const globalForCompany = scoped.length ? global.filter(row => textFrom(row.companyId) === companyId) : global
+  const rows = scoped.length ? [...scoped, ...globalForCompany] : globalForCompany
   return uniqueRows(rows).filter(row => !companyId || !textFrom(row.companyId) || textFrom(row.companyId) === companyId)
 }
 

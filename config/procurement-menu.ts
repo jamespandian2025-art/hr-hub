@@ -35,6 +35,14 @@ export const procurementWorkspaceMenu: ProcurementWorkspaceMenuItem[] = [
   { label: 'Settings', href: '/procurement/settings', icon: Settings, description: 'Procurement workspace controls' },
 ]
 
+export function isProcurementRouteActive(pathname: string, href: string) {
+  if (href === '/procurement') return pathname === href
+  return pathname === href || pathname.startsWith(`${href}/`)
+}
+
 export function getProcurementRouteMeta(pathname: string) {
-  return procurementWorkspaceMenu.find(item => pathname === item.href || pathname.startsWith(`${item.href}/`)) || procurementWorkspaceMenu[0]
+  return procurementWorkspaceMenu
+    .slice()
+    .sort((a, b) => b.href.length - a.href.length)
+    .find(item => isProcurementRouteActive(pathname, item.href)) || procurementWorkspaceMenu[0]
 }

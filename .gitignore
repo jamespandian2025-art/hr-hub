@@ -23,15 +23,30 @@
 # misc
 .DS_Store
 *.pem
+.data/
+*.backup
+*.backup.json
+wiseflow-backup-*.json
+backups/
+*.dump
+*.sql.gz
 
 # debug
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 .pnpm-debug.log*
+*.log
+.codex-*
+qwiet-*.json
+qwiet-*.log
+
+# local agent/tooling workspaces
+.claude/
 
 # env files (can opt-in for committing if needed)
 .env*
+!.env.example
 
 # vercel
 .vercel

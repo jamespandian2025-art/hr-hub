@@ -42,6 +42,7 @@ import {
   movementFromTransfer,
   newWarehouseId as newId,
   normalizeWarehouseState,
+  refreshWarehouseState,
   saveWarehouseState,
 } from '@/lib/warehouse/store'
 
@@ -128,6 +129,7 @@ function useWarehouseState() {
 
   useEffect(() => {
     const reload = () => setState(loadWarehouseState())
+    refreshWarehouseState().then(next => setState(next)).catch(() => undefined)
     window.addEventListener('storage', reload)
     window.addEventListener('focus', reload)
     window.addEventListener('wiseflow:warehouse-data-changed', reload)
@@ -623,13 +625,12 @@ function Overview({ state }: { state: WarehouseState }) {
   const hasData = state.inventory.length || state.locations.length || state.receiving.length || state.transfers.length || state.adjustments.length
   return (
     <>
-      {hasData ? (
+      <InventoryHealth state={state} />
+      {hasData && (
         <div className="wh-overview-grid">
           <InventoryTable rows={state.inventory.slice(0, 8)} />
           <ActivityPanel state={state} />
         </div>
-      ) : (
-        <EmptyState title={pageConfig.overview.emptyTitle} body={pageConfig.overview.emptyBody} primary="Add Inventory Item" href="/warehouse/inventory/new" />
       )}
       <div className="wh-quick-grid">
         <QuickLink label="Inventory" detail="Create and track SKUs" href="/warehouse/inventory" icon={<Boxes size={22} />} />
@@ -639,6 +640,88 @@ function Overview({ state }: { state: WarehouseState }) {
         <QuickLink label="Locations" detail="Organize warehouse storage" href="/warehouse/locations" icon={<MapPin size={22} />} />
       </div>
     </>
+  )
+}
+
+function InventoryHealth({ state }: { state: WarehouseState }) {
+  const items = state.inventory
+  const total = items.length
+  const counts: Record<'In Stock' | 'Low Stock' | 'Out of Stock', number> = { 'In Stock': 0, 'Low Stock': 0, 'Out of Stock': 0 }
+  items.forEach(item => { counts[itemStatus(item)] += 1 })
+  const segments = [
+    { label: 'In Stock', value: counts['In Stock'], color: '#10b981' },
+    { label: 'Low Stock', value: counts['Low Stock'], color: '#f59e0b' },
+    { label: 'Out of Stock', value: counts['Out of Stock'], color: '#ef4444' },
+  ]
+  const totalValue = items.reduce((sum, item) => sum + item.stock * item.unitCost, 0)
+  const byWarehouse = new Map<string, number>()
+  items.forEach(item => {
+    const key = item.warehouse || 'Unassigned'
+    byWarehouse.set(key, (byWarehouse.get(key) || 0) + item.stock * item.unitCost)
+  })
+  const warehouseRows = Array.from(byWarehouse, ([name, value]) => ({ name, value }))
+    .sort((a, b) => b.value - a.value)
+    .slice(0, 6)
+  const maxValue = Math.max(...warehouseRows.map(row => row.value), 1)
+
+  const denom = Math.max(total, 1)
+  let cursor = 0
+  const stops = segments
+    .filter(segment => segment.value > 0)
+    .map(segment => {
+      const start = (cursor / denom) * 100
+      cursor += segment.value
+      const end = (cursor / denom) * 100
+      return `${segment.color} ${start}% ${end}%`
+    })
+    .join(', ')
+  const donutBackground = total ? `conic-gradient(${stops})` : 'conic-gradient(#e5e7eb 0% 100%)'
+
+  return (
+    <section className="wh-health">
+      <div className="wh-chart-card">
+        <header>
+          <h3>Stock Status</h3>
+          <span className="wh-muted">{total} {total === 1 ? 'SKU' : 'SKUs'}</span>
+        </header>
+        <div className="wh-donut-wrap">
+          <div className="wh-donut" style={{ background: donutBackground }} role="img" aria-label="Stock status breakdown">
+            <span><strong>{total}</strong><small>Total SKUs</small></span>
+          </div>
+          <ul className="wh-donut-legend">
+            {segments.map(segment => (
+              <li key={segment.label}>
+                <i style={{ background: total ? segment.color : '#cbd5e1' }} />
+                <span>{segment.label}</span>
+                <strong>{segment.value}{total ? ` · ${Math.round((segment.value / total) * 100)}%` : ''}</strong>
+              </li>
+            ))}
+          </ul>
+        </div>
+      </div>
+      <div className="wh-chart-card">
+        <header>
+          <h3>Inventory Value by Warehouse</h3>
+          <span className="wh-muted">{money(totalValue)}</span>
+        </header>
+        {warehouseRows.length ? (
+          <ul className="wh-bar-list">
+            {warehouseRows.map(row => (
+              <li key={row.name}>
+                <span className="wh-bar-label" title={row.name}>{row.name}</span>
+                <span className="wh-bar-track"><i style={{ width: `${Math.max((row.value / maxValue) * 100, 2)}%` }} /></span>
+                <strong>{money(row.value)}</strong>
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <div className="wh-chart-empty">
+            <p>Add inventory to see value broken down by warehouse.</p>
+            <Link href="/warehouse/inventory/new" className="wh-btn wh-primary"><Plus size={15} /> Add Inventory Item</Link>
+          </div>
+        )}
+      </div>
+    </section>
   )
 }
 
@@ -1139,9 +1222,9 @@ tr:hover td { background: #f8fffb; }
 .wh-row-actions { display: inline-flex; gap: 6px; align-items: center; flex-wrap: wrap; }
 .wh-row-actions button { min-height: 30px; border: 1px solid #e5e7eb; background: #fff; color: #0f172a; border-radius: 7px; padding: 0 8px; display: inline-flex; align-items: center; gap: 5px; font: inherit; font-size: 11px; font-weight: 900; cursor: pointer; }
 .wh-row-actions button.danger { border-color: #fecaca; color: #dc2626; background: #fff7f7; }
-.wh-empty { min-height: 420px; border: 1px solid #edf2f7; background: #fff; border-radius: 8px; display: grid; place-items: center; align-content: center; gap: 12px; text-align: center; padding: 28px; }
-.wh-empty > span { width: 92px; height: 92px; border-radius: 999px; background: #ecfdf5; color: #10b981; display: grid; place-items: center; }
-.wh-empty h2 { margin: 0; font-size: 24px; }
+.wh-empty { min-height: 300px; border: 1px dashed #d7e3ec; background: linear-gradient(180deg, #ffffff 0%, #f6fdfb 100%); border-radius: 12px; display: grid; place-items: center; align-content: center; gap: 14px; text-align: center; padding: 40px 28px; box-shadow: 0 1px 2px rgba(15, 23, 42, .03); }
+.wh-empty > span { width: 88px; height: 88px; border-radius: 999px; background: #ecfdf5; color: #10b981; display: grid; place-items: center; box-shadow: 0 0 0 10px rgba(16, 185, 129, .06); }
+.wh-empty h2 { margin: 0; font-size: 22px; font-weight: 800; }
 .wh-empty p { max-width: 480px; margin: 0; color: #64748b; line-height: 1.55; font-size: 14px; }
 .wh-detail { padding: 18px; position: sticky; top: 92px; }
 .wh-detail h3, .wh-form-card h2 { margin: 0 0 14px; font-size: 16px; }
@@ -1212,4 +1295,28 @@ textarea { width: 100%; min-height: 96px; resize: vertical; border: 1px solid #e
 .wh-page select:focus-visible,
 .wh-page textarea:focus-visible { outline: 2px solid #10b981; outline-offset: 2px; }
 .wh-field input:focus, .wh-field select:focus, .wh-page textarea:focus { border-color: #10b981; box-shadow: 0 0 0 3px rgba(16, 185, 129, .12); }
+/* Inventory Health charts */
+.wh-health { display: grid; grid-template-columns: minmax(0, 380px) minmax(0, 1fr); gap: 18px; margin-bottom: 18px; align-items: stretch; }
+.wh-chart-card { min-width: 0; border: 1px solid #edf2f7; background: #fff; border-radius: 12px; padding: 18px; box-shadow: 0 1px 2px rgba(15, 23, 42, .04); }
+.wh-chart-card header { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 16px; }
+.wh-chart-card h3 { margin: 0; font-size: 15px; font-weight: 700; }
+.wh-donut-wrap { display: flex; align-items: center; gap: 22px; }
+.wh-donut { position: relative; width: 132px; height: 132px; border-radius: 999px; flex: 0 0 auto; display: grid; place-items: center; }
+.wh-donut::after { content: ''; position: absolute; inset: 19px; background: #fff; border-radius: 999px; }
+.wh-donut > span { position: relative; z-index: 1; display: grid; place-items: center; text-align: center; }
+.wh-donut strong { font-size: 26px; line-height: 1; color: #0f172a; }
+.wh-donut small { margin-top: 3px; color: #64748b; font-size: 11px; font-weight: 700; }
+.wh-donut-legend { flex: 1; min-width: 0; list-style: none; margin: 0; padding: 0; display: grid; gap: 11px; }
+.wh-donut-legend li { display: grid; grid-template-columns: 12px minmax(0, 1fr) auto; align-items: center; gap: 10px; font-size: 13px; color: #334155; }
+.wh-donut-legend i { width: 11px; height: 11px; border-radius: 3px; flex: 0 0 auto; }
+.wh-donut-legend strong { color: #0f172a; font-weight: 700; white-space: nowrap; }
+.wh-bar-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 15px; }
+.wh-bar-list li { display: grid; grid-template-columns: minmax(86px, 130px) minmax(0, 1fr) auto; align-items: center; gap: 14px; font-size: 13px; }
+.wh-bar-label { color: #334155; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.wh-bar-track { height: 10px; border-radius: 999px; background: #f1f5f9; overflow: hidden; }
+.wh-bar-track i { display: block; height: 100%; border-radius: 999px; background: linear-gradient(90deg, #34d399, #10b981); }
+.wh-bar-list strong { color: #0f172a; font-weight: 700; white-space: nowrap; }
+.wh-chart-empty { min-height: 132px; display: grid; place-items: center; align-content: center; gap: 12px; text-align: center; }
+.wh-chart-empty p { margin: 0; color: #64748b; font-size: 13px; max-width: 280px; }
+@media (max-width: 980px) { .wh-health { grid-template-columns: 1fr; } }
 `

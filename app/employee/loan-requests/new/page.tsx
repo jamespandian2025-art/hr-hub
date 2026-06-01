@@ -24,6 +24,7 @@ export default function NewLoanRequestPage() {
   const [repaymentMonths, setRepaymentMonths] = useState('1')
   const [reason, setReason] = useState('')
   const [notice, setNotice] = useState('')
+  const [isSubmitting, setIsSubmitting] = useState(false)
 
   const amountValue = Number(amount || 0)
   const monthsValue = Math.max(1, Number(repaymentMonths || 1))
@@ -48,6 +49,7 @@ export default function NewLoanRequestPage() {
   ], [amountValue, effectiveMonths, effectiveSchedule, isCashAdvance, repaymentAmount, selectedRequestType])
 
   const submit = async () => {
+    if (isSubmitting) return
     setNotice('')
     if (!amountValue || amountValue <= 0) {
       setNotice('Please enter a valid amount.')
@@ -62,48 +64,58 @@ export default function NewLoanRequestPage() {
       return
     }
 
-    const now = new Date().toISOString()
-    const request: LoanRequest = {
-      id: `LRQ-${new Date().getFullYear()}-${String(Date.now()).slice(-6)}`,
-      employeeId: employee.id,
-      employeeName,
-      employeeCode: employee.employeeId || employee.id,
-      department: employee.department,
-      team: employee.team,
-      jobTitle: employee.jobTitle,
-      requestType,
-      customLoanType: isManualType ? customLoanType.trim() : undefined,
-      amount: amountValue,
-      repaymentMonths: effectiveMonths,
-      repaymentAmount,
-      deductionSchedule: effectiveSchedule,
-      reason: reason.trim(),
-      status: 'Pending',
-      approvalStep: 'finance',
-      financeApprovalStatus: 'Pending',
-      hrApprovalStatus: 'Skipped',
-      approvalLogs: [{ id: `LOG-${Date.now()}`, actor: 'employee', decision: 'Submitted', createdAt: now }],
-      createdAt: now,
-      updatedAt: now,
-    }
-
-    let savedRequest = request
+    setIsSubmitting(true)
     try {
-      savedRequest = await createHrRecord<LoanRequest>('loan-requests', request as unknown as Record<string, unknown>)
-    } catch (error) {
-      console.error('Could not sync loan request to Finance inbox', error)
+      const now = new Date().toISOString()
+      const request: LoanRequest = {
+        id: `LRQ-${new Date().getFullYear()}-${String(Date.now()).slice(-6)}`,
+        employeeId: employee.id,
+        employeeName,
+        employeeCode: employee.employeeId || employee.id,
+        department: employee.department,
+        team: employee.team,
+        jobTitle: employee.jobTitle,
+        requestType,
+        customLoanType: isManualType ? customLoanType.trim() : undefined,
+        amount: amountValue,
+        repaymentMonths: effectiveMonths,
+        repaymentAmount,
+        deductionSchedule: effectiveSchedule,
+        reason: reason.trim(),
+        status: 'Pending',
+        approvalStep: 'finance',
+        financeApprovalStatus: 'Pending',
+        hrApprovalStatus: 'Skipped',
+        approvalLogs: [{ id: `LOG-${Date.now()}`, actor: 'employee', decision: 'Submitted', createdAt: now }],
+        createdAt: now,
+        updatedAt: now,
+      }
+
+      let savedRequest: LoanRequest
+      try {
+        savedRequest = await createHrRecord<LoanRequest>('loan-requests', request as unknown as Record<string, unknown>)
+      } catch (error) {
+        console.error('Could not sync loan request to Finance inbox', error)
+        setNotice(error instanceof Error
+          ? `Could not submit this request to Finance. ${error.message}`
+          : 'Could not submit this request to Finance. Please try again.')
+        return
+      }
+
+      const requests = loadStored<LoanRequest[]>(loanRequestKey, [])
+      saveStored(loanRequestKey, [savedRequest, ...requests.filter(item => item.id !== savedRequest.id)])
+      window.dispatchEvent(new Event('storage'))
+      window.dispatchEvent(new Event('wiseflow:finance-requests-changed'))
+      appendSystemNotification(
+        `${employeeName} requested ${selectedRequestType.toLowerCase()}`,
+        `${employeeName} submitted a ${money(amountValue)} ${selectedRequestType.toLowerCase()} request. Finance must approve payment terms before payroll deduction.`,
+        '/accounting/payroll-finance',
+      )
+      appendAuditLog({ action: 'loan.change', targetType: 'Loan Request', targetId: request.id, summary: `${employeeName} submitted ${selectedRequestType} for finance review.` })
+      router.push('/employee/loan-requests')
+    } finally {
+      setIsSubmitting(false)
     }
-    const requests = loadStored<LoanRequest[]>(loanRequestKey, [])
-    saveStored(loanRequestKey, [savedRequest, ...requests.filter(item => item.id !== savedRequest.id)])
-    window.dispatchEvent(new Event('storage'))
-    window.dispatchEvent(new Event('wiseflow:finance-requests-changed'))
-    appendSystemNotification(
-      `${employeeName} requested ${selectedRequestType.toLowerCase()}`,
-      `${employeeName} submitted a ${money(amountValue)} ${selectedRequestType.toLowerCase()} request. Finance must approve payment terms before payroll deduction.`,
-      '/accounting/payroll-finance',
-    )
-    appendAuditLog({ action: 'loan.change', targetType: 'Loan Request', targetId: request.id, summary: `${employeeName} submitted ${selectedRequestType} for finance review.` })
-    router.push('/employee/loan-requests')
   }
 
   return (
@@ -141,7 +153,7 @@ export default function NewLoanRequestPage() {
 
           <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 12, marginTop: 24 }}>
             <button type="button" onClick={() => router.push('/employee/loan-requests')} className="employee-secondary-button">Cancel</button>
-            <button type="button" onClick={submit} className="employee-primary-button">Submit Request</button>
+            <button type="button" onClick={submit} disabled={isSubmitting} className="employee-primary-button">{isSubmitting ? 'Submitting...' : 'Submit Request'}</button>
           </div>
         </section>
 

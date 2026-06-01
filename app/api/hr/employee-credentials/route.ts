@@ -1,3 +1,9 @@
+import { appendAuditLog, jsonError } from '@/lib/hrms/serverStore'
+import { requireSession, requestIp } from '@/lib/security/session'
+import { requireCsrf } from '@/lib/security/requestGuards'
+import { escapeHtml, validateObject } from '@/lib/security/validation'
+import { enforceRateLimit, rateLimitPolicies } from '@/lib/security/rateLimit'
+
 type CredentialEmailPayload = {
   recipient?: unknown
   employeeName?: unknown
@@ -83,6 +89,14 @@ async function sendWithSendGrid(input: { fromEmail: string; recipient: string; s
 }
 
 export async function POST(request: Request) {
+  try {
+    requireCsrf(request)
+  } catch (error) {
+    return jsonError(error)
+  }
+
+  const session = await requireSession(request, 'hr').catch(error => error)
+  if (session instanceof Error) return jsonError(session)
   let payload: CredentialEmailPayload
 
   try {
@@ -91,14 +105,29 @@ export async function POST(request: Request) {
     return Response.json({ ok: false, error: 'Invalid request body.' }, { status: 400 })
   }
 
-  const recipient = value(payload.recipient)
-  const employeeName = value(payload.employeeName) || 'Employee'
-  const portalEmail = value(payload.portalEmail)
-  const portalPassword = value(payload.portalPassword)
-  const loginUrl = value(payload.loginUrl)
+  const validation = validateObject(payload as Record<string, unknown>, {
+    recipient: { required: true, type: 'string', maxLength: 200 },
+    employeeName: { type: 'string', maxLength: 160 },
+    portalEmail: { required: true, type: 'string', maxLength: 200 },
+    portalPassword: { required: true, type: 'string', maxLength: 200 },
+    loginUrl: { required: true, type: 'string', maxLength: 400 },
+  })
+  if (!validation.ok) return Response.json({ ok: false, error: validation.errors[0] }, { status: 400 })
+
+  const recipient = value(validation.value.recipient)
+  const employeeName = value(validation.value.employeeName) || 'Employee'
+  const portalEmail = value(validation.value.portalEmail)
+  const portalPassword = value(validation.value.portalPassword)
+  const loginUrl = value(validation.value.loginUrl)
 
   if (!isEmail(recipient) || !portalEmail || !portalPassword || !loginUrl) {
     return Response.json({ ok: false, error: 'Missing employee login email details.' }, { status: 400 })
+  }
+
+  try {
+    await enforceRateLimit(request, rateLimitPolicies.credentialEmail, session.userId, session.email, recipient)
+  } catch (error) {
+    return jsonError(error)
   }
 
   const fromEmail = configuredFromEmail()
@@ -135,15 +164,19 @@ export async function POST(request: Request) {
     'WiseFlow HR',
   ].join('\n')
 
+  const safeEmployeeName = escapeHtml(employeeName)
+  const safeLoginUrl = escapeHtml(loginUrl)
+  const safePortalEmail = escapeHtml(portalEmail)
+  const safePortalPassword = escapeHtml(portalPassword)
   const html = `
     <div style="font-family: Arial, sans-serif; color: #0f172a; line-height: 1.5;">
       <h2 style="margin:0 0 12px;">WiseFlow employee portal login</h2>
-      <p>Hello ${employeeName},</p>
+      <p>Hello ${safeEmployeeName},</p>
       <p>Your WiseFlow Employee Self-Service portal account is ready.</p>
       <div style="border:1px solid #e2e8f0; border-radius:10px; padding:14px; background:#f8fafc;">
-        <p><strong>Login page:</strong> <a href="${loginUrl}">${loginUrl}</a></p>
-        <p><strong>Login email:</strong> ${portalEmail}</p>
-        <p><strong>Temporary password:</strong> ${portalPassword}</p>
+        <p><strong>Login page:</strong> <a href="${safeLoginUrl}">${safeLoginUrl}</a></p>
+        <p><strong>Login email:</strong> ${safePortalEmail}</p>
+        <p><strong>Temporary password:</strong> ${safePortalPassword}</p>
       </div>
       <p>Please sign in and change your temporary password after your first login.</p>
       <p>Thank you,<br />WiseFlow HR</p>
@@ -171,5 +204,14 @@ export async function POST(request: Request) {
     }, { status: 502 })
   }
 
-  return Response.json({ ok: true, provider: process.env.RESEND_API_KEY ? 'resend' : process.env.SENDGRID_API_KEY ? 'sendgrid' : 'brevo' })
+  await appendAuditLog({
+    action: 'employee.credentials.email',
+    actor: { id: session.userId, name: session.name || session.email || 'HR User', role: session.role },
+    collection: 'employees',
+    targetId: portalEmail,
+    summary: `Sent employee portal credentials to ${recipient}.`,
+    ip: requestIp(request),
+  })
+
+return Response.json({ ok: true, provider: process.env.RESEND_API_KEY ? 'resend' : process.env.SENDGRID_API_KEY ? 'sendgrid' : 'brevo' })
 }

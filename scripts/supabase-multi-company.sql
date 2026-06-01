@@ -63,11 +63,28 @@ as $$
   );
 $$;
 
+create or replace function public.is_company_admin(target_company_id text)
+returns boolean
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select exists (
+    select 1
+    from public.company_members member
+    where member.company_id = target_company_id
+      and member.status = 'Active'
+      and lower(member.role) in ('admin', 'owner')
+      and (
+        member.user_id = auth.uid()
+        or lower(member.email) = lower(coalesce(auth.jwt() ->> 'email', ''))
+      )
+  );
+$$;
+
 alter table public.companies enable row level security;
 alter table public.company_members enable row level security;
-alter table if exists public.clients enable row level security;
-alter table if exists public.sales_orders enable row level security;
-
 drop policy if exists "Company members can read companies" on public.companies;
 create policy "Company members can read companies"
 on public.companies for select
@@ -76,27 +93,5 @@ using (public.is_company_member(id));
 drop policy if exists "Company admins can manage members" on public.company_members;
 create policy "Company admins can manage members"
 on public.company_members for all
-using (public.is_company_member(company_id))
-with check (public.is_company_member(company_id));
-
-drop policy if exists "Company members can read clients" on public.clients;
-create policy "Company members can read clients"
-on public.clients for select
-using (public.is_company_member(company_id));
-
-drop policy if exists "Company members can write clients" on public.clients;
-create policy "Company members can write clients"
-on public.clients for all
-using (public.is_company_member(company_id))
-with check (public.is_company_member(company_id));
-
-drop policy if exists "Company members can read sales orders" on public.sales_orders;
-create policy "Company members can read sales orders"
-on public.sales_orders for select
-using (public.is_company_member(company_id));
-
-drop policy if exists "Company members can write sales orders" on public.sales_orders;
-create policy "Company members can write sales orders"
-on public.sales_orders for all
-using (public.is_company_member(company_id))
-with check (public.is_company_member(company_id));
+using (public.is_company_admin(company_id))
+with check (public.is_company_admin(company_id));

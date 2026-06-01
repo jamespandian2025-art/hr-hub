@@ -18,6 +18,7 @@ import { createHrRecord, listHrRecords, updateHrRecord } from '@/lib/hrms/client
 const font = "var(--font-body)"
 const statuses: Array<LeaveStatus | 'All'> = ['All', 'Pending', 'Approved', 'Rejected', 'Cancelled']
 type FloatingMenuPosition = { top: number; left: number }
+const syncErrorStyle = { marginBottom: 16, padding: '10px 12px', border: '1px solid #fecaca', borderRadius: 10, background: '#fef2f2', color: '#b91c1c', fontSize: 13, fontWeight: 800 } as const
 
 type FormState = {
   employeeId: string
@@ -56,6 +57,7 @@ export default function HrLeaveRequestsPage() {
   const [menuPosition, setMenuPosition] = useState<FloatingMenuPosition>({ top: 0, left: 0 })
   const [modalOpen, setModalOpen] = useState(false)
   const [form, setForm] = useState<FormState>(defaultForm)
+  const [syncError, setSyncError] = useState('')
   const menuRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -146,25 +148,32 @@ export default function HrLeaveRequestsPage() {
   }
 
   async function updateStatus(row: LeaveRow, status: LeaveStatus) {
+    setSyncError('')
     const next = requests.map(request => {
       if (request.id !== row.id) return request
       if (status === 'Cancelled') return { ...request, status, approvalStep: 'complete' as const, updatedAt: new Date().toISOString() }
       if (status === 'Pending') return { ...request, status, updatedAt: new Date().toISOString() }
       return decideLeaveRequest(request, row.employee, 'hr', status)
     })
-    persist(next)
     const changed = next.find(request => request.id === row.id)
     if (changed) {
       try {
         await updateHrRecord<LeaveRequest>('leave-requests', changed.id, changed as unknown as Record<string, unknown>)
       } catch (error) {
         console.error('Could not sync leave request decision', error)
+        setSyncError(error instanceof Error
+          ? `Could not update this leave request in HR records. ${error.message}`
+          : 'Could not update this leave request in HR records. Please try again.')
+        setMenuId(null)
+        return
       }
     }
+    persist(next)
     setMenuId(null)
   }
 
   async function submitRequest() {
+    setSyncError('')
     const employee = employees.find(item => item.id === form.employeeId)
     if (!employee) return
     const next: LeaveRequest = {
@@ -184,11 +193,15 @@ export default function HrLeaveRequestsPage() {
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     }
-    persist([next, ...requests])
     try {
-      await createHrRecord<LeaveRequest>('leave-requests', next as unknown as Record<string, unknown>)
+      const savedRequest = await createHrRecord<LeaveRequest>('leave-requests', next as unknown as Record<string, unknown>)
+      persist([savedRequest, ...requests.filter(request => request.id !== savedRequest.id)])
     } catch (error) {
       console.error('Could not sync HR-created leave request', error)
+      setSyncError(error instanceof Error
+        ? `Could not create this leave request in HR records. ${error.message}`
+        : 'Could not create this leave request in HR records. Please try again.')
+      return
     }
     setForm(defaultForm())
     setModalOpen(false)
@@ -205,7 +218,6 @@ export default function HrLeaveRequestsPage() {
     <div className="hr-module-page" style={{ fontFamily: font }}>
       <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 16, marginBottom: 18 }}>
         <div>
-          <div style={{ fontSize: 12, color: '#64748b', marginBottom: 20 }}>HR Hub&nbsp;&nbsp;&gt;&nbsp;&nbsp;Leave Requests</div>
           <h1 style={{ margin: 0, color: '#0f172a', fontSize: 28, fontWeight: 900 }}>Leave Requests</h1>
           <p style={{ margin: '6px 0 0', color: '#475569', fontSize: 14 }}>Manage and review employee leave requests, balances, and approval status.</p>
         </div>
@@ -214,6 +226,7 @@ export default function HrLeaveRequestsPage() {
           <button onClick={() => setModalOpen(true)} style={primaryButtonStyle}><Plus size={15} /> New Leave Request</button>
         </div>
       </div>
+      {syncError && <div style={syncErrorStyle}>{syncError}</div>}
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(6, minmax(0, 1fr))', gap: 12, marginBottom: 18 }}>
         <StatCard icon={CalendarDays} label="Total Requests" value={stats.total} sub={monthRangeLabel()} tone="#3b82f6" bg="#dbeafe" />

@@ -314,7 +314,7 @@ export default function TeamDetailsPage() {
 
   if (!team) {
     return (
-      <main style={{ fontFamily: font, padding: 24, minHeight: '100vh', background: '#f8fafc' }}>
+      <main style={{ fontFamily: font, padding: 24, minHeight: '100vh' }}>
         <div style={{ ...card, padding: 28 }}>
           <h1 style={{ margin: 0, color: '#111827' }}>Team not found</h1>
           <Link href="/hr/teams" style={{ color: '#16a34a', fontWeight: 800 }}>Back to Teams</Link>
@@ -328,7 +328,7 @@ export default function TeamDetailsPage() {
   const contractors = team.members.filter(member => member.employmentType === 'Contractor').length
 
   return (
-    <main style={{ fontFamily: font, padding: '0 20px 32px', minHeight: '100vh', background: '#f8fafc' }}>
+    <main style={{ fontFamily: font, padding: '0 20px 32px', minHeight: '100vh' }}>
       <div style={{ padding: '20px 0 18px', fontSize: 12, color: '#6b7280' }}>
         HR Hub &nbsp;&gt;&nbsp; <Link href="/hr/teams" style={{ color: '#6b7280', textDecoration: 'none' }}>Teams</Link> &nbsp;&gt;&nbsp; {team.name}
       </div>

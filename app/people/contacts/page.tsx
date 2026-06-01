@@ -1,13 +1,14 @@
 'use client'
 
 import { useEffect, useMemo, useState } from 'react'
+import { companyScopedKey, getActiveCompany } from '@/lib/tenant/company'
 
 const font = "var(--font-body)"
 const contactsStorageKey = 'flowsys-contacts'
 const clientsStorageKey = 'flowsys-clients'
 
 interface Client {
-  id: number
+  id: number | string
   name: string
   email: string
   contact: string
@@ -28,7 +29,7 @@ interface ManualContact {
 
 interface ContactRow {
   key: string
-  id: number
+  id: number | string
   source: 'Client' | 'Contact'
   name: string
   email: string
@@ -78,8 +79,25 @@ const loadClients = () => {
   if (typeof window === 'undefined') return initialClients
 
   try {
-    const stored = window.localStorage.getItem(clientsStorageKey)
-    return stored ? (JSON.parse(stored) as Client[]) : initialClients
+    const activeCompany = getActiveCompany()
+    const scopedKey = companyScopedKey(clientsStorageKey, activeCompany?.id)
+    const stored = window.localStorage.getItem(scopedKey) || window.localStorage.getItem(clientsStorageKey)
+    if (!stored) return initialClients
+    const parsed = JSON.parse(stored) as Array<Record<string, unknown>>
+    return parsed.map((client, index) => {
+      const contacts = Array.isArray(client.contacts) ? client.contacts as Array<Record<string, unknown>> : []
+      const primary = contacts.find(contact => contact.primary) || contacts[0]
+      return {
+        id: typeof client.id === 'string' || typeof client.id === 'number' ? client.id : index + 1,
+        name: stringValue(client.name, stringValue(client.company, 'Unnamed client')),
+        email: stringValue(primary?.email, stringValue(client.email, '-')),
+        contact: stringValue(primary?.phone, stringValue(client.phone, '-')),
+        completed: numberValue(client.completed),
+        total: numberValue(client.total, numberValue(client.totalProjects)),
+        cost: numberValue(client.cost, numberValue(client.totalRevenue)),
+        color: stringValue(client.color, colorFor(index + 1)),
+      }
+    })
   } catch {
     return initialClients
   }
@@ -98,6 +116,8 @@ const loadContacts = () => {
 
 const nextId = (records: { id: number }[]) => records.reduce((max, record) => Math.max(max, record.id), 0) + 1
 const colorFor = (id: number) => ['#6c63ff', '#10b981', '#f59e0b', '#2563eb', '#ec4899'][id % 5]
+const stringValue = (value: unknown, fallback = '') => typeof value === 'string' && value.trim() ? value : fallback
+const numberValue = (value: unknown, fallback = 0) => typeof value === 'number' && Number.isFinite(value) ? value : fallback
 
 export default function ContactsPage() {
   const [clients, setClients] = useState<Client[]>(loadClients)
@@ -191,10 +211,10 @@ export default function ContactsPage() {
     if (!trimmedName) return
 
     if (editingKey?.startsWith('client-')) {
-      const id = Number(editingKey.replace('client-', ''))
+      const id = editingKey.replace('client-', '')
       setClients(previous =>
         previous.map(client =>
-          client.id === id
+          String(client.id) === id
             ? {
                 ...client,
                 name: trimmedName,
@@ -241,7 +261,7 @@ export default function ContactsPage() {
 
   const deleteContact = (contact: ContactRow) => {
     if (contact.source === 'Client') {
-      setClients(previous => previous.filter(client => client.id !== contact.id))
+      setClients(previous => previous.filter(client => String(client.id) !== String(contact.id)))
     } else {
       setManualContacts(previous => previous.filter(record => record.id !== contact.id))
     }

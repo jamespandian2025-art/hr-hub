@@ -1,16 +1,13 @@
 'use client'
 
-import { useState } from 'react'
 import Link from 'next/link'
 import { ArrowLeft, Check } from 'lucide-react'
 
 const font = "var(--font-body)"
-const storageKey = 'flowsys-account'
-
-type ThemeName = 'WiseFlow Light' | 'WiseFlow Dark' | 'Google Blue' | 'Google Green' | 'Graphite Pro'
 
 const THEMES: {
-  name: ThemeName
+  name: 'light'
+  label: string
   description: string
   accent: string
   bg: string
@@ -21,108 +18,36 @@ const THEMES: {
   text: string
 }[] = [
   {
-    name: 'WiseFlow Light',
-    description: 'Clean black and white workspace. Default.',
-    accent: '#000000',
+    name: 'light',
+    label: 'Light',
+    description: 'Clean bright workspace.',
+    accent: '#16a34a',
     bg: '#FFFFFF',
     surface: '#FFFFFF',
     sidebar: '#000000',
     sidebarText: '#EDEDED',
     border: '#D4D4D4',
     text: '#000000',
-  },
-  {
-    name: 'WiseFlow Dark',
-    description: 'Monochrome dark preview with no color accent.',
-    accent: '#FFFFFF',
-    bg: '#000000',
-    surface: '#0A0A0A',
-    sidebar: '#000000',
-    sidebarText: '#EDEDED',
-    border: '#242424',
-    text: '#FFFFFF',
-  },
-  {
-    name: 'Google Blue',
-    description: 'Monochrome light workspace.',
-    accent: '#000000',
-    bg: '#FFFFFF',
-    surface: '#FFFFFF',
-    sidebar: '#000000',
-    sidebarText: '#EDEDED',
-    border: '#D4D4D4',
-    text: '#000000',
-  },
-  {
-    name: 'Google Green',
-    description: 'Monochrome light workspace.',
-    accent: '#000000',
-    bg: '#FFFFFF',
-    surface: '#FFFFFF',
-    sidebar: '#000000',
-    sidebarText: '#EDEDED',
-    border: '#D4D4D4',
-    text: '#000000',
-  },
-  {
-    name: 'Graphite Pro',
-    description: 'Monochrome dark preview with no color accent.',
-    accent: '#FFFFFF',
-    bg: '#000000',
-    surface: '#0A0A0A',
-    sidebar: '#000000',
-    sidebarText: '#EDEDED',
-    border: '#242424',
-    text: '#FFFFFF',
   },
 ]
-
-const THEME_MAP: Record<string, string> = {
-  'WiseFlow Light': 'light',
-  'WiseFlow Dark': 'light',
-  'Google Blue': 'light',
-  'Google Green': 'light',
-  'Graphite Pro': 'light',
-}
-
-function applyThemeToDOM(name: string) {
-  const mapped = THEME_MAP[name]
-  if (!mapped) return
-  document.documentElement.dataset.theme = mapped
-  document.documentElement.dataset.themePreference = name
-  window.dispatchEvent(new Event('flowsys-theme-change'))
-}
 
 function ThemePreviewCard({
   theme,
   active,
-  preview,
-  onSelect,
-  onPreview,
-  onLeave,
 }: {
   theme: typeof THEMES[0]
   active: boolean
-  preview: boolean
-  onSelect: () => void
-  onPreview: () => void
-  onLeave: () => void
 }) {
   return (
     <div
-      onMouseEnter={onPreview}
-      onMouseLeave={onLeave}
-      onClick={onSelect}
       style={{
-        border: `2px solid ${active ? theme.accent : preview ? theme.accent + '66' : theme.border}`,
+        border: `2px solid ${active ? theme.accent : theme.border}`,
         borderRadius: 14,
         overflow: 'hidden',
-        cursor: 'pointer',
+        cursor: 'default',
         transition: 'border-color 180ms ease, box-shadow 180ms ease',
         boxShadow: active
           ? `0 0 0 3px ${theme.accent}22, 0 4px 18px rgba(0,0,0,0.1)`
-          : preview
-          ? `0 0 0 2px ${theme.accent}14, 0 4px 12px rgba(0,0,0,0.06)`
           : '0 1px 4px rgba(0,0,0,0.05)',
         background: theme.bg,
         fontFamily: font,
@@ -166,7 +91,7 @@ function ThemePreviewCard({
       <div style={{ padding: '10px 14px 12px', background: theme.surface, borderTop: `1px solid ${theme.border}` }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           <div>
-            <div style={{ fontSize: 13, fontWeight: 600, color: theme.text, marginBottom: 2 }}>{theme.name}</div>
+            <div style={{ fontSize: 13, fontWeight: 600, color: theme.text, marginBottom: 2 }}>{theme.label}</div>
             <div style={{ fontSize: 11, color: theme.text + '88' }}>{theme.description}</div>
           </div>
           {active && (
@@ -181,42 +106,7 @@ function ThemePreviewCard({
 }
 
 export default function AppearancePage() {
-  const [current, setCurrent] = useState<ThemeName>(() => {
-    if (typeof window === 'undefined') return 'WiseFlow Light'
-    try {
-      const stored = window.localStorage.getItem(storageKey)
-      const account = stored ? JSON.parse(stored) as { theme?: string } : null
-      return account?.theme && THEME_MAP[account.theme] ? account.theme as ThemeName : 'WiseFlow Light'
-    } catch {
-      return 'WiseFlow Light'
-    }
-  })
-  const [previewing, setPreviewing] = useState<ThemeName | null>(null)
-  const [saved, setSaved] = useState(false)
-
-  const handlePreview = (name: ThemeName) => {
-    setPreviewing(name)
-    applyThemeToDOM(name)
-  }
-
-  const handleLeave = () => {
-    setPreviewing(null)
-    applyThemeToDOM(current)
-  }
-
-  const handleSelect = (name: ThemeName) => {
-    setCurrent(name)
-    setPreviewing(null)
-    applyThemeToDOM(name)
-    try {
-      const stored = window.localStorage.getItem(storageKey)
-      const account = stored ? JSON.parse(stored) : {}
-      account.theme = name
-      window.localStorage.setItem(storageKey, JSON.stringify(account))
-    } catch { /* ignore */ }
-    setSaved(true)
-    setTimeout(() => setSaved(false), 2000)
-  }
+  const current = 'light'
 
   return (
     <div style={{ fontFamily: font, maxWidth: 900 }}>
@@ -234,27 +124,8 @@ export default function AppearancePage() {
         <div style={{ fontSize: 22, fontWeight: 700, color: '#111827' }}>Appearance</div>
       </div>
       <div style={{ fontSize: 13, color: '#6b7280', marginBottom: 28 }}>
-        Choose a theme for your workspace. Hover to preview, click to apply.
+        Theme switching is paused while the workspace flow is being finalized.
       </div>
-
-      {saved && (
-        <div style={{
-          display: 'inline-flex',
-          alignItems: 'center',
-          gap: 6,
-          background: '#f0fdf4',
-          border: '1px solid #86efac',
-          borderRadius: 8,
-          padding: '7px 14px',
-          fontSize: 12,
-          color: '#166534',
-          fontWeight: 500,
-          marginBottom: 20,
-        }}>
-          <Check size={13} color="#166534" />
-          Theme saved â€” {current}
-        </div>
-      )}
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: 16 }}>
         {THEMES.map(theme => (
@@ -262,16 +133,12 @@ export default function AppearancePage() {
             key={theme.name}
             theme={theme}
             active={current === theme.name}
-            preview={previewing === theme.name}
-            onSelect={() => handleSelect(theme.name)}
-            onPreview={() => handlePreview(theme.name)}
-            onLeave={handleLeave}
           />
         ))}
       </div>
 
       <div style={{ marginTop: 32, padding: '16px 20px', background: '#f9fafb', border: '1px solid #e5e7eb', borderRadius: 10, fontSize: 12, color: '#6b7280' }}>
-        <strong style={{ color: '#374151' }}>Tip:</strong> You can also switch themes quickly using the theme picker in the top navigation bar.
+        <strong style={{ color: '#374151' }}>Current theme:</strong> Light is locked in for now.
       </div>
     </div>
   )

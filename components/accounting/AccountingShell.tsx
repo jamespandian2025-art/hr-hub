@@ -10,6 +10,7 @@ import {
   Banknote,
   Bell,
   BookOpenCheck,
+  Calculator,
   FileBarChart,
   FileClock,
   FileText,
@@ -85,6 +86,7 @@ export const accountingNavItems = [
   { label: 'Budgeting', href: '/accounting/budgeting', icon: PieChart, description: 'Budgets, forecasts, and variance' },
   { label: 'Payroll Finance', href: '/accounting/payroll-finance', icon: BadgeDollarSign, description: 'Payroll accruals and disbursements' },
   { label: 'Tax & Compliance', href: '/accounting/tax-compliance', icon: ShieldCheck, description: 'Tax calendars and filings' },
+  { label: 'Withholding Tax', href: '/accounting/withholding-tax-calculator', icon: Calculator, description: 'Payroll withholding calculator' },
   { label: 'Reports', href: '/accounting/reports', icon: FileBarChart, description: 'Financial statements and analytics' },
   { label: 'Audit Logs', href: '/accounting/audit-logs', icon: FileClock, description: 'Controls and accounting history' },
 ]
@@ -92,13 +94,19 @@ export const accountingNavItems = [
 const newAccountingActions = [
   { label: 'Invoice', description: 'Create a client invoice', href: '/accounting/invoices?new=1', icon: FileText },
   { label: 'Bill or Expense', description: 'Record a vendor bill', href: '/accounting/bills?new=1', icon: ReceiptText },
+  { label: 'Transaction', description: 'Create a manual ledger transaction', href: '/accounting/transactions?new=1', icon: Banknote },
   { label: 'Budget', description: 'Create a project budget', href: '/accounting/budgeting?new=1', icon: PieChart },
   { label: 'Bank Account', description: 'Open banking setup', href: '/accounting/banking', icon: Landmark },
-  { label: 'Payroll Run', description: 'Open HR payroll', href: '/hr/payroll', icon: BadgeDollarSign },
+  { label: 'Payroll Review', description: 'Approve and release payroll', href: '/accounting/payroll-finance', icon: BadgeDollarSign },
 ]
 
 export function getAccountingRouteMeta(pathname: string) {
-  return accountingNavItems.find(item => pathname === item.href || pathname.startsWith(item.href + '/')) || accountingNavItems[0]
+  const exactMatch = accountingNavItems.find(item => pathname === item.href)
+  if (exactMatch) return exactMatch
+
+  return [...accountingNavItems]
+    .sort((a, b) => b.href.length - a.href.length)
+    .find(item => pathname.startsWith(item.href + '/')) || accountingNavItems[0]
 }
 
 export default function AccountingShell({ children }: { children: React.ReactNode }) {
@@ -230,7 +238,7 @@ export default function AccountingShell({ children }: { children: React.ReactNod
     minHeight: '100vh',
     height: '100dvh',
     overflow: 'hidden',
-    background: isDarkTheme ? '#101010' : 'var(--acc-bg, #f7f9fc)',
+    background: isDarkTheme ? '#0a0a0a' : 'var(--acc-bg, #f7f9fc)',
     display: 'grid',
     fontFamily: font,
     color: isDarkTheme ? '#fafafa' : 'var(--acc-text, #111827)',
@@ -240,8 +248,9 @@ export default function AccountingShell({ children }: { children: React.ReactNod
     height: '100dvh',
     top: 0,
     alignSelf: 'start',
-    background: '#000',
-    color: '#ededed',
+    background: '#ffffff',
+    color: '#0f172a',
+    borderRight: '1px solid #e5e7eb',
     padding: '18px 10px',
     display: 'flex',
     flexDirection: 'column',
@@ -272,10 +281,10 @@ export default function AccountingShell({ children }: { children: React.ReactNod
       />
       <aside className={`accounting-sidebar${mobileSidebarOpen ? ' is-open' : ''}`} style={sidebarStyle}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '0 6px 4px' }}>
-          <span style={{ width: 36, height: 36, borderRadius: 10, background: '#ededed', color: '#000', display: 'grid', placeItems: 'center', fontWeight: 700, fontSize: 16 }}>W</span>
+          <span style={{ width: 36, height: 36, borderRadius: 10, background: '#0f172a', color: '#fff', display: 'grid', placeItems: 'center', fontWeight: 700, fontSize: 16 }}>W</span>
           <span>
-            <span style={{ display: 'block', fontSize: 16, fontWeight: 600, lineHeight: 1, color: '#ededed' }}>Accounting</span>
-            <span style={{ display: 'block', fontSize: 12, color: '#a1a1a1', marginTop: 4, fontWeight: 500 }}>Finance workspace</span>
+            <span style={{ display: 'block', fontSize: 16, fontWeight: 600, lineHeight: 1, color: '#0f172a' }}>Accounting</span>
+            <span style={{ display: 'block', fontSize: 12, color: '#64748b', marginTop: 4, fontWeight: 500 }}>Finance workspace</span>
           </span>
         </div>
 
@@ -285,10 +294,10 @@ export default function AccountingShell({ children }: { children: React.ReactNod
         </Link>
 
         <nav className="accounting-sidebar-nav" style={{ display: 'grid', gap: 3, alignContent: 'start', flex: 1, overflowY: 'auto', paddingRight: 0 }} aria-label="Accounting workspace navigation">
-          <div style={{ fontSize: 11, color: '#737373', fontWeight: 500, padding: '0 10px 6px', textTransform: 'uppercase' }}>Workspace</div>
+          <div style={{ fontSize: 11, color: '#64748b', fontWeight: 500, padding: '0 10px 6px', textTransform: 'uppercase' }}>Workspace</div>
           {accountingNavItems.map(item => {
             const Icon = item.icon
-            const active = pathname === item.href || pathname.startsWith(item.href + '/')
+            const active = activeMeta.href === item.href
             return (
               <Link key={item.href} href={item.href} style={{ textDecoration: 'none' }} onClick={() => setMobileSidebarOpen(false)}>
                 <div className={`accounting-nav-row${active ? ' active' : ''}`}>
@@ -377,23 +386,10 @@ export default function AccountingShell({ children }: { children: React.ReactNod
                 </button>
               </div>
             )}
-            <button
-              type="button"
-              className="accounting-new-record-button"
-              onClick={() => {
-                setNotificationsOpen(false)
-                setAccountMenuOpen(false)
-                setNewMenuOpen(open => !open)
-              }}
-              aria-expanded={newMenuOpen}
-              aria-haspopup="menu"
-              style={employeeButtonStyle}
-            >
-              <Plus size={16} /> New Record
-            </button>
-            <div style={{ position: 'relative' }}>
+            <div className="accounting-new-record-wrap" style={{ position: 'relative' }}>
               <button
                 type="button"
+                className="accounting-new-record-button"
                 onClick={() => {
                   setNotificationsOpen(false)
                   setAccountMenuOpen(false)
@@ -401,9 +397,9 @@ export default function AccountingShell({ children }: { children: React.ReactNod
                 }}
                 aria-expanded={newMenuOpen}
                 aria-haspopup="menu"
-                style={plusButtonStyle}
+                style={employeeButtonStyle}
               >
-                <Plus size={18} />
+                <Plus size={16} /> New Record
               </button>
               {newMenuOpen && (
                 <div role="menu" style={newMenuStyle}>
@@ -463,7 +459,7 @@ export default function AccountingShell({ children }: { children: React.ReactNod
             </div>
           </div>
         </header>
-        <main className="accounting-scroll-content" style={{ background: isDarkTheme ? '#101010' : 'var(--acc-bg, #f8fafc)', color: isDarkTheme ? '#fafafa' : 'var(--acc-text, #0f172a)' }}>
+        <main className="accounting-scroll-content" style={{ background: isDarkTheme ? '#0a0a0a' : 'var(--acc-bg, #f8fafc)', color: isDarkTheme ? '#fafafa' : 'var(--acc-text, #0f172a)' }}>
           {children}
           <style>{accountingThemeOverrideCss}</style>
         </main>
@@ -481,9 +477,9 @@ function formatNotificationTime(value?: string) {
 
 const backLinkStyle: React.CSSProperties = {
   minHeight: 38,
-  border: '1px solid rgba(255,255,255,0.12)',
-  background: 'rgba(255,255,255,0.04)',
-  color: '#e2e8f0',
+  border: '1px solid #e5e7eb',
+  background: '#f8fafc',
+  color: '#0f172a',
   borderRadius: 10,
   padding: '0 12px',
   display: 'flex',
@@ -536,20 +532,6 @@ const employeeButtonStyle: React.CSSProperties = {
   cursor: 'pointer',
   flex: '0 0 auto',
   boxShadow: '0 1px 2px rgba(22,163,74,0.18)',
-}
-
-const plusButtonStyle: React.CSSProperties = {
-  width: 40,
-  height: 40,
-  borderRadius: 999,
-  border: '1px solid #d7dde6',
-  background: '#fff',
-  color: '#0f172a',
-  display: 'grid',
-  placeItems: 'center',
-  cursor: 'pointer',
-  flex: '0 0 auto',
-  boxShadow: '0 1px 2px rgba(15,23,42,0.04)',
 }
 
 const avatarButtonStyle: React.CSSProperties = {
@@ -882,10 +864,13 @@ const accountingShellCss = `
 .accounting-header-actions {
   width: 100%;
   display: grid !important;
-  grid-template-columns: 44px 44px minmax(0, 1fr) 44px 44px;
+  grid-template-columns: 44px 44px minmax(0, 1fr) 44px;
   align-items: center !important;
   justify-content: stretch !important;
   gap: 8px !important;
+}
+.accounting-header-actions > .accounting-new-record-wrap {
+  width: 100%;
 }
 .accounting-header-actions > div {
   display: flex;
@@ -898,14 +883,14 @@ const accountingShellCss = `
   padding: 0 !important;
 }
 .accounting-header-actions > button:not(.accounting-new-record-button),
-.accounting-header-actions > div > button {
+.accounting-header-actions > div > button:not(.accounting-new-record-button) {
   width: 44px !important;
   height: 44px !important;
   min-width: 44px !important;
   max-width: 44px !important;
   aspect-ratio: 1 / 1;
 }
-.accounting-header-actions > .accounting-new-record-button {
+.accounting-new-record-wrap > .accounting-new-record-button {
   width: 100% !important;
   min-height: 44px !important;
   height: 44px !important;
@@ -927,7 +912,7 @@ const accountingShellCss = `
   -webkit-overflow-scrolling: touch;
   background: var(--acc-bg) !important;
   color: var(--acc-text) !important;
-  padding-inline: max(0px, calc((100% - var(--wf-content-max)) / 2));
+  padding-inline: 0;
 }
 .accounting-scroll-content :where(img, svg, canvas, video) {
   max-width: 100%;
@@ -952,8 +937,8 @@ const accountingShellCss = `
   align-items: center;
   gap: 10px;
   padding: 0 10px;
-  border-radius: 0;
-  color: #a1a1a1;
+  border-radius: 8px;
+  color: #334155;
   background: transparent;
   font-size: 14px;
   font-weight: 500;
@@ -961,25 +946,25 @@ const accountingShellCss = `
   transition: background 120ms ease, color 120ms ease, box-shadow 120ms ease;
 }
 .accounting-nav-row svg {
-  color: #a1a1a1;
+  color: #64748b;
   flex-shrink: 0;
   transition: color 120ms ease;
 }
 .accounting-nav-row:hover {
-  background: #1a1a1a;
-  color: #ededed;
+  background: #f1f5f9;
+  color: #0f172a;
 }
 .accounting-nav-row:hover svg {
-  color: #ededed;
+  color: #334155;
 }
 .accounting-nav-row.active {
-  background: #1f1f1f;
-  color: #ededed;
-  box-shadow: 0 0 0 1px #ffffff;
+  background: #eef2f7;
+  color: #0f172a;
+  box-shadow: inset 2px 0 0 #0f172a;
   font-weight: 600;
 }
 .accounting-nav-row.active svg {
-  color: #ededed;
+  color: #0f172a;
 }
 @media (min-width: 901px) {
   .accounting-shell {
@@ -1067,7 +1052,7 @@ const accountingShellCss = `
   }
 
   .accounting-header-actions > button:not(.accounting-new-record-button),
-  .accounting-header-actions > div > button {
+  .accounting-header-actions > div > button:not(.accounting-new-record-button) {
     width: 40px !important;
     height: 40px !important;
     min-width: 40px !important;
@@ -1075,7 +1060,11 @@ const accountingShellCss = `
     min-height: 40px !important;
   }
 
-  .accounting-header-actions > .accounting-new-record-button {
+  .accounting-header-actions > .accounting-new-record-wrap {
+    width: auto;
+  }
+
+  .accounting-new-record-wrap > .accounting-new-record-button {
     width: auto !important;
     min-height: 40px !important;
     height: 40px !important;
@@ -1130,7 +1119,7 @@ const accountingShellCss = `
   }
 
   .accounting-header-actions {
-    grid-template-columns: 44px minmax(0, 1fr) 44px 42px;
+    grid-template-columns: 44px 44px minmax(0, 1fr) 42px;
   }
 }
 
@@ -1146,16 +1135,16 @@ html[data-theme='dark'] .accounting-shell {
   --acc-text: #fafafa;
   --acc-muted: #c7c7cf;
   --acc-placeholder: #9ca3af;
-  --acc-sidebar: #000000;
-  --acc-sidebar-hover: #171717;
-  --acc-sidebar-active: #222225;
+  --acc-sidebar: #ffffff;
+  --acc-sidebar-hover: #f1f5f9;
+  --acc-sidebar-active: #eef2f7;
   --acc-positive: #86efac;
   --acc-warning: #fbbf24;
   --acc-danger: #fca5a5;
 }
 
 html[data-theme='light'] .accounting-shell {
-  --acc-bg: #f8fafc;
+  --acc-bg: #f3f4f6;
   --acc-surface: #ffffff;
   --acc-surface-raised: #ffffff;
   --acc-hover: #f1f5f9;
@@ -1166,9 +1155,9 @@ html[data-theme='light'] .accounting-shell {
   --acc-text: #0f172a;
   --acc-muted: #475569;
   --acc-placeholder: #64748b;
-  --acc-sidebar: #000000;
-  --acc-sidebar-hover: #171717;
-  --acc-sidebar-active: #202020;
+  --acc-sidebar: #ffffff;
+  --acc-sidebar-hover: #f1f5f9;
+  --acc-sidebar-active: #eef2f7;
   --acc-positive: #15803d;
   --acc-warning: #b45309;
   --acc-danger: #b91c1c;
@@ -1251,12 +1240,12 @@ html[data-theme] .accounting-scroll-content [class*='primary-button'] {
 
 html[data-theme] .accounting-sidebar {
   background: var(--acc-sidebar) !important;
-  border-color: var(--acc-border) !important;
-  color: #fafafa !important;
+  border-color: #e5e7eb !important;
+  color: #0f172a !important;
 }
 
 html[data-theme] .accounting-nav-row {
-  color: #d4d4d8 !important;
+  color: #334155 !important;
   background: transparent !important;
 }
 
@@ -1268,12 +1257,12 @@ html[data-theme] .accounting-nav-row svg {
 html[data-theme] .accounting-nav-row:hover,
 html[data-theme] .accounting-nav-row.active {
   background: var(--acc-sidebar-hover) !important;
-  color: #ffffff !important;
+  color: #0f172a !important;
 }
 
 html[data-theme] .accounting-nav-row.active {
   background: var(--acc-sidebar-active) !important;
-  box-shadow: inset 2px 0 0 #ffffff !important;
+  box-shadow: none !important;
 }
 
 html[data-theme] .accounting-scroll-content h1,
@@ -1396,6 +1385,17 @@ html[data-theme] .accounting-scroll-content :is(button, a[class*='button'], [cla
   color: var(--acc-text) !important;
 }
 
+html[data-theme] .accounting-scroll-content :is(button.primary, a.primary, [class*='primary-button']) {
+  background: var(--acc-text) !important;
+  border-color: var(--acc-text) !important;
+  color: var(--acc-bg) !important;
+}
+
+html[data-theme] .accounting-scroll-content :is(button.primary, a.primary, [class*='primary-button']):hover {
+  background: var(--acc-text) !important;
+  color: var(--acc-bg) !important;
+}
+
 html[data-theme] .accounting-scroll-content :is(.accounting-pill, [class*='pill'], [class*='status'], [class*='tag'], [class*='badge']) {
   background: var(--acc-hover) !important;
   border-color: var(--acc-border) !important;
@@ -1436,9 +1436,890 @@ html[data-theme] .accounting-scroll-content svg [stroke='#eef2f7'],
 html[data-theme] .accounting-scroll-content svg [stroke='#EEF2F7'] {
   stroke: var(--acc-border) !important;
 }
+
+/* ============================================================
+   ACCOUNTING DASHBOARD POLISH
+   Keeps the existing finance workflows intact while aligning the
+   accounting pages with the newer operational dashboard direction.
+   ============================================================ */
+html[data-theme='light'] .accounting-shell {
+  --acc-bg: #f3f4f6;
+  --acc-surface: #ffffff;
+  --acc-surface-raised: #f8fafc;
+  --acc-hover: #f8fafc;
+  --acc-border: #dbe2ea;
+  --acc-border-soft: #e5e7eb;
+  --acc-input-border: #d8dee7;
+  --acc-text: #0f172a;
+  --acc-muted: #64748b;
+}
+
+@media (min-width: 901px) {
+  html[data-theme='light'] .accounting-shell .accounting-content-column {
+    grid-template-rows: 64px minmax(0, 1fr) !important;
+  }
+
+  html[data-theme='light'] .accounting-shell .accounting-sticky-header {
+    height: 64px !important;
+    min-height: 64px !important;
+    padding: 0 20px !important;
+    grid-template-columns: minmax(210px, .82fr) minmax(260px, 520px) max-content !important;
+  }
+}
+
+html[data-theme='light'] .accounting-shell .accounting-scroll-content > :is(
+  .live-accounting-page,
+  .invoices-page,
+  .banking-page,
+  .tx-page,
+  .budget-page,
+  .payroll-page,
+  .tax-page,
+  .reports-page,
+  .audit-page,
+  .withholding-page
+) {
+  min-height: 100% !important;
+  padding: 24px 32px 32px !important;
+  background: #f3f4f6 !important;
+  color: #0f172a !important;
+}
+
+html[data-theme='light'] .accounting-shell .accounting-scroll-content :is(
+  .live-header,
+  .invoices-header,
+  .banking-header,
+  .tx-header,
+  .budget-header,
+  .payroll-header,
+  .tax-header,
+  .reports-header,
+  .audit-header,
+  .withholding-header
+) {
+  margin-bottom: 18px !important;
+  background: transparent !important;
+  border: 0 !important;
+  box-shadow: none !important;
+}
+
+html[data-theme='light'] .accounting-shell .accounting-scroll-content :is(
+  .live-header h1,
+  .invoices-title,
+  .banking-title,
+  .tx-title,
+  .budget-title,
+  .payroll-title,
+  .tax-title,
+  .reports-title,
+  .audit-header h1,
+  .withholding-header h1
+) {
+  color: #0f172a !important;
+  font-size: 28px !important;
+  line-height: 1.12 !important;
+  font-weight: 650 !important;
+  letter-spacing: 0 !important;
+}
+
+html[data-theme='light'] .accounting-shell .accounting-scroll-content :is(
+  .live-header p,
+  .invoices-subtitle,
+  .banking-subtitle,
+  .tx-subtitle,
+  .budget-subtitle,
+  .payroll-subtitle,
+  .tax-subtitle,
+  .reports-subtitle,
+  .audit-header p,
+  .withholding-header p
+) {
+  color: #64748b !important;
+  font-size: 13.5px !important;
+  font-weight: 400 !important;
+  line-height: 1.45 !important;
+}
+
+html[data-theme='light'] .accounting-shell .accounting-scroll-content :is(
+  .live-actions,
+  .invoices-header-actions,
+  .banking-header-actions,
+  .tx-header-actions,
+  .budget-header-actions,
+  .payroll-actions,
+  .tax-actions,
+  .reports-actions,
+  .audit-actions,
+  .withholding-actions
+) {
+  gap: 10px !important;
+}
+
+html[data-theme='light'] .accounting-shell .accounting-scroll-content :is(
+  .live-actions button,
+  .live-actions a,
+  .invoices-header-actions button,
+  .banking-header-actions button,
+  .tx-header-actions button,
+  .budget-header-actions button,
+  .payroll-actions button,
+  .payroll-actions a,
+  .tax-actions button,
+  .tax-actions a,
+  .reports-actions button,
+  .audit-actions button,
+  .withholding-actions button,
+  .invoices-panel-actions button,
+  .budget-panel-actions button,
+  .reports-panel-header button,
+  .tax-filterbar button,
+  .tx-filterbar button
+) {
+  min-height: 38px !important;
+  border-radius: 6px !important;
+  border-color: #d8dee7 !important;
+  background: #ffffff !important;
+  color: #0f172a !important;
+  font-size: 12.5px !important;
+  font-weight: 600 !important;
+  box-shadow: none !important;
+}
+
+html[data-theme='light'] .accounting-shell .accounting-scroll-content :is(
+  .live-actions .primary,
+  .invoices-primary-button,
+  .tx-primary-button,
+  .budget-primary-button,
+  .banking-primary-button,
+  .payroll-actions .is-primary,
+  .request-actions .approve,
+  .tax-actions a[href*='withholding'],
+  .withholding-export
+) {
+  background: #22c55e !important;
+  border-color: #22c55e !important;
+  color: #ffffff !important;
+}
+
+html[data-theme='light'] .accounting-shell .accounting-scroll-content :is(
+  .live-card,
+  .invoices-card,
+  .banking-card,
+  .tx-card,
+  .tx-table-card,
+  .budget-card,
+  .payroll-card,
+  .tax-card,
+  .reports-card,
+  .audit-card,
+  .withholding-card,
+  .banking-modal,
+  .live-bill-sheet,
+  .tx-create-sheet,
+  .budget-filter-panel,
+  .budget-create-panel,
+  .invoices-create-panel,
+  .audit-filter-panel,
+  .reports-filter-panel,
+  .reports-action-panel
+) {
+  background: #ffffff !important;
+  border: 1px solid #dbe2ea !important;
+  border-radius: 8px !important;
+  color: #0f172a !important;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, .04) !important;
+}
+
+html[data-theme='light'] .accounting-shell .accounting-scroll-content :is(
+  .live-metric,
+  .invoices-metric-card,
+  .banking-metric-card,
+  .tx-metric-card,
+  .budget-metric-card,
+  .payroll-metric,
+  .tax-metric,
+  .reports-metric,
+  .audit-metric,
+  .withholding-metric
+) {
+  min-height: 100px !important;
+  padding: 15px 16px !important;
+}
+
+html[data-theme='light'] .accounting-shell .accounting-scroll-content :is(
+  .invoices-card-value,
+  .banking-card-value,
+  .tx-card-value,
+  .budget-value,
+  .payroll-value,
+  .tax-value,
+  .reports-value,
+  .audit-metric strong,
+  .withholding-metric strong,
+  .live-metric strong
+) {
+  color: #0f172a !important;
+  font-size: 22px !important;
+  line-height: 1.12 !important;
+  font-weight: 750 !important;
+}
+
+html[data-theme='light'] .accounting-shell .accounting-scroll-content :is(
+  .invoices-card-label,
+  .banking-card-label,
+  .tx-card-label,
+  .budget-label,
+  .payroll-label,
+  .tax-label,
+  .reports-label,
+  .audit-metric small,
+  .withholding-metric span span,
+  .live-metric small
+) {
+  color: #64748b !important;
+  font-size: 12px !important;
+  font-weight: 600 !important;
+}
+
+html[data-theme='light'] .accounting-shell .accounting-scroll-content :is(
+  .invoices-tabs,
+  .banking-tabs,
+  .tx-tabs,
+  .budget-tabs,
+  .payroll-tabs,
+  .tax-tabs,
+  .reports-tabs,
+  .audit-tabs
+) {
+  min-height: 48px !important;
+  gap: 24px !important;
+  border-bottom: 1px solid #dbe2ea !important;
+  background: transparent !important;
+  box-shadow: none !important;
+}
+
+html[data-theme='light'] .accounting-shell .accounting-scroll-content :is(
+  .invoices-tabs button,
+  .banking-tabs button,
+  .tx-tabs button,
+  .budget-tabs button,
+  .payroll-tabs button,
+  .tax-tabs button,
+  .reports-tabs button,
+  .audit-tabs button
+) {
+  min-height: 48px !important;
+  padding-bottom: 12px !important;
+  border-radius: 0 !important;
+  background: transparent !important;
+  color: #475569 !important;
+  font-size: 13px !important;
+  font-weight: 500 !important;
+}
+
+html[data-theme='light'] .accounting-shell .accounting-scroll-content :is(
+  .invoices-tabs button.is-active,
+  .banking-tabs button.is-active,
+  .tx-tabs button.is-active,
+  .budget-tabs button.is-active,
+  .payroll-tabs button.is-active,
+  .tax-tabs button.is-active,
+  .reports-tabs button.is-active,
+  .audit-tabs button.is-active
+) {
+  border-bottom-color: #0f172a !important;
+  color: #0f172a !important;
+  font-weight: 600 !important;
+}
+
+html[data-theme='light'] .accounting-shell .accounting-scroll-content :is(
+  .invoices-search,
+  .banking-search,
+  .tx-search,
+  .tx-filter-search,
+  .budget-search,
+  .audit-search,
+  .reports-browser label,
+  .live-card-head label,
+  .banking-filter-row label,
+  .banking-select-filter,
+  .tx-select-button,
+  .tx-account-select label,
+  .tax-filterbar label,
+  .reports-filter-panel input,
+  .reports-filter-panel select,
+  .budget-filter-panel select,
+  .audit-select
+) {
+  border-color: #d8dee7 !important;
+  border-radius: 8px !important;
+  background: #ffffff !important;
+  color: #0f172a !important;
+  box-shadow: none !important;
+}
+
+html[data-theme='light'] .accounting-shell .accounting-scroll-content :is(
+  .accounting-table-wrap,
+  .live-table-wrap,
+  .invoices-table-wrap,
+  .banking-table-wrap,
+  .tx-table-wrap,
+  .budget-table-wrap,
+  .payroll-table-wrap,
+  .tax-table-wrap,
+  .reports-table-wrap,
+  .audit-table-wrap
+) {
+  overflow-x: auto !important;
+  border: 1px solid #e5e7eb !important;
+  border-radius: 8px !important;
+  background: #ffffff !important;
+}
+
+html[data-theme='light'] .accounting-shell .accounting-scroll-content :is(
+  .accounting-table,
+  .live-table,
+  .invoices-table,
+  .banking-table,
+  .tx-table,
+  .budget-table,
+  .payroll-table,
+  .tax-table,
+  .reports-table,
+  .audit-table
+) th,
+html[data-theme='light'] .accounting-shell .accounting-scroll-content table th {
+  background: #f8fafc !important;
+  color: #475569 !important;
+  font-size: 12px !important;
+  font-weight: 700 !important;
+  text-transform: uppercase;
+}
+
+html[data-theme='light'] .accounting-shell .accounting-scroll-content table td {
+  background: #ffffff !important;
+  color: #0f172a !important;
+}
+
+html[data-theme='light'] .accounting-shell .accounting-scroll-content tbody tr:hover td {
+  background: #f8fafc !important;
+}
+
+html[data-theme='light'] .accounting-shell .accounting-scroll-content :is(
+  .accounting-empty,
+  .empty,
+  .invoices-empty,
+  .banking-empty,
+  .banking-feed-empty,
+  .budget-empty,
+  .payroll-empty,
+  .tax-empty,
+  .tax-calendar-empty,
+  .reports-empty-note,
+  .reports-empty-chart,
+  .reports-empty-small,
+  .audit-details-empty,
+  .withholding-empty
+) {
+  min-height: 132px;
+  border: 1px dashed #dbe2ea !important;
+  border-radius: 8px !important;
+  background: #ffffff !important;
+  color: #64748b !important;
+  font-size: 13px !important;
+  font-weight: 500 !important;
+}
+
+@media (max-width: 820px) {
+  html[data-theme='light'] .accounting-shell .accounting-scroll-content > :is(
+    .live-accounting-page,
+    .invoices-page,
+    .banking-page,
+    .tx-page,
+    .budget-page,
+    .payroll-page,
+    .tax-page,
+    .reports-page,
+    .audit-page,
+    .withholding-page
+  ) {
+    padding: 16px !important;
+  }
+}
+
+/* ============================================================
+   SHARED STATUS BADGES
+   The neutral pill rule above flattens every status badge to one
+   monochrome tone. These rules layer finance-standard colors on
+   top, keyed off the status word baked into the badge class
+   (e.g. "accounting-pill status-paid", "tax-pill pending"),
+   scoped to pill/badge elements so category pills stay neutral.
+   Order matters: narrower fragments that overlap a broader one
+   (unpaid contains paid) come last so they win.
+   ============================================================ */
+
+/* --- Light theme --- */
+html[data-theme='light'] .accounting-scroll-content :is([class*='pill'], [class*='badge'], [class*='chip']):is([class*='paid'], [class*='approved'], [class*='released'], [class*='completed'], [class*='reconciled'], [class*='cleared'], [class*='collected'], [class*='posted'], [class*='settled'], [class*='success']) {
+  background: #dcfce7 !important;
+  border-color: #bbf7d0 !important;
+  color: #15803d !important;
+}
+html[data-theme='light'] .accounting-scroll-content :is([class*='pill'], [class*='badge'], [class*='chip']):is([class*='pending'], [class*='partial'], [class*='processing'], [class*='awaiting'], [class*='scheduled'], [class*='submitted'], [class*='review'], [class*='sent'], [class*='unpaid']) {
+  background: #fef3c7 !important;
+  border-color: #fde68a !important;
+  color: #b45309 !important;
+}
+html[data-theme='light'] .accounting-scroll-content :is([class*='pill'], [class*='badge'], [class*='chip']):is([class*='overdue'], [class*='rejected'], [class*='cancelled'], [class*='canceled'], [class*='failed'], [class*='declined'], [class*='void'], [class*='returned'], [class*='error']) {
+  background: #fee2e2 !important;
+  border-color: #fecaca !important;
+  color: #dc2626 !important;
+}
+html[data-theme='light'] .accounting-scroll-content :is([class*='pill'], [class*='badge'], [class*='chip']):is([class*='draft'], [class*='recorded'], [class*='archived'], [class*='closed']) {
+  background: #f1f5f9 !important;
+  border-color: #e2e8f0 !important;
+  color: #475569 !important;
+}
+
+/* --- Dark theme (both triggers) --- */
+html[data-theme='dark'] .accounting-scroll-content :is([class*='pill'], [class*='badge'], [class*='chip']):is([class*='paid'], [class*='approved'], [class*='released'], [class*='completed'], [class*='reconciled'], [class*='cleared'], [class*='collected'], [class*='posted'], [class*='settled'], [class*='success']),
+.accounting-theme-dark .accounting-scroll-content :is([class*='pill'], [class*='badge'], [class*='chip']):is([class*='paid'], [class*='approved'], [class*='released'], [class*='completed'], [class*='reconciled'], [class*='cleared'], [class*='collected'], [class*='posted'], [class*='settled'], [class*='success']) {
+  background: rgba(34, 197, 94, 0.16) !important;
+  border-color: rgba(74, 222, 128, 0.40) !important;
+  color: #86efac !important;
+}
+html[data-theme='dark'] .accounting-scroll-content :is([class*='pill'], [class*='badge'], [class*='chip']):is([class*='pending'], [class*='partial'], [class*='processing'], [class*='awaiting'], [class*='scheduled'], [class*='submitted'], [class*='review'], [class*='sent'], [class*='unpaid']),
+.accounting-theme-dark .accounting-scroll-content :is([class*='pill'], [class*='badge'], [class*='chip']):is([class*='pending'], [class*='partial'], [class*='processing'], [class*='awaiting'], [class*='scheduled'], [class*='submitted'], [class*='review'], [class*='sent'], [class*='unpaid']) {
+  background: rgba(245, 158, 11, 0.16) !important;
+  border-color: rgba(251, 191, 36, 0.40) !important;
+  color: #fbbf24 !important;
+}
+html[data-theme='dark'] .accounting-scroll-content :is([class*='pill'], [class*='badge'], [class*='chip']):is([class*='overdue'], [class*='rejected'], [class*='cancelled'], [class*='canceled'], [class*='failed'], [class*='declined'], [class*='void'], [class*='returned'], [class*='error']),
+.accounting-theme-dark .accounting-scroll-content :is([class*='pill'], [class*='badge'], [class*='chip']):is([class*='overdue'], [class*='rejected'], [class*='cancelled'], [class*='canceled'], [class*='failed'], [class*='declined'], [class*='void'], [class*='returned'], [class*='error']) {
+  background: rgba(239, 68, 68, 0.16) !important;
+  border-color: rgba(248, 113, 113, 0.42) !important;
+  color: #fca5a5 !important;
+}
+html[data-theme='dark'] .accounting-scroll-content :is([class*='pill'], [class*='badge'], [class*='chip']):is([class*='draft'], [class*='recorded'], [class*='archived'], [class*='closed']),
+.accounting-theme-dark .accounting-scroll-content :is([class*='pill'], [class*='badge'], [class*='chip']):is([class*='draft'], [class*='recorded'], [class*='archived'], [class*='closed']) {
+  background: rgba(148, 163, 184, 0.16) !important;
+  border-color: rgba(148, 163, 184, 0.30) !important;
+  color: #cbd5e1 !important;
+}
 `
 
 const accountingThemeOverrideCss = `
+/* ============================================================
+   LIGHT ACCOUNTING WORKSPACE PASS
+   Applies the cleaned dashboard treatment across every Accounting
+   route while preserving each page's forms, tables, and workflows.
+   ============================================================ */
+html[data-theme='light'] .accounting-shell .accounting-scroll-content > :is(
+  .accounting-overview-page,
+  .live-accounting-page,
+  .invoices-page,
+  .banking-page,
+  .tx-page,
+  .budget-page,
+  .payroll-page,
+  .tax-page,
+  .reports-page,
+  .audit-page,
+  .withholding-page
+) {
+  width: min(100%, var(--wf-content-max, 1440px)) !important;
+  min-height: 100% !important;
+  margin-inline: auto !important;
+  padding: 24px clamp(16px, 2vw, 32px) 32px !important;
+  background: #f3f4f6 !important;
+  background-color: #f3f4f6 !important;
+  color: #0f172a !important;
+  overflow-x: clip !important;
+}
+
+html[data-theme='light'] .accounting-shell .accounting-scroll-content :is(
+  .accounting-hero-header,
+  .live-header,
+  .invoices-header,
+  .banking-header,
+  .tx-header,
+  .budget-header,
+  .payroll-header,
+  .tax-header,
+  .reports-header,
+  .audit-header,
+  .withholding-header
+) {
+  display: grid !important;
+  grid-template-columns: minmax(0, 1fr) auto !important;
+  align-items: start !important;
+  gap: 16px !important;
+  margin: 0 0 16px !important;
+  padding: 0 !important;
+  background: transparent !important;
+  background-color: transparent !important;
+  border: 0 !important;
+  box-shadow: none !important;
+}
+
+html[data-theme='light'] .accounting-shell .accounting-scroll-content :is(
+  .accounting-hero-actions,
+  .live-actions,
+  .invoices-header-actions,
+  .banking-header-actions,
+  .tx-header-actions,
+  .budget-header-actions,
+  .payroll-actions,
+  .tax-actions,
+  .reports-actions,
+  .audit-actions,
+  .withholding-actions
+) {
+  min-width: 0 !important;
+  max-width: 100% !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: flex-end !important;
+  gap: 10px !important;
+  flex-wrap: wrap !important;
+}
+
+html[data-theme='light'] .accounting-shell .accounting-scroll-content :is(
+  .accounting-hero-copy h1,
+  .live-header h1,
+  .invoices-title,
+  .banking-title,
+  .tx-title,
+  .budget-title,
+  .payroll-title,
+  .tax-title,
+  .reports-title,
+  .audit-header h1,
+  .withholding-header h1
+) {
+  margin: 0 !important;
+  color: #0f172a !important;
+  font-size: 30px !important;
+  line-height: 1.08 !important;
+  font-weight: 750 !important;
+  letter-spacing: 0 !important;
+}
+
+html[data-theme='light'] .accounting-shell .accounting-scroll-content :is(
+  .accounting-hero-copy p,
+  .live-header p,
+  .invoices-subtitle,
+  .banking-subtitle,
+  .tx-subtitle,
+  .budget-subtitle,
+  .payroll-subtitle,
+  .tax-subtitle,
+  .reports-subtitle,
+  .audit-header p,
+  .withholding-header p
+) {
+  margin: 8px 0 0 !important;
+  color: #64748b !important;
+  font-size: 14px !important;
+  line-height: 1.45 !important;
+  font-weight: 400 !important;
+}
+
+html[data-theme='light'] .accounting-shell .accounting-scroll-content :is(
+  .accounting-metrics,
+  .live-metrics,
+  .invoices-metrics,
+  .banking-metrics,
+  .tx-metrics,
+  .budget-metrics,
+  .payroll-metrics,
+  .tax-metrics,
+  .reports-metrics,
+  .audit-metrics,
+  .withholding-metrics
+) {
+  display: grid !important;
+  grid-template-columns: repeat(auto-fit, minmax(min(210px, 100%), 1fr)) !important;
+  gap: 12px !important;
+  margin: 0 0 16px !important;
+}
+
+html[data-theme='light'] .accounting-shell .accounting-scroll-content :is(
+  .accounting-metric-card,
+  .live-metric,
+  .invoices-metric-card,
+  .banking-metric-card,
+  .tx-metric-card,
+  .budget-metric-card,
+  .payroll-metric-card,
+  .tax-metric-card,
+  .reports-metric-card,
+  .audit-metric,
+  .withholding-metric
+) {
+  min-width: 0 !important;
+  min-height: 104px !important;
+  display: grid !important;
+  grid-template-columns: 40px minmax(0, 1fr) !important;
+  align-items: start !important;
+  gap: 12px !important;
+  padding: 14px 15px !important;
+  border: 1px solid #dbe2ea !important;
+  border-radius: 8px !important;
+  background: #ffffff !important;
+  background-color: #ffffff !important;
+  color: #0f172a !important;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, .04) !important;
+}
+
+html[data-theme='light'] .accounting-shell .accounting-scroll-content :is(
+  .accounting-metric-icon,
+  .live-metric > span:first-child,
+  .invoices-metric-icon,
+  .banking-metric-icon,
+  .tx-metric-icon,
+  .budget-metric-icon,
+  .payroll-metric-icon,
+  .tax-metric-icon,
+  .reports-metric-icon,
+  .audit-metric > span:first-child,
+  .withholding-metric-icon
+) {
+  width: 38px !important;
+  height: 38px !important;
+  margin: 0 !important;
+  border: 1px solid #e5e7eb !important;
+  border-radius: 6px !important;
+  display: grid !important;
+  place-items: center !important;
+  flex: 0 0 auto !important;
+}
+
+html[data-theme='light'] .accounting-shell .accounting-scroll-content :is(
+  .accounting-eyebrow,
+  .live-metric small,
+  .invoices-card-label,
+  .banking-card-label,
+  .tx-card-label,
+  .budget-card-label,
+  .payroll-label,
+  .tax-label,
+  .reports-label,
+  .audit-metric small,
+  .withholding-metric span span
+) {
+  min-height: 28px !important;
+  display: block !important;
+  color: #64748b !important;
+  font-size: 11.5px !important;
+  line-height: 1.2 !important;
+  font-weight: 650 !important;
+  white-space: normal !important;
+  overflow: visible !important;
+  text-overflow: clip !important;
+}
+
+html[data-theme='light'] .accounting-shell .accounting-scroll-content :is(
+  .accounting-metric-value,
+  .live-metric strong,
+  .invoices-card-value,
+  .banking-card-value,
+  .tx-card-value,
+  .budget-card-value,
+  .payroll-value,
+  .tax-value,
+  .reports-value,
+  .audit-metric strong,
+  .withholding-metric strong
+) {
+  display: block !important;
+  margin-top: 4px !important;
+  color: #0f172a !important;
+  font-size: 21px !important;
+  line-height: 1.1 !important;
+  font-weight: 800 !important;
+  white-space: normal !important;
+  overflow-wrap: anywhere !important;
+}
+
+html[data-theme='light'] .accounting-shell .accounting-scroll-content :is(
+  .accounting-metric-delta,
+  .live-metric em,
+  .invoices-card-detail,
+  .banking-card-detail,
+  .tx-card-detail,
+  .budget-card-detail,
+  .payroll-detail,
+  .tax-detail,
+  .reports-detail,
+  .audit-metric em
+) {
+  margin-top: 5px !important;
+  font-size: 12px !important;
+  line-height: 1.25 !important;
+  font-weight: 650 !important;
+  white-space: normal !important;
+  overflow-wrap: anywhere !important;
+}
+
+html[data-theme='light'] .accounting-shell .accounting-scroll-content :is(
+  .accounting-card,
+  .live-card,
+  .invoices-card,
+  .banking-card,
+  .tx-card,
+  .tx-table-card,
+  .budget-card,
+  .payroll-card,
+  .tax-card,
+  .reports-card,
+  .audit-card,
+  .withholding-card,
+  .banking-modal,
+  .live-bill-sheet,
+  .tx-create-sheet,
+  .budget-filter-panel,
+  .budget-create-panel,
+  .invoices-create-panel,
+  .audit-filter-panel,
+  .reports-filter-panel,
+  .reports-action-panel
+) {
+  border-color: #dbe2ea !important;
+  border-radius: 8px !important;
+  background: #ffffff !important;
+  background-color: #ffffff !important;
+  color: #0f172a !important;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, .04) !important;
+}
+
+html[data-theme='light'] .accounting-shell .accounting-scroll-content :is(
+  .invoices-tabs,
+  .banking-tabs,
+  .tx-tabs,
+  .budget-tabs,
+  .payroll-tabs,
+  .tax-tabs,
+  .reports-tabs,
+  .audit-tabs
+) {
+  min-height: 48px !important;
+  margin: 0 0 16px !important;
+  padding-left: 0 !important;
+  gap: 24px !important;
+  border-bottom: 1px solid #dbe2ea !important;
+  background: transparent !important;
+  box-shadow: none !important;
+}
+
+html[data-theme='light'] .accounting-shell .accounting-scroll-content :is(
+  .accounting-hero-action,
+  .live-actions button,
+  .live-actions a,
+  .invoices-header-actions button,
+  .banking-header-actions button,
+  .tx-header-actions button,
+  .budget-header-actions button,
+  .payroll-actions button,
+  .payroll-actions a,
+  .tax-actions button,
+  .tax-actions a,
+  .reports-actions button,
+  .audit-actions button,
+  .withholding-actions button
+) {
+  min-height: 38px !important;
+  border-radius: 6px !important;
+  border: 1px solid #d8dee7 !important;
+  background: #ffffff !important;
+  color: #0f172a !important;
+  box-shadow: none !important;
+}
+
+html[data-theme='light'] .accounting-shell .accounting-scroll-content :is(
+  .accounting-hero-action.is-primary,
+  .live-actions .primary,
+  .invoices-primary-button,
+  .banking-primary-button,
+  .tx-primary-button,
+  .budget-primary-button,
+  .payroll-actions .is-primary,
+  .request-actions .approve,
+  .tax-actions a[href*='withholding'],
+  .withholding-export
+) {
+  background: #22c55e !important;
+  border-color: #22c55e !important;
+  color: #ffffff !important;
+}
+
+html[data-theme='light'] .accounting-shell .accounting-scroll-content :is(
+  .invoices-search,
+  .banking-search,
+  .tx-search,
+  .tx-filter-search,
+  .budget-search,
+  .audit-search,
+  .reports-browser label,
+  .live-card-head label,
+  .banking-filter-row label,
+  .banking-select-filter,
+  .tx-select-button,
+  .tx-account-select label,
+  .tax-filterbar label,
+  .reports-filter-panel input,
+  .reports-filter-panel select,
+  .budget-filter-panel select,
+  .audit-select
+) {
+  background: #ffffff !important;
+  border-color: #d8dee7 !important;
+}
+
+@media (max-width: 960px) {
+  html[data-theme='light'] .accounting-shell .accounting-scroll-content :is(
+    .accounting-hero-header,
+    .live-header,
+    .invoices-header,
+    .banking-header,
+    .tx-header,
+    .budget-header,
+    .payroll-header,
+    .tax-header,
+    .reports-header,
+    .audit-header,
+    .withholding-header
+  ) {
+    grid-template-columns: 1fr !important;
+  }
+
+  html[data-theme='light'] .accounting-shell .accounting-scroll-content :is(
+    .accounting-hero-actions,
+    .live-actions,
+    .invoices-header-actions,
+    .banking-header-actions,
+    .tx-header-actions,
+    .budget-header-actions,
+    .payroll-actions,
+    .tax-actions,
+    .reports-actions,
+    .audit-actions,
+    .withholding-actions
+  ) {
+    width: 100% !important;
+    justify-content: flex-start !important;
+  }
+
+  html[data-theme='light'] .accounting-shell .accounting-scroll-content :is(
+    .invoices-search,
+    .banking-search,
+    .tx-search,
+    .budget-search,
+    .audit-search
+  ) {
+    width: 100% !important;
+  }
+}
+
 html .accounting-shell.accounting-theme-dark {
   --acc-bg: #101010;
   --acc-surface: #101010;
@@ -1647,5 +2528,66 @@ html[data-theme='dark'] .accounting-scroll-content td {
 
 html[data-theme='dark'] .accounting-scroll-content :is(input, select, textarea, button, a[class*='button']) {
   border-color: var(--acc-input-border) !important;
+}
+
+/* ============================================================
+   DARK-MODE ELEVATION
+   Earlier rules flatten page + cards to one #101010 tone. Here we
+   give the page the darkest base and lift cards/surfaces a step
+   above it so hierarchy is readable. The extra .accounting-shell
+   in each selector raises specificity above the flat rules so
+   these win without editing the fragile blocks above.
+   ============================================================ */
+html[data-theme='dark'] .accounting-shell,
+.accounting-shell.accounting-theme-dark {
+  --acc-bg: #0a0a0a;
+  --acc-surface: #171717;
+  --acc-surface-raised: #1f1f1f;
+  --acc-hover: #242424;
+}
+
+/* Page canvas → darkest base */
+html[data-theme='dark'] .accounting-shell .accounting-scroll-content,
+html[data-theme='dark'] .accounting-shell .accounting-scroll-content > [class$='-page'],
+.accounting-shell.accounting-theme-dark .accounting-scroll-content,
+.accounting-shell.accounting-theme-dark .accounting-scroll-content > [class$='-page'] {
+  background: var(--acc-bg) !important;
+  background-color: var(--acc-bg) !important;
+}
+
+/* Cards, panels, table wraps, sheets → raised surface with soft border */
+html[data-theme='dark'] .accounting-shell .accounting-scroll-content :is(.accounting-card, .live-card, .invoices-card, .banking-card, .tx-card, .tx-table-card, .budget-card, .payroll-card, .tax-card, .reports-card, .audit-card, .accounting-table-wrap, .live-table-wrap, .invoices-table-wrap, .banking-table-wrap, .tx-table-wrap, .budget-table-wrap, .payroll-table-wrap, .tax-table-wrap, .reports-table-wrap, .audit-table-wrap, .budget-filter-panel, .budget-create-panel, .invoices-create-panel, .banking-modal, .live-bill-sheet, .tx-create-sheet, .audit-filter-panel, .audit-row-menu, .tx-row-menu, .status-summary, .quick-actions),
+.accounting-shell.accounting-theme-dark .accounting-scroll-content :is(.accounting-card, .live-card, .invoices-card, .banking-card, .tx-card, .tx-table-card, .budget-card, .payroll-card, .tax-card, .reports-card, .audit-card, .accounting-table-wrap, .live-table-wrap, .invoices-table-wrap, .banking-table-wrap, .tx-table-wrap, .budget-table-wrap, .payroll-table-wrap, .tax-table-wrap, .reports-table-wrap, .audit-table-wrap, .budget-filter-panel, .budget-create-panel, .invoices-create-panel, .banking-modal, .live-bill-sheet, .tx-create-sheet, .audit-filter-panel, .audit-row-menu, .tx-row-menu, .status-summary, .quick-actions) {
+  background: var(--acc-surface) !important;
+  background-color: var(--acc-surface) !important;
+  border-color: var(--acc-border) !important;
+}
+
+/* Inline-white card-like elements → raised surface too */
+html[data-theme='dark'] .accounting-shell .accounting-scroll-content [style*='background: #fff' i],
+html[data-theme='dark'] .accounting-shell .accounting-scroll-content [style*='background:#fff' i],
+html[data-theme='dark'] .accounting-shell .accounting-scroll-content [style*='background: #ffffff' i],
+html[data-theme='dark'] .accounting-shell .accounting-scroll-content [style*='background:#ffffff' i],
+html[data-theme='dark'] .accounting-shell .accounting-scroll-content [style*='background: white' i],
+html[data-theme='dark'] .accounting-shell .accounting-scroll-content [style*='background: #f8fafc' i],
+html[data-theme='dark'] .accounting-shell .accounting-scroll-content [style*='background: #f1f5f9' i] {
+  background: var(--acc-surface) !important;
+  background-color: var(--acc-surface) !important;
+  border-color: var(--acc-border) !important;
+}
+
+/* Table cells sit on the card surface; headers lift one step more */
+html[data-theme='dark'] .accounting-shell .accounting-scroll-content td {
+  background: var(--acc-surface) !important;
+  background-color: var(--acc-surface) !important;
+}
+html[data-theme='dark'] .accounting-shell .accounting-scroll-content :is(thead, th) {
+  background: var(--acc-surface-raised) !important;
+  background-color: var(--acc-surface-raised) !important;
+}
+
+/* Subtle lift so cards read as elevated, not painted-on */
+html[data-theme='dark'] .accounting-shell .accounting-scroll-content :is(.accounting-card, .live-card, .invoices-card, .banking-card, .tx-card, .tx-table-card, .budget-card, .payroll-card, .tax-card, .reports-card, .audit-card) {
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.03), 0 8px 24px rgba(0, 0, 0, 0.45) !important;
 }
 `

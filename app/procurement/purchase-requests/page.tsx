@@ -250,7 +250,7 @@ export default function PurchaseRequestsPage() {
           <button type="button" className="pr-secondary-button" onClick={() => { setPriorityFilter(priorityFilter === 'High' ? 'All' : 'High'); setPage(1) }}>
             <PackageCheck size={16} /> Group by <ChevronDown size={14} />
           </button>
-          <button type="button" className="pr-icon-button" aria-label="More purchase request actions">
+          <button type="button" className="pr-icon-button" aria-label="Reset purchase request filters" onClick={resetFilters}>
             <MoreHorizontal size={18} />
           </button>
           <button type="button" className="pr-primary-button" onClick={() => setShowCreate(true)}>
@@ -383,9 +383,9 @@ export default function PurchaseRequestsPage() {
               <div className="pr-pagination">
                 <span>Showing {pageStart} to {pageEnd} of {filteredRequests.length} entries</span>
                 <div>
-                  <button type="button" disabled={currentPage === 1} onClick={() => setPage(value => Math.max(1, value - 1))}>‹</button>
+                  <button type="button" disabled={currentPage === 1} onClick={() => setPage(value => Math.max(1, value - 1))} aria-label="Previous page">&lt;</button>
                   <strong>{currentPage}</strong>
-                  <button type="button" disabled={currentPage === totalPages} onClick={() => setPage(value => Math.min(totalPages, value + 1))}>›</button>
+                  <button type="button" disabled={currentPage === totalPages} onClick={() => setPage(value => Math.min(totalPages, value + 1))} aria-label="Next page">&gt;</button>
                   <select value={pageSize} onChange={event => { setPageSize(Number(event.target.value)); setPage(1) }} aria-label="Rows per page">
                     {[10, 25, 50].map(size => <option key={size} value={size}>{size} / page</option>)}
                   </select>
@@ -597,7 +597,10 @@ function DetailRow({ label, value }: { label: string; value: string }) {
 
 function loadStoredRequests(companyId: string) {
   const scopedKey = companyId ? companyScopedKey(purchaseRequestsKey, companyId) : purchaseRequestsKey
-  const rows = [...readStored(purchaseRequestsKey), ...(scopedKey === purchaseRequestsKey ? [] : readStored(scopedKey))]
+  const scopedRows = scopedKey === purchaseRequestsKey ? [] : readStored(scopedKey)
+  const globalRows = readStored(purchaseRequestsKey)
+  const globalForCompany = scopedRows.length ? globalRows.filter(record => readString(record, ['companyId']) === companyId) : globalRows
+  const rows = scopedRows.length ? [...scopedRows, ...globalForCompany] : globalForCompany
   return uniqueRequests(rows).filter(record => {
     const recordCompanyId = readString(record, ['companyId'])
     return !companyId || !recordCompanyId || recordCompanyId === companyId

@@ -4,10 +4,9 @@ import { usePathname, useRouter, useSearchParams } from 'next/navigation'
 import { PieChart, Pie, Cell, ResponsiveContainer } from 'recharts'
 import ClientChart from '../../../components/ClientChart'
 import jsPDF from 'jspdf'
+import { listBusinessRecords, replaceBusinessCollection } from '@/lib/business/client'
 
 const font = "var(--font-body)"
-const projectsStorageKey = 'flowsys-projects'
-const budgetsStorageKey = 'flowsys-budgets'
 
 interface BudgetItem {
   id: number
@@ -42,28 +41,6 @@ const statusStyle: Record<string, { bg: string, color: string }> = {
 
 const tabs = ['All', 'Pending', 'Approved', 'Rejected']
 
-const loadBudgets = () => {
-  if (typeof window === 'undefined') return []
-
-  try {
-    const stored = window.localStorage.getItem(budgetsStorageKey)
-    return stored ? (JSON.parse(stored) as Budget[]) : []
-  } catch {
-    return []
-  }
-}
-
-const loadProjects = () => {
-  if (typeof window === 'undefined') return []
-
-  try {
-    const stored = window.localStorage.getItem(projectsStorageKey)
-    return stored ? (JSON.parse(stored) as ProjectRecord[]) : []
-  } catch {
-    return []
-  }
-}
-
 export default function BudgetPage() {
   const router = useRouter()
   const pathname = usePathname()
@@ -77,8 +54,9 @@ export default function BudgetPage() {
   const [showImportModal, setShowImportModal] = useState(false)
   const [activeTab, setActiveTab] = useState('All')
   const [search, setSearch] = useState('')
-  const [budgets, setBudgets] = useState<Budget[]>(loadBudgets)
-  const [projects] = useState<ProjectRecord[]>(loadProjects)
+  const [budgets, setBudgets] = useState<Budget[]>([])
+  const [projects, setProjects] = useState<ProjectRecord[]>([])
+  const [loaded, setLoaded] = useState(false)
   const [selected, setSelected] = useState<number[]>([])
   const [openMenu, setOpenMenu] = useState<number | null>(null)
 
@@ -90,11 +68,26 @@ export default function BudgetPage() {
   const [budgetItems, setBudgetItems] = useState<BudgetItem[]>([{ id: 1, name: '', remarks: '', amount: 0 }])
 
   useEffect(() => {
-    window.localStorage.setItem(budgetsStorageKey, JSON.stringify(budgets))
-  }, [budgets])
+    // Only mark as loaded on a SUCCESSFUL fetch. If the GET fails we must not
+    // flip `loaded`, otherwise the persist effect below would immediately
+    // replace the server collection with the empty initial state and wipe it.
+    Promise.all([
+      listBusinessRecords<Budget>('accounting-budgets'),
+      listBusinessRecords<ProjectRecord>('project-legacy-records'),
+    ]).then(([nextBudgets, nextProjects]) => {
+      setBudgets(nextBudgets)
+      setProjects(nextProjects)
+      setLoaded(true)
+    }).catch(() => undefined)
+  }, [])
+
+  useEffect(() => {
+    if (!loaded) return
+    void replaceBusinessCollection('accounting-budgets', budgets).catch(() => undefined)
+  }, [budgets, loaded])
 
 
-  const addBudgetItem = () => setBudgetItems(prev => [...prev, { id: prev.length + 1, name: '', remarks: '', amount: 0 }])
+  const addBudgetItem = () => setBudgetItems(prev => [...prev, { id: Math.max(0, ...prev.map(i => i.id)) + 1, name: '', remarks: '', amount: 0 }])
   const removeBudgetItem = (id: number) => setBudgetItems(prev => prev.filter(i => i.id !== id))
   const updateBudgetItem = (id: number, field: Exclude<keyof BudgetItem, 'id'>, value: string | number) => setBudgetItems(prev => prev.map(i => i.id === id ? { ...i, [field]: value } : i))
   const total = budgetItems.reduce((sum, item) => sum + item.amount, 0)
@@ -103,7 +96,9 @@ export default function BudgetPage() {
 
   const handleCreate = () => {
     const newBudget: Budget = {
-      id: budgets.length + 1,
+      // Collision-proof id derived from the max existing id, not array length —
+      // length+1 reuses an id after any delete.
+      id: Math.max(0, ...budgets.map(b => b.id)) + 1,
       name: name || 'Untitled Budget',
       project: project || 'No project',
       date,

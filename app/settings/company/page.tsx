@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { type ChangeEvent, type MouseEvent, useCallback, useEffect, useState } from 'react'
 import { Building2, Check, Mail, ShieldCheck, UsersRound } from 'lucide-react'
 import {
   type CompanyRecord,
@@ -24,7 +24,7 @@ export default function CompanySettingsPage() {
   const [inviteRole, setInviteRole] = useState<CompanyRole>('Member')
   const [notice, setNotice] = useState('')
 
-  const refresh = () => {
+  const refresh = useCallback(() => {
     const company = getActiveCompany()
     setCompanies(loadCompanies())
     setActiveCompany(company)
@@ -37,18 +37,43 @@ export default function CompanySettingsPage() {
         fiscalYearStart: company.settings.fiscalYearStart,
       })
     }
-  }
+  }, [])
 
   useEffect(() => {
-    const id = window.setTimeout(refresh, 0)
+    queueMicrotask(refresh)
     window.addEventListener(companyChangeEvent, refresh)
     window.addEventListener('storage', refresh)
     return () => {
-      window.clearTimeout(id)
       window.removeEventListener(companyChangeEvent, refresh)
       window.removeEventListener('storage', refresh)
     }
-  }, [])
+  }, [refresh])
+
+  const switchCompany = (companyId: string) => {
+    setActiveCompanyId(companyId)
+    refresh()
+  }
+
+  const handleCompanySwitch = (event: MouseEvent<HTMLButtonElement>) => {
+    const companyId = event.currentTarget.dataset.companyId
+    if (companyId) switchCompany(companyId)
+  }
+
+  const updateDraftField = (field: keyof typeof draft, value: string) => {
+    setDraft(previous => ({ ...previous, [field]: value }))
+  }
+
+  const handleDraftChange = (field: keyof typeof draft) => (event: ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
+    updateDraftField(field, event.target.value)
+  }
+
+  const handleInviteEmailChange = (event: ChangeEvent<HTMLInputElement>) => {
+    setInviteEmail(event.target.value)
+  }
+
+  const handleInviteRoleChange = (event: ChangeEvent<HTMLSelectElement>) => {
+    setInviteRole(event.target.value as CompanyRole)
+  }
 
   const saveSettings = () => {
     if (!activeCompany) return
@@ -85,7 +110,7 @@ export default function CompanySettingsPage() {
           <div style={sectionTitleStyle}><Building2 size={18} />Company Switcher</div>
           <div style={{ display: 'grid', gap: 10 }}>
             {companies.map(company => (
-              <button key={company.id} onClick={() => { setActiveCompanyId(company.id); refresh() }} style={{ ...switchButtonStyle, borderColor: activeCompany?.id === company.id ? '#16a34a' : '#e5e7eb', background: activeCompany?.id === company.id ? '#ecfdf5' : '#fff' }}>
+              <button key={company.id} data-company-id={company.id} onClick={handleCompanySwitch} style={{ ...switchButtonStyle, borderColor: activeCompany?.id === company.id ? '#16a34a' : '#e5e7eb', background: activeCompany?.id === company.id ? '#ecfdf5' : '#fff' }}>
                 <span>
                   <strong>{company.name}</strong>
                   <small>{company.type}</small>
@@ -100,11 +125,11 @@ export default function CompanySettingsPage() {
           <div style={cardStyle}>
             <div style={sectionTitleStyle}><ShieldCheck size={18} />Workspace Profile</div>
             <div style={formGridStyle}>
-              <label style={fieldStyle}>Company name<input value={draft.name} onChange={event => setDraft(previous => ({ ...previous, name: event.target.value }))} /></label>
-              <label style={fieldStyle}>Company type<input value={draft.type} onChange={event => setDraft(previous => ({ ...previous, type: event.target.value }))} /></label>
-              <label style={fieldStyle}>Currency<select value={draft.currency} onChange={event => setDraft(previous => ({ ...previous, currency: event.target.value }))}><option>USD</option><option>PHP</option><option>EUR</option><option>GBP</option></select></label>
-              <label style={fieldStyle}>Fiscal year starts<select value={draft.fiscalYearStart} onChange={event => setDraft(previous => ({ ...previous, fiscalYearStart: event.target.value }))}><option>January</option><option>April</option><option>July</option><option>October</option></select></label>
-              <label style={fieldStyle}>Timezone<input value={draft.timezone} onChange={event => setDraft(previous => ({ ...previous, timezone: event.target.value }))} /></label>
+              <label style={fieldStyle}>Company name<input value={draft.name} onChange={handleDraftChange('name')} /></label>
+              <label style={fieldStyle}>Company type<input value={draft.type} onChange={handleDraftChange('type')} /></label>
+              <label style={fieldStyle}>Currency<select value={draft.currency} onChange={handleDraftChange('currency')}><option>USD</option><option>PHP</option><option>EUR</option><option>GBP</option></select></label>
+              <label style={fieldStyle}>Fiscal year starts<select value={draft.fiscalYearStart} onChange={handleDraftChange('fiscalYearStart')}><option>January</option><option>April</option><option>July</option><option>October</option></select></label>
+              <label style={fieldStyle}>Timezone<input value={draft.timezone} onChange={handleDraftChange('timezone')} /></label>
             </div>
             <button onClick={saveSettings} style={primaryButtonStyle}>Save company settings</button>
           </div>
@@ -112,8 +137,8 @@ export default function CompanySettingsPage() {
           <div style={cardStyle}>
             <div style={sectionTitleStyle}><Mail size={18} />Invite Members</div>
             <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) 180px auto', gap: 10, alignItems: 'end' }}>
-              <label style={fieldStyle}>Email<input value={inviteEmail} onChange={event => setInviteEmail(event.target.value)} placeholder="teammate@example.com" /></label>
-              <label style={fieldStyle}>Role<select value={inviteRole} onChange={event => setInviteRole(event.target.value as CompanyRole)}>{roles.map(role => <option key={role}>{role}</option>)}</select></label>
+              <label style={fieldStyle}>Email<input value={inviteEmail} onChange={handleInviteEmailChange} placeholder="teammate@example.com" /></label>
+              <label style={fieldStyle}>Role<select value={inviteRole} onChange={handleInviteRoleChange}>{roles.map(role => <option key={role}>{role}</option>)}</select></label>
               <button onClick={inviteMember} disabled={!inviteEmail.trim()} style={{ ...primaryButtonStyle, opacity: inviteEmail.trim() ? 1 : 0.5 }}>Invite</button>
             </div>
             <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 12 }}>{rolePermissions(inviteRole).map(permission => <span key={permission} style={pillStyle}>{permission}</span>)}</div>

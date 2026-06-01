@@ -347,7 +347,7 @@ const workflowWorkspaceCss = `
 .workflow-main {
   min-width: 0;
   min-height: 100vh;
-  background: #fbfbfc;
+  background: #f3f4f6;
 }
 .workflow-topbar {
   height: 66px;
@@ -462,4 +462,22 @@ const workflowWorkspaceCss = `
     justify-self: start;
   }
 }
+/* Workflow sidebar — light theme */
+.workflow-sidebar { background: #ffffff; color: #0f172a; border-right: 1px solid #e5e7eb; }
+.workflow-brand button { color: #64748b; }
+.workflow-workspace-card { border-color: #e5e7eb; background: #f8fafc; }
+.workflow-workspace-card strong { color: #0f172a; }
+.workflow-workspace-card small { color: #64748b; }
+.workflow-back-link { border-color: #e5e7eb; background: #f8fafc; color: #334155; }
+.workflow-back-link:hover { background: #f1f5f9; color: #0f172a; }
+.workflow-nav section { border-bottom-color: #eef2f7; }
+.workflow-nav p { color: #64748b; }
+.workflow-nav a, .workflow-parent { color: #334155; }
+.workflow-nav a:hover, .workflow-parent:hover { background: #f1f5f9; color: #0f172a; }
+.workflow-nav a.active, .workflow-parent.active { background: #ecfdf5; color: #065f46; }
+.workflow-nav a b { background: #eef2f7; color: #475569; }
+.workflow-nav a.active b { background: #d1fae5; color: #065f46; }
+.workflow-profile { border-top-color: #eef2f7; }
+.workflow-profile strong { color: #0f172a; }
+.workflow-profile small { color: #64748b; }
 `

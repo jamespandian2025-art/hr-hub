@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
+import { type FormEvent, useEffect, useMemo, useState } from 'react'
 import {
   BarChart3,
   CalendarDays,
@@ -12,6 +12,7 @@ import {
   Plus,
   Search,
   Sparkles,
+  X,
 } from 'lucide-react'
 
 type HrReport = {
@@ -49,6 +50,12 @@ type ReportInsight = {
   title: string
   description?: string
   source?: string
+}
+
+type ReportActionHandlers = {
+  onExport: (format: string, report?: HrReport) => void
+  onSchedule: (report?: HrReport) => void
+  onRunReport: (report: HrReport) => void
 }
 
 const font = "var(--font-body)"
@@ -163,6 +170,20 @@ export default function HrReportsPage() {
   const [createdBy, setCreatedBy] = useState('All Users')
   const [dateRange, setDateRange] = useState('Current Period')
   const [query, setQuery] = useState('')
+  const [notice, setNotice] = useState('')
+  const [isCreateReportOpen, setIsCreateReportOpen] = useState(false)
+  const [newReport, setNewReport] = useState({
+    name: '',
+    category: 'Custom',
+    type: 'Custom Report',
+    dataSource: 'Employee Records',
+    summary: '',
+    format: 'PDF',
+  })
+  const setPageNotice = (message: string) => {
+    setNotice(message)
+    window.setTimeout(() => setNotice(''), 4000)
+  }
 
   useEffect(() => {
     const load = () => {
@@ -174,6 +195,19 @@ export default function HrReportsPage() {
     load()
     window.addEventListener('storage', load)
     return () => window.removeEventListener('storage', load)
+  }, [])
+
+  useEffect(() => {
+    const handleAction = (event: Event) => {
+      const action = (event as CustomEvent<string>).detail || ''
+      if (action.toLowerCase().includes('create')) {
+        setIsCreateReportOpen(true)
+        return
+      }
+      setPageNotice(`${action} is ready from the report workspace.`)
+    }
+    window.addEventListener('hr-report-action', handleAction)
+    return () => window.removeEventListener('hr-report-action', handleAction)
   }, [])
 
   const hrReports = reports.filter(report => isHrReport(report))
@@ -350,7 +384,109 @@ export default function HrReportsPage() {
   }
   const handleTabChange = (tab: string) => {
     setActiveTab(tab)
+    setNotice('')
     clearFilters()
+  }
+  const updateNewReport = (field: keyof typeof newReport, value: string) => {
+    setNewReport(current => ({ ...current, [field]: value }))
+  }
+  const closeCreateReport = () => {
+    setIsCreateReportOpen(false)
+    setNewReport({
+      name: '',
+      category: 'Custom',
+      type: 'Custom Report',
+      dataSource: 'Employee Records',
+      summary: '',
+      format: 'PDF',
+    })
+  }
+  const handleCreateReport = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault()
+    const name = newReport.name.trim()
+    if (!name) return
+
+    const createdAt = new Date().toISOString()
+    const report: HrReport = {
+      id: `hr-report-${reports.length + 1}-${createdAt.replace(/\D/g, '')}`,
+      name,
+      summary: newReport.summary.trim() || `${newReport.type} created from ${newReport.dataSource}.`,
+      category: newReport.category,
+      type: newReport.type,
+      dataSource: newReport.dataSource,
+      generatedBy: 'HR Admin',
+      createdAt,
+      format: newReport.format,
+      downloads: 0,
+      status: 'Ready',
+      source: 'manual',
+    }
+    const nextReports = [report, ...reports]
+    setReports(nextReports)
+    window.localStorage.setItem(reportsKey, JSON.stringify(nextReports))
+    setActiveTab('Custom Reports')
+    setCategory('All Categories')
+    setType('All Types')
+    setCreatedBy('All Users')
+    setDataSource('All Data Sources')
+    setQuery('')
+    closeCreateReport()
+    setPageNotice(`${report.name} was created and saved to Custom Reports.`)
+  }
+  const handleApplyFilters = () => {
+    setPageNotice(`${activeReports.length} ${reportAreaLabel || 'total'} report${activeReports.length === 1 ? '' : 's'} match the current view.`)
+  }
+  const persistReports = (nextReports: HrReport[]) => {
+    setReports(nextReports)
+    window.localStorage.setItem(reportsKey, JSON.stringify(nextReports))
+  }
+  const persistExports = (nextExports: HrReport[]) => {
+    setExportsLog(nextExports)
+    window.localStorage.setItem(reportExportsKey, JSON.stringify(nextExports))
+  }
+  const persistSchedules = (nextSchedules: ScheduledReport[]) => {
+    setScheduledReports(nextSchedules)
+    window.localStorage.setItem(scheduledReportsKey, JSON.stringify(nextSchedules))
+  }
+  const handleExport = (format: string, report?: HrReport) => {
+    const createdAt = new Date().toISOString()
+    const exportRecord: HrReport = {
+      id: `hr-export-${exportsLog.length + 1}-${createdAt.replace(/\D/g, '')}`,
+      name: report?.name || `${reportAreaLabel || activeTab.replace(' Reports', '') || 'HR'} ${format} Export`,
+      summary: report?.summary || `Exported from ${activeTab}.`,
+      category: report?.category || (reportAreaLabel ? `${reportAreaLabel} Reports` : 'Custom'),
+      type: report?.type || 'Export',
+      dataSource: report?.dataSource || 'Filtered Reports',
+      generatedBy: 'HR Admin',
+      createdAt,
+      format,
+      downloads: 1,
+      status: 'Complete',
+      source: 'generated',
+    }
+    persistExports([exportRecord, ...exportsLog])
+    if (report) {
+      persistReports(reports.map(item => item.id === report.id ? { ...item, downloads: (item.downloads ?? 0) + 1, lastRunAt: createdAt } : item))
+    }
+    setPageNotice(`${format} export is ready for ${exportRecord.name}.`)
+  }
+  const handleSchedule = (report?: HrReport) => {
+    const scheduledAt = new Date().toISOString()
+    const nextRun = new Date()
+    nextRun.setDate(nextRun.getDate() + 7)
+    const schedule: ScheduledReport = {
+      id: `hr-schedule-${scheduledReports.length + 1}-${scheduledAt.replace(/\D/g, '')}`,
+      name: report?.name || `${reportAreaLabel || 'Custom'} Report Schedule`,
+      nextRun: nextRun.toISOString(),
+      active: true,
+      source: 'manual',
+    }
+    persistSchedules([schedule, ...scheduledReports])
+    setPageNotice(`${schedule.name} was scheduled for next week.`)
+  }
+  const handleRunReport = (report: HrReport) => {
+    persistReports(reports.map(item => item.id === report.id ? { ...item, status: 'Complete', lastRunAt: new Date().toISOString() } : item))
+    setPageNotice(`${report.name} was run successfully.`)
   }
 
   return (
@@ -365,7 +501,7 @@ export default function HrReportsPage() {
             <Search size={15} color="#94a3b8" />
             <input value={query} onChange={event => setQuery(event.target.value)} placeholder="Search reports..." style={plainInputStyle} />
           </label>
-          <button style={primaryButtonStyle} disabled><Plus size={15} /> Create Report</button>
+          <button type="button" style={primaryButtonStyle} onClick={() => setIsCreateReportOpen(true)}><Plus size={15} /> Create Report</button>
         </div>
       </div>
 
@@ -402,9 +538,10 @@ export default function HrReportsPage() {
         {activeTab === 'Custom Reports' && <SelectFilter value={dataSource} onChange={setDataSource} label="Data Source" options={dataSources} />}
         {activeTab !== 'Payroll Reports' && activeTab !== 'Attendance Reports' && activeTab !== 'Leave Reports' && activeTab !== 'Performance Reports' && activeTab !== 'Compliance Reports' && activeTab !== 'Custom Reports' && <SelectFilter value={createdBy} onChange={setCreatedBy} label="Created By" options={creators} />}
         <SelectFilter value={dateRange} onChange={setDateRange} label="Date Range" options={['Current Period']} />
-        <button style={secondaryButtonStyle} disabled><Filter size={15} /> Filters</button>
+        <button type="button" style={secondaryButtonStyle} onClick={handleApplyFilters}><Filter size={15} /> Filters</button>
         {(activeTab === 'Payroll Reports' || activeTab === 'Attendance Reports' || activeTab === 'Leave Reports' || activeTab === 'Performance Reports' || activeTab === 'Compliance Reports' || activeTab === 'Custom Reports') && <button style={linkButtonStyle} onClick={clearFilters}>Clear All</button>}
       </div>
+      {notice && <div style={noticeStyle}>{notice}</div>}
 
       {activeTab === 'HR Reports' ? (
         <HrReportsView
@@ -412,6 +549,9 @@ export default function HrReportsPage() {
           allReports={hrReports}
           scheduledReports={activeScheduledReports}
           insights={activeInsights}
+          onExport={handleExport}
+          onSchedule={handleSchedule}
+          onRunReport={handleRunReport}
         />
       ) : activeTab === 'Payroll Reports' ? (
         <PayrollReportsView
@@ -419,6 +559,9 @@ export default function HrReportsPage() {
           allReports={payrollReports}
           scheduledReports={activeScheduledReports}
           insights={activeInsights}
+          onExport={handleExport}
+          onSchedule={handleSchedule}
+          onRunReport={handleRunReport}
         />
       ) : activeTab === 'Attendance Reports' ? (
         <AttendanceReportsView
@@ -426,6 +569,9 @@ export default function HrReportsPage() {
           allReports={attendanceReports}
           scheduledReports={activeScheduledReports}
           insights={activeInsights}
+          onExport={handleExport}
+          onSchedule={handleSchedule}
+          onRunReport={handleRunReport}
         />
       ) : activeTab === 'Leave Reports' ? (
         <LeaveReportsView
@@ -433,6 +579,9 @@ export default function HrReportsPage() {
           allReports={leaveReports}
           scheduledReports={activeScheduledReports}
           insights={activeInsights}
+          onExport={handleExport}
+          onSchedule={handleSchedule}
+          onRunReport={handleRunReport}
         />
       ) : activeTab === 'Performance Reports' ? (
         <PerformanceReportsView
@@ -440,6 +589,9 @@ export default function HrReportsPage() {
           allReports={performanceReports}
           scheduledReports={activeScheduledReports}
           insights={activeInsights}
+          onExport={handleExport}
+          onSchedule={handleSchedule}
+          onRunReport={handleRunReport}
         />
       ) : activeTab === 'Compliance Reports' ? (
         <ComplianceReportsView
@@ -447,6 +599,9 @@ export default function HrReportsPage() {
           allReports={complianceReports}
           scheduledReports={activeScheduledReports}
           insights={activeInsights}
+          onExport={handleExport}
+          onSchedule={handleSchedule}
+          onRunReport={handleRunReport}
         />
       ) : activeTab === 'Custom Reports' ? (
         <CustomReportsView
@@ -454,6 +609,9 @@ export default function HrReportsPage() {
           allReports={customReports}
           scheduledReports={activeScheduledReports}
           insights={activeInsights}
+          onExport={handleExport}
+          onSchedule={handleSchedule}
+          onRunReport={handleRunReport}
         />
       ) : (
         <>
@@ -489,8 +647,8 @@ export default function HrReportsPage() {
                       <Td><StatusPill status={report.status || '-'} /></Td>
                       <Td>
                         <span style={actionGroupStyle}>
-                          <button style={iconButtonStyle} aria-label={`Download ${report.name}`}><Download size={14} /></button>
-                          <button style={iconButtonStyle} aria-label={`More actions for ${report.name}`}><MoreVertical size={14} /></button>
+                          <button style={iconButtonStyle} aria-label={`Download ${report.name}`} onClick={() => handleExport(report.format || 'PDF', report)}><Download size={14} /></button>
+                          <button style={iconButtonStyle} aria-label={`Schedule ${report.name}`} onClick={() => handleSchedule(report)}><MoreVertical size={14} /></button>
                         </span>
                       </Td>
                     </tr>
@@ -533,12 +691,7 @@ export default function HrReportsPage() {
             )}
           </Panel>
           <Panel title="Quick Export" icon={Download}>
-            <div style={quickGridStyle}>
-              <button style={secondaryButtonStyle} disabled>Export PDF</button>
-              <button style={secondaryButtonStyle} disabled>Export Excel</button>
-              <button style={secondaryButtonStyle} disabled>Export CSV</button>
-              <button style={secondaryButtonStyle} disabled>Schedule Report</button>
-            </div>
+            <QuickExportActions onExport={handleExport} onSchedule={handleSchedule} />
           </Panel>
         </aside>
       </div>
@@ -561,6 +714,79 @@ export default function HrReportsPage() {
         <ActionCard title="Need Help?" text="Learn how to create, schedule, and share reports." action="View Help Center" />
       </div>
         </>
+      )}
+      {isCreateReportOpen && (
+        <div style={modalBackdropStyle} role="presentation" onMouseDown={closeCreateReport}>
+          <form
+            style={modalStyle}
+            aria-modal="true"
+            role="dialog"
+            aria-labelledby="create-hr-report-title"
+            onMouseDown={event => event.stopPropagation()}
+            onSubmit={handleCreateReport}
+          >
+            <div style={modalHeaderStyle}>
+              <div>
+                <h2 id="create-hr-report-title" style={{ ...sectionTitleStyle, fontSize: 22 }}>Create Report</h2>
+                <p style={{ margin: '6px 0 0', color: '#64748b', fontSize: 13 }}>Build a company report from live HR records.</p>
+              </div>
+              <button type="button" style={iconCloseButtonStyle} aria-label="Close create report" onClick={closeCreateReport}>
+                <X size={18} />
+              </button>
+            </div>
+
+            <div style={modalBodyStyle}>
+              <label style={formFieldStyle}>
+                <span>Report name *</span>
+                <input
+                  required
+                  value={newReport.name}
+                  onChange={event => updateNewReport('name', event.target.value)}
+                  placeholder="Example: Monthly HR Summary"
+                  style={inputStyle}
+                />
+              </label>
+              <label style={formFieldStyle}>
+                <span>Category</span>
+                <select value={newReport.category} onChange={event => updateNewReport('category', event.target.value)} style={selectStyle}>
+                  {customReportCategories.map(option => <option key={option}>{option}</option>)}
+                </select>
+              </label>
+              <label style={formFieldStyle}>
+                <span>Report type</span>
+                <select value={newReport.type} onChange={event => updateNewReport('type', event.target.value)} style={selectStyle}>
+                  {['Custom Report', 'Summary Report', 'Detail Report', 'Compliance Report', 'Payroll Report'].map(option => <option key={option}>{option}</option>)}
+                </select>
+              </label>
+              <label style={formFieldStyle}>
+                <span>Data source</span>
+                <select value={newReport.dataSource} onChange={event => updateNewReport('dataSource', event.target.value)} style={selectStyle}>
+                  {['Employee Records', 'Payroll Records', 'Attendance Records', 'Leave Requests', 'Performance Reviews', 'Compliance Records'].map(option => <option key={option}>{option}</option>)}
+                </select>
+              </label>
+              <label style={formFieldStyle}>
+                <span>Format</span>
+                <select value={newReport.format} onChange={event => updateNewReport('format', event.target.value)} style={selectStyle}>
+                  {['PDF', 'XLSX', 'CSV'].map(option => <option key={option}>{option}</option>)}
+                </select>
+              </label>
+              <label style={{ ...formFieldStyle, gridColumn: '1 / -1' }}>
+                <span>Description</span>
+                <textarea
+                  value={newReport.summary}
+                  onChange={event => updateNewReport('summary', event.target.value)}
+                  placeholder="Describe what this report should track."
+                  style={textareaStyle}
+                />
+              </label>
+            </div>
+
+            <div style={modalFooterStyle}>
+              <button type="button" style={secondaryButtonStyle} onClick={closeCreateReport}>Cancel</button>
+              <button type="submit" style={primaryButtonStyle}><Plus size={15} /> Create Report</button>
+            </div>
+          </form>
+        </div>
       )}
     </section>
   )
@@ -628,11 +854,14 @@ function isCustomReport(report: HrReport) {
     || customReportCategories.some(category => haystack.includes(category.toLowerCase()) && haystack.includes('custom'))
 }
 
-function HrReportsView({ reports, allReports, scheduledReports, insights }: {
+function HrReportsView({ reports, allReports, scheduledReports, insights, onExport, onSchedule, onRunReport }: {
   reports: HrReport[]
   allReports: HrReport[]
   scheduledReports: ScheduledReport[]
   insights: ReportInsight[]
+  onExport: (format: string, report?: HrReport) => void
+  onSchedule: (report?: HrReport) => void
+  onRunReport: (report: HrReport) => void
 }) {
   return (
     <>
@@ -644,7 +873,7 @@ function HrReportsView({ reports, allReports, scheduledReports, insights }: {
           {hrReportCategories.map(category => (
             <article key={category} style={categoryCardStyle}>
               <FileBarChart size={18} color="#16a34a" />
-              <span>
+              <span style={{ display: 'grid', gap: 2 }}>
                 <strong>{allReports.filter(report => report.category === category).length}</strong>
                 <small>{category}</small>
               </span>
@@ -683,8 +912,9 @@ function HrReportsView({ reports, allReports, scheduledReports, insights }: {
                     <Td><StatusPill status={report.status || '-'} /></Td>
                     <Td>
                       <span style={actionGroupStyle}>
-                        <button style={iconButtonStyle} aria-label={`Download ${report.name}`}><Download size={14} /></button>
-                        <button style={iconButtonStyle} aria-label={`More actions for ${report.name}`}><MoreVertical size={14} /></button>
+                        <button style={iconButtonStyle} aria-label={`Download ${report.name}`} onClick={() => onExport(report.format || 'PDF', report)}><Download size={14} /></button>
+                        <button style={iconButtonStyle} aria-label={`Run ${report.name}`} onClick={() => onRunReport(report)}><Plus size={14} /></button>
+                        <button style={iconButtonStyle} aria-label={`Schedule ${report.name}`} onClick={() => onSchedule(report)}><MoreVertical size={14} /></button>
                       </span>
                     </Td>
                   </tr>
@@ -740,10 +970,10 @@ function HrReportsView({ reports, allReports, scheduledReports, insights }: {
           </Panel>
           <Panel title="Quick Export" icon={Download}>
             <div style={quickGridStyle}>
-              <button style={secondaryButtonStyle} disabled>Export PDF</button>
-              <button style={secondaryButtonStyle} disabled>Export Excel</button>
-              <button style={secondaryButtonStyle} disabled>Export CSV</button>
-              <button style={secondaryButtonStyle} disabled>Schedule Report</button>
+              <button style={secondaryButtonStyle} onClick={() => onExport('PDF')}>Export PDF</button>
+              <button style={secondaryButtonStyle} onClick={() => onExport('XLSX')}>Export Excel</button>
+              <button style={secondaryButtonStyle} onClick={() => onExport('CSV')}>Export CSV</button>
+              <button style={secondaryButtonStyle} onClick={() => onSchedule()}>Schedule Report</button>
             </div>
           </Panel>
         </aside>
@@ -752,12 +982,23 @@ function HrReportsView({ reports, allReports, scheduledReports, insights }: {
   )
 }
 
-function PayrollReportsView({ reports, allReports, scheduledReports, insights }: {
+function QuickExportActions({ onExport, onSchedule }: Pick<ReportActionHandlers, 'onExport' | 'onSchedule'>) {
+  return (
+    <div style={quickGridStyle}>
+      <button type="button" style={secondaryButtonStyle} onClick={() => onExport('PDF')}>Export PDF</button>
+      <button type="button" style={secondaryButtonStyle} onClick={() => onExport('XLSX')}>Export Excel</button>
+      <button type="button" style={secondaryButtonStyle} onClick={() => onExport('CSV')}>Export CSV</button>
+      <button type="button" style={secondaryButtonStyle} onClick={() => onSchedule()}>Schedule Report</button>
+    </div>
+  )
+}
+
+function PayrollReportsView({ reports, allReports, scheduledReports, insights, onExport, onSchedule, onRunReport }: {
   reports: HrReport[]
   allReports: HrReport[]
   scheduledReports: ScheduledReport[]
   insights: ReportInsight[]
-}) {
+} & ReportActionHandlers) {
   return (
     <>
       <div className="hr-reports-workspace" style={reportsGridStyle}>
@@ -794,8 +1035,9 @@ function PayrollReportsView({ reports, allReports, scheduledReports, insights }:
                       <Td><StatusPill status={report.status || '-'} /></Td>
                       <Td>
                         <span style={actionGroupStyle}>
-                          <button style={iconButtonStyle} aria-label={`Download ${report.name}`}><Download size={14} /></button>
-                          <button style={iconButtonStyle} aria-label={`More actions for ${report.name}`}><MoreVertical size={14} /></button>
+                          <button style={iconButtonStyle} aria-label={`Download ${report.name}`} onClick={() => onExport(report.format || 'PDF', report)}><Download size={14} /></button>
+                          <button style={iconButtonStyle} aria-label={`Run ${report.name}`} onClick={() => onRunReport(report)}><Plus size={14} /></button>
+                          <button style={iconButtonStyle} aria-label={`Schedule ${report.name}`} onClick={() => onSchedule(report)}><MoreVertical size={14} /></button>
                         </span>
                       </Td>
                     </tr>
@@ -838,12 +1080,7 @@ function PayrollReportsView({ reports, allReports, scheduledReports, insights }:
             )}
           </Panel>
           <Panel title="Quick Export" icon={Download}>
-            <div style={quickGridStyle}>
-              <button style={secondaryButtonStyle} disabled>Export PDF</button>
-              <button style={secondaryButtonStyle} disabled>Export Excel</button>
-              <button style={secondaryButtonStyle} disabled>Export CSV</button>
-              <button style={secondaryButtonStyle} disabled>Schedule Report</button>
-            </div>
+            <QuickExportActions onExport={onExport} onSchedule={onSchedule} />
           </Panel>
         </aside>
       </div>
@@ -875,12 +1112,12 @@ function PayrollReportsView({ reports, allReports, scheduledReports, insights }:
   )
 }
 
-function AttendanceReportsView({ reports, allReports, scheduledReports, insights }: {
+function AttendanceReportsView({ reports, allReports, scheduledReports, insights, onExport, onSchedule, onRunReport }: {
   reports: HrReport[]
   allReports: HrReport[]
   scheduledReports: ScheduledReport[]
   insights: ReportInsight[]
-}) {
+} & ReportActionHandlers) {
   return (
     <>
       <div className="hr-reports-workspace" style={reportsGridStyle}>
@@ -917,8 +1154,9 @@ function AttendanceReportsView({ reports, allReports, scheduledReports, insights
                       <Td><StatusPill status={report.status || '-'} /></Td>
                       <Td>
                         <span style={actionGroupStyle}>
-                          <button style={iconButtonStyle} aria-label={`Download ${report.name}`}><Download size={14} /></button>
-                          <button style={iconButtonStyle} aria-label={`More actions for ${report.name}`}><MoreVertical size={14} /></button>
+                          <button style={iconButtonStyle} aria-label={`Download ${report.name}`} onClick={() => onExport(report.format || 'PDF', report)}><Download size={14} /></button>
+                          <button style={iconButtonStyle} aria-label={`Run ${report.name}`} onClick={() => onRunReport(report)}><Plus size={14} /></button>
+                          <button style={iconButtonStyle} aria-label={`Schedule ${report.name}`} onClick={() => onSchedule(report)}><MoreVertical size={14} /></button>
                         </span>
                       </Td>
                     </tr>
@@ -961,12 +1199,7 @@ function AttendanceReportsView({ reports, allReports, scheduledReports, insights
             )}
           </Panel>
           <Panel title="Quick Export" icon={Download}>
-            <div style={quickGridStyle}>
-              <button style={secondaryButtonStyle} disabled>Export PDF</button>
-              <button style={secondaryButtonStyle} disabled>Export Excel</button>
-              <button style={secondaryButtonStyle} disabled>Export CSV</button>
-              <button style={secondaryButtonStyle} disabled>Schedule Report</button>
-            </div>
+            <QuickExportActions onExport={onExport} onSchedule={onSchedule} />
           </Panel>
         </aside>
       </div>
@@ -998,12 +1231,12 @@ function AttendanceReportsView({ reports, allReports, scheduledReports, insights
   )
 }
 
-function LeaveReportsView({ reports, allReports, scheduledReports, insights }: {
+function LeaveReportsView({ reports, allReports, scheduledReports, insights, onExport, onSchedule, onRunReport }: {
   reports: HrReport[]
   allReports: HrReport[]
   scheduledReports: ScheduledReport[]
   insights: ReportInsight[]
-}) {
+} & ReportActionHandlers) {
   return (
     <>
       <div className="hr-reports-workspace" style={reportsGridStyle}>
@@ -1040,8 +1273,9 @@ function LeaveReportsView({ reports, allReports, scheduledReports, insights }: {
                       <Td><StatusPill status={report.status || '-'} /></Td>
                       <Td>
                         <span style={actionGroupStyle}>
-                          <button style={iconButtonStyle} aria-label={`Download ${report.name}`}><Download size={14} /></button>
-                          <button style={iconButtonStyle} aria-label={`More actions for ${report.name}`}><MoreVertical size={14} /></button>
+                          <button style={iconButtonStyle} aria-label={`Download ${report.name}`} onClick={() => onExport(report.format || 'PDF', report)}><Download size={14} /></button>
+                          <button style={iconButtonStyle} aria-label={`Run ${report.name}`} onClick={() => onRunReport(report)}><Plus size={14} /></button>
+                          <button style={iconButtonStyle} aria-label={`Schedule ${report.name}`} onClick={() => onSchedule(report)}><MoreVertical size={14} /></button>
                         </span>
                       </Td>
                     </tr>
@@ -1084,12 +1318,7 @@ function LeaveReportsView({ reports, allReports, scheduledReports, insights }: {
             )}
           </Panel>
           <Panel title="Quick Export" icon={Download}>
-            <div style={quickGridStyle}>
-              <button style={secondaryButtonStyle} disabled>Export PDF</button>
-              <button style={secondaryButtonStyle} disabled>Export Excel</button>
-              <button style={secondaryButtonStyle} disabled>Export CSV</button>
-              <button style={secondaryButtonStyle} disabled>Schedule Report</button>
-            </div>
+            <QuickExportActions onExport={onExport} onSchedule={onSchedule} />
           </Panel>
         </aside>
       </div>
@@ -1121,12 +1350,12 @@ function LeaveReportsView({ reports, allReports, scheduledReports, insights }: {
   )
 }
 
-function PerformanceReportsView({ reports, allReports, scheduledReports, insights }: {
+function PerformanceReportsView({ reports, allReports, scheduledReports, insights, onExport, onSchedule, onRunReport }: {
   reports: HrReport[]
   allReports: HrReport[]
   scheduledReports: ScheduledReport[]
   insights: ReportInsight[]
-}) {
+} & ReportActionHandlers) {
   return (
     <>
       <div className="hr-reports-workspace" style={reportsGridStyle}>
@@ -1165,8 +1394,9 @@ function PerformanceReportsView({ reports, allReports, scheduledReports, insight
                       <Td><StatusPill status={report.status || '-'} /></Td>
                       <Td>
                         <span style={actionGroupStyle}>
-                          <button style={iconButtonStyle} aria-label={`Download ${report.name}`}><Download size={14} /></button>
-                          <button style={iconButtonStyle} aria-label={`More actions for ${report.name}`}><MoreVertical size={14} /></button>
+                          <button style={iconButtonStyle} aria-label={`Download ${report.name}`} onClick={() => onExport(report.format || 'PDF', report)}><Download size={14} /></button>
+                          <button style={iconButtonStyle} aria-label={`Run ${report.name}`} onClick={() => onRunReport(report)}><Plus size={14} /></button>
+                          <button style={iconButtonStyle} aria-label={`Schedule ${report.name}`} onClick={() => onSchedule(report)}><MoreVertical size={14} /></button>
                         </span>
                       </Td>
                     </tr>
@@ -1209,12 +1439,7 @@ function PerformanceReportsView({ reports, allReports, scheduledReports, insight
             )}
           </Panel>
           <Panel title="Quick Export" icon={Download}>
-            <div style={quickGridStyle}>
-              <button style={secondaryButtonStyle} disabled>Export PDF</button>
-              <button style={secondaryButtonStyle} disabled>Export Excel</button>
-              <button style={secondaryButtonStyle} disabled>Export CSV</button>
-              <button style={secondaryButtonStyle} disabled>Schedule Report</button>
-            </div>
+            <QuickExportActions onExport={onExport} onSchedule={onSchedule} />
           </Panel>
         </aside>
       </div>
@@ -1246,12 +1471,12 @@ function PerformanceReportsView({ reports, allReports, scheduledReports, insight
   )
 }
 
-function ComplianceReportsView({ reports, allReports, scheduledReports, insights }: {
+function ComplianceReportsView({ reports, allReports, scheduledReports, insights, onExport, onSchedule, onRunReport }: {
   reports: HrReport[]
   allReports: HrReport[]
   scheduledReports: ScheduledReport[]
   insights: ReportInsight[]
-}) {
+} & ReportActionHandlers) {
   return (
     <>
       <div className="hr-reports-workspace" style={reportsGridStyle}>
@@ -1288,8 +1513,9 @@ function ComplianceReportsView({ reports, allReports, scheduledReports, insights
                       <Td><StatusPill status={report.status || '-'} /></Td>
                       <Td>
                         <span style={actionGroupStyle}>
-                          <button style={iconButtonStyle} aria-label={`Download ${report.name}`}><Download size={14} /></button>
-                          <button style={iconButtonStyle} aria-label={`More actions for ${report.name}`}><MoreVertical size={14} /></button>
+                          <button style={iconButtonStyle} aria-label={`Download ${report.name}`} onClick={() => onExport(report.format || 'PDF', report)}><Download size={14} /></button>
+                          <button style={iconButtonStyle} aria-label={`Run ${report.name}`} onClick={() => onRunReport(report)}><Plus size={14} /></button>
+                          <button style={iconButtonStyle} aria-label={`Schedule ${report.name}`} onClick={() => onSchedule(report)}><MoreVertical size={14} /></button>
                         </span>
                       </Td>
                     </tr>
@@ -1332,12 +1558,7 @@ function ComplianceReportsView({ reports, allReports, scheduledReports, insights
             )}
           </Panel>
           <Panel title="Quick Export" icon={Download}>
-            <div style={quickGridStyle}>
-              <button style={secondaryButtonStyle} disabled>Export PDF</button>
-              <button style={secondaryButtonStyle} disabled>Export Excel</button>
-              <button style={secondaryButtonStyle} disabled>Export CSV</button>
-              <button style={secondaryButtonStyle} disabled>Schedule Report</button>
-            </div>
+            <QuickExportActions onExport={onExport} onSchedule={onSchedule} />
           </Panel>
         </aside>
       </div>
@@ -1369,12 +1590,12 @@ function ComplianceReportsView({ reports, allReports, scheduledReports, insights
   )
 }
 
-function CustomReportsView({ reports, allReports, scheduledReports, insights }: {
+function CustomReportsView({ reports, allReports, scheduledReports, insights, onExport, onSchedule, onRunReport }: {
   reports: HrReport[]
   allReports: HrReport[]
   scheduledReports: ScheduledReport[]
   insights: ReportInsight[]
-}) {
+} & ReportActionHandlers) {
   return (
     <>
       <div className="hr-reports-workspace" style={reportsGridStyle}>
@@ -1411,8 +1632,8 @@ function CustomReportsView({ reports, allReports, scheduledReports, insights }: 
                       <Td><StatusPill status={report.status || '-'} /></Td>
                       <Td>
                         <span style={actionGroupStyle}>
-                          <button style={iconButtonStyle} aria-label={`Run ${report.name}`}><Plus size={14} /></button>
-                          <button style={iconButtonStyle} aria-label={`More actions for ${report.name}`}><MoreVertical size={14} /></button>
+                          <button style={iconButtonStyle} aria-label={`Run ${report.name}`} onClick={() => onRunReport(report)}><Plus size={14} /></button>
+                          <button style={iconButtonStyle} aria-label={`Schedule ${report.name}`} onClick={() => onSchedule(report)}><MoreVertical size={14} /></button>
                         </span>
                       </Td>
                     </tr>
@@ -1455,12 +1676,7 @@ function CustomReportsView({ reports, allReports, scheduledReports, insights }: 
             )}
           </Panel>
           <Panel title="Quick Export" icon={Download}>
-            <div style={quickGridStyle}>
-              <button style={secondaryButtonStyle} disabled>Export PDF</button>
-              <button style={secondaryButtonStyle} disabled>Export Excel</button>
-              <button style={secondaryButtonStyle} disabled>Export CSV</button>
-              <button style={secondaryButtonStyle} disabled>Schedule Report</button>
-            </div>
+            <QuickExportActions onExport={onExport} onSchedule={onSchedule} />
           </Panel>
         </aside>
       </div>
@@ -1558,7 +1774,13 @@ function ActionCard({ title, text, action }: { title: string; text: string; acti
         <strong>{title}</strong>
         <small>{text}</small>
       </span>
-      <button style={secondaryButtonStyle} disabled>{action}</button>
+      <button
+        type="button"
+        style={secondaryButtonStyle}
+        onClick={() => window.dispatchEvent(new CustomEvent('hr-report-action', { detail: action }))}
+      >
+        {action}
+      </button>
     </article>
   )
 }
@@ -1586,6 +1808,7 @@ const metricIconStyle = { width: 48, height: 48, borderRadius: 12, display: 'gri
 const tabsStyle = { display: 'flex', gap: 6, border: '1px solid #e5eaf0', borderRadius: 14, background: '#fff', padding: 6, overflowX: 'auto' as const, marginBottom: 14, boxShadow: '0 8px 22px rgba(15,23,42,0.04)' }
 const tabStyle = (active: boolean) => ({ border: 'none', background: active ? '#e8f5ee' : 'transparent', padding: '10px 13px', borderRadius: 10, color: active ? '#0f7a3b' : '#334155', fontSize: 13, fontWeight: 850, cursor: 'pointer', fontFamily: font, whiteSpace: 'nowrap' as const })
 const filterBarStyle = { marginBottom: 14, padding: 14, background: '#fff', border: '1px solid #e5eaf0', borderRadius: 14, display: 'flex', gap: 12, alignItems: 'end', flexWrap: 'wrap' as const, boxShadow: '0 8px 22px rgba(15,23,42,0.04)' }
+const noticeStyle = { margin: '-4px 0 14px', padding: '11px 14px', border: '1px solid #bbf7d0', borderRadius: 12, background: '#f0fdf4', color: '#15803d', fontSize: 13, fontWeight: 850 }
 const selectFieldStyle = { display: 'grid', gap: 5, color: '#64748b', fontSize: 11, fontWeight: 800 }
 const selectStyle = { minHeight: 40, minWidth: 168, border: '1px solid #d8e0eb', borderRadius: 10, background: '#fff', color: '#0f172a', padding: '0 12px', fontSize: 13, fontFamily: font }
 const reportsGridStyle = { display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) 340px', gap: 14, alignItems: 'start', marginBottom: 14 }
@@ -1612,3 +1835,12 @@ const actionCardStyle = { display: 'grid', gridTemplateColumns: 'auto 1fr', gap:
 const categoryOverviewStyle = { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(170px, 1fr))', gap: 10, padding: 14, borderBottom: '1px solid #f1f5f9' }
 const categoryCardStyle = { display: 'flex', alignItems: 'center', gap: 10, padding: 12, border: '1px solid #eef2f7', borderRadius: 10, background: '#fff', color: '#0f172a', fontSize: 12 }
 const emptyNoticeStyle = { marginTop: 14, padding: 14, border: '1px dashed #bbf7d0', borderRadius: 12, background: '#f0fdf4', color: '#15803d', fontSize: 13, fontWeight: 800 }
+const modalBackdropStyle = { position: 'fixed' as const, inset: 0, zIndex: 80, background: 'rgba(15,23,42,0.42)', display: 'flex', justifyContent: 'flex-end', padding: 12 }
+const modalStyle = { width: 'min(560px, 100%)', maxHeight: 'calc(100vh - 24px)', overflowY: 'auto' as const, background: '#fff', border: '1px solid #d8e0eb', borderRadius: 18, boxShadow: '0 24px 70px rgba(15,23,42,0.28)', display: 'flex', flexDirection: 'column' as const }
+const modalHeaderStyle = { padding: 20, borderBottom: '1px solid #edf2f7', display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 16 }
+const modalBodyStyle = { padding: 20, display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 14 }
+const modalFooterStyle = { padding: 16, borderTop: '1px solid #edf2f7', display: 'flex', justifyContent: 'flex-end', gap: 10, background: '#fbfdff', flexWrap: 'wrap' as const }
+const formFieldStyle = { display: 'grid', gap: 7, color: '#334155', fontSize: 12, fontWeight: 850 }
+const inputStyle = { minHeight: 42, width: '100%', border: '1px solid #d8e0eb', borderRadius: 10, background: '#fff', color: '#0f172a', padding: '0 12px', fontSize: 13, fontFamily: font, outline: 'none' }
+const textareaStyle = { minHeight: 96, width: '100%', border: '1px solid #d8e0eb', borderRadius: 10, background: '#fff', color: '#0f172a', padding: 12, fontSize: 13, fontFamily: font, outline: 'none', resize: 'vertical' as const }
+const iconCloseButtonStyle = { width: 38, height: 38, border: '1px solid #d8e0eb', borderRadius: 12, background: '#fff', color: '#0f172a', display: 'grid', placeItems: 'center', cursor: 'pointer', flexShrink: 0 }

@@ -195,7 +195,15 @@ export default function AuditLogsPage() {
   }
 
   return (
-    <div className="audit-page" style={{ fontFamily: font }}>
+    <div
+      className="audit-page"
+      style={{
+        fontFamily: font,
+        minHeight: 'calc(100dvh - 76px)',
+        background: '#101010',
+        color: '#fafafa',
+      }}
+    >
       <style>{auditCss}</style>
 
       <div className="audit-header">
@@ -204,8 +212,6 @@ export default function AuditLogsPage() {
           <p>Track system activities and changes across the platform for security and compliance.</p>
         </div>
         <div className="audit-actions">
-          <button type="button" onClick={resetFilters}><CalendarDays size={15} /> Current records</button>
-          <button type="button" className={filtersOpen ? 'is-active' : undefined} onClick={() => setFiltersOpen(open => !open)}><Filter size={15} /> Filters</button>
           <button type="button" onClick={() => exportEvents()}>Export <Download size={14} /></button>
         </div>
       </div>
@@ -238,6 +244,10 @@ export default function AuditLogsPage() {
           </button>
         ))}
       </nav>
+
+      <div className="audit-filter-toolbar">
+        <button type="button" className={filtersOpen ? 'is-active' : undefined} onClick={() => setFiltersOpen(open => !open)}><Filter size={15} /> Filters</button>
+      </div>
 
       {filtersOpen && <section className="audit-filter-panel">
         <label className="audit-search">
@@ -393,9 +403,9 @@ export default function AuditLogsPage() {
 
 const auditCss = `
 .audit-page {
-  min-height: 100vh;
-  background: #f8fafc;
-  color: #0f172a;
+  min-height: calc(100dvh - 76px);
+  background: #101010;
+  color: #fafafa;
   padding: 24px 28px 32px;
 }
 .audit-header {
@@ -419,6 +429,8 @@ const auditCss = `
 }
 .audit-actions,
 .audit-actions button,
+.audit-filter-toolbar,
+.audit-filter-toolbar button,
 .audit-filter-panel,
 .audit-filter-panel button,
 .audit-search,
@@ -433,6 +445,7 @@ const auditCss = `
   justify-content: flex-end;
 }
 .audit-actions button,
+.audit-filter-toolbar button,
 .audit-filter-panel button,
 .audit-filter-panel select,
 .audit-pagination button,
@@ -449,6 +462,15 @@ const auditCss = `
   cursor: pointer;
 }
 .audit-actions button.is-active {
+  border-color: #bbf7d0;
+  background: #ecfdf3;
+  color: #047857;
+}
+.audit-filter-toolbar {
+  justify-content: flex-end;
+  padding: 12px 0;
+}
+.audit-filter-toolbar button.is-active {
   border-color: #bbf7d0;
   background: #ecfdf3;
   color: #047857;
@@ -547,9 +569,8 @@ const auditCss = `
   padding: 18px;
   margin-bottom: 18px;
   border: 1px solid #e8edf4;
-  border-top: 0;
   background: #fff;
-  border-radius: 0 0 8px 8px;
+  border-radius: 8px;
 }
 .audit-search {
   min-height: 40px;
@@ -923,6 +944,75 @@ const auditCss = `
   gap: 6px;
   color: #2563eb;
   white-space: nowrap;
+}
+.accounting-theme-dark .audit-page,
+html[data-theme='dark'] .audit-page {
+  background: #101010 !important;
+  background-color: #101010 !important;
+  color: #fafafa !important;
+}
+.accounting-theme-dark .audit-page :is(.audit-card, .audit-filter-panel, .audit-search, .audit-table-wrap, .audit-row-menu, .audit-details, .changes > div),
+html[data-theme='dark'] .audit-page :is(.audit-card, .audit-filter-panel, .audit-search, .audit-table-wrap, .audit-row-menu, .audit-details, .changes > div) {
+  background: #101010 !important;
+  background-color: #101010 !important;
+  border-color: #333333 !important;
+  color: #fafafa !important;
+  box-shadow: none !important;
+}
+.accounting-theme-dark .audit-page :is(.audit-header h1, .audit-metric strong, .audit-tabs button, .audit-table td, .audit-user strong, .audit-pagination span, .details-title h2, .event-id strong, .detail-list dd, .detail-note p, .changes strong),
+html[data-theme='dark'] .audit-page :is(.audit-header h1, .audit-metric strong, .audit-tabs button, .audit-table td, .audit-user strong, .audit-pagination span, .details-title h2, .event-id strong, .detail-list dd, .detail-note p, .changes strong) {
+  color: #fafafa !important;
+}
+.accounting-theme-dark .audit-page :is(.audit-header p, .audit-metric small, .event-id small, .detail-note small, .changes small, .audit-user small, .audit-select, .audit-details-empty small, .audit-details-empty p, .detail-list dt, .changes span, .related-link),
+html[data-theme='dark'] .audit-page :is(.audit-header p, .audit-metric small, .event-id small, .detail-note small, .changes small, .audit-user small, .audit-select, .audit-details-empty small, .audit-details-empty p, .detail-list dt, .changes span, .related-link) {
+  color: #c7c7cf !important;
+}
+.accounting-theme-dark .audit-page :is(.audit-actions button, .audit-filter-toolbar button, .audit-filter-panel button, .audit-filter-panel select, .audit-pagination button, .audit-pagination select, .audit-row-actions > button, .audit-row-menu button),
+html[data-theme='dark'] .audit-page :is(.audit-actions button, .audit-filter-toolbar button, .audit-filter-panel button, .audit-filter-panel select, .audit-pagination button, .audit-pagination select, .audit-row-actions > button, .audit-row-menu button) {
+  background: #161616 !important;
+  background-color: #161616 !important;
+  border-color: #333333 !important;
+  color: #fafafa !important;
+}
+.accounting-theme-dark .audit-page .audit-search input,
+html[data-theme='dark'] .audit-page .audit-search input {
+  color: #fafafa !important;
+}
+.accounting-theme-dark .audit-page .audit-search input::placeholder,
+html[data-theme='dark'] .audit-page .audit-search input::placeholder {
+  color: #8f8f98 !important;
+}
+.accounting-theme-dark .audit-page .audit-table th,
+html[data-theme='dark'] .audit-page .audit-table th {
+  background: #181818 !important;
+  background-color: #181818 !important;
+  color: #c7c7cf !important;
+  border-color: #333333 !important;
+}
+.accounting-theme-dark .audit-page :is(.audit-table td, .audit-table th, .audit-table tr, .audit-tabs, .event-id, .detail-note, .changes, .related-link),
+html[data-theme='dark'] .audit-page :is(.audit-table td, .audit-table th, .audit-table tr, .audit-tabs, .event-id, .detail-note, .changes, .related-link) {
+  border-color: #333333 !important;
+}
+.accounting-theme-dark .audit-page .audit-table tr.is-selected td,
+html[data-theme='dark'] .audit-page .audit-table tr.is-selected td {
+  background: #181818 !important;
+  background-color: #181818 !important;
+}
+.accounting-theme-dark .audit-page :is(.audit-actions button.is-active, .audit-filter-toolbar button.is-active),
+html[data-theme='dark'] .audit-page :is(.audit-actions button.is-active, .audit-filter-toolbar button.is-active) {
+  background: #143524 !important;
+  border-color: #2f7a4b !important;
+  color: #b8f7cf !important;
+}
+.accounting-theme-dark .audit-page .audit-pagination button.is-active,
+html[data-theme='dark'] .audit-page .audit-pagination button.is-active {
+  background: #059669 !important;
+  border-color: #059669 !important;
+  color: #ffffff !important;
+}
+.accounting-theme-dark .audit-page .audit-row-menu button:hover,
+html[data-theme='dark'] .audit-page .audit-row-menu button:hover {
+  background: #222222 !important;
 }
 @media (max-width: 1280px) {
   .audit-metrics {

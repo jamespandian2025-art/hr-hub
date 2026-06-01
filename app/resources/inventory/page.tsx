@@ -3,6 +3,7 @@
 import Link from 'next/link'
 import Image from 'next/image'
 import { ChangeEvent, useEffect, useState } from 'react'
+import { uploadFileObject } from '@/lib/uploads/client'
 
 const font = "var(--font-body)"
 const storageKey = 'flowsys-warehouses'
@@ -91,13 +92,16 @@ export default function InventoryPage() {
     setOpenMenu(null)
   }
 
-  const uploadWarehousePhoto = (event: ChangeEvent<HTMLInputElement>) => {
+  const uploadWarehousePhoto = async (event: ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0]
     if (!file) return
 
-    const reader = new FileReader()
-    reader.onload = () => setPhotoUrl(String(reader.result || ''))
-    reader.readAsDataURL(file)
+    try {
+      const uploaded = await uploadFileObject(file, 'warehouse-photos')
+      setPhotoUrl(uploaded.url)
+    } catch {
+      setPhotoUrl('')
+    }
   }
 
   const saveWarehouse = () => {

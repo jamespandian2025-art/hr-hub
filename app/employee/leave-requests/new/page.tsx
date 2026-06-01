@@ -16,16 +16,21 @@ import {
 } from '../../employeeData'
 import { employeeLeaveOutboxKey } from '@/app/hr/leave-requests/leaveData'
 import { createHrRecord } from '@/lib/hrms/client'
+import { uploadFileObject } from '@/lib/uploads/client'
 
 const leaveTypes = ['Annual Leave', 'Sick Leave', 'Personal Leave', 'Maternity Leave', 'Paternity Leave', 'Emergency Leave', 'Unpaid Leave', 'Work From Home']
 
-function readFile(file: File) {
-  return new Promise<{ name: string; size: number; type: string; dataUrl?: string }>((resolve, reject) => {
-    const reader = new FileReader()
-    reader.onload = () => resolve({ name: file.name, size: file.size, type: file.type, dataUrl: String(reader.result || '') })
-    reader.onerror = reject
-    reader.readAsDataURL(file)
-  })
+async function uploadLeaveAttachment(file: File) {
+  const uploaded = await uploadFileObject(file, 'leave-attachments')
+  return {
+    name: file.name,
+    size: file.size,
+    type: file.type,
+    dataUrl: uploaded.url,
+    fileUrl: uploaded.url,
+    objectKey: uploaded.objectKey,
+    storageProvider: uploaded.storageProvider,
+  }
 }
 
 export default function ApplyLeavePage() {
@@ -37,7 +42,7 @@ export default function ApplyLeavePage() {
   const [reason, setReason] = useState('')
   const [contact, setContact] = useState('')
   const [halfDay, setHalfDay] = useState(false)
-  const [attachments, setAttachments] = useState<Array<{ name: string; size: number; type: string; dataUrl?: string }>>([])
+  const [attachments, setAttachments] = useState<Array<{ name: string; size: number; type: string; dataUrl?: string; fileUrl?: string; objectKey?: string; storageProvider?: string }>>([])
   const [notice, setNotice] = useState('')
   const [isSubmitting, setIsSubmitting] = useState(false)
   const isWorkFromHome = leaveType === 'Work From Home'
@@ -56,8 +61,12 @@ export default function ApplyLeavePage() {
 
   const attachFiles = async (files: FileList | null) => {
     if (!files?.length) return
-    const next = await Promise.all(Array.from(files).map(readFile))
-    setAttachments(current => [...current, ...next])
+    try {
+      const next = await Promise.all(Array.from(files).map(uploadLeaveAttachment))
+      setAttachments(current => [...current, ...next])
+    } catch {
+      setNotice('Could not upload one or more attachments. Please try again.')
+    }
   }
 
   const buildRequest = (status: 'Pending' | 'Draft'): LeaveRequest => {

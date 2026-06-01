@@ -1,20 +1,33 @@
 'use client'
 
-import { ChangeEvent, useEffect, useMemo, useState } from 'react'
+import { ChangeEvent, FormEvent, useEffect, useMemo, useState } from 'react'
+import { usePathname, useRouter, useSearchParams } from 'next/navigation'
 import {
   ArrowDownCircle,
   ArrowUpCircle,
   Banknote,
-  CalendarDays,
   ChevronDown,
   Download,
-  Filter,
   Landmark,
   MoreHorizontal,
+  Plus,
   Search,
   SlidersHorizontal,
+  Trash2,
+  X,
 } from 'lucide-react'
-import { emptyAccountingData, formatDate, loadAccountingData, money, subscribeAccountingData } from '@/lib/accounting/data'
+import {
+  createAccountingTransaction,
+  deleteAccountingTransaction,
+  emptyAccountingData,
+  formatDate,
+  loadAccountingData,
+  money,
+  refreshAccountingData,
+  subscribeAccountingData,
+  type AccountingTransactionSource,
+  updateAccountingTransactionStatus,
+} from '@/lib/accounting/data'
 
 const font = 'var(--font-body)'
 
@@ -24,6 +37,7 @@ type TransactionTab = 'All Transactions' | 'Unreconciled' | 'Deposits' | 'Withdr
 type PaginationItem = number | 'ellipsis'
 type TransactionRowView = {
   id: string
+  source: AccountingTransactionSource
   date: string
   description: string
   detail: string
@@ -44,6 +58,14 @@ type TransactionMenuState = {
 }
 
 const PAGE_SIZE_OPTIONS = [5, 10, 25, 50, 100]
+const reconciledStatuses = new Set(['Reconciled', 'Paid', 'Completed', 'Released', 'Processed', 'Posted', 'Settled', 'Cleared'])
+const sourceLabels: Record<AccountingTransactionSource, string> = {
+  manual: 'Manual',
+  invoice: 'Invoice',
+  bill: 'Bill',
+  expense: 'Expense',
+  payroll: 'Payroll',
+}
 
 function TransactionTypePill({ value }: { value: TransactionType }) {
   const styles: Record<TransactionType, { bg: string; color: string }> = {
@@ -73,6 +95,10 @@ function CategoryPill({ value }: { value: string }) {
 }
 
 export default function TransactionsPage() {
+  const router = useRouter()
+  const pathname = usePathname()
+  const searchParams = useSearchParams()
+  const createRequested = searchParams.get('new') === '1'
   const [data, setData] = useState(emptyAccountingData)
   const [activeTab, setActiveTab] = useState<TransactionTab>('All Transactions')
   const [headerSearch, setHeaderSearch] = useState('')
@@ -80,24 +106,47 @@ export default function TransactionsPage() {
   const [accountFilter, setAccountFilter] = useState('All Accounts')
   const [typeFilter, setTypeFilter] = useState('All Types')
   const [statusFilter, setStatusFilter] = useState('All Status')
-  const [moreFiltersOpen, setMoreFiltersOpen] = useState(false)
+  const [categoryFilter, setCategoryFilter] = useState('All Categories')
   const [selectedRows, setSelectedRows] = useState<string[]>([])
   const [activeMenu, setActiveMenu] = useState<TransactionMenuState | null>(null)
   const [notice, setNotice] = useState('')
+  const [showCreate, setShowCreate] = useState(false)
+  const [form, setForm] = useState({
+    date: new Date().toISOString().slice(0, 10),
+    description: '',
+    account: '',
+    category: '',
+    type: 'Expense' as 'Income' | 'Expense' | 'Transfer',
+    reference: '',
+    amount: '',
+    status: 'Recorded',
+    notes: '',
+  })
   const [currentPage, setCurrentPage] = useState(1)
   const [pageSize, setPageSize] = useState(10)
 
   useEffect(() => {
+    let active = true
     const load = () => setData(loadAccountingData())
     load()
-    return subscribeAccountingData(load)
+    void refreshAccountingData()
+      .then(nextData => {
+        if (active) setData(nextData)
+      })
+      .catch(() => undefined)
+    const unsubscribe = subscribeAccountingData(load)
+    return () => {
+      active = false
+      unsubscribe()
+    }
   }, [])
 
   const transactions = useMemo<TransactionRowView[]>(() => data.transactions.map(transaction => ({
     id: transaction.id,
+    source: transaction.source,
     date: formatDate(transaction.date),
     description: transaction.description,
-    detail: transaction.secondary,
+    detail: transaction.source === 'manual' ? transaction.secondary : `${sourceLabels[transaction.source]} - ${transaction.secondary}`,
     account: transaction.account,
     accountDetail: transaction.reference || '-',
     type: transaction.type === 'Income' ? 'Deposit' as const : transaction.type === 'Expense' ? 'Withdrawal' as const : 'Transfer' as const,
@@ -105,7 +154,7 @@ export default function TransactionsPage() {
     inflow: transaction.inflow,
     outflow: transaction.outflow,
     balance: transaction.balance,
-    status: ['Reconciled', 'Paid', 'Completed'].includes(transaction.status) ? 'Reconciled' as const : 'Unreconciled' as const,
+    status: reconciledStatuses.has(transaction.status) ? 'Reconciled' as const : 'Unreconciled' as const,
     category: transaction.category,
   })), [data.transactions])
   const accounts = useMemo(() => Array.from(new Set(transactions.map(transaction => transaction.account).filter(Boolean))).sort(), [transactions])
@@ -122,10 +171,11 @@ export default function TransactionsPage() {
       const accountMatches = accountFilter === 'All Accounts' || transaction.account === accountFilter
       const typeMatches = typeFilter === 'All Types' || transaction.type === typeFilter
       const statusMatches = statusFilter === 'All Status' || transaction.status === statusFilter
+      const categoryMatches = categoryFilter === 'All Categories' || transaction.category === categoryFilter
       const queryMatches = !query || [transaction.description, transaction.detail, transaction.account, transaction.reference, transaction.category, transaction.type, transaction.status].join(' ').toLowerCase().includes(query)
-      return tabMatches && accountMatches && typeMatches && statusMatches && queryMatches
+      return tabMatches && accountMatches && typeMatches && statusMatches && categoryMatches && queryMatches
     })
-  }, [accountFilter, activeTab, headerSearch, statusFilter, tableSearch, transactions, typeFilter])
+  }, [accountFilter, activeTab, categoryFilter, headerSearch, statusFilter, tableSearch, transactions, typeFilter])
   const filteredTotal = visibleTransactions.length
   const totalPages = Math.max(1, Math.ceil(filteredTotal / pageSize))
   const safeCurrentPage = Math.min(currentPage, totalPages)
@@ -138,6 +188,8 @@ export default function TransactionsPage() {
   const paginationItems = useMemo(() => getPaginationItems(safeCurrentPage, totalPages), [safeCurrentPage, totalPages])
   const allPageRowsSelected = paginatedTransactions.length > 0 && paginatedTransactions.every(transaction => selectedRows.includes(transaction.id))
   const totalTransactions = transactions.length
+  const generatedTransactions = transactions.filter(transaction => transaction.source !== 'manual').length
+  const manualTransactions = totalTransactions - generatedTransactions
   const accountCount = new Set(transactions.map(transaction => transaction.account).filter(Boolean)).size
   const totalInflow = transactions.reduce((sum, transaction) => sum + transaction.inflow, 0)
   const totalOutflow = transactions.reduce((sum, transaction) => sum + transaction.outflow, 0)
@@ -147,7 +199,7 @@ export default function TransactionsPage() {
     .filter(transaction => transaction.status === 'Unreconciled')
     .reduce((sum, transaction) => sum + transaction.inflow + transaction.outflow, 0)
   const metrics = [
-    { title: 'Total Transactions', value: String(totalTransactions), detail: `${accountCount} account${accountCount === 1 ? '' : 's'}`, icon: Landmark, tone: '#2563eb', up: totalTransactions > 0 },
+    { title: 'Total Transactions', value: String(totalTransactions), detail: `${generatedTransactions} generated / ${manualTransactions} manual`, icon: Landmark, tone: '#2563eb', up: totalTransactions > 0 },
     { title: 'Total Inflow', value: money(totalInflow, data.currency), detail: `${transactions.filter(row => row.inflow > 0).length} income records`, icon: ArrowDownCircle, tone: '#16a34a', up: totalInflow > 0 },
     { title: 'Total Outflow', value: money(totalOutflow, data.currency), detail: `${transactions.filter(row => row.outflow > 0).length} expense records`, icon: ArrowUpCircle, tone: '#ef4444', up: false },
     { title: 'Net Cash Flow', value: money(netCashFlow, data.currency), detail: 'Inflow minus outflow', icon: SlidersHorizontal, tone: '#7c3aed', up: netCashFlow >= 0 },
@@ -160,18 +212,6 @@ export default function TransactionsPage() {
     Withdrawals: transactions.filter(transaction => transaction.type === 'Withdrawal').length,
     Transfers: transactions.filter(transaction => transaction.type === 'Transfer').length,
   }
-  const resetFilters = () => {
-    setActiveTab('All Transactions')
-    setHeaderSearch('')
-    setTableSearch('')
-    setAccountFilter('All Accounts')
-    setTypeFilter('All Types')
-    setStatusFilter('All Status')
-    setSelectedRows([])
-    setActiveMenu(null)
-    setNotice('')
-    setCurrentPage(1)
-  }
   const toggleSelectAll = (event: ChangeEvent<HTMLInputElement>) => {
     const pageRowIds = paginatedTransactions.map(transaction => transaction.id)
     setSelectedRows(previous => {
@@ -181,6 +221,62 @@ export default function TransactionsPage() {
   }
   const toggleSelectRow = (id: string) => {
     setSelectedRows(previous => previous.includes(id) ? previous.filter(item => item !== id) : [...previous, id])
+  }
+  const openCreate = () => {
+    setShowCreate(true)
+    setNotice('')
+  }
+  const closeCreate = () => {
+    setShowCreate(false)
+    if (createRequested) router.replace(pathname, { scroll: false })
+  }
+  const submitTransaction = (event: FormEvent) => {
+    event.preventDefault()
+    const amount = Number(form.amount || 0)
+    if (!Number.isFinite(amount) || amount <= 0) {
+      setNotice('Enter an amount greater than zero.')
+      return
+    }
+    createAccountingTransaction({
+      date: form.date,
+      description: form.description,
+      account: form.account || accounts[0] || 'Accounting ledger',
+      category: form.category || form.type,
+      type: form.type,
+      reference: form.reference,
+      amount,
+      status: form.status,
+      notes: form.notes,
+    })
+    setData(loadAccountingData())
+    setForm({ date: new Date().toISOString().slice(0, 10), description: '', account: '', category: '', type: 'Expense', reference: '', amount: '', status: 'Recorded', notes: '' })
+    closeCreate()
+    setNotice('Transaction created.')
+  }
+  const reconcileRows = (ids: string[]) => {
+    const manualIds = ids.filter(id => transactions.find(transaction => transaction.id === id)?.source === 'manual')
+    manualIds.forEach(id => updateAccountingTransactionStatus(id, 'Reconciled'))
+    setData(loadAccountingData())
+    setSelectedRows(previous => previous.filter(id => !ids.includes(id)))
+    setActiveMenu(null)
+    setNotice(manualIds.length === ids.length
+      ? `${ids.length} transaction${ids.length === 1 ? '' : 's'} reconciled.`
+      : manualIds.length
+        ? `${manualIds.length} manual transaction${manualIds.length === 1 ? '' : 's'} reconciled. Generated rows follow their source record.`
+        : 'Generated transactions follow their source record.')
+  }
+  const removeTransaction = (id: string) => {
+    const target = transactions.find(transaction => transaction.id === id)
+    if (target?.source !== 'manual') {
+      setNotice('Generated transactions follow their source record.')
+      setActiveMenu(null)
+      return
+    }
+    deleteAccountingTransaction(id)
+    setData(loadAccountingData())
+    setSelectedRows(previous => previous.filter(item => item !== id))
+    setActiveMenu(null)
+    setNotice('Transaction deleted.')
   }
   const exportCsv = () => {
     if (typeof window === 'undefined') return
@@ -244,7 +340,15 @@ export default function TransactionsPage() {
   }
 
   return (
-    <div className="tx-page" style={{ fontFamily: font }}>
+    <div
+      className="tx-page"
+      style={{
+        fontFamily: font,
+        minHeight: 'calc(100dvh - 76px)',
+        background: '#101010',
+        color: '#fafafa',
+      }}
+    >
       <style>{transactionsCss}</style>
       <div className="tx-header">
         <div>
@@ -256,8 +360,7 @@ export default function TransactionsPage() {
             <Search size={16} color="#64748b" />
             <input value={headerSearch} onChange={event => { setHeaderSearch(event.target.value); setCurrentPage(1) }} placeholder="Search transactions, accounts, reference..." />
           </label>
-          <button type="button" className="tx-toolbar-button" onClick={() => setMoreFiltersOpen(open => !open)}><Filter size={15} /> Filters</button>
-          <button type="button" className="tx-toolbar-button" onClick={resetFilters}><CalendarDays size={15} /> Current records</button>
+          <button type="button" className="tx-primary-button" onClick={openCreate}><Plus size={14} /> New Transaction</button>
           <button type="button" className="tx-toolbar-button" onClick={exportCsv}>Export <Download size={14} /></button>
         </div>
       </div>
@@ -303,18 +406,9 @@ export default function TransactionsPage() {
           <SelectButton label="Transaction type" value={typeFilter} onChange={value => { setTypeFilter(value); setCurrentPage(1) }} options={['All Types', 'Deposit', 'Withdrawal', 'Transfer']} />
           <SelectButton label="Transaction status" value={statusFilter} onChange={value => { setStatusFilter(value); setCurrentPage(1) }} options={['All Status', 'Reconciled', 'Unreconciled']} />
           <SelectButton label="Transaction account" value={accountFilter} onChange={value => { setAccountFilter(value); setCurrentPage(1) }} options={['All Accounts', ...accounts]} />
-          <button type="button" onClick={resetFilters}><CalendarDays size={15} /> Current records</button>
-          <button type="button" onClick={() => setMoreFiltersOpen(open => !open)}><SlidersHorizontal size={15} /> More Filters</button>
+          <SelectButton label="Category" value={categoryFilter} onChange={value => { setCategoryFilter(value); setCurrentPage(1) }} options={['All Categories', ...categories]} />
+          {selectedRows.length > 0 && <button type="button" onClick={() => reconcileRows(selectedRows)}>Reconcile {selectedRows.length}</button>}
         </div>
-        {moreFiltersOpen && (
-          <div className="tx-more-filters">
-            <strong>Category</strong>
-            <div>
-              <button type="button" onClick={() => { setTableSearch(''); setCurrentPage(1) }}>All Categories</button>
-              {categories.map(category => <button key={category} type="button" onClick={() => { setTableSearch(category); setCurrentPage(1) }}>{category}</button>)}
-            </div>
-          </div>
-        )}
         {notice && <div className="tx-notice" role="status">{notice}</div>}
 
         <div className="tx-table-wrap">
@@ -346,7 +440,9 @@ export default function TransactionsPage() {
                         <div className="tx-row-menu" role="menu" style={{ top: activeMenu.top, left: activeMenu.left }}>
                           <button type="button" role="menuitem" onClick={() => focusTransaction(transaction)}>View details</button>
                           <button type="button" role="menuitem" onClick={() => filterAccount(transaction)}>Filter account</button>
+                          <button type="button" role="menuitem" onClick={() => reconcileRows([transaction.id])}>Mark reconciled</button>
                           <button type="button" role="menuitem" onClick={() => exportTransaction(transaction)}>Export row</button>
+                          {transaction.source === 'manual' && <button type="button" role="menuitem" className="danger" onClick={() => removeTransaction(transaction.id)}><Trash2 size={13} /> Delete</button>}
                         </div>
                       )}
                     </div>
@@ -384,6 +480,34 @@ export default function TransactionsPage() {
           </div>
         </div>
       </section>
+      {(showCreate || createRequested) && (
+        <div className="tx-modal-backdrop" onMouseDown={event => { if (event.target === event.currentTarget) closeCreate() }}>
+          <form className="tx-create-sheet" onSubmit={submitTransaction}>
+            <div className="tx-create-head">
+              <div>
+                <h2>New Transaction</h2>
+                <p>Add an income, expense, or transfer row to the accounting ledger.</p>
+              </div>
+              <button type="button" onClick={closeCreate} aria-label="Close transaction form"><X size={18} /></button>
+            </div>
+            <div className="tx-create-grid">
+              <label><span>Date</span><input type="date" value={form.date} onChange={event => setForm(prev => ({ ...prev, date: event.target.value }))} required /></label>
+              <label><span>Type</span><select value={form.type} onChange={event => setForm(prev => ({ ...prev, type: event.target.value as typeof form.type }))}><option>Income</option><option>Expense</option><option>Transfer</option></select></label>
+              <label><span>Description</span><input value={form.description} onChange={event => setForm(prev => ({ ...prev, description: event.target.value }))} required /></label>
+              <label><span>Account</span><input value={form.account} onChange={event => setForm(prev => ({ ...prev, account: event.target.value }))} placeholder={accounts[0] || 'Accounting ledger'} /></label>
+              <label><span>Category</span><input value={form.category} onChange={event => setForm(prev => ({ ...prev, category: event.target.value }))} placeholder={form.type} /></label>
+              <label><span>Reference</span><input value={form.reference} onChange={event => setForm(prev => ({ ...prev, reference: event.target.value }))} placeholder="Optional reference" /></label>
+              <label><span>Amount</span><input type="number" min="0" step="0.01" value={form.amount} onChange={event => setForm(prev => ({ ...prev, amount: event.target.value }))} required /></label>
+              <label><span>Status</span><select value={form.status} onChange={event => setForm(prev => ({ ...prev, status: event.target.value }))}><option>Recorded</option><option>Reconciled</option><option>Pending</option></select></label>
+              <label className="wide"><span>Notes</span><textarea value={form.notes} onChange={event => setForm(prev => ({ ...prev, notes: event.target.value }))} /></label>
+            </div>
+            <div className="tx-create-actions">
+              <button type="button" onClick={closeCreate}>Cancel</button>
+              <button type="submit" className="tx-primary-button">Save Transaction</button>
+            </div>
+          </form>
+        </div>
+      )}
     </div>
   )
 }
@@ -428,7 +552,7 @@ function SelectButton({ label, value, options, onChange }: { label: string; valu
 }
 
 const transactionsCss = `
-.tx-page { padding: 26px 28px 40px; color: #0f172a; }
+.tx-page { min-height: calc(100dvh - 76px); padding: 26px 28px 40px; background: #101010; color: #fafafa; }
 .tx-header { display: flex; justify-content: space-between; align-items: flex-start; gap: 18px; margin-bottom: 24px; }
 .tx-title { margin: 0; font-size: 28px; line-height: 1.1; font-weight: 950; }
 .tx-subtitle { margin: 8px 0 0; color: #334155; font-size: 13.5px; }
@@ -436,7 +560,8 @@ const transactionsCss = `
 .tx-search, .tx-filter-search { min-height: 40px; border-radius: 8px; background: #fff; display: flex; align-items: center; gap: 10px; padding: 0 13px; border: 1px solid #e8edf4; }
 .tx-search { width: min(360px, 38vw); }
 .tx-search input, .tx-filter-search input { flex: 1; min-width: 0; border: 0; outline: 0; background: transparent; font-size: 12.5px; color: #0f172a; }
-.tx-toolbar-button, .tx-filterbar button, .tx-select-button { min-height: 40px; border-radius: 8px; border: 1px solid #e8edf4; background: #fff; color: #0f172a; display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 0 12px; font-size: 12.5px; font-weight: 850; cursor: pointer; white-space: nowrap; }
+.tx-toolbar-button, .tx-primary-button, .tx-filterbar button, .tx-select-button { min-height: 40px; border-radius: 8px; border: 1px solid #e8edf4; background: #fff; color: #0f172a; display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 0 12px; font-size: 12.5px; font-weight: 850; cursor: pointer; white-space: nowrap; }
+.tx-primary-button { background: #16a34a; border-color: #16a34a; color: #fff; justify-content: center; font-weight: 950; }
 .tx-select-button select, .tx-account-select select { appearance: none; border: 0; outline: 0; background: transparent; color: #0f172a; font: inherit; font-weight: 850; width: 100%; cursor: pointer; }
 .tx-metrics { display: grid; grid-template-columns: repeat(5, minmax(170px, 1fr)); gap: 18px; margin-bottom: 24px; }
 .tx-card, .tx-account-select, .tx-table-card { background: #fff; border: 1px solid #e8edf4; border-radius: 8px; box-shadow: 0 1px 2px rgba(15, 23, 42, .03); }
@@ -455,11 +580,7 @@ const transactionsCss = `
 .tx-tabs span { min-width: 21px; min-height: 21px; border-radius: 999px; background: #f1f5f9; color: #475569; display: grid; place-items: center; font-size: 11px; }
 .tx-tabs button.is-active span { background: #dcfce7; color: #15803d; }
 .tx-table-card { border-top-left-radius: 0; border-top-right-radius: 0; padding: 18px; }
-.tx-filterbar { display: grid; grid-template-columns: minmax(220px, 1fr) repeat(5, minmax(140px, auto)); gap: 14px; align-items: center; margin-bottom: 18px; }
-.tx-more-filters { border: 1px solid #eef2f7; background: #f8fafc; border-radius: 8px; padding: 12px; margin: -4px 0 18px; display: grid; gap: 10px; }
-.tx-more-filters strong { font-size: 12px; color: #475569; }
-.tx-more-filters div { display: flex; gap: 8px; flex-wrap: wrap; }
-.tx-more-filters button { border: 1px solid #e8edf4; border-radius: 999px; min-height: 30px; background: #fff; color: #0f172a; padding: 0 10px; font-size: 12px; font-weight: 850; cursor: pointer; }
+.tx-filterbar { display: grid; grid-template-columns: minmax(220px, 1fr) repeat(4, minmax(140px, auto)); gap: 14px; align-items: center; margin-bottom: 18px; }
 .tx-notice { margin: -4px 0 14px; border: 1px solid #bbf7d0; border-radius: 8px; background: #f0fdf4; color: #15803d; padding: 10px 12px; font-size: 12.5px; font-weight: 900; }
 .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
 .tx-table-wrap { overflow-x: auto; border: 1px solid #eef2f7; border-radius: 8px; }
@@ -478,6 +599,22 @@ const transactionsCss = `
 .tx-row-menu { position: fixed; z-index: 1400; width: 172px; border: 1px solid #e8edf4; border-radius: 8px; background: #fff; box-shadow: 0 18px 44px rgba(15,23,42,.16); padding: 6px; display: grid; gap: 2px; }
 .tx-row-menu button { min-height: 34px; border: 0; border-radius: 6px; background: transparent; color: #0f172a; padding: 0 10px; text-align: left; font-size: 12.5px; font-weight: 850; cursor: pointer; }
 .tx-row-menu button:hover { background: #f1f5f9; }
+.tx-row-menu button.danger { color: #dc2626; display: flex; align-items: center; gap: 8px; }
+.tx-modal-backdrop { position: fixed; inset: 0; z-index: 1500; background: rgba(15,23,42,.36); display: flex; justify-content: flex-end; }
+.tx-create-sheet { width: min(520px, 100%); height: 100%; background: #fff; box-shadow: -24px 0 80px rgba(15,23,42,.22); display: grid; grid-template-rows: auto 1fr auto; }
+.tx-create-head { padding: 22px 24px; border-bottom: 1px solid #e8edf4; display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }
+.tx-create-head h2 { margin: 0; font-size: 22px; }
+.tx-create-head p { margin: 6px 0 0; color: #64748b; font-size: 13px; }
+.tx-create-head button { width: 36px; height: 36px; border: 1px solid #e8edf4; border-radius: 8px; background: #fff; display: grid; place-items: center; cursor: pointer; }
+.tx-create-grid { padding: 22px 24px; display: grid; grid-template-columns: 1fr 1fr; gap: 14px; overflow: auto; align-content: start; }
+.tx-create-grid label { display: grid; gap: 7px; min-width: 0; }
+.tx-create-grid label.wide { grid-column: 1 / -1; }
+.tx-create-grid span { font-size: 12px; font-weight: 900; color: #334155; }
+.tx-create-grid input, .tx-create-grid select, .tx-create-grid textarea { width: 100%; border: 1px solid #dbe3ef; border-radius: 8px; background: #fff; color: #0f172a; padding: 0 12px; font: inherit; font-size: 13px; outline: 0; }
+.tx-create-grid input, .tx-create-grid select { height: 44px; }
+.tx-create-grid textarea { min-height: 96px; padding: 11px 12px; resize: vertical; line-height: 1.45; }
+.tx-create-actions { padding: 14px 24px; border-top: 1px solid #e8edf4; display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.tx-create-actions button { justify-content: center; }
 .tx-pagination { display: flex; justify-content: space-between; align-items: center; gap: 16px; padding-top: 16px; }
 .tx-pagination strong { font-size: 12.5px; }
 .tx-pagination > div { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
@@ -487,6 +624,14 @@ const transactionsCss = `
 .tx-ellipsis { min-width: 22px; text-align: center; color: #64748b; font-weight: 900; }
 .tx-page-size { min-height: 32px; border-radius: 7px; border: 1px solid #e8edf4; background: #fff; color: #0f172a; display: flex; align-items: center; gap: 8px; padding: 0 10px; width: auto; }
 .tx-page-size select { appearance: none; border: 0; outline: 0; background: transparent; color: #0f172a; font: inherit; font-weight: 900; cursor: pointer; }
+.accounting-theme-dark .tx-page,
+html[data-theme='dark'] .tx-page { background: #101010 !important; background-color: #101010 !important; color: #fafafa !important; }
+.accounting-theme-dark .tx-page :is(.tx-card,.tx-account-select,.tx-table-card,.tx-table-wrap),
+html[data-theme='dark'] .tx-page :is(.tx-card,.tx-account-select,.tx-table-card,.tx-table-wrap) { background: #101010 !important; background-color: #101010 !important; border-color: #333 !important; color: #fafafa !important; box-shadow: none !important; }
+.accounting-theme-dark .tx-page .tx-table th,
+html[data-theme='dark'] .tx-page .tx-table th { background: #181818 !important; color: #c7c7cf !important; border-color: #333 !important; }
+.accounting-theme-dark .tx-page .tx-table td,
+html[data-theme='dark'] .tx-page .tx-table td { background: #101010 !important; color: #fafafa !important; border-color: #333 !important; }
 @media (max-width: 1280px) {
   .tx-page { padding: 22px; }
   .tx-header { flex-direction: column; }
@@ -513,5 +658,9 @@ const transactionsCss = `
   .tx-table td { border-top: 0; display: grid; grid-template-columns: 112px minmax(0, 1fr); gap: 10px; padding: 10px 12px; font-size: 12.5px; }
   .tx-table td::before { content: attr(data-label); color: #64748b; font-size: 11px; font-weight: 900; text-transform: uppercase; }
   .tx-pagination > div { justify-content: flex-start; }
+  .tx-create-sheet { height: min(92dvh, 720px); align-self: end; border-radius: 18px 18px 0 0; }
+  .tx-create-grid { grid-template-columns: 1fr; padding: 18px; }
+  .tx-create-head { padding: 18px; }
+  .tx-create-actions { padding: 12px 18px; }
 }
 `

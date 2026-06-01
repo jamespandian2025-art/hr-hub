@@ -133,13 +133,13 @@ export default function EmployeeAttendancePage() {
   }
 
   if (!employee) {
-    return <main style={{ fontFamily: font, minHeight: '100vh', padding: 24, background: '#f8fafc' }}><section style={{ ...card, padding: 24 }}><h1 style={{ margin: 0 }}>Employee not found</h1><Link href="/hr/attendance" style={{ color: '#16a34a', fontWeight: 800 }}>Back to Attendance</Link></section></main>
+    return <main style={{ fontFamily: font, minHeight: '100vh', padding: 24 }}><section style={{ ...card, padding: 24 }}><h1 style={{ margin: 0 }}>Employee not found</h1><Link href="/hr/attendance" style={{ color: '#16a34a', fontWeight: 800 }}>Back to Attendance</Link></section></main>
   }
 
   const name = fullName(employee) || employee.email || 'Employee'
 
   return (
-    <main style={{ fontFamily: font, padding: '0 20px 36px', minHeight: '100vh', background: '#f8fafc' }}>
+    <main style={{ fontFamily: font, padding: '0 20px 36px', minHeight: '100vh' }}>
       <div style={{ padding: '20px 0 18px', fontSize: 12, color: '#6b7280' }}>HR Hub &nbsp;&gt;&nbsp; <Link href="/hr/attendance" style={{ color: '#6b7280', textDecoration: 'none' }}>Attendance</Link> &nbsp;&gt;&nbsp; {name}</div>
       {notice && <div style={{ ...card, padding: '10px 14px', marginBottom: 14, color: '#15803d', fontSize: 12, fontWeight: 800 }}>{notice}</div>}
 

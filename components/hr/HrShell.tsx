@@ -6,11 +6,7 @@ import { usePathname, useRouter } from 'next/navigation'
 import {
   ArrowLeft,
   Bell,
-  CalendarCheck,
-  CreditCard,
-  FileText,
   Menu,
-  Plus,
   Search,
   Settings,
   UserPlus,
@@ -21,6 +17,7 @@ import { getHrRouteMeta, HR_NAV_ITEMS, isHrRouteActive } from './hrNav'
 import { loadStored } from '@/app/employee/employeeData'
 import { allowanceRequestKey, AllowanceRequest } from '@/app/hr/enterpriseData'
 import { loadLeaveRequests } from '@/app/hr/leave-requests/leaveData'
+import CompanySwitcher from '@/components/CompanySwitcher'
 import { logoutUser } from '@/lib/auth/logout'
 import { listHrRecords } from '@/lib/hrms/client'
 
@@ -135,7 +132,6 @@ export default function HrShell({ children }: { children: React.ReactNode }) {
   const [mobileOpen, setMobileOpen] = useState(false)
   const [account, setAccount] = useState<StoredAccount>({})
   const [loanNotificationsOpen, setLoanNotificationsOpen] = useState(false)
-  const [createMenuOpen, setCreateMenuOpen] = useState(false)
   const [accountMenuOpen, setAccountMenuOpen] = useState(false)
   const [leaveNotifications, setLeaveNotifications] = useState<LeaveNotification[]>([])
   const [systemNotifications, setSystemNotifications] = useState<HrSystemNotification[]>([])
@@ -196,7 +192,6 @@ export default function HrShell({ children }: { children: React.ReactNode }) {
   )
   const openHrRoute = (target: string) => {
     setLoanNotificationsOpen(false)
-    setCreateMenuOpen(false)
     setAccountMenuOpen(false)
     router.push(target)
   }
@@ -324,7 +319,8 @@ export default function HrShell({ children }: { children: React.ReactNode }) {
           </label>
 
           <div className="hr-topbar-actions">
-            <button type="button" className="hr-icon-button" aria-label="Notifications" onClick={() => { setLoanNotificationsOpen(open => !open); setCreateMenuOpen(false); setAccountMenuOpen(false) }} style={{ position: 'relative' }}>
+            <CompanySwitcher className="hr-company-switcher" compact />
+            <button type="button" className="hr-icon-button" aria-label="Notifications" onClick={() => { setLoanNotificationsOpen(open => !open); setAccountMenuOpen(false) }} style={{ position: 'relative' }}>
               <Bell size={17} />
               {hrNotificationItems.length > 0 && <span style={notificationBadgeStyle}>{hrNotificationItems.length}</span>}
             </button>
@@ -367,20 +363,7 @@ export default function HrShell({ children }: { children: React.ReactNode }) {
               Add employee
             </button>
             <div style={{ position: 'relative' }}>
-              <button type="button" className="hr-icon-button" aria-label="Create HR item" onClick={() => { setCreateMenuOpen(open => !open); setLoanNotificationsOpen(false); setAccountMenuOpen(false) }}>
-                <Plus size={17} />
-              </button>
-              {createMenuOpen && (
-                <div style={quickMenuStyle}>
-                  <button type="button" style={quickMenuItemStyle} onClick={() => openHrRoute('/hr/employees/new')}><UserPlus size={15} /> New employee</button>
-                  <button type="button" style={quickMenuItemStyle} onClick={() => openHrRoute('/hr/leave-requests')}><CalendarCheck size={15} /> Leave request</button>
-                  <button type="button" style={quickMenuItemStyle} onClick={() => openHrRoute('/hr/payroll')}><CreditCard size={15} /> Payroll run</button>
-                  <button type="button" style={quickMenuItemStyle} onClick={() => openHrRoute('/hr/documents')}><FileText size={15} /> Document</button>
-                </div>
-              )}
-            </div>
-            <div style={{ position: 'relative' }}>
-              <button type="button" className="hr-user-button" aria-label="HR account menu" onClick={() => { setAccountMenuOpen(open => !open); setLoanNotificationsOpen(false); setCreateMenuOpen(false) }}>
+              <button type="button" className="hr-user-button" aria-label="HR account menu" onClick={() => { setAccountMenuOpen(open => !open); setLoanNotificationsOpen(false) }}>
                 <span className="hr-user-avatar">{accountPhoto ? <span style={{ backgroundImage: `url(${accountPhoto})` }} /> : initials(displayName)}</span>
               </button>
               {accountMenuOpen && (

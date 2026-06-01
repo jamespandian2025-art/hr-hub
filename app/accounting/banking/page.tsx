@@ -1,6 +1,7 @@
 'use client'
 
 import Link from 'next/link'
+import { useRouter } from 'next/navigation'
 import { ChangeEvent, FormEvent, useEffect, useMemo, useRef, useState } from 'react'
 import {
   ArrowDownLeft,
@@ -9,7 +10,6 @@ import {
   Clock3,
   CreditCard,
   Download,
-  Filter,
   Landmark,
   MoreHorizontal,
   Plus,
@@ -20,17 +20,14 @@ import {
   SlidersHorizontal,
 } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
-import { emptyAccountingData, formatDate, loadAccountingData, monthlySeries, money, subscribeAccountingData } from '@/lib/accounting/data'
-import { getActiveCompany } from '@/lib/tenant/company'
+import { createAccountingTransaction, emptyAccountingData, formatDate, loadAccountingData, monthlySeries, money, saveAccountingBankAccounts, subscribeAccountingData, updateAccountingTransactionStatus } from '@/lib/accounting/data'
+import { canAccessBanking } from '@/lib/security/rbac'
 
 const font = 'var(--font-body)'
-const bankStorageKey = 'flowsys-bank-accounts'
-const transactionStorageKey = 'flowsys-accounting-transactions'
 const today = new Date().toISOString().slice(0, 10)
 
 type BankingTab = 'Accounts' | 'Transactions' | 'Reconciliation' | 'Payments'
 type BankingAction = 'add-account' | 'payment' | 'plaid' | 'transfer' | 'statement' | null
-type StoredRow = Record<string, unknown>
 
 const bankingTabs: BankingTab[] = ['Accounts', 'Transactions', 'Reconciliation', 'Payments']
 
@@ -74,7 +71,9 @@ function StatusPill({ value }: { value: string }) {
 }
 
 export default function BankingPage() {
+  const router = useRouter()
   const [data, setData] = useState(emptyAccountingData)
+  const [access, setAccess] = useState<'checking' | 'allowed' | 'denied'>('checking')
   const [activeTab, setActiveTab] = useState<BankingTab>('Accounts')
   const [search, setSearch] = useState('')
   const [accountFilter, setAccountFilter] = useState('All Accounts')
@@ -88,10 +87,29 @@ export default function BankingPage() {
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
+    try {
+      const sessionRaw = window.localStorage.getItem('flowsys-auth-session')
+      const accountRaw = window.localStorage.getItem('flowsys-account')
+      if (!sessionRaw) {
+        router.replace('/login?next=%2Faccounting%2Fbanking')
+        return
+      }
+      const session = JSON.parse(sessionRaw) as { role?: string }
+      const account = accountRaw ? JSON.parse(accountRaw) as { role?: string } : {}
+      const nextAccess = canAccessBanking(session.role || account.role) ? 'allowed' : 'denied'
+      const timer = window.setTimeout(() => setAccess(nextAccess), 0)
+      return () => window.clearTimeout(timer)
+    } catch {
+      router.replace('/login?next=%2Faccounting%2Fbanking')
+    }
+  }, [router])
+
+  useEffect(() => {
+    if (access !== 'allowed') return
     const load = () => setData(loadAccountingData())
     load()
     return subscribeAccountingData(load)
-  }, [])
+  }, [access])
 
   const bankAccounts = data.bankAccounts
   const bankTransactions = data.transactions.map(transaction => ({
@@ -180,23 +198,7 @@ export default function BankingPage() {
   }
   const refreshData = (message?: string) => {
     setData(loadAccountingData())
-    window.dispatchEvent(new Event('wiseflow-accounting-refresh'))
     if (message) setNotice(message)
-  }
-  const storageKey = (key: string) => {
-    const companyId = getActiveCompany()?.id
-    return companyId ? `${key}:${companyId}` : key
-  }
-  const loadRows = (key: string): StoredRow[] => {
-    try {
-      const parsed = JSON.parse(window.localStorage.getItem(storageKey(key)) || '[]') as unknown
-      return Array.isArray(parsed) ? parsed.filter((row): row is StoredRow => Boolean(row) && typeof row === 'object') : []
-    } catch {
-      return []
-    }
-  }
-  const saveRows = (key: string, rows: StoredRow[]) => {
-    window.localStorage.setItem(storageKey(key), JSON.stringify(rows))
   }
   const openModal = (action: BankingAction) => {
     setNotice('')
@@ -207,7 +209,6 @@ export default function BankingPage() {
   const submitAccount = (event: FormEvent) => {
     event.preventDefault()
     const balance = Number(accountForm.balance)
-    const rows = loadRows(bankStorageKey)
     const next = {
       id: `bank_${Date.now()}`,
       name: accountForm.name.trim(),
@@ -219,7 +220,7 @@ export default function BankingPage() {
       status: accountForm.status,
       color: '#16a34a',
     }
-    saveRows(bankStorageKey, [next, ...rows])
+    saveAccountingBankAccounts([next, ...bankAccounts])
     setAccountForm(initialAccountForm)
     setModal(null)
     refreshData('Bank account added.')
@@ -228,21 +229,16 @@ export default function BankingPage() {
     event.preventDefault()
     const amount = Math.max(Number(paymentForm.amount), 0)
     if (!amount) return
-    const rows = loadRows(transactionStorageKey)
-    const next = {
-      id: `payment_${Date.now()}`,
+    createAccountingTransaction({
       date: paymentForm.date,
       description: paymentForm.description.trim() || 'Bank payment',
       account: paymentForm.account || accountOptions[0] || 'Bank account',
       category: paymentForm.category,
       type: 'Expense',
       reference: paymentForm.reference.trim() || `PAY-${Date.now()}`,
-      outflow: amount,
       amount,
-      balance: 0,
       status: 'Reconciled',
-    }
-    saveRows(transactionStorageKey, [next, ...rows])
+    })
     setPaymentForm({ ...initialPaymentForm, account: paymentForm.account })
     setModal(null)
     setActiveTab('Payments')
@@ -252,23 +248,17 @@ export default function BankingPage() {
     event.preventDefault()
     const amount = Math.max(Number(transferForm.amount), 0)
     if (!amount) return
-    const rows = loadRows(transactionStorageKey)
-    const next = {
-      id: `transfer_${Date.now()}`,
+    createAccountingTransaction({
       date: transferForm.date,
       description: transferForm.description.trim() || 'Bank transfer',
       account: transferForm.fromAccount || 'Bank transfer',
       category: 'Transfer',
       type: 'Transfer',
       reference: transferForm.reference.trim() || `TRF-${Date.now()}`,
-      inflow: amount,
-      outflow: amount,
       amount,
-      balance: 0,
       status: 'Reconciled',
       notes: `Transfer to ${transferForm.toAccount}`,
-    }
-    saveRows(transactionStorageKey, [next, ...rows])
+    })
     setTransferForm({ ...initialTransferForm, fromAccount: transferForm.fromAccount, toAccount: transferForm.toAccount })
     setModal(null)
     setActiveTab('Transactions')
@@ -284,29 +274,24 @@ export default function BankingPage() {
       const amount = Math.abs(Number((amountValue || '').replace(/[^0-9.-]+/g, ''))) || 0
       const isExpense = (typeValue || '').toLowerCase().includes('expense') || Number(amountValue) < 0
       return {
-        id: `statement_${Date.now()}_${index}`,
         date: dateValue || today,
         description: description || `Statement row ${index + 1}`,
         account: accountValue || accountOptions[0] || 'Imported statement',
         category: isExpense ? 'Statement Expense' : 'Statement Income',
-        type: isExpense ? 'Expense' : 'Income',
+        type: isExpense ? 'Expense' as const : 'Income' as const,
         reference: referenceValue || `STM-${Date.now()}-${index + 1}`,
         amount,
-        inflow: isExpense ? 0 : amount,
-        outflow: isExpense ? amount : 0,
-        balance: 0,
         status: 'Pending',
       }
     }).filter(row => row.amount > 0)
-    if (imported.length) saveRows(transactionStorageKey, [...imported, ...loadRows(transactionStorageKey)])
+    imported.forEach(row => createAccountingTransaction(row))
     event.target.value = ''
     setModal(null)
     setActiveTab('Reconciliation')
     refreshData(imported.length ? `${imported.length} statement transaction${imported.length === 1 ? '' : 's'} imported.` : 'No valid statement rows found.')
   }
   const reconcileTransaction = (reference: string) => {
-    const rows = loadRows(transactionStorageKey)
-    saveRows(transactionStorageKey, rows.map(row => String(row.reference || row.id) === reference ? { ...row, status: 'Reconciled' } : row))
+    updateAccountingTransactionStatus(reference, 'Reconciled')
     refreshData('Transaction reconciled.')
   }
   const exportTransactions = () => {
@@ -322,8 +307,19 @@ export default function BankingPage() {
     window.URL.revokeObjectURL(url)
   }
 
+  if (access === 'checking') return null
+  if (access === 'denied') return <BankingAccessDenied />
+
   return (
-    <div className="banking-page" style={{ fontFamily: font }}>
+    <div
+      className="banking-page"
+      style={{
+        fontFamily: font,
+        minHeight: 'calc(100dvh - 76px)',
+        background: '#101010',
+        color: '#fafafa',
+      }}
+    >
       <style>{bankingCss}</style>
       <div className="banking-header">
         <div>
@@ -335,7 +331,6 @@ export default function BankingPage() {
             <Search size={16} color="#64748b" />
             <input value={search} onChange={event => setSearch(event.target.value)} placeholder="Search accounts, transactions..." />
           </label>
-          <button type="button" className="banking-toolbar-button" onClick={resetFilters}><Filter size={15} /> Current records</button>
           <button type="button" className="banking-primary-button" onClick={() => openModal('add-account')}><Plus size={15} /> Add Account <ChevronDown size={13} /></button>
         </div>
       </div>
@@ -551,6 +546,26 @@ export default function BankingPage() {
   )
 }
 
+function BankingAccessDenied() {
+  return (
+    <div
+      className="banking-page"
+      style={{
+        fontFamily: font,
+        minHeight: 'calc(100dvh - 76px)',
+        background: '#101010',
+        color: '#fafafa',
+      }}
+    >
+      <style>{bankingCss}</style>
+      <div className="banking-card" style={{ maxWidth: 520 }}>
+        <h1 className="banking-title">Access Denied</h1>
+        <p className="banking-subtitle">Banking is restricted to Admin and Finance users.</p>
+      </div>
+    </div>
+  )
+}
+
 function Legend({ color, label }: { color: string; label: string }) {
   return <span className="banking-legend-item"><span style={{ background: color }} />{label}</span>
 }
@@ -599,7 +614,7 @@ function SelectFormField({ label, value, options, onChange }: { label: string; v
 }
 
 const bankingCss = `
-.banking-page { padding: 26px 28px 40px; color: #0f172a; }
+.banking-page { min-height: calc(100dvh - 76px); padding: 26px 28px 40px; background: #101010; color: #fafafa; }
 .banking-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 18px; margin-bottom: 24px; }
 .banking-title { margin: 0; font-size: 28px; line-height: 1.1; font-weight: 950; }
 .banking-subtitle { margin: 8px 0 0; color: #334155; font-size: 13.5px; }
@@ -673,6 +688,16 @@ const bankingCss = `
 .banking-modal-copy { display: grid; gap: 16px; color: #334155; font-size: 13px; line-height: 1.55; }
 .banking-modal-copy p { margin: 0; }
 .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
+.accounting-theme-dark .banking-page,
+html[data-theme='dark'] .banking-page { background: #101010 !important; background-color: #101010 !important; color: #fafafa !important; }
+.accounting-theme-dark .banking-page .banking-card,
+html[data-theme='dark'] .banking-page .banking-card,
+.accounting-theme-dark .banking-page .banking-table-wrap,
+html[data-theme='dark'] .banking-page .banking-table-wrap { background: #101010 !important; background-color: #101010 !important; border-color: #333 !important; color: #fafafa !important; box-shadow: none !important; }
+.accounting-theme-dark .banking-page .banking-table th,
+html[data-theme='dark'] .banking-page .banking-table th { background: #181818 !important; color: #c7c7cf !important; border-color: #333 !important; }
+.accounting-theme-dark .banking-page .banking-table td,
+html[data-theme='dark'] .banking-page .banking-table td { background: #101010 !important; color: #fafafa !important; border-color: #333 !important; }
 @media (max-width: 1280px) {
   .banking-page { padding: 22px; }
   .banking-header { flex-direction: column; }

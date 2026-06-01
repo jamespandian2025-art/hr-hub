@@ -2,6 +2,8 @@ import { randomUUID } from 'node:crypto'
 import { mkdir, readFile, rename, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 import { createClient, type SupabaseClient } from '@supabase/supabase-js'
+import { sessionFromRequest } from '@/lib/security/session'
+import { validateObject, type FieldRule } from '@/lib/security/validation'
 import {
   canAccessCollection,
   HrAction,
@@ -15,6 +17,7 @@ export const runtime = 'nodejs'
 
 export type HrActor = {
   id?: string
+  email?: string
   name: string
   role: string
 }
@@ -29,11 +32,13 @@ export type HrRecord = {
 export type AuditLogRecord = {
   id: string
   action: string
+  companyId?: string
   actorId?: string
   actorName: string
   actorRole: string
   collection: HrCollection
   targetId?: string
+  ip?: string
   summary: string
   before?: unknown
   after?: unknown
@@ -114,6 +119,27 @@ function cleanRecord(record: HrRecord) {
   return JSON.parse(JSON.stringify(record)) as Record<string, unknown>
 }
 
+function publicRecord(record: HrRecord): HrRecord {
+  const copy = cleanRecord(record) as HrRecord
+  delete copy.password
+  delete copy.passwordHash
+  delete copy.passwordSalt
+  delete copy.portalPassword
+  delete copy.portalPasswordHash
+  delete copy.portalPasswordSalt
+  delete copy.portalPasswordAlgorithm
+  return copy
+}
+
+function redactSecrets(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(redactSecrets)
+  if (!value || typeof value !== 'object') return value
+  return Object.fromEntries(Object.entries(value as Record<string, unknown>).map(([key, item]) => {
+    if (/password|secret|token|serviceRole/i.test(key)) return [key, '[redacted]']
+    return [key, redactSecrets(item)]
+  }))
+}
+
 function rowToRecord(row: HrStoreRow): HrRecord {
   const payload = row.payload && typeof row.payload === 'object' ? row.payload : {}
   return {
@@ -124,34 +150,43 @@ function rowToRecord(row: HrStoreRow): HrRecord {
   }
 }
 
-function recordToRow(collection: HrCollection, record: HrRecord) {
+function recordToRow(collection: HrCollection, record: HrRecord, companyId?: string) {
   const payload = cleanRecord(record)
-  const companyId = typeof record.companyId === 'string'
+  const recordCompanyId = companyId
+    || (typeof record.companyId === 'string'
     ? record.companyId
     : typeof record.company_id === 'string'
       ? record.company_id
-      : null
+      : null)
 
   return {
     id: record.id,
     collection,
     payload,
-    company_id: companyId,
+    company_id: recordCompanyId,
     created_at: typeof record.createdAt === 'string' ? record.createdAt : new Date().toISOString(),
     updated_at: typeof record.updatedAt === 'string' ? record.updatedAt : new Date().toISOString(),
   }
 }
 
-async function readStoreRecords(collection: HrCollection) {
+async function readStoreRecords(collection: HrCollection, companyId?: string) {
   assertStoreConfigured()
   const supabase = getSupabaseAdmin()
-  if (!supabase) return readJsonArray<HrRecord>(collectionFile(collection))
+  if (!supabase) {
+    const records = await readJsonArray<HrRecord>(collectionFile(collection))
+    return companyId
+      ? records.filter(record => record.companyId === companyId || record.company_id === companyId)
+      : records
+  }
 
-  const { data, error } = await supabase
+  let query = supabase
     .from('hr_records')
     .select('id, collection, payload, company_id, created_at, updated_at')
     .eq('collection', collection)
     .order('created_at', { ascending: false })
+  if (companyId) query = query.eq('company_id', companyId)
+
+  const { data, error } = await query
 
   if (error) {
     throw Object.assign(new Error(`Could not read HR records from Supabase: ${error.message}`), { status: 500 })
@@ -160,11 +195,17 @@ async function readStoreRecords(collection: HrCollection) {
   return (data || []).map(row => rowToRecord(row as HrStoreRow))
 }
 
-async function writeStoreRecords(collection: HrCollection, records: HrRecord[]) {
+async function writeStoreRecords(collection: HrCollection, records: HrRecord[], companyId?: string) {
   assertStoreConfigured()
   const supabase = getSupabaseAdmin()
   if (!supabase) {
-    await writeJsonArray(collectionFile(collection), records)
+    if (!companyId) {
+      await writeJsonArray(collectionFile(collection), records)
+      return
+    }
+    const existing = await readJsonArray<HrRecord>(collectionFile(collection))
+    const retained = existing.filter(record => record.companyId !== companyId && record.company_id !== companyId)
+    await writeJsonArray(collectionFile(collection), [...records, ...retained])
     return
   }
 
@@ -172,18 +213,21 @@ async function writeStoreRecords(collection: HrCollection, records: HrRecord[]) 
 
   const { error } = await supabase
     .from('hr_records')
-    .upsert(records.map(record => recordToRow(collection, record)), { onConflict: 'id' })
+    .upsert(records.map(record => recordToRow(collection, record, companyId)), { onConflict: 'id' })
 
   if (error) {
     throw Object.assign(new Error(`Could not write HR records to Supabase: ${error.message}`), { status: 500 })
   }
 }
 
-export function actorFromRequest(request: Request): HrActor {
+export async function actorFromRequest(request: Request): Promise<HrActor> {
+  const session = await sessionFromRequest(request)
+  if (!session) throw Object.assign(new Error('Authentication required.'), { status: 401 })
   return {
-    id: request.headers.get('x-hr-user-id') || undefined,
-    name: request.headers.get('x-hr-user-name') || 'System User',
-    role: request.headers.get('x-hr-role') || 'Employee',
+    id: session.employeeId || session.userId,
+    email: session.email,
+    name: session.name || session.email || 'System User',
+    role: session.role,
   }
 }
 
@@ -197,6 +241,99 @@ export function assertCollection(input: string) {
 export function assertPermission(actor: HrActor, collection: HrCollection, action: HrAction) {
   if (!canAccessCollection(actor.role, collection, action)) {
     throw Object.assign(new Error('You are not allowed to perform this HR action.'), { status: 403 })
+  }
+}
+
+const commonRules = {
+  employeeId: { type: 'string', maxLength: 80 },
+  employeeName: { type: 'string', maxLength: 160 },
+  status: { type: 'string', maxLength: 80 },
+  createdAt: { type: 'date' },
+  updatedAt: { type: 'date' },
+} satisfies Record<string, FieldRule>
+
+const collectionValidationRules: Partial<Record<HrCollection, Record<string, FieldRule>>> = {
+  employees: {
+    ...commonRules,
+    firstName: { required: true, type: 'string', maxLength: 80 },
+    lastName: { required: true, type: 'string', maxLength: 80 },
+    email: { type: 'string', maxLength: 200 },
+    portalEmail: { type: 'string', maxLength: 200 },
+    portalPassword: { type: 'string', maxLength: 200 },
+    portalPasswordHash: { type: 'string', maxLength: 200 },
+    portalPasswordSalt: { type: 'string', maxLength: 80 },
+    portalPasswordAlgorithm: { type: 'string', allowed: ['pbkdf2-sha256'] },
+    portalPasswordUpdatedAt: { type: 'date' },
+    employmentStatus: { type: 'string', maxLength: 80 },
+    dateOfJoining: { type: 'date' },
+    basicSalary: { type: 'number', min: 0 },
+    allowances: { type: 'number', min: 0 },
+    deductions: { type: 'number', min: 0 },
+  },
+  attendance: {
+    employeeId: { required: true, type: 'string', maxLength: 80 },
+    date: { required: true, type: 'date' },
+    status: { required: true, type: 'string', allowed: ['Present', 'Late', 'Absent', 'On Leave', 'Rest day'] },
+    breakMinutes: { type: 'number', min: 0, max: 1440 },
+    notes: { type: 'string', maxLength: 1000 },
+  },
+  'leave-requests': {
+    ...commonRules,
+    employeeId: { required: true, type: 'string', maxLength: 80 },
+    leaveType: { required: true, type: 'string', maxLength: 80 },
+    startDate: { required: true, type: 'date' },
+    endDate: { required: true, type: 'date' },
+    days: { required: true, type: 'number', min: 0.5, max: 365 },
+    reason: { type: 'string', maxLength: 1500 },
+  },
+  'loan-requests': {
+    ...commonRules,
+    employeeId: { required: true, type: 'string', maxLength: 80 },
+    requestType: { required: true, type: 'string', maxLength: 80 },
+    amount: { required: true, type: 'number', min: 1 },
+    repaymentMonths: { type: 'number', min: 1, max: 120 },
+    reason: { type: 'string', maxLength: 1500 },
+  },
+  'allowance-requests': {
+    ...commonRules,
+    employeeId: { required: true, type: 'string', maxLength: 80 },
+    type: { required: true, type: 'string', maxLength: 80 },
+    amount: { required: true, type: 'number', min: 1 },
+    date: { type: 'date' },
+    purpose: { type: 'string', maxLength: 1500 },
+  },
+  'payroll-records': {
+    employeeId: { required: true, type: 'string', maxLength: 80 },
+    period: { required: true, type: 'string', maxLength: 80 },
+    gross: { required: true, type: 'number', min: 0 },
+    deductions: { required: true, type: 'number', min: 0 },
+    net: { required: true, type: 'number' },
+    status: { required: true, type: 'string', maxLength: 80 },
+  },
+  notifications: {
+    title: { required: true, type: 'string', maxLength: 220 },
+    detail: { type: 'string', maxLength: 1000 },
+    status: { type: 'string', maxLength: 80 },
+  },
+}
+
+function validateRecordInput(collection: HrCollection, input: Record<string, unknown>, partial = false) {
+  const rules = collectionValidationRules[collection]
+  if (!rules) return input
+  const activeRules = partial
+    ? Object.fromEntries(Object.entries(rules).map(([key, rule]) => [key, { ...rule, required: false }]))
+    : rules
+  const validation = validateObject(input, activeRules)
+  if (!validation.ok) throw Object.assign(new Error(validation.errors[0] || 'Invalid record input.'), { status: 400 })
+  return validation.value
+}
+
+function assertPayrollWorkflow(collection: HrCollection, action: HrAction, input: Record<string, unknown>, actor: HrActor) {
+  if (collection !== 'payroll-records' || action !== 'create') return
+  const bucket = roleBucket(actor.role)
+  const status = typeof input.status === 'string' ? input.status : ''
+  if (bucket === 'hr' && !['Pending', 'Processing'].includes(status)) {
+    throw Object.assign(new Error('HR can generate payroll only as Pending or Processing. Finance must approve and release payment.'), { status: 403 })
   }
 }
 
@@ -233,36 +370,42 @@ export function recordVisibleToActor(collection: HrCollection, record: HrRecord,
   return recordEmployeeKeys(record).includes(actor.id)
 }
 
-export async function listRecords(collection: HrCollection) {
-  return readStoreRecords(collection)
+export async function listRecords(collection: HrCollection, companyId?: string) {
+  return readStoreRecords(collection, companyId)
 }
 
-export async function listVisibleRecords(collection: HrCollection, actor: HrActor) {
-  const records = await listRecords(collection)
-  return records.filter(record => recordVisibleToActor(collection, record, actor))
+export async function listVisibleRecords(collection: HrCollection, actor: HrActor, companyId?: string) {
+  const records = await listRecords(collection, companyId)
+  return records.filter(record => recordVisibleToActor(collection, record, actor)).map(publicRecord)
 }
 
-export async function getRecord(collection: HrCollection, id: string) {
-  const records = await listRecords(collection)
+export async function getRecord(collection: HrCollection, id: string, companyId?: string) {
+  const records = await listRecords(collection, companyId)
   return records.find(record => record.id === id) || null
 }
 
-export async function getVisibleRecord(collection: HrCollection, id: string, actor: HrActor) {
-  const record = await getRecord(collection, id)
-  return record && recordVisibleToActor(collection, record, actor) ? record : null
+export async function getVisibleRecord(collection: HrCollection, id: string, actor: HrActor, companyId?: string) {
+  const record = await getRecord(collection, id, companyId)
+  return record && recordVisibleToActor(collection, record, actor) ? publicRecord(record) : null
 }
 
-export async function createRecord(collection: HrCollection, input: Record<string, unknown>, actor: HrActor) {
+export async function createRecord(collection: HrCollection, input: Record<string, unknown>, actor: HrActor, companyId?: string) {
   const now = new Date().toISOString()
+  const validatedInput = validateRecordInput(collection, input)
+  assertPayrollWorkflow(collection, 'create', validatedInput, actor)
   const record: HrRecord = {
-    ...input,
-    id: String(input.id || `${collection}-${randomUUID()}`),
-    createdAt: typeof input.createdAt === 'string' ? input.createdAt : now,
+    ...validatedInput,
+    ...(companyId ? { companyId } : {}),
+    id: String(validatedInput.id || `${collection}-${randomUUID()}`),
+    createdAt: typeof validatedInput.createdAt === 'string' ? validatedInput.createdAt : now,
     updatedAt: now,
   }
-  const records = await listRecords(collection)
+  if (!recordVisibleToActor(collection, record, actor)) {
+    throw Object.assign(new Error('You can only create records for data you are allowed to access.'), { status: 403 })
+  }
+  const records = await listRecords(collection, companyId)
   const next = [record, ...records.filter(item => item.id !== record.id)]
-  await writeStoreRecords(collection, next)
+  await writeStoreRecords(collection, next, companyId)
   await appendAuditLog({
     action: sensitiveAuditAction(collection, 'create'),
     actor,
@@ -270,22 +413,28 @@ export async function createRecord(collection: HrCollection, input: Record<strin
     targetId: record.id,
     summary: `Created ${collection} record.`,
     after: record,
+    companyId,
   })
-  return record
+  return publicRecord(record)
 }
 
-export async function updateRecord(collection: HrCollection, id: string, input: Record<string, unknown>, actor: HrActor) {
-  const records = await listRecords(collection)
+export async function updateRecord(collection: HrCollection, id: string, input: Record<string, unknown>, actor: HrActor, companyId?: string) {
+  const records = await listRecords(collection, companyId)
   const before = records.find(record => record.id === id)
   if (!before) return null
+  if (!recordVisibleToActor(collection, before, actor)) {
+    throw Object.assign(new Error('You can only update records you are allowed to access.'), { status: 403 })
+  }
+  const validatedInput = validateRecordInput(collection, input, true)
   const after: HrRecord = {
     ...before,
-    ...input,
+    ...validatedInput,
+    ...(companyId ? { companyId } : {}),
     id,
     createdAt: before.createdAt,
     updatedAt: new Date().toISOString(),
   }
-  await writeStoreRecords(collection, records.map(record => record.id === id ? after : record))
+  await writeStoreRecords(collection, records.map(record => record.id === id ? after : record), companyId)
   await appendAuditLog({
     action: sensitiveAuditAction(collection, 'update'),
     actor,
@@ -294,11 +443,45 @@ export async function updateRecord(collection: HrCollection, id: string, input: 
     summary: `Updated ${collection} record.`,
     before,
     after,
+    companyId,
   })
-  return after
+  return publicRecord(after)
 }
 
-export async function appendAuditLog(input: Omit<AuditLogRecord, 'id' | 'actorId' | 'actorName' | 'actorRole' | 'createdAt' | 'updatedAt'> & { actor: HrActor }) {
+export async function deleteRecord(collection: HrCollection, id: string, actor: HrActor, companyId?: string) {
+  const records = await listRecords(collection, companyId)
+  const before = records.find(record => record.id === id)
+  if (!before) return false
+  if (!recordVisibleToActor(collection, before, actor)) {
+    throw Object.assign(new Error('You can only delete records you are allowed to access.'), { status: 403 })
+  }
+  await writeStoreRecords(collection, records.filter(record => record.id !== id), companyId)
+  await appendAuditLog({
+    action: sensitiveAuditAction(collection, 'delete'),
+    actor,
+    collection,
+    targetId: id,
+    summary: `Deleted ${collection} record.`,
+    before,
+    companyId,
+  })
+  return true
+}
+
+export async function replaceRecords(collection: HrCollection, records: HrRecord[], companyId?: string) {
+  const now = new Date().toISOString()
+  const cleaned = records.map(record => ({
+    ...record,
+    ...(companyId ? { companyId } : {}),
+    id: String(record.id || `${collection}-${randomUUID()}`),
+    createdAt: typeof record.createdAt === 'string' ? record.createdAt : now,
+    updatedAt: typeof record.updatedAt === 'string' ? record.updatedAt : now,
+  }))
+  await writeStoreRecords(collection, cleaned, companyId)
+  return cleaned.map(publicRecord)
+}
+
+export async function appendAuditLog(input: Omit<AuditLogRecord, 'id' | 'actorId' | 'actorName' | 'actorRole' | 'createdAt' | 'updatedAt'> & { actor: HrActor; companyId?: string }) {
   const now = new Date().toISOString()
   const record: AuditLogRecord = {
     id: `audit-${randomUUID()}`,
@@ -308,23 +491,25 @@ export async function appendAuditLog(input: Omit<AuditLogRecord, 'id' | 'actorId
     actorRole: input.actor.role,
     collection: input.collection,
     targetId: input.targetId,
+    ip: input.ip,
     summary: input.summary,
-    before: input.before,
-    after: input.after,
+    ...(input.companyId ? { companyId: input.companyId } : {}),
+    before: redactSecrets(input.before),
+    after: redactSecrets(input.after),
     createdAt: now,
     updatedAt: now,
   }
-  const records = await readStoreRecords('audit-logs') as AuditLogRecord[]
-  await writeStoreRecords('audit-logs', [record, ...records].slice(0, 5000))
+  const records = await readStoreRecords('audit-logs', input.companyId) as AuditLogRecord[]
+  await writeStoreRecords('audit-logs', [record, ...records].slice(0, 5000), input.companyId)
   return record
 }
 
-export async function createNotification(input: Record<string, unknown>, actor: HrActor) {
+export async function createNotification(input: Record<string, unknown>, actor: HrActor, companyId?: string) {
   return createRecord('notifications', {
     status: 'Unread',
     channel: 'In App',
     ...input,
-  }, actor)
+  }, actor, companyId)
 }
 
 export function jsonError(error: unknown) {

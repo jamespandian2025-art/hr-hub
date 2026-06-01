@@ -1,9 +1,9 @@
 'use client'
 import { useEffect, useState } from 'react'
 import { usePathname, useRouter, useSearchParams } from 'next/navigation'
+import { listBusinessRecords, replaceBusinessCollection } from '@/lib/business/client'
 
 const font = "var(--font-body)"
-const invoicesStorageKey = 'flowsys-invoices'
 
 interface Item {
   id: number
@@ -31,18 +31,24 @@ const statusStyle: Record<string, { bg: string; color: string }> = {
   OVERDUE: { bg: '#fee2e2', color: '#dc2626' },
 }
 
-const tabs = ['All', 'Draft', 'Sent', 'Paid', 'Overdue']
-
-const loadInvoices = () => {
-  if (typeof window === 'undefined') return []
-
-  try {
-    const stored = window.localStorage.getItem(invoicesStorageKey)
-    return stored ? (JSON.parse(stored) as Invoice[]) : []
-  } catch {
-    return []
-  }
+// An issued, unpaid invoice past its due date is overdue — even if it is still
+// stored as "SENT". Drafts/paid/cancelled invoices are never overdue.
+function isInvoiceOverdue(inv: Invoice) {
+  if (inv.status === 'PAID' || inv.status === 'DRAFT' || inv.status === 'CANCELLED') return false
+  if (!inv.dueDate || inv.dueDate === '-') return false
+  const due = new Date(`${inv.dueDate}T00:00:00`)
+  if (Number.isNaN(due.getTime())) return false
+  const today = new Date()
+  today.setHours(0, 0, 0, 0)
+  return due.getTime() < today.getTime()
 }
+
+// The status shown to the user: derived OVERDUE wins over the stored status.
+function invoiceDisplayStatus(inv: Invoice) {
+  return isInvoiceOverdue(inv) ? 'OVERDUE' : inv.status
+}
+
+const tabs = ['All', 'Draft', 'Sent', 'Paid', 'Overdue']
 
 export default function InvoicesPage() {
   const router = useRouter()
@@ -57,7 +63,8 @@ export default function InvoicesPage() {
   const [activeTab, setActiveTab] = useState('All')
   const [search, setSearch] = useState('')
   const [selected, setSelected] = useState<number[]>([])
-  const [invoices, setInvoices] = useState<Invoice[]>(loadInvoices)
+  const [invoices, setInvoices] = useState<Invoice[]>([])
+  const [loaded, setLoaded] = useState(false)
   const [status, setStatus] = useState('Draft')
   const [recipient, setRecipient] = useState('')
   const [dateCreated, setDateCreated] = useState('2026-05-06')
@@ -68,14 +75,24 @@ export default function InvoicesPage() {
   ])
 
   useEffect(() => {
-    window.localStorage.setItem(invoicesStorageKey, JSON.stringify(invoices))
-  }, [invoices])
+    // Only mark as loaded on a SUCCESSFUL fetch. If the GET fails we must not
+    // flip `loaded`, otherwise the persist effect below would immediately
+    // replace the server collection with the empty initial state and wipe it.
+    listBusinessRecords<Invoice>('accounting-invoices')
+      .then(rows => { setInvoices(rows); setLoaded(true) })
+      .catch(() => undefined)
+  }, [])
+
+  useEffect(() => {
+    if (!loaded) return
+    void replaceBusinessCollection('accounting-invoices', invoices).catch(() => undefined)
+  }, [invoices, loaded])
 
 
   const addItem = () =>
     setItems(prev => [
       ...prev,
-      { id: prev.length + 1, name: '', unit: 'each', qty: 0, cost: 0 },
+      { id: Math.max(0, ...prev.map(i => i.id)) + 1, name: '', unit: 'each', qty: 0, cost: 0 },
     ])
 
   const removeItem = (id: number) =>
@@ -94,9 +111,12 @@ export default function InvoicesPage() {
     )
 
   const handleCreate = () => {
+    // Collision-proof id derived from the max existing id, not array length —
+    // length+1 reuses an id (and invoice number) after any delete.
+    const nextId = Math.max(0, ...invoices.map(i => i.id)) + 1
     const newInvoice: Invoice = {
-      id: invoices.length + 1,
-      invoiceNo: `INV# ${String(invoices.length + 1).padStart(5, '0')}`,
+      id: nextId,
+      invoiceNo: `INV# ${String(nextId).padStart(5, '0')}`,
       recipient: recipient || 'No recipient',
       dateCreated,
       dueDate: dueDate || '-',
@@ -116,7 +136,7 @@ export default function InvoicesPage() {
   }
 
   const filtered = invoices.filter(inv => {
-    const matchTab = activeTab === 'All' || inv.status === activeTab.toUpperCase()
+    const matchTab = activeTab === 'All' || invoiceDisplayStatus(inv) === activeTab.toUpperCase()
     const matchSearch =
       inv.invoiceNo.toLowerCase().includes(search.toLowerCase()) ||
       inv.recipient.toLowerCase().includes(search.toLowerCase())
@@ -127,7 +147,7 @@ export default function InvoicesPage() {
   const tabCounts = (tab: string) =>
     tab === 'All'
       ? invoices.length
-      : invoices.filter(i => i.status === tab.toUpperCase()).length
+      : invoices.filter(i => invoiceDisplayStatus(i) === tab.toUpperCase()).length
 
   const totalAmount = invoices.reduce((sum, inv) => sum + inv.total, 0)
 
@@ -136,7 +156,7 @@ export default function InvoicesPage() {
     .reduce((sum, inv) => sum + inv.total, 0)
 
   const statusSummary = ['DRAFT', 'SENT', 'PAID', 'OVERDUE'].map(statusName => {
-    const statusInvoices = invoices.filter(inv => inv.status === statusName)
+    const statusInvoices = invoices.filter(inv => invoiceDisplayStatus(inv) === statusName)
 
     return {
       label: statusName.charAt(0) + statusName.slice(1).toLowerCase(),
@@ -971,11 +991,11 @@ export default function InvoicesPage() {
                           fontWeight: 600,
                           padding: '4px 10px',
                           borderRadius: '20px',
-                          background: statusStyle[inv.status]?.bg,
-                          color: statusStyle[inv.status]?.color,
+                          background: statusStyle[invoiceDisplayStatus(inv)]?.bg,
+                          color: statusStyle[invoiceDisplayStatus(inv)]?.color,
                         }}
                       >
-                        {inv.status}
+                        {invoiceDisplayStatus(inv)}
                       </span>
                     </td>
                     <td style={{ padding: '16px', color: '#9ca3af', cursor: 'pointer', fontSize: '18px' }}>

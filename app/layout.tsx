@@ -1,11 +1,12 @@
 import type { Metadata, Viewport } from 'next'
-import { Space_Grotesk } from 'next/font/google'
+import { Geist } from 'next/font/google'
 import './globals.css'
 import AppShell from '../components/AppShell'
+import { ThemeProvider } from '../components/ThemeProvider'
 
-const spaceGrotesk = Space_Grotesk({
+const geistSans = Geist({
   subsets: ['latin'],
-  variable: '--font-space-grotesk',
+  variable: '--font-geist-sans',
 })
 
 export const metadata: Metadata = {
@@ -24,9 +25,11 @@ export default function RootLayout({
   children: React.ReactNode
 }) {
   return (
-    <html lang="en" className={spaceGrotesk.variable}>
+    <html lang="en" className={geistSans.variable} data-theme="light" data-theme-preference="light" suppressHydrationWarning>
       <body>
-        <AppShell>{children}</AppShell>
+        <ThemeProvider>
+          <AppShell>{children}</AppShell>
+        </ThemeProvider>
       </body>
     </html>
   )

@@ -1,694 +1,1076 @@
 'use client'
 
-/* eslint-disable @next/next/no-img-element */
-import { ChangeEvent, CSSProperties, useEffect, useMemo, useRef, useState } from 'react'
+import { FormEvent, useEffect, useMemo, useState } from 'react'
 import {
-  BarChart3,
   Boxes,
-  ChevronDown,
-  ChevronLeft,
-  ChevronRight,
+  CheckCircle2,
+  Edit3,
   Filter,
-  Grid2X2,
-  Image as ImageIcon,
   MoreHorizontal,
   PackagePlus,
   Plus,
-  ReceiptText,
   Search,
-  Star,
-  Table2,
-  UploadCloud,
+  Trash2,
   X,
 } from 'lucide-react'
 import { companyChangeEvent, companyScopedKey, getActiveCompany } from '@/lib/tenant/company'
 
-const storageKey = 'flowsys-pricebook-items'
 const font = 'var(--font-body)'
+const pricebookKey = 'flowsys-pricebook-items'
+const suppliersKey = 'flowsys-suppliers'
 
-type ItemStatus = 'Active' | 'Inactive' | 'Low Stock' | 'Out of Stock'
+type StoredRow = Record<string, unknown>
 type ItemType = 'Material' | 'Labor' | 'Equipment' | 'Service' | 'Other'
+type ItemStatus = 'Active' | 'Inactive'
 
 type PricebookItem = {
-  id: number
-  companyId?: string
-  name: string
+  id: string
   sku: string
-  category: string
+  name: string
   itemType: ItemType
   unit: string
   cost: number
   markup: number
   price: number
   vendor: string
-  notes: string
+  reorderPoint: number
   status: ItemStatus
-  stockOnHand: number
-  minimumOrder: number
-  leadTime: string
-  paymentTerms: string
-  image?: string
+  notes: string
 }
 
-type NewItemForm = {
+type SupplierOption = {
+  id: string
   name: string
+}
+
+type PricebookForm = {
   sku: string
-  category: string
+  name: string
   itemType: ItemType
   unit: string
-  vendor: string
   cost: string
-  price: string
   markup: string
+  price: string
+  vendor: string
+  reorderPoint: string
   status: ItemStatus
   notes: string
-  image: string
 }
 
-const emptyForm: NewItemForm = {
-  name: '',
+const emptyForm: PricebookForm = {
   sku: '',
-  category: '',
+  name: '',
   itemType: 'Material',
-  unit: '',
-  vendor: '',
+  unit: 'pcs',
   cost: '',
+  markup: '15',
   price: '',
-  markup: '0',
+  vendor: '',
+  reorderPoint: '',
   status: 'Active',
   notes: '',
-  image: '',
 }
 
-function loadInitialItems(companyId = '') {
-  if (typeof window === 'undefined') return []
+const itemTypes: ItemType[] = ['Material', 'Labor', 'Equipment', 'Service', 'Other']
+const units = ['pcs', 'bag', 'box', 'kg', 'm', 'sqm', 'hour', 'day', 'lot']
 
-  try {
-    const scopedKey = companyId ? companyScopedKey(storageKey, companyId) : storageKey
-    const scoped = parseItems(window.localStorage.getItem(scopedKey))
-    const global = parseItems(window.localStorage.getItem(storageKey))
-    const rows = scoped.length ? [...scoped, ...global] : global
-    return uniqueItems(rows)
-      .filter(item => !companyId || !item.companyId || item.companyId === companyId)
-      .map((item, index) => normalizeStoredItem(item, index, companyId))
-  } catch {
-    return []
+export default function ProcurementPricebookPage() {
+  const [companyId, setCompanyId] = useState('')
+  const [storedItems, setStoredItems] = useState<StoredRow[]>([])
+  const [suppliers, setSuppliers] = useState<SupplierOption[]>([])
+  const [search, setSearch] = useState('')
+  const [activeTab, setActiveTab] = useState<'All' | ItemStatus>('All')
+  const [typeFilter, setTypeFilter] = useState<'All' | ItemType>('All')
+  const [showCreate, setShowCreate] = useState(false)
+  const [editingId, setEditingId] = useState('')
+  const [openActionId, setOpenActionId] = useState('')
+  const [form, setForm] = useState<PricebookForm>(emptyForm)
+
+  useEffect(() => {
+    const load = () => {
+      const activeCompanyId = getActiveCompany()?.id || ''
+      setCompanyId(activeCompanyId)
+      setStoredItems(loadRows(pricebookKey, activeCompanyId))
+      setSuppliers(loadSuppliers(activeCompanyId))
+    }
+
+    load()
+    window.addEventListener('storage', load)
+    window.addEventListener('focus', load)
+    window.addEventListener(companyChangeEvent, load)
+    return () => {
+      window.removeEventListener('storage', load)
+      window.removeEventListener('focus', load)
+      window.removeEventListener(companyChangeEvent, load)
+    }
+  }, [])
+
+  const items = useMemo(() => storedItems.map(normalizeItem).filter(Boolean) as PricebookItem[], [storedItems])
+  const supplierNames = useMemo(() => uniqueValues([...suppliers.map(supplier => supplier.name), ...items.map(item => item.vendor)].filter(Boolean)), [items, suppliers])
+
+  const filteredItems = useMemo(() => {
+    const needle = search.trim().toLowerCase()
+    return items.filter(item => {
+      const matchesSearch = !needle || [item.sku, item.name, item.itemType, item.unit, item.vendor, item.notes].some(value => value.toLowerCase().includes(needle))
+      const matchesTab = activeTab === 'All' || item.status === activeTab
+      const matchesType = typeFilter === 'All' || item.itemType === typeFilter
+      return matchesSearch && matchesTab && matchesType
+    })
+  }, [activeTab, items, search, typeFilter])
+
+  const stats = useMemo(() => {
+    const active = items.filter(item => item.status === 'Active')
+    const totalCost = items.reduce((sum, item) => sum + item.cost, 0)
+    const totalPrice = items.reduce((sum, item) => sum + item.price, 0)
+    const averageMarkup = items.length ? Math.round(items.reduce((sum, item) => sum + item.markup, 0) / items.length) : 0
+    return {
+      total: items.length,
+      active: active.length,
+      inactive: items.length - active.length,
+      totalCost,
+      totalPrice,
+      averageMarkup,
+    }
+  }, [items])
+
+  const tabs = [
+    { label: 'All', count: items.length },
+    { label: 'Active', count: stats.active },
+    { label: 'Inactive', count: stats.inactive },
+  ] as const
+
+  function persist(nextRows: StoredRow[]) {
+    const unique = uniqueRows(nextRows)
+    setStoredItems(unique)
+    persistRows(pricebookKey, unique, companyId)
   }
+
+  function resetForm() {
+    setForm(emptyForm)
+    setEditingId('')
+  }
+
+  function openCreate() {
+    resetForm()
+    setShowCreate(true)
+  }
+
+  function openEdit(item: PricebookItem) {
+    setForm({
+      sku: item.sku,
+      name: item.name,
+      itemType: item.itemType,
+      unit: item.unit,
+      cost: String(item.cost || ''),
+      markup: String(item.markup || ''),
+      price: String(item.price || ''),
+      vendor: item.vendor,
+      reorderPoint: String(item.reorderPoint || ''),
+      status: item.status,
+      notes: item.notes,
+    })
+    setEditingId(item.id)
+    setShowCreate(true)
+    setOpenActionId('')
+  }
+
+  function closeForm() {
+    resetForm()
+    setShowCreate(false)
+  }
+
+  function updateCost(value: string) {
+    const nextCost = numberValue(value)
+    const markup = numberValue(form.markup)
+    setForm(previous => ({ ...previous, cost: value, price: String(calculatedPrice(nextCost, markup) || '') }))
+  }
+
+  function updateMarkup(value: string) {
+    const cost = numberValue(form.cost)
+    const nextMarkup = numberValue(value)
+    setForm(previous => ({ ...previous, markup: value, price: String(calculatedPrice(cost, nextMarkup) || '') }))
+  }
+
+  function saveItem(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    const name = form.name.trim()
+    if (!name) return
+
+    const now = new Date()
+    const record: StoredRow = {
+      id: editingId || `pricebook-${now.getTime()}`,
+      companyId,
+      sku: form.sku.trim() || nextSku(items),
+      name,
+      itemType: form.itemType,
+      unit: form.unit.trim() || 'pcs',
+      cost: numberValue(form.cost),
+      markup: numberValue(form.markup),
+      price: numberValue(form.price) || calculatedPrice(numberValue(form.cost), numberValue(form.markup)),
+      vendor: form.vendor.trim(),
+      reorderPoint: numberValue(form.reorderPoint),
+      status: form.status,
+      notes: form.notes.trim(),
+      updatedAt: now.toISOString(),
+      createdAt: editingId ? undefined : now.toISOString(),
+    }
+
+    if (editingId) {
+      persist(storedItems.map(item => textFrom(item.id) === editingId ? { ...item, ...record } : item))
+    } else {
+      persist([record, ...storedItems])
+    }
+    closeForm()
+  }
+
+  function deleteItem(item: PricebookItem) {
+    persist(storedItems.filter(row => textFrom(row.id) !== item.id))
+    setOpenActionId('')
+  }
+
+  function toggleStatus(item: PricebookItem) {
+    const nextStatus: ItemStatus = item.status === 'Active' ? 'Inactive' : 'Active'
+    persist(storedItems.map(row => textFrom(row.id) === item.id ? { ...row, status: nextStatus, updatedAt: new Date().toISOString() } : row))
+    setOpenActionId('')
+  }
+
+  return (
+    <main className="pricebook-page" style={{ fontFamily: font }}>
+      <style>{pricebookCss}</style>
+
+      <section className="pricebook-header">
+        <div>
+          <div className="pricebook-breadcrumb"><span>Procurement</span><span>/</span><strong>Pricebook</strong></div>
+          <div className="pricebook-title-row">
+            <span><Boxes size={21} /></span>
+            <div>
+              <h1>Pricebook</h1>
+              <p>Add real materials, services, labor, and equipment pricing for requests, RFQs, and purchase orders.</p>
+            </div>
+          </div>
+        </div>
+        <button type="button" className="pricebook-primary-button" onClick={openCreate}><Plus size={17} /> Add Item</button>
+      </section>
+
+      <section className="pricebook-kpis" aria-label="Pricebook summary">
+        <Kpi title="Total Items" value={String(stats.total)} helper="All records" />
+        <Kpi title="Active Items" value={String(stats.active)} helper="Ready for procurement" />
+        <Kpi title="Average Markup" value={`${stats.averageMarkup}%`} helper="Across pricebook" />
+        <Kpi title="Cost Value" value={formatCurrency(stats.totalCost)} helper="Base cost total" />
+        <Kpi title="Selling Value" value={formatCurrency(stats.totalPrice)} helper="Price total" />
+      </section>
+
+      <section className="pricebook-guide-strip">
+        <span><PackagePlus size={22} /></span>
+        <div>
+          <strong>How to add items here</strong>
+          <p>Click <b>Add Item</b>, enter the item name, SKU, unit, base cost, markup, selling price, and preferred supplier, then save. Purchase orders can then select these records from the pricebook.</p>
+        </div>
+      </section>
+
+      <section className="pricebook-tabs" aria-label="Pricebook status tabs">
+        {tabs.map(tab => (
+          <button key={tab.label} type="button" className={activeTab === tab.label ? 'active' : ''} onClick={() => setActiveTab(tab.label)}>
+            {tab.label} <span>{tab.count}</span>
+          </button>
+        ))}
+      </section>
+
+      <section className="pricebook-workspace">
+        <div className="pricebook-toolbar">
+          <label className="pricebook-search">
+            <Search size={17} />
+            <input value={search} onChange={event => setSearch(event.target.value)} placeholder="Search SKU, item, supplier, or type..." aria-label="Search pricebook items" />
+          </label>
+          <label className="pricebook-select">
+            <Filter size={15} />
+            <select value={typeFilter} onChange={event => setTypeFilter(event.target.value as 'All' | ItemType)} aria-label="Filter item type">
+              <option value="All">All types</option>
+              {itemTypes.map(type => <option key={type} value={type}>{type}</option>)}
+            </select>
+          </label>
+          <button type="button" className="pricebook-secondary-button" onClick={() => { setSearch(''); setTypeFilter('All'); setActiveTab('All') }}>Reset</button>
+        </div>
+
+        {items.length === 0 ? (
+          <div className="pricebook-empty">
+            <span><PackagePlus size={42} /></span>
+            <h2>No pricebook items yet</h2>
+            <p>Start by adding your first real item. Use exact SKU, unit, cost, markup, and supplier data so procurement totals stay accurate.</p>
+            <button type="button" className="pricebook-primary-button" onClick={openCreate}><Plus size={16} /> Add First Item</button>
+          </div>
+        ) : (
+          <div className="pricebook-table-wrap">
+            <table className="pricebook-table">
+              <thead>
+                <tr>
+                  <th>Item</th>
+                  <th>Type</th>
+                  <th>Unit</th>
+                  <th>Supplier</th>
+                  <th>Cost</th>
+                  <th>Markup</th>
+                  <th>Price</th>
+                  <th>Reorder</th>
+                  <th>Status</th>
+                  <th aria-label="Actions" />
+                </tr>
+              </thead>
+              <tbody>
+                {filteredItems.map(item => (
+                  <tr key={item.id}>
+                    <td data-label="Item"><strong>{item.name}</strong><small>{item.sku || 'No SKU'}</small></td>
+                    <td data-label="Type">{item.itemType}</td>
+                    <td data-label="Unit">{item.unit}</td>
+                    <td data-label="Supplier">{item.vendor || '-'}</td>
+                    <td data-label="Cost">{formatCurrency(item.cost)}</td>
+                    <td data-label="Markup">{item.markup}%</td>
+                    <td data-label="Price"><strong>{formatCurrency(item.price)}</strong></td>
+                    <td data-label="Reorder">{item.reorderPoint || '-'}</td>
+                    <td data-label="Status"><StatusBadge status={item.status} /></td>
+                    <td data-label="Actions">
+                      <div className="pricebook-row-actions">
+                        <button type="button" aria-label={`Open actions for ${item.name}`} onClick={() => setOpenActionId(openActionId === item.id ? '' : item.id)}><MoreHorizontal size={17} /></button>
+                        {openActionId === item.id && (
+                          <div className="pricebook-action-menu">
+                            <button type="button" onClick={() => openEdit(item)}><Edit3 size={14} /> Edit item</button>
+                            <button type="button" onClick={() => toggleStatus(item)}><CheckCircle2 size={14} /> Mark {item.status === 'Active' ? 'Inactive' : 'Active'}</button>
+                            <button type="button" className="danger" onClick={() => deleteItem(item)}><Trash2 size={14} /> Delete</button>
+                          </div>
+                        )}
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            {!filteredItems.length && (
+              <div className="pricebook-inline-empty">
+                <strong>No items match your filters</strong>
+                <button type="button" onClick={() => { setSearch(''); setTypeFilter('All'); setActiveTab('All') }}>Reset filters</button>
+              </div>
+            )}
+          </div>
+        )}
+      </section>
+
+      <section className="pricebook-checklist">
+        <h2>Before You Add Many Items</h2>
+        {[
+          'Confirm item naming and SKU format.',
+          'Create or import supplier records.',
+          'Define units such as pcs, bag, kg, m, hour, or lot.',
+          'Verify base cost, markup, selling price, and stock thresholds.',
+        ].map(item => (
+          <div key={item}><CheckCircle2 size={17} /><span>{item}</span></div>
+        ))}
+      </section>
+
+      {showCreate && (
+        <div className="pricebook-drawer-backdrop" role="presentation" onMouseDown={closeForm}>
+          <form className="pricebook-drawer" aria-labelledby="pricebook-form-title" onSubmit={saveItem} onMouseDown={event => event.stopPropagation()}>
+            <div className="pricebook-drawer-head">
+              <div>
+                <h2 id="pricebook-form-title">{editingId ? 'Edit Pricebook Item' : 'Add Pricebook Item'}</h2>
+                <p>Use real item and pricing details. These records feed procurement purchasing screens.</p>
+              </div>
+              <button type="button" aria-label="Close pricebook form" onClick={closeForm}><X size={18} /></button>
+            </div>
+
+            <div className="pricebook-form-grid">
+              <label>
+                Item Name
+                <input value={form.name} onChange={event => setForm(previous => ({ ...previous, name: event.target.value }))} placeholder="e.g. Portland Cement Type 1" required />
+              </label>
+              <label>
+                SKU
+                <input value={form.sku} onChange={event => setForm(previous => ({ ...previous, sku: event.target.value }))} placeholder={nextSku(items)} />
+              </label>
+              <label>
+                Item Type
+                <select value={form.itemType} onChange={event => setForm(previous => ({ ...previous, itemType: event.target.value as ItemType }))}>
+                  {itemTypes.map(type => <option key={type} value={type}>{type}</option>)}
+                </select>
+              </label>
+              <label>
+                Unit
+                <input value={form.unit} onChange={event => setForm(previous => ({ ...previous, unit: event.target.value }))} list="pricebook-units" placeholder="pcs" />
+                <datalist id="pricebook-units">{units.map(unit => <option key={unit} value={unit} />)}</datalist>
+              </label>
+              <label>
+                Base Cost
+                <input type="number" min="0" step="0.01" value={form.cost} onChange={event => updateCost(event.target.value)} placeholder="0.00" />
+              </label>
+              <label>
+                Markup %
+                <input type="number" min="0" step="0.01" value={form.markup} onChange={event => updateMarkup(event.target.value)} placeholder="15" />
+              </label>
+              <label>
+                Selling Price
+                <input type="number" min="0" step="0.01" value={form.price} onChange={event => setForm(previous => ({ ...previous, price: event.target.value }))} placeholder="0.00" />
+              </label>
+              <label>
+                Preferred Supplier
+                <input value={form.vendor} onChange={event => setForm(previous => ({ ...previous, vendor: event.target.value }))} list="pricebook-suppliers" placeholder="Supplier name" />
+                <datalist id="pricebook-suppliers">{supplierNames.map(name => <option key={name} value={name} />)}</datalist>
+              </label>
+              <label>
+                Reorder Point
+                <input type="number" min="0" step="1" value={form.reorderPoint} onChange={event => setForm(previous => ({ ...previous, reorderPoint: event.target.value }))} placeholder="0" />
+              </label>
+              <label>
+                Status
+                <select value={form.status} onChange={event => setForm(previous => ({ ...previous, status: event.target.value as ItemStatus }))}>
+                  <option value="Active">Active</option>
+                  <option value="Inactive">Inactive</option>
+                </select>
+              </label>
+              <label className="wide">
+                Notes
+                <textarea value={form.notes} onChange={event => setForm(previous => ({ ...previous, notes: event.target.value }))} placeholder="Brand, specification, warranty, sourcing notes, or pricing assumptions." />
+              </label>
+            </div>
+
+            <footer className="pricebook-drawer-footer">
+              <div>
+                <span>Calculated price</span>
+                <strong>{formatCurrency(numberValue(form.price) || calculatedPrice(numberValue(form.cost), numberValue(form.markup)))}</strong>
+              </div>
+              <div>
+                <button type="button" className="pricebook-secondary-button" onClick={closeForm}>Cancel</button>
+                <button type="submit" className="pricebook-primary-button">{editingId ? 'Save Changes' : 'Save Item'}</button>
+              </div>
+            </footer>
+          </form>
+        </div>
+      )}
+    </main>
+  )
 }
 
-function normalizeStoredItem(item: Partial<PricebookItem> & Record<string, unknown>, index: number, companyId = ''): PricebookItem {
-  const cost = numberFrom(item.cost)
-  const markup = numberFrom(item.markup)
-  const price = numberFrom(item.price) || Number((cost + cost * (markup / 100)).toFixed(2))
+function Kpi({ title, value, helper }: { title: string; value: string; helper: string }) {
+  return (
+    <article className="pricebook-kpi">
+      <span>{title}</span>
+      <strong>{value}</strong>
+      <small>{helper}</small>
+    </article>
+  )
+}
 
+function StatusBadge({ status }: { status: ItemStatus }) {
+  return <span className={`pricebook-badge ${status.toLowerCase()}`}>{status}</span>
+}
+
+function loadRows(key: string, companyId: string) {
+  if (typeof window === 'undefined') return []
+  const scoped = companyId ? readRows(window.localStorage.getItem(companyScopedKey(key, companyId))) : []
+  const global = readRows(window.localStorage.getItem(key))
+  const globalForCompany = scoped.length ? global.filter(row => textFrom(row.companyId) === companyId) : global
+  const rows = scoped.length ? [...scoped, ...globalForCompany] : globalForCompany
+  return uniqueRows(rows).filter(row => !companyId || !textFrom(row.companyId) || textFrom(row.companyId) === companyId)
+}
+
+function persistRows(key: string, rows: StoredRow[], companyId: string) {
+  if (typeof window === 'undefined') return
+  window.localStorage.setItem(companyScopedKey(key, companyId), JSON.stringify(rows))
+  window.dispatchEvent(new Event('storage'))
+}
+
+function loadSuppliers(companyId: string): SupplierOption[] {
+  return loadRows(suppliersKey, companyId).map((row, index) => ({
+    id: textFrom(row.id) || `supplier-${index}`,
+    name: textFrom(row.name || row.companyName || row.vendorName) || `Supplier ${index + 1}`,
+  }))
+}
+
+function normalizeItem(row: StoredRow, index: number): PricebookItem | null {
+  const name = textFrom(row.name || row.itemName || row.description)
+  if (!name) return null
+  const cost = numberValue(row.cost || row.baseCost)
+  const markup = numberValue(row.markup)
+  const price = numberValue(row.price || row.sellingPrice) || calculatedPrice(cost, markup)
   return {
-    id: numberFrom(item.id) || index + 1,
-    companyId: textFrom(item.companyId, companyId),
-    name: textFrom(item.name, 'Untitled item'),
-    sku: textFrom(item.sku, `ITEM-${String(index + 1).padStart(4, '0')}`),
-    category: textFrom(item.category, 'Uncategorized'),
-    itemType: validItemType(item.itemType ?? item.type),
-    unit: textFrom(item.unit, 'pcs'),
+    id: textFrom(row.id) || textFrom(row.sku) || `pricebook-${index}`,
+    sku: textFrom(row.sku) || `PB-${String(index + 1).padStart(4, '0')}`,
+    name,
+    itemType: validItemType(textFrom(row.itemType || row.type || row.category)),
+    unit: textFrom(row.unit || row.uom) || 'pcs',
     cost,
     markup,
     price,
-    vendor: textFrom(item.vendor, '-'),
-    notes: textFrom(item.notes ?? item.description, ''),
-    status: validStatus(item.status),
-    stockOnHand: numberFrom(item.stockOnHand),
-    minimumOrder: numberFrom(item.minimumOrder),
-    leadTime: textFrom(item.leadTime, '-'),
-    paymentTerms: textFrom(item.paymentTerms, '-'),
-    image: textFrom(item.image, ''),
+    vendor: textFrom(row.vendor || row.supplierName || row.supplier),
+    reorderPoint: numberValue(row.reorderPoint || row.minimumStock || row.minStock),
+    status: textFrom(row.status).toLowerCase() === 'inactive' ? 'Inactive' : 'Active',
+    notes: textFrom(row.notes || row.description),
   }
 }
 
-function parseItems(value: string | null) {
-  if (!value) return [] as Array<Partial<PricebookItem> & Record<string, unknown>>
-  try {
-    const parsed = JSON.parse(value) as unknown
-    return Array.isArray(parsed) ? parsed as Array<Partial<PricebookItem> & Record<string, unknown>> : []
-  } catch {
-    return []
-  }
-}
-
-function uniqueItems(rows: Array<Partial<PricebookItem> & Record<string, unknown>>) {
+function uniqueRows(rows: StoredRow[]) {
   const seen = new Set<string>()
   return rows.filter((row, index) => {
-    const id = textFrom(row.id, '') || textFrom(row.sku, '') || `${textFrom(row.name, 'item')}-${index}`
+    const id = textFrom(row.id) || `row-${index}`
     if (seen.has(id)) return false
     seen.add(id)
     return true
   })
 }
 
-function persistItems(items: PricebookItem[], companyId: string) {
-  if (typeof window === 'undefined') return
-  const serialized = JSON.stringify(items)
-  window.localStorage.setItem(storageKey, serialized)
-  if (companyId) window.localStorage.setItem(companyScopedKey(storageKey, companyId), serialized)
-}
-
-export default function ProcurementPricebookPage() {
-  const fileInputRef = useRef<HTMLInputElement>(null)
-  const [companyId, setCompanyId] = useState('')
-  const [items, setItems] = useState<PricebookItem[]>([])
-  const [loaded, setLoaded] = useState(false)
-  const [selectedId, setSelectedId] = useState<number | null>(null)
-  const [activeTab, setActiveTab] = useState<ItemStatus | 'All'>('All')
-  const [search, setSearch] = useState('')
-  const [categoryFilter, setCategoryFilter] = useState('All')
-  const [statusFilter, setStatusFilter] = useState<ItemStatus | 'All'>('All')
-  const [viewMode, setViewMode] = useState<'table' | 'grid' | 'chart'>('table')
-  const [drawerOpen, setDrawerOpen] = useState(false)
-  const [actionsOpen, setActionsOpen] = useState(false)
-  const [form, setForm] = useState<NewItemForm>(emptyForm)
-  const [formError, setFormError] = useState('')
-
-  useEffect(() => {
-    const load = () => {
-      const activeCompanyId = getActiveCompany()?.id || ''
-      setCompanyId(activeCompanyId)
-      setItems(loadInitialItems(activeCompanyId))
-      setLoaded(true)
-    }
-    load()
-    window.addEventListener(companyChangeEvent, load)
-    window.addEventListener('storage', load)
-    return () => {
-      window.removeEventListener(companyChangeEvent, load)
-      window.removeEventListener('storage', load)
-    }
-  }, [])
-
-  useEffect(() => {
-    if (!loaded) return
-    persistItems(items, companyId)
-  }, [companyId, items, loaded])
-
-  const categories = useMemo(() => ['All', ...Array.from(new Set(items.map(item => item.category))).sort()], [items])
-
-  const filteredItems = useMemo(() => {
-    const query = search.trim().toLowerCase()
-    return items.filter(item => {
-      const matchesTab = activeTab === 'All' || item.status === activeTab
-      const matchesStatus = statusFilter === 'All' || item.status === statusFilter
-      const matchesCategory = categoryFilter === 'All' || item.category === categoryFilter
-      const matchesQuery =
-        !query ||
-        item.name.toLowerCase().includes(query) ||
-        item.sku.toLowerCase().includes(query) ||
-        item.vendor.toLowerCase().includes(query) ||
-        item.category.toLowerCase().includes(query)
-
-      return matchesTab && matchesStatus && matchesCategory && matchesQuery
-    })
-  }, [activeTab, categoryFilter, items, search, statusFilter])
-
-  const selectedItem = items.find(item => item.id === selectedId) ?? filteredItems[0] ?? items[0]
-
-  const summary = useMemo(() => {
-    const totalCost = items.reduce((sum, item) => sum + item.cost, 0)
-    const totalPrice = items.reduce((sum, item) => sum + item.price, 0)
-    const averageMarkup = items.length ? Math.round(items.reduce((sum, item) => sum + item.markup, 0) / items.length) : 0
-    return { totalCost, totalPrice, averageMarkup }
-  }, [items])
-
-  const tabCount = (tab: ItemStatus | 'All') => tab === 'All' ? items.length : items.filter(item => item.status === tab).length
-
-  const updateForm = (key: keyof NewItemForm, value: string) => {
-    setForm(current => {
-      const next = { ...current, [key]: value }
-      if (key === 'cost' || key === 'price') {
-        const cost = Number(key === 'cost' ? value : next.cost)
-        const price = Number(key === 'price' ? value : next.price)
-        next.markup = cost > 0 && price > 0 ? String(Number((((price - cost) / cost) * 100).toFixed(2))) : '0'
-      }
-      if (key === 'markup') {
-        const cost = Number(next.cost)
-        const markup = Number(value)
-        next.price = cost > 0 ? String(Number((cost + cost * (markup / 100)).toFixed(2))) : next.price
-      }
-      return next
-    })
+function readRows(raw: string | null) {
+  if (!raw) return []
+  try {
+    const parsed = JSON.parse(raw) as unknown
+    if (Array.isArray(parsed)) return parsed.filter(isRecord)
+    if (isRecord(parsed) && Array.isArray(parsed.items)) return parsed.items.filter(isRecord)
+  } catch {
+    return []
   }
+  return []
+}
 
-  const handleImageUpload = (event: ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0]
-    if (!file) return
-    if (file.size > 2 * 1024 * 1024) {
-      setFormError('Image is too large. Please upload a PNG, JPG, or WebP under 2MB.')
-      event.target.value = ''
-      return
-    }
+function isRecord(value: unknown): value is StoredRow {
+  return Boolean(value && typeof value === 'object' && !Array.isArray(value))
+}
 
-    const reader = new FileReader()
-    reader.onload = () => {
-      updateForm('image', typeof reader.result === 'string' ? reader.result : '')
-      setFormError('')
-    }
-    reader.readAsDataURL(file)
-    event.target.value = ''
+function textFrom(value: unknown) {
+  return typeof value === 'string' ? value : value == null ? '' : String(value)
+}
+
+function numberValue(value: unknown) {
+  if (typeof value === 'number' && Number.isFinite(value)) return value
+  if (typeof value === 'string') {
+    const parsed = Number(value.replace(/[^0-9.-]/g, ''))
+    return Number.isFinite(parsed) ? parsed : 0
   }
+  return 0
+}
 
-  const openAddDrawer = () => {
-    setForm(emptyForm)
-    setFormError('')
-    setDrawerOpen(true)
-    setActionsOpen(false)
+function validItemType(value: string): ItemType {
+  const match = itemTypes.find(type => type.toLowerCase() === value.toLowerCase())
+  return match || 'Material'
+}
+
+function calculatedPrice(cost: number, markup: number) {
+  return Math.round((cost + cost * (markup / 100)) * 100) / 100
+}
+
+function formatCurrency(value: number) {
+  return new Intl.NumberFormat('en-PH', { style: 'currency', currency: 'PHP', maximumFractionDigits: 0 }).format(value || 0)
+}
+
+function nextSku(items: PricebookItem[]) {
+  const max = items.reduce((highest, item) => {
+    const match = item.sku.match(/(\d+)$/)
+    return Math.max(highest, match ? Number(match[1]) : 0)
+  }, 0)
+  return `PB-${String(max + 1).padStart(4, '0')}`
+}
+
+function uniqueValues(values: string[]) {
+  return Array.from(new Set(values.map(value => value.trim()).filter(Boolean))).sort((a, b) => a.localeCompare(b))
+}
+
+const pricebookCss = `
+.pricebook-page {
+  min-height: 100%;
+  padding: 28px;
+  color: #0f172a;
+  background: #fff;
+}
+.pricebook-header,
+.pricebook-title-row,
+.pricebook-toolbar,
+.pricebook-guide-strip,
+.pricebook-tabs {
+  display: flex;
+  align-items: center;
+}
+.pricebook-header {
+  justify-content: space-between;
+  gap: 18px;
+  margin-bottom: 18px;
+}
+.pricebook-breadcrumb {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: #64748b;
+  font-size: 13px;
+  margin-bottom: 11px;
+}
+.pricebook-breadcrumb strong {
+  color: #0f172a;
+}
+.pricebook-title-row {
+  gap: 12px;
+}
+.pricebook-title-row > span,
+.pricebook-guide-strip > span {
+  width: 44px;
+  height: 44px;
+  border-radius: 10px;
+  background: #ecfdf5;
+  color: #16a34a;
+  display: grid;
+  place-items: center;
+  flex: 0 0 auto;
+}
+.pricebook-title-row h1 {
+  margin: 0;
+  color: #07111f;
+  font-size: 30px;
+  line-height: 1.1;
+  font-weight: 900;
+  letter-spacing: 0;
+}
+.pricebook-title-row p {
+  margin: 7px 0 0;
+  color: #64748b;
+  font-size: 14px;
+  line-height: 1.5;
+}
+.pricebook-primary-button,
+.pricebook-secondary-button,
+.pricebook-row-actions > button,
+.pricebook-action-menu button,
+.pricebook-drawer-head button,
+.pricebook-inline-empty button {
+  min-height: 40px;
+  border-radius: 10px;
+  border: 1px solid #e5e7eb;
+  background: #fff;
+  color: #0f172a;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 850;
+  cursor: pointer;
+}
+.pricebook-primary-button,
+.pricebook-secondary-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 0 15px;
+}
+.pricebook-primary-button {
+  border-color: #16a34a;
+  background: #16a34a;
+  color: #fff;
+}
+.pricebook-kpis {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(145px, 1fr));
+  gap: 14px;
+  margin-bottom: 16px;
+}
+.pricebook-kpi,
+.pricebook-workspace,
+.pricebook-guide-strip,
+.pricebook-checklist,
+.pricebook-drawer {
+  border: 1px solid #e5e7eb;
+  background: #fff;
+  box-shadow: 0 12px 30px rgba(15, 23, 42, .04);
+}
+.pricebook-kpi {
+  border-radius: 14px;
+  padding: 16px;
+  min-height: 96px;
+}
+.pricebook-kpi span,
+.pricebook-kpi small {
+  display: block;
+  color: #64748b;
+  font-size: 12px;
+}
+.pricebook-kpi span {
+  font-weight: 850;
+}
+.pricebook-kpi strong {
+  display: block;
+  margin: 8px 0 7px;
+  font-size: 22px;
+}
+.pricebook-guide-strip {
+  gap: 14px;
+  border-radius: 14px;
+  padding: 16px;
+  margin-bottom: 16px;
+}
+.pricebook-guide-strip strong {
+  font-size: 15px;
+}
+.pricebook-guide-strip p {
+  margin: 5px 0 0;
+  color: #64748b;
+  font-size: 13px;
+  line-height: 1.5;
+}
+.pricebook-guide-strip b {
+  color: #0f172a;
+}
+.pricebook-tabs {
+  gap: 28px;
+  overflow-x: auto;
+  border-bottom: 1px solid #e5e7eb;
+}
+.pricebook-tabs button {
+  min-height: 48px;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  background: transparent;
+  color: #334155;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 850;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.pricebook-tabs button.active {
+  color: #111827;
+  border-color: #16a34a;
+}
+.pricebook-tabs span {
+  color: #64748b;
+  margin-left: 6px;
+  font-size: 12px;
+}
+.pricebook-workspace {
+  border-radius: 0 0 14px 14px;
+  overflow: visible;
+}
+.pricebook-toolbar {
+  gap: 12px;
+  padding: 16px;
+  border-bottom: 1px solid #e5e7eb;
+}
+.pricebook-search,
+.pricebook-select {
+  height: 42px;
+  border: 1px solid #e5e7eb;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 0 12px;
+  color: #64748b;
+  background: #fff;
+}
+.pricebook-search {
+  min-width: 240px;
+  flex: 1;
+}
+.pricebook-select {
+  min-width: 150px;
+}
+.pricebook-search input,
+.pricebook-select select,
+.pricebook-form-grid input,
+.pricebook-form-grid select,
+.pricebook-form-grid textarea {
+  width: 100%;
+  min-width: 0;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: #0f172a;
+  font: inherit;
+}
+.pricebook-empty,
+.pricebook-inline-empty {
+  min-height: 360px;
+  display: grid;
+  place-items: center;
+  text-align: center;
+  padding: 42px 18px;
+}
+.pricebook-empty > span {
+  width: 104px;
+  height: 104px;
+  border-radius: 999px;
+  background: #eff6ff;
+  color: #64748b;
+  display: grid;
+  place-items: center;
+  margin-bottom: 16px;
+}
+.pricebook-empty h2 {
+  margin: 0;
+  font-size: 19px;
+}
+.pricebook-empty p {
+  max-width: 420px;
+  color: #64748b;
+  font-size: 13px;
+  line-height: 1.55;
+}
+.pricebook-table-wrap {
+  padding: 16px;
+  overflow: auto;
+}
+.pricebook-table {
+  width: 100%;
+  min-width: 1040px;
+  border-collapse: collapse;
+}
+.pricebook-table th,
+.pricebook-table td {
+  padding: 14px 12px;
+  text-align: left;
+  border-bottom: 1px solid #e5e7eb;
+  font-size: 12px;
+  vertical-align: middle;
+}
+.pricebook-table th {
+  background: #f8fafc;
+  color: #475569;
+  text-transform: uppercase;
+  font-size: 10px;
+  letter-spacing: 0;
+}
+.pricebook-table tr:hover {
+  background: #f0fdf4;
+}
+.pricebook-table td small {
+  display: block;
+  margin-top: 4px;
+  color: #64748b;
+}
+.pricebook-badge {
+  min-height: 24px;
+  border-radius: 8px;
+  display: inline-flex;
+  align-items: center;
+  padding: 0 9px;
+  font-size: 10px;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+.pricebook-badge.active {
+  background: #dcfce7;
+  color: #15803d;
+}
+.pricebook-badge.inactive {
+  background: #f1f5f9;
+  color: #475569;
+}
+.pricebook-row-actions {
+  position: relative;
+}
+.pricebook-row-actions > button,
+.pricebook-drawer-head button {
+  width: 40px;
+  display: grid;
+  place-items: center;
+}
+.pricebook-action-menu {
+  position: absolute;
+  top: 44px;
+  right: 0;
+  z-index: 20;
+  width: 190px;
+  padding: 8px;
+  border: 1px solid #e5e7eb;
+  border-radius: 12px;
+  background: #fff;
+  box-shadow: 0 18px 40px rgba(15, 23, 42, .16);
+}
+.pricebook-action-menu button {
+  width: 100%;
+  min-height: 36px;
+  border: 0;
+  border-radius: 9px;
+  justify-content: flex-start;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 10px;
+}
+.pricebook-action-menu button:hover {
+  background: #f1f5f9;
+}
+.pricebook-action-menu button.danger {
+  color: #ef4444;
+}
+.pricebook-inline-empty {
+  min-height: 190px;
+  gap: 10px;
+}
+.pricebook-inline-empty button {
+  padding: 0 16px;
+}
+.pricebook-checklist {
+  margin-top: 16px;
+  border-radius: 14px;
+  padding: 20px 24px;
+  display: grid;
+  gap: 12px;
+}
+.pricebook-checklist h2 {
+  margin: 0 0 4px;
+  font-size: 18px;
+}
+.pricebook-checklist div {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: #334155;
+  font-size: 13px;
+  font-weight: 750;
+}
+.pricebook-checklist svg {
+  color: #16a34a;
+}
+.pricebook-drawer-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 80;
+  background: rgba(15, 23, 42, .42);
+  display: flex;
+  justify-content: flex-end;
+}
+.pricebook-drawer {
+  width: min(860px, calc(100vw - 32px));
+  height: 100%;
+  border-radius: 0;
+  overflow: auto;
+}
+.pricebook-drawer-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 24px;
+  border-bottom: 1px solid #e5e7eb;
+}
+.pricebook-drawer-head h2 {
+  margin: 0;
+  font-size: 22px;
+}
+.pricebook-drawer-head p {
+  margin: 8px 0 0;
+  color: #64748b;
+  font-size: 13px;
+}
+.pricebook-form-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+  padding: 18px 18px 92px;
+}
+.pricebook-form-grid label {
+  display: grid;
+  gap: 8px;
+  color: #334155;
+  font-size: 12px;
+  font-weight: 900;
+}
+.pricebook-form-grid label.wide {
+  grid-column: 1 / -1;
+}
+.pricebook-form-grid input,
+.pricebook-form-grid select,
+.pricebook-form-grid textarea {
+  min-height: 44px;
+  border: 1px solid #d1d5db;
+  border-radius: 10px;
+  padding: 0 12px;
+}
+.pricebook-form-grid textarea {
+  min-height: 92px;
+  padding: 12px;
+  resize: vertical;
+}
+.pricebook-drawer-footer {
+  position: sticky;
+  bottom: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 14px 18px;
+  border-top: 1px solid #e5e7eb;
+  background: rgba(255, 255, 255, .96);
+  backdrop-filter: blur(10px);
+}
+.pricebook-drawer-footer > div {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.pricebook-drawer-footer span {
+  color: #64748b;
+  font-size: 12px;
+}
+.pricebook-drawer-footer strong {
+  font-size: 18px;
+}
+@media (max-width: 1100px) {
+  .pricebook-kpis {
+    grid-template-columns: repeat(3, minmax(150px, 1fr));
   }
-
-  const saveItem = () => {
-    setFormError('')
-    const required = [form.name, form.sku, form.category, form.unit, form.vendor, form.cost, form.price]
-    if (required.some(value => !value.trim())) {
-      setFormError('Please complete all required fields before saving.')
-      return
-    }
-
-    const nextItem: PricebookItem = {
-      id: items.reduce((max, item) => Math.max(max, item.id), 0) + 1,
-      companyId,
-      name: form.name.trim(),
-      sku: form.sku.trim(),
-      category: form.category.trim(),
-      itemType: form.itemType,
-      unit: form.unit.trim(),
-      cost: Number(form.cost),
-      markup: Number(form.markup),
-      price: Number(form.price),
-      vendor: form.vendor.trim(),
-      notes: form.notes.trim(),
-      status: form.status,
-      stockOnHand: 0,
-      minimumOrder: 0,
-      leadTime: '-',
-      paymentTerms: '-',
-      image: form.image,
-    }
-
-    const nextItems = [nextItem, ...items]
-    try {
-      persistItems(nextItems, companyId)
-      setItems(nextItems)
-      setSelectedId(nextItem.id)
-      setDrawerOpen(false)
-    } catch {
-      const withoutImage = { ...nextItem, image: '' }
-      const fallbackItems = [withoutImage, ...items]
-      persistItems(fallbackItems, companyId)
-      setItems(fallbackItems)
-      setSelectedId(withoutImage.id)
-      setDrawerOpen(false)
-    }
+}
+@media (max-width: 760px) {
+  .pricebook-page {
+    padding: 18px 14px 28px;
   }
-
-  return (
-    <div style={{ fontFamily: font, padding: '28px 28px 40px', color: '#0f172a' }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 20, marginBottom: 28, flexWrap: 'wrap' }}>
-        <div>
-          <div style={breadcrumbStyle}><span>Procurement</span><span>/</span><span>Pricebook</span></div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-            <span style={titleIconStyle}><Boxes size={18} /></span>
-            <h1 style={{ margin: 0, fontSize: 28, lineHeight: 1.1, fontWeight: 900, color: '#07111f' }}>Pricebook</h1>
-            <Star size={18} color="#94a3b8" />
-          </div>
-          <p style={{ margin: '8px 0 0', fontSize: 14, color: '#64748b' }}>Manage your items, pricing, and vendor information in one place.</p>
-        </div>
-
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
-          <ToolbarButton icon={<Grid2X2 size={16} />} label="Views" hasChevron />
-          <ToolbarButton icon={<Filter size={16} />} label="Filters" badge="2" />
-          <ToolbarButton icon={<Boxes size={16} />} label="Group" />
-          <button style={smallIconButtonStyle} aria-label="More"><MoreHorizontal size={18} /></button>
-          <button style={outlineButtonStyle}>Import CSV</button>
-          <div style={{ position: 'relative' }}>
-            <button onClick={() => setActionsOpen(value => !value)} style={greenButtonStyle}>
-              <Plus size={17} />
-              Add Item
-              <ChevronDown size={15} />
-            </button>
-            {actionsOpen && (
-              <div style={addMenuStyle}>
-                <button style={addMenuItemStyle} onClick={openAddDrawer}><PackagePlus size={15} /> New Item</button>
-                <button style={addMenuItemStyle}><ReceiptText size={15} /> Purchase Request</button>
-                <button style={addMenuItemStyle}><ReceiptText size={15} /> Purchase Order</button>
-              </div>
-            )}
-          </div>
-        </div>
-      </div>
-
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(160px, 1fr))', gap: 14, marginBottom: 18 }}>
-        <MetricCard icon={<PackagePlus size={25} />} label="Total Items" value={items.length.toLocaleString()} detail="Across all categories" tone="#22c55e" />
-        <MetricCard icon={<Boxes size={25} />} label="Total Cost" value={formatPeso(summary.totalCost)} detail="Base price total" tone="#8b5cf6" />
-        <MetricCard icon={<ReceiptText size={25} />} label="Total Price" value={formatPeso(summary.totalPrice)} detail="Selling price total" tone="#3b82f6" />
-        <MetricCard icon={<BarChart3 size={25} />} label="Average Markup" value={`${summary.averageMarkup}%`} detail="Across all items" tone="#f59e0b" />
-      </div>
-
-      <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) 320px', gap: 16, alignItems: 'start' }}>
-        <section style={panelStyle}>
-          <div style={{ display: 'flex', borderBottom: '1px solid #e5e7eb', overflowX: 'auto' }}>
-            {(['All', 'Active', 'Inactive', 'Low Stock', 'Out of Stock'] as const).map(tab => (
-              <button key={tab} onClick={() => setActiveTab(tab)} style={tabStyle(activeTab === tab)}>
-                {tab} <span style={tabCountStyle}>{tabCount(tab)}</span>
-              </button>
-            ))}
-          </div>
-
-          <div style={{ display: 'flex', gap: 12, padding: 16, borderBottom: '1px solid #eef2f7', flexWrap: 'wrap' }}>
-            <label style={searchBoxStyle}>
-              <Search size={16} color="#64748b" />
-              <input value={search} onChange={event => setSearch(event.target.value)} placeholder="Search by item name, SKU, type, or vendor..." style={inputResetStyle} />
-            </label>
-            <select value={categoryFilter} onChange={event => setCategoryFilter(event.target.value)} style={selectStyle}>
-              {categories.map(category => <option key={category}>{category}</option>)}
-            </select>
-            <select value={statusFilter} onChange={event => setStatusFilter(event.target.value as ItemStatus | 'All')} style={selectStyle}>
-              <option>All</option>
-              <option>Active</option>
-              <option>Inactive</option>
-              <option>Low Stock</option>
-              <option>Out of Stock</option>
-            </select>
-            <ToolbarButton icon={<Filter size={16} />} label="More filters" />
-            <div style={{ marginLeft: 'auto', display: 'flex', gap: 6 }}>
-              <button onClick={() => setViewMode('grid')} style={viewButtonStyle(viewMode === 'grid')}><Grid2X2 size={16} /></button>
-              <button onClick={() => setViewMode('table')} style={viewButtonStyle(viewMode === 'table')}><Table2 size={16} /></button>
-              <button onClick={() => setViewMode('chart')} style={viewButtonStyle(viewMode === 'chart')}><BarChart3 size={16} /></button>
-            </div>
-          </div>
-
-          {viewMode === 'grid' ? (
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(210px, 1fr))', gap: 14, padding: 16 }}>
-              {filteredItems.map(item => (
-                <button key={item.id} onClick={() => setSelectedId(item.id)} style={gridCardStyle(selectedItem?.id === item.id)}>
-                  <ItemThumbnail item={item} large />
-                  <strong>{item.name}</strong>
-                  <span>{item.sku} - {formatPeso(item.price)}</span>
-                  <StatusBadge status={item.status} />
-                </button>
-              ))}
-            </div>
-          ) : (
-            <div style={{ overflowX: 'auto' }}>
-              <table style={{ width: '100%', minWidth: 1050, borderCollapse: 'collapse' }}>
-                <thead>
-                  <tr style={{ background: '#f8fafc' }}>
-                    {['Item', 'SKU', 'Category', 'Type', 'Unit', 'Cost', 'Markup', 'Price', 'Vendor', 'Status', ''].map(header => (
-                      <th key={header} style={tableHeadStyle}>{header}</th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {filteredItems.map(item => (
-                    <tr key={item.id} onClick={() => setSelectedId(item.id)} style={{ borderTop: '1px solid #eef2f7', background: selectedItem?.id === item.id ? '#ecfdf5' : '#fff', cursor: 'pointer' }}>
-                      <td style={tableCellStyle}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                          <input type="checkbox" onClick={event => event.stopPropagation()} />
-                          <ItemThumbnail item={item} />
-                          <span>
-                            <strong style={{ display: 'block', fontSize: 13 }}>{item.name}</strong>
-                            <span style={{ display: 'block', fontSize: 12, color: '#64748b', marginTop: 3 }}>{item.notes}</span>
-                          </span>
-                        </div>
-                      </td>
-                      <td style={tableCellStyle}>{item.sku}</td>
-                      <td style={tableCellStyle}>{item.category}</td>
-                      <td style={tableCellStyle}>{item.itemType}</td>
-                      <td style={tableCellStyle}>{item.unit}</td>
-                      <td style={tableCellStyle}>{formatPeso(item.cost)}</td>
-                      <td style={tableCellStyle}>{item.markup}%</td>
-                      <td style={{ ...tableCellStyle, fontWeight: 850 }}>{formatPeso(item.price)}</td>
-                      <td style={tableCellStyle}>{item.vendor}</td>
-                      <td style={tableCellStyle}><StatusBadge status={item.status} /></td>
-                      <td style={tableCellStyle}><button style={ghostIconButtonStyle}><MoreHorizontal size={16} /></button></td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, padding: 16, borderTop: '1px solid #eef2f7', color: '#64748b', fontSize: 13 }}>
-            <span>Showing 1 to {filteredItems.length} of {items.length.toLocaleString()} items</span>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <button style={pagerButtonStyle}><ChevronLeft size={16} /></button>
-              <button style={{ ...pagerButtonStyle, background: '#dcfce7', color: '#16a34a' }}>1</button>
-              <button style={pagerButtonStyle}>2</button>
-              <button style={pagerButtonStyle}>3</button>
-              <span>...</span>
-              <button style={pagerButtonStyle}>125</button>
-              <button style={pagerButtonStyle}><ChevronRight size={16} /></button>
-            </div>
-          </div>
-        </section>
-
-        {selectedItem && <ItemDetails item={selectedItem} />}
-      </div>
-
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, minmax(130px, 1fr))', gap: 14, marginTop: 16 }}>
-        <MiniAction value="12" label="Pending Requests" />
-        <MiniAction value="8" label="Draft POs" />
-        <MiniAction value="4" label="RFQs Sent" />
-        <MiniAction value="2" label="Overdue Deliveries" />
-        <MiniAction value="Php 2.45M" label="Total PO Value (This Month)" />
-      </div>
-
-      {drawerOpen && (
-        <div style={drawerOverlayStyle}>
-          <div style={drawerStyle}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12, marginBottom: 24 }}>
-              <div>
-                <h2 style={{ margin: 0, fontSize: 20, fontWeight: 900 }}>Add New Item</h2>
-                <p style={{ margin: '7px 0 0', color: '#64748b', fontSize: 13 }}>Add a new item to your pricebook.</p>
-              </div>
-              <button onClick={() => setDrawerOpen(false)} style={ghostIconButtonStyle}><X size={20} /></button>
-            </div>
-
-            <button onClick={() => fileInputRef.current?.click()} style={uploadBoxStyle}>
-              {form.image ? <img src={form.image} alt="Item preview" style={uploadPreviewImageStyle} /> : <><UploadCloud size={28} /><span>Upload item image</span><small>PNG, JPG or WebP (max. 2MB)</small></>}
-            </button>
-            <input ref={fileInputRef} type="file" accept="image/png,image/jpeg,image/webp" onChange={handleImageUpload} style={{ display: 'none' }} />
-
-            {formError && <div style={errorStyle}>{formError}</div>}
-
-            <div style={{ display: 'grid', gap: 16 }}>
-              <Field label="Item Name *"><input style={fieldStyle} value={form.name} onChange={event => updateForm('name', event.target.value)} placeholder="Enter item name" /></Field>
-              <Field label="SKU *"><input style={fieldStyle} value={form.sku} onChange={event => updateForm('sku', event.target.value)} placeholder="Enter SKU" /></Field>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
-                <Field label="Category *"><input style={fieldStyle} value={form.category} onChange={event => updateForm('category', event.target.value)} placeholder="Select category" /></Field>
-                <Field label="Type *"><select style={fieldStyle} value={form.itemType} onChange={event => updateForm('itemType', event.target.value)}><option>Material</option><option>Labor</option><option>Equipment</option><option>Service</option><option>Other</option></select></Field>
-              </div>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
-                <Field label="Unit *"><input style={fieldStyle} value={form.unit} onChange={event => updateForm('unit', event.target.value)} placeholder="Select unit" /></Field>
-                <Field label="Vendor *"><input style={fieldStyle} value={form.vendor} onChange={event => updateForm('vendor', event.target.value)} placeholder="Select vendor" /></Field>
-              </div>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
-                <Field label="Cost (Base Price) *"><input style={fieldStyle} type="number" value={form.cost} onChange={event => updateForm('cost', event.target.value)} placeholder="0.00" /></Field>
-                <Field label="Price (Selling Price) *"><input style={fieldStyle} type="number" value={form.price} onChange={event => updateForm('price', event.target.value)} placeholder="0.00" /></Field>
-              </div>
-              <Field label="Markup (%)"><input style={fieldStyle} type="number" value={form.markup} onChange={event => updateForm('markup', event.target.value)} /></Field>
-              <Field label="Status"><select style={fieldStyle} value={form.status} onChange={event => updateForm('status', event.target.value)}><option>Active</option><option>Inactive</option><option>Low Stock</option><option>Out of Stock</option></select></Field>
-              <Field label="Description"><textarea style={{ ...fieldStyle, minHeight: 78, resize: 'vertical' }} value={form.notes} onChange={event => updateForm('notes', event.target.value)} placeholder="Enter item description (optional)" /></Field>
-            </div>
-
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginTop: 26 }}>
-              <button onClick={() => setDrawerOpen(false)} style={outlineButtonStyle}>Cancel</button>
-              <button onClick={saveItem} style={greenButtonStyle}>Save Item</button>
-            </div>
-          </div>
-        </div>
-      )}
-    </div>
-  )
+  .pricebook-header {
+    display: grid;
+  }
+  .pricebook-kpis,
+  .pricebook-form-grid {
+    grid-template-columns: 1fr;
+  }
+  .pricebook-toolbar {
+    flex-wrap: wrap;
+  }
+  .pricebook-toolbar > * {
+    flex: 1 1 100%;
+  }
+  .pricebook-table-wrap {
+    border: 0;
+    overflow: visible;
+  }
+  .pricebook-table,
+  .pricebook-table thead,
+  .pricebook-table tbody,
+  .pricebook-table tr,
+  .pricebook-table td {
+    display: block;
+    min-width: 0;
+  }
+  .pricebook-table thead {
+    display: none;
+  }
+  .pricebook-table tr {
+    border: 1px solid #e5e7eb;
+    border-radius: 14px;
+    padding: 14px;
+    margin-bottom: 12px;
+  }
+  .pricebook-table td {
+    border: 0;
+    padding: 7px 0;
+  }
+  .pricebook-table td::before {
+    content: attr(data-label);
+    display: inline-block;
+    min-width: 104px;
+    color: #64748b;
+    font-size: 11px;
+    font-weight: 900;
+  }
+  .pricebook-drawer {
+    width: 100vw;
+    border-radius: 18px 18px 0 0;
+    height: calc(100% - 20px);
+    margin-top: 20px;
+  }
+  .pricebook-drawer-footer,
+  .pricebook-drawer-footer > div {
+    display: grid;
+    width: 100%;
+  }
 }
-
-function Field({ label, children }: { label: string; children: React.ReactNode }) {
-  return (
-    <label style={{ display: 'grid', gap: 7 }}>
-      <span style={{ fontSize: 12, fontWeight: 850, color: '#334155' }}>{label}</span>
-      {children}
-    </label>
-  )
-}
-
-function MetricCard({ icon, label, value, detail, tone }: { icon: React.ReactNode; label: string; value: string; detail: string; tone: string }) {
-  return (
-    <div style={metricCardStyle}>
-      <span style={{ width: 54, height: 54, borderRadius: 12, background: withAlpha(tone, 0.14), color: tone, display: 'grid', placeItems: 'center', flexShrink: 0 }}>{icon}</span>
-      <span>
-        <span style={{ display: 'block', fontSize: 12, color: '#64748b', fontWeight: 750 }}>{label}</span>
-        <strong style={{ display: 'block', marginTop: 6, fontSize: 20, color: '#0f172a' }}>{value}</strong>
-        <span style={{ display: 'block', marginTop: 5, fontSize: 12, color: '#64748b' }}>{detail}</span>
-      </span>
-    </div>
-  )
-}
-
-function ToolbarButton({ icon, label, hasChevron, badge }: { icon: React.ReactNode; label: string; hasChevron?: boolean; badge?: string }) {
-  return (
-    <button style={outlineButtonStyle}>
-      {icon}
-      {label}
-      {badge && <span style={{ display: 'grid', placeItems: 'center', minWidth: 22, height: 22, borderRadius: 99, background: '#4f46e5', color: '#fff', fontSize: 12 }}>{badge}</span>}
-      {hasChevron && <ChevronDown size={14} />}
-    </button>
-  )
-}
-
-function ItemThumbnail({ item, large }: { item: PricebookItem; large?: boolean }) {
-  const size = large ? 130 : 48
-  return (
-    <span style={{ width: size, height: large ? 110 : size, borderRadius: large ? 10 : 8, background: item.image ? '#fff' : '#f1f5f9', display: 'grid', placeItems: 'center', overflow: 'hidden', border: '1px solid #e5e7eb', flexShrink: 0 }}>
-      {item.image ? <img src={item.image} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : <ImageIcon size={large ? 32 : 18} color="#ef4444" />}
-    </span>
-  )
-}
-
-function ItemDetails({ item }: { item: PricebookItem }) {
-  const fields = [
-    ['Category', item.category],
-    ['Type', item.itemType],
-    ['Unit', item.unit],
-    ['Cost (Base Price)', formatPeso(item.cost)],
-    ['Markup', `${item.markup}%`],
-    ['Price (Selling Price)', formatPeso(item.price)],
-    ['Stock On Hand', `${item.stockOnHand} pcs`],
-    ['Minimum Order', `${item.minimumOrder} pcs`],
-    ['Lead Time', item.leadTime],
-    ['Preferred Vendor', item.vendor],
-    ['Payment Terms', item.paymentTerms],
-  ]
-
-  return (
-    <aside style={detailsPanelStyle}>
-      <button style={{ position: 'absolute', top: 18, right: 18, border: 0, background: 'transparent', color: '#64748b', cursor: 'pointer' }}><X size={18} /></button>
-      <div style={{ display: 'flex', alignItems: 'flex-start', gap: 14, paddingRight: 24 }}>
-        <ItemThumbnail item={item} large />
-        <div>
-          <h2 style={{ margin: 0, fontSize: 17, fontWeight: 900 }}>{item.name}</h2>
-          <StatusBadge status={item.status} />
-          <p style={{ margin: '8px 0 0', fontSize: 13, color: '#64748b', lineHeight: 1.45 }}>{item.sku}<br />{item.notes}</p>
-        </div>
-      </div>
-      <div style={{ display: 'flex', gap: 18, marginTop: 18, borderBottom: '1px solid #e5e7eb' }}>
-        {['Details', 'Suppliers', 'Pricing History', 'Activity'].map((tab, index) => (
-          <button key={tab} style={{ border: 0, background: 'transparent', padding: '0 0 12px', fontSize: 13, fontWeight: 800, color: index === 0 ? '#16a34a' : '#64748b', borderBottom: index === 0 ? '2px solid #16a34a' : '2px solid transparent' }}>{tab}</button>
-        ))}
-      </div>
-      <div style={{ display: 'grid', gap: 13, marginTop: 16 }}>
-        {fields.map(([label, value]) => (
-          <div key={label} style={{ display: 'grid', gridTemplateColumns: 'minmax(110px, 1fr) 1fr', gap: 12, fontSize: 13 }}>
-            <span style={{ color: '#64748b' }}>{label}</span>
-            <strong style={{ color: label.includes('Price') ? '#0f172a' : '#334155' }}>{value}</strong>
-          </div>
-        ))}
-      </div>
-      <div style={{ marginTop: 20, paddingTop: 18, borderTop: '1px solid #e5e7eb' }}>
-        <strong style={{ display: 'block', fontSize: 13 }}>Price History (Last 6 Months)</strong>
-        <div style={{ height: 118, marginTop: 14, borderRadius: 12, background: 'linear-gradient(180deg, #ecfdf5 0%, #fff 100%)', position: 'relative', overflow: 'hidden' }}>
-          <svg viewBox="0 0 300 110" width="100%" height="100%" preserveAspectRatio="none">
-            <polyline points="0,72 35,44 70,68 105,55 140,70 175,42 210,50 245,60 300,36" fill="none" stroke="#10b981" strokeWidth="3" />
-          </svg>
-        </div>
-        <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 10, fontSize: 13 }}>
-          <span style={{ color: '#64748b' }}>Current Price</span>
-          <strong>{formatPeso(item.price)}</strong>
-        </div>
-        <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 5, fontSize: 13 }}>
-          <span style={{ color: '#64748b' }}>Base Price</span>
-          <strong>{formatPeso(item.cost)}</strong>
-        </div>
-      </div>
-    </aside>
-  )
-}
-
-function StatusBadge({ status }: { status: ItemStatus }) {
-  const tone = status === 'Active' ? ['#dcfce7', '#16a34a'] : status === 'Low Stock' ? ['#fef3c7', '#d97706'] : status === 'Out of Stock' ? ['#fee2e2', '#dc2626'] : ['#f1f5f9', '#64748b']
-  return <span style={{ display: 'inline-flex', alignItems: 'center', padding: '4px 9px', borderRadius: 999, background: tone[0], color: tone[1], fontSize: 11, fontWeight: 900, textTransform: 'uppercase' }}>{status}</span>
-}
-
-function MiniAction({ value, label }: { value: string; label: string }) {
-  return (
-    <div style={{ ...panelStyle, padding: 18, display: 'flex', alignItems: 'center', gap: 12 }}>
-      <span style={{ width: 42, height: 42, borderRadius: 10, background: '#dcfce7', color: '#16a34a', display: 'grid', placeItems: 'center' }}><ReceiptText size={20} /></span>
-      <span>
-        <strong style={{ display: 'block', fontSize: 18 }}>{value}</strong>
-        <span style={{ display: 'block', fontSize: 12, color: '#64748b' }}>{label}</span>
-      </span>
-    </div>
-  )
-}
-
-const breadcrumbStyle: CSSProperties = { display: 'flex', gap: 8, alignItems: 'center', marginBottom: 10, color: '#64748b', fontSize: 13 }
-const titleIconStyle: CSSProperties = { width: 38, height: 38, borderRadius: 10, background: '#dcfce7', color: '#16a34a', display: 'grid', placeItems: 'center' }
-const panelStyle: CSSProperties = { background: '#fff', border: '1px solid #e2e8f0', borderRadius: 14, boxShadow: '0 14px 30px rgba(15,23,42,0.04)', overflow: 'hidden' }
-const metricCardStyle: CSSProperties = { background: '#fff', border: '1px solid #e2e8f0', borderRadius: 14, padding: 18, display: 'flex', alignItems: 'center', gap: 16, boxShadow: '0 14px 30px rgba(15,23,42,0.04)' }
-const outlineButtonStyle: CSSProperties = { minHeight: 40, border: '1px solid #e2e8f0', borderRadius: 10, background: '#fff', color: '#0f172a', padding: '0 14px', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 8, fontSize: 13, fontWeight: 850, cursor: 'pointer', textDecoration: 'none' }
-const greenButtonStyle: CSSProperties = { minHeight: 42, border: 0, borderRadius: 10, background: '#16a34a', color: '#fff', padding: '0 18px', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 8, fontSize: 13, fontWeight: 900, cursor: 'pointer' }
-const smallIconButtonStyle: CSSProperties = { width: 40, height: 40, border: '1px solid #e2e8f0', borderRadius: 10, background: '#fff', display: 'grid', placeItems: 'center', cursor: 'pointer', color: '#334155' }
-const searchBoxStyle: CSSProperties = { minHeight: 42, flex: '1 1 300px', border: '1px solid #e2e8f0', background: '#f8fafc', borderRadius: 10, display: 'flex', alignItems: 'center', gap: 10, padding: '0 12px' }
-const inputResetStyle: CSSProperties = { flex: 1, border: 0, outline: 0, background: 'transparent', color: '#0f172a', fontSize: 13 }
-const selectStyle: CSSProperties = { minHeight: 42, minWidth: 132, border: '1px solid #e2e8f0', borderRadius: 10, background: '#fff', color: '#0f172a', padding: '0 12px', fontSize: 13, fontWeight: 750 }
-const tableHeadStyle: CSSProperties = { padding: '13px 12px', textAlign: 'left', fontSize: 11, letterSpacing: '0.04em', textTransform: 'uppercase', color: '#64748b', fontWeight: 900 }
-const tableCellStyle: CSSProperties = { padding: '13px 12px', fontSize: 13, color: '#334155', verticalAlign: 'middle' }
-const ghostIconButtonStyle: CSSProperties = { width: 34, height: 34, border: '1px solid #e2e8f0', borderRadius: 9, background: '#fff', color: '#0f172a', display: 'grid', placeItems: 'center', cursor: 'pointer' }
-const pagerButtonStyle: CSSProperties = { minWidth: 34, height: 34, border: '1px solid #e2e8f0', borderRadius: 8, background: '#fff', color: '#334155', display: 'inline-grid', placeItems: 'center', fontSize: 13, fontWeight: 800 }
-const detailsPanelStyle: CSSProperties = { ...panelStyle, padding: 18, position: 'sticky', top: 92 }
-const addMenuStyle: CSSProperties = { position: 'absolute', right: 0, top: 48, width: 220, background: '#fff', border: '1px solid #e2e8f0', borderRadius: 10, boxShadow: '0 22px 45px rgba(15,23,42,0.18)', zIndex: 20, overflow: 'hidden' }
-const addMenuItemStyle: CSSProperties = { width: '100%', border: 0, background: '#fff', padding: '12px 14px', display: 'flex', alignItems: 'center', gap: 9, color: '#0f172a', fontSize: 13, fontWeight: 750, cursor: 'pointer', textAlign: 'left' }
-const drawerOverlayStyle: CSSProperties = { position: 'fixed', inset: 0, background: 'rgba(15,23,42,0.35)', backdropFilter: 'blur(2px)', zIndex: 80, display: 'flex', justifyContent: 'flex-end' }
-const drawerStyle: CSSProperties = { width: 'min(460px, 100vw)', height: '100vh', overflowY: 'auto', background: '#fff', padding: 28, boxShadow: '-24px 0 60px rgba(15,23,42,0.24)' }
-const uploadBoxStyle: CSSProperties = { width: '100%', height: 132, minHeight: 132, border: '1px dashed #cbd5e1', borderRadius: 12, background: '#f8fafc', color: '#64748b', display: 'grid', placeItems: 'center', gap: 7, marginBottom: 20, cursor: 'pointer', fontSize: 13, fontWeight: 800, padding: 0, overflow: 'hidden', position: 'relative', lineHeight: 1.2, boxSizing: 'border-box' }
-const uploadPreviewImageStyle: CSSProperties = { display: 'block', width: '100%', height: '100%', maxWidth: '100%', maxHeight: '100%', objectFit: 'contain', objectPosition: 'center', borderRadius: 11, pointerEvents: 'none' }
-const fieldStyle: CSSProperties = { minHeight: 40, width: '100%', border: '1px solid #e2e8f0', borderRadius: 9, background: '#fff', color: '#0f172a', outline: 0, padding: '0 12px', fontSize: 13 }
-const errorStyle: CSSProperties = { margin: '0 0 16px', border: '1px solid #fecaca', background: '#fef2f2', color: '#dc2626', borderRadius: 9, padding: '10px 12px', fontSize: 13, fontWeight: 800 }
-const tabCountStyle: CSSProperties = { color: '#94a3b8', fontSize: 12, marginLeft: 4 }
-
-function tabStyle(active: boolean): CSSProperties {
-  return { border: 0, background: 'transparent', color: active ? '#16a34a' : '#64748b', borderBottom: active ? '2px solid #16a34a' : '2px solid transparent', padding: '17px 20px', fontSize: 13, fontWeight: 900, cursor: 'pointer', whiteSpace: 'nowrap' }
-}
-
-function viewButtonStyle(active: boolean): CSSProperties {
-  return { width: 38, height: 38, border: '1px solid #e2e8f0', borderRadius: 9, background: active ? '#dcfce7' : '#fff', color: active ? '#16a34a' : '#64748b', display: 'grid', placeItems: 'center', cursor: 'pointer' }
-}
-
-function gridCardStyle(active: boolean): CSSProperties {
-  return { border: `1px solid ${active ? '#22c55e' : '#e2e8f0'}`, borderRadius: 13, background: active ? '#f0fdf4' : '#fff', padding: 12, display: 'grid', gap: 9, textAlign: 'left', color: '#0f172a', cursor: 'pointer', boxShadow: active ? '0 14px 28px rgba(34,197,94,0.12)' : 'none' }
-}
-
-function withAlpha(hex: string, alpha: number) {
-  const value = hex.replace('#', '')
-  const r = parseInt(value.substring(0, 2), 16)
-  const g = parseInt(value.substring(2, 4), 16)
-  const b = parseInt(value.substring(4, 6), 16)
-  return `rgba(${r}, ${g}, ${b}, ${alpha})`
-}
-
-function numberFrom(value: unknown) {
-  const parsed = Number(value)
-  return Number.isFinite(parsed) ? parsed : 0
-}
-
-function textFrom(value: unknown, fallback: string) {
-  return typeof value === 'string' && value.trim() ? value : fallback
-}
-
-function validItemType(value: unknown): ItemType {
-  return value === 'Material' || value === 'Labor' || value === 'Equipment' || value === 'Service' || value === 'Other'
-    ? value
-    : 'Material'
-}
-
-function validStatus(value: unknown): ItemStatus {
-  return value === 'Active' || value === 'Inactive' || value === 'Low Stock' || value === 'Out of Stock'
-    ? value
-    : 'Active'
-}
-
-function formatPeso(value: number) {
-  return `Php ${value.toLocaleString('en-PH', { minimumFractionDigits: value % 1 ? 2 : 0, maximumFractionDigits: 2 })}`
-}
+`

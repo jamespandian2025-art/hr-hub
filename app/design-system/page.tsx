@@ -2,13 +2,13 @@
 
 import { useState } from 'react'
 import {
-  Activity, AlertCircle, AlertTriangle, Archive, ArrowDownToLine, ArrowUpToLine,
-  Bell, BookOpen, Box, Building2, Check, CheckCircle2, ChevronDown, ChevronLeft,
-  ChevronRight, ClipboardList, Copy, CreditCard, Download, Edit2, Eye, FileText,
-  Filter, FolderKanban, Grid, HandCoins, Home, Info, LayoutDashboard, Link,
-  Maximize2, MoreHorizontal, Package, Paperclip, Pen, Plus, QrCode, RefreshCw,
-  Search, Settings, ShoppingCart, Tag, Trash2, TrendingUp, Upload, UsersRound,
-  Warehouse, X, Zap,
+  Activity, AlertCircle, AlertTriangle, Archive,
+  Box, CheckCircle2, ChevronDown, ChevronLeft,
+  ChevronRight, ClipboardList, Copy, Download, Edit2, Eye, FileText,
+  Filter, Grid, Info, LayoutDashboard,
+  MoreHorizontal, Pen, Plus, QrCode, RefreshCw,
+  Search, Settings, ShoppingCart, Tag, Trash2, Upload, UsersRound,
+  X,
 } from 'lucide-react'
 
 const font = "var(--font-body)"
@@ -143,7 +143,7 @@ export default function DesignSystemPage() {
         <div>
           <div style={{ fontSize: 10, fontWeight: 700, color: '#9ca3af', letterSpacing: '1px', textTransform: 'uppercase', marginBottom: 12 }}>Typography</div>
           <div style={{ fontSize: 42, fontWeight: 700, color: '#111827', lineHeight: 1, letterSpacing: '-2px', marginBottom: 8 }}>Aa</div>
-          <div style={{ fontSize: 16, fontWeight: 700, color: '#111827', marginBottom: 3 }}>Space Grotesk</div>
+          <div style={{ fontSize: 16, fontWeight: 700, color: '#111827', marginBottom: 3 }}>Geist Sans</div>
           <div style={{ fontSize: 11, color: '#6b7280', lineHeight: 1.5, marginBottom: 12 }}>Clean, modern and highly readable typeface for enterprise interfaces.</div>
           <div style={{ display: 'grid', gap: 5 }}>
             {typeScale.map(t => (

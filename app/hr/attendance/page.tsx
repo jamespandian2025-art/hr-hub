@@ -12,6 +12,7 @@ import {
   initials, loadStored, monthRangeLabel, normalizeStatus, saveStored, statusTone,
   todayInput, upsertRecord,
 } from './attendanceData'
+import { secureId } from '@/lib/security/random'
 
 const font = "var(--font-body)"
 const card = { background: '#fff', border: '1px solid #e5e7eb', borderRadius: 12, boxShadow: '0 1px 4px rgba(15,23,42,0.05)' }
@@ -209,7 +210,7 @@ export default function HrAttendancePage() {
       const cleaned = imported
         .filter(row => row.employeeId && row.date && row.status)
         .map(row => ({
-          id: row.id || `att_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+          id: row.id || secureId('att', 5),
           employeeId: String(row.employeeId),
           date: String(row.date),
           status: normalizeStatus(row.status),
@@ -232,7 +233,7 @@ export default function HrAttendancePage() {
   }
 
   return (
-    <main style={{ fontFamily: font, padding: '0 20px 36px', minHeight: '100vh', background: '#f8fafc' }}>
+    <main style={{ fontFamily: font, padding: '0 20px 36px', minHeight: '100vh' }}>
       <input ref={importRef} type="file" accept=".csv,.json" onChange={importAttendance} style={{ display: 'none' }} />
 
       <PageHeader onImport={() => importRef.current?.click()} onExport={exportReport} />
@@ -372,7 +373,6 @@ function PageHeader({ onImport, onExport }: { onImport: () => void; onExport: ()
   return (
     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', padding: '20px 0 18px', gap: 16, flexWrap: 'wrap' }}>
       <div>
-        <div style={{ fontSize: 12, color: '#6b7280', marginBottom: 12 }}>HR Hub &nbsp;&gt;&nbsp; Attendance</div>
         <h1 style={{ margin: 0, color: '#0f172a', fontSize: 28, fontWeight: 900 }}>Attendance</h1>
         <p style={{ margin: '6px 0 0', color: '#475569', fontSize: 14 }}>Track and manage employee attendance, clock-ins, work hours, and exceptions.</p>
       </div>

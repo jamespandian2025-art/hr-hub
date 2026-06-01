@@ -576,9 +576,9 @@ export default function RFQsPage() {
                 <div className="rfq-pagination">
                   <span>Showing {pageStart} to {pageEnd} of {filteredRfqs.length} entries</span>
                   <div>
-                    <button type="button" disabled={currentPage === 1} onClick={() => setPage(value => Math.max(1, value - 1))}>‹</button>
+                    <button type="button" disabled={currentPage === 1} onClick={() => setPage(value => Math.max(1, value - 1))} aria-label="Previous page">&lt;</button>
                     <strong>{currentPage}</strong>
-                    <button type="button" disabled={currentPage === totalPages} onClick={() => setPage(value => Math.min(totalPages, value + 1))}>›</button>
+                    <button type="button" disabled={currentPage === totalPages} onClick={() => setPage(value => Math.min(totalPages, value + 1))} aria-label="Next page">&gt;</button>
                     <select value={pageSize} onChange={event => { setPageSize(Number(event.target.value)); setPage(1) }} aria-label="Rows per page">
                       {[10, 25, 50].map(size => <option key={size} value={size}>{size} / page</option>)}
                     </select>
@@ -618,7 +618,7 @@ export default function RFQsPage() {
           <section className="rfq-side-card">
             <div className="rfq-card-title">
               <h2>Recent Activity</h2>
-              <button type="button">View all</button>
+              <button type="button" onClick={resetFilters}>View all</button>
             </div>
             <div className="rfq-activity">
               {recentActivity.length ? recentActivity.map(activity => (
@@ -964,7 +964,10 @@ function EmptyRfqs({ onCreate }: { onCreate: () => void }) {
 
 function loadRows(key: string, companyId: string) {
   const scoped = companyId ? companyScopedKey(key, companyId) : key
-  const rows = [...readStored(key), ...(scoped === key ? [] : readStored(scoped))]
+  const scopedRows = scoped === key ? [] : readStored(scoped)
+  const globalRows = readStored(key)
+  const globalForCompany = scopedRows.length ? globalRows.filter(row => textFrom(row.companyId) === companyId) : globalRows
+  const rows = scopedRows.length ? [...scopedRows, ...globalForCompany] : globalForCompany
   return uniqueRows(rows).filter(row => {
     const rowCompanyId = textFrom(row.companyId)
     return !companyId || !rowCompanyId || rowCompanyId === companyId

@@ -7,8 +7,8 @@ import {
   CheckCircle2,
   ChevronDown,
   Clock3,
+  Download,
   FileText,
-  Filter,
   Mail,
   MoreHorizontal,
   Plus,
@@ -20,7 +20,8 @@ import {
   X,
 } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
-import { getActiveCompany } from '@/lib/tenant/company'
+import { secureId } from '@/lib/security/random'
+import { loadClients, type ClientRecord } from '@/app/people/clients/clientData'
 import {
   type AccountingInvoice,
   emptyAccountingData,
@@ -28,12 +29,14 @@ import {
   isOverdue,
   loadAccountingData,
   money,
+  saveAccountingInvoices,
   subscribeAccountingData,
 } from '@/lib/accounting/data'
 
 const font = 'var(--font-body)'
-const invoiceStorageKeys = ['flowsys-invoices', 'flowsys-accounting-invoices', 'wiseflow-accounting-invoices']
 const tabs = ['All', 'Draft', 'Sent', 'Paid', 'Overdue']
+const invoiceUnitTypes = ['Quantity', 'Hourly', 'Daily', 'Weekly', 'Monthly', 'Fixed fee', 'Square meter', 'Linear meter', 'Lot']
+const manualCustomerOption = '__manual_customer__'
 
 type InvoiceForm = {
   number: string
@@ -42,6 +45,7 @@ type InvoiceForm = {
   companyDetails: string
   billTo: string
   currency: string
+  clientId: string
   customer: string
   email: string
   issueDate: string
@@ -58,6 +62,7 @@ type InvoiceForm = {
 type InvoiceLineItem = {
   id: string
   description: string
+  unitType: string
   unitCost: string
   quantity: string
 }
@@ -79,47 +84,6 @@ function statusTone(value: string) {
   return { bg: '#f1f5f9', color: '#475569' }
 }
 
-function invoiceToStored(invoice: AccountingInvoice) {
-  return {
-    id: invoice.id,
-    invoiceNo: invoice.number,
-    recipient: invoice.customer,
-    customer: invoice.customer,
-    email: invoice.email,
-    dateCreated: invoice.issueDate,
-    issueDate: invoice.issueDate,
-    dueDate: invoice.dueDate,
-    total: invoice.amount,
-    amount: invoice.amount,
-    paid: invoice.paid,
-    paidAmount: invoice.paid,
-    balanceDue: invoice.balanceDue,
-    status: invoice.status,
-    purchaseOrder: invoice.purchaseOrder,
-    companyDetails: invoice.companyDetails,
-    billTo: invoice.billTo,
-    currency: invoice.currency,
-    notes: invoice.notes,
-    bankDetails: invoice.bankDetails,
-    logoName: invoice.logoName,
-    subtotal: invoice.subtotal,
-    taxRate: invoice.taxRate,
-    taxAmount: invoice.taxAmount,
-    discount: invoice.discount,
-    shippingFee: invoice.shippingFee,
-    lineItems: invoice.lineItems,
-  }
-}
-
-function saveInvoices(invoices: AccountingInvoice[]) {
-  if (typeof window === 'undefined') return
-  const companyId = getActiveCompany()?.id
-  const rows = invoices.map(invoiceToStored)
-  const keys = invoiceStorageKeys.flatMap(key => companyId ? [`${key}:${companyId}`, key] : [key])
-  keys.forEach(key => window.localStorage.setItem(key, JSON.stringify(rows)))
-  window.dispatchEvent(new Event('wiseflow-accounting-refresh'))
-}
-
 function nextInvoiceNumber(invoices: AccountingInvoice[]) {
   const max = invoices.reduce((largest, invoice) => {
     const parsed = Number(invoice.number.replace(/[^0-9]/g, ''))
@@ -130,8 +94,9 @@ function nextInvoiceNumber(invoices: AccountingInvoice[]) {
 
 function createEmptyLineItem(): InvoiceLineItem {
   return {
-    id: `item-${Date.now()}-${Math.random().toString(16).slice(2)}`,
+    id: secureId('item'),
     description: '',
+    unitType: 'Quantity',
     unitCost: '',
     quantity: '1',
   }
@@ -139,6 +104,34 @@ function createEmptyLineItem(): InvoiceLineItem {
 
 function createInvoiceId() {
   return `invoice-${Date.now()}`
+}
+
+function clientDisplayName(client: ClientRecord) {
+  return client.name || client.company || client.email || 'Unnamed client'
+}
+
+function clientBillingEmail(client: ClientRecord) {
+  return client.email || client.contacts.find(contact => contact.primary)?.email || client.contacts.find(contact => contact.email)?.email || ''
+}
+
+function clientBillingLabel(client: ClientRecord) {
+  return clientDisplayName(client)
+}
+
+function validClientDetail(value: string) {
+  const trimmed = value.trim()
+  return trimmed && trimmed !== '-'
+}
+
+function clientBillingBlock(client: ClientRecord) {
+  const email = clientBillingEmail(client)
+  return [
+    clientDisplayName(client),
+    validClientDetail(email) ? `Email: ${email}` : '',
+    validClientDetail(client.phone) ? `Phone: ${client.phone}` : '',
+    validClientDetail(client.taxId) ? `Tax ID: ${client.taxId}` : '',
+    validClientDetail(client.billingAddress) ? `Address: ${client.billingAddress}` : '',
+  ].filter(Boolean).join('\n')
 }
 
 function createInvoiceForm(nextNumber: string, currency = 'PHP'): InvoiceForm {
@@ -149,6 +142,7 @@ function createInvoiceForm(nextNumber: string, currency = 'PHP'): InvoiceForm {
     companyDetails: '',
     billTo: '',
     currency,
+    clientId: '',
     customer: '',
     email: '',
     issueDate: todayInputValue(),
@@ -173,6 +167,20 @@ function StatusPill({ value }: { value: string }) {
   return <span className="invoice-status-pill" style={{ background: tone.bg, color: tone.color }}>{value}</span>
 }
 
+function downloadCsv(filename: string, rows: Array<Record<string, string | number>>) {
+  const headers = Object.keys(rows[0] || { Empty: 'No rows' })
+  const csv = [
+    headers.join(','),
+    ...(rows.length ? rows : [{ Empty: 'No invoice rows' }]).map(row => headers.map(header => `"${String(row[header] ?? '').replaceAll('"', '""')}"`).join(',')),
+  ].join('\n')
+  const url = window.URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }))
+  const link = document.createElement('a')
+  link.href = url
+  link.download = filename
+  link.click()
+  window.URL.revokeObjectURL(url)
+}
+
 export default function AccountingInvoicesPage() {
   const router = useRouter()
   const pathname = usePathname()
@@ -181,10 +189,10 @@ export default function AccountingInvoicesPage() {
   const [data, setData] = useState(emptyAccountingData)
   const [activeTab, setActiveTab] = useState('All')
   const [search, setSearch] = useState('')
-  const [filtersOpen, setFiltersOpen] = useState(false)
   const [showCreate, setShowCreate] = useState(false)
   const [selected, setSelected] = useState<string[]>([])
   const [form, setForm] = useState<InvoiceForm>(() => createInvoiceForm(''))
+  const [clients, setClients] = useState<ClientRecord[]>([])
 
   useEffect(() => {
     const load = () => setData(loadAccountingData())
@@ -192,9 +200,31 @@ export default function AccountingInvoicesPage() {
     return subscribeAccountingData(load)
   }, [])
 
+  useEffect(() => {
+    let active = true
+    const refreshClients = async () => {
+      const result = await loadClients()
+      if (active) setClients(result.clients)
+    }
+
+    refreshClients()
+    window.addEventListener('storage', refreshClients)
+    window.addEventListener('wiseflow-company-change', refreshClients)
+    window.addEventListener('focus', refreshClients)
+    return () => {
+      active = false
+      window.removeEventListener('storage', refreshClients)
+      window.removeEventListener('wiseflow-company-change', refreshClients)
+      window.removeEventListener('focus', refreshClients)
+    }
+  }, [])
+
   const invoices = data.invoices
   const createPanelOpen = showCreate || createRequested
   const suggestedInvoiceNumber = nextInvoiceNumber(invoices)
+  const clientOptions = useMemo(() => {
+    return [...clients].sort((a, b) => clientDisplayName(a).localeCompare(clientDisplayName(b)))
+  }, [clients])
 
   const filtered = useMemo(() => invoices.filter(invoice => {
     const normalizedStatus = invoice.balanceDue > 0 && isOverdue(invoice.dueDate) && invoice.status.toLowerCase() !== 'paid' ? 'Overdue' : invoice.status
@@ -246,12 +276,12 @@ export default function AccountingInvoicesPage() {
     setShowCreate(true)
   }
 
-  const updateInvoices = (nextInvoices: AccountingInvoice[]) => {
-    saveInvoices(nextInvoices)
+  const updateInvoices = async (nextInvoices: AccountingInvoice[]) => {
+    await saveAccountingInvoices(nextInvoices)
     setData(loadAccountingData())
   }
 
-  const createInvoice = (event: FormEvent) => {
+  const createInvoice = async (event: FormEvent) => {
     event.preventDefault()
     const status = normalizeStatus(form.status)
     const paid = status.toLowerCase() === 'paid' ? invoiceTotal : 0
@@ -261,12 +291,14 @@ export default function AccountingInvoicesPage() {
       .map(item => ({
         id: item.id,
         description: item.description.trim() || 'Invoice item',
+        unitType: item.unitType || 'Quantity',
         unitCost: item.unitCost,
         quantity: item.quantity || 1,
         amount: item.amount,
       }))
     const invoice: AccountingInvoice = {
       id: createInvoiceId(),
+      clientId: form.clientId,
       number: invoiceNumber,
       customer: form.customer.trim() || 'No recipient',
       email: form.email.trim(),
@@ -290,29 +322,103 @@ export default function AccountingInvoicesPage() {
       shippingFee: invoiceShipping,
       lineItems,
     }
-    updateInvoices([...invoices, invoice])
+    await updateInvoices([...invoices, invoice])
     setForm(createInvoiceForm(nextInvoiceNumber([...invoices, invoice]), data.currency))
     closeCreate()
   }
 
-  const setInvoiceStatus = (id: string, status: string) => {
+  const setInvoiceStatus = async (id: string, status: string) => {
     const next = invoices.map(invoice => {
       if (invoice.id !== id) return invoice
       const paid = status === 'Paid' ? invoice.amount : invoice.paid
       return { ...invoice, status, paid, balanceDue: Math.max(invoice.amount - paid, 0) }
     })
-    updateInvoices(next)
+    await updateInvoices(next)
   }
 
-  const deleteInvoice = (id: string) => {
-    updateInvoices(invoices.filter(invoice => invoice.id !== id))
+  const deleteInvoice = async (id: string) => {
+    await updateInvoices(invoices.filter(invoice => invoice.id !== id))
     setSelected(prev => prev.filter(item => item !== id))
   }
+  const exportInvoices = () => {
+    const rows = filtered.map(invoice => ({
+      Number: invoice.number,
+      Customer: invoice.customer,
+      Email: invoice.email,
+      IssueDate: formatDate(invoice.issueDate),
+      DueDate: formatDate(invoice.dueDate),
+      Amount: money(invoice.amount, invoice.currency || data.currency),
+      Paid: money(invoice.paid, invoice.currency || data.currency),
+      Balance: money(invoice.balanceDue, invoice.currency || data.currency),
+      Status: invoice.balanceDue > 0 && isOverdue(invoice.dueDate) && invoice.status.toLowerCase() !== 'paid' ? 'Overdue' : invoice.status,
+    }))
+    downloadCsv(`accounting-invoices-${new Date().toISOString().slice(0, 10)}.csv`, rows)
+  }
 
-  const markSelectedPaid = () => {
+  const markSelectedPaid = async () => {
     if (!selected.length) return
-    updateInvoices(invoices.map(invoice => selected.includes(invoice.id) ? { ...invoice, status: 'Paid', paid: invoice.amount, balanceDue: 0 } : invoice))
+    await updateInvoices(invoices.map(invoice => selected.includes(invoice.id) ? { ...invoice, status: 'Paid', paid: invoice.amount, balanceDue: 0 } : invoice))
     setSelected([])
+  }
+
+  const findClientByBillingText = (value: string) => {
+    const normalized = value.split('\n')[0].trim().toLowerCase()
+    return clientOptions.find(client => {
+      const names = [clientBillingLabel(client), clientDisplayName(client), client.company, client.email].filter(Boolean)
+      return names.some(name => name.trim().toLowerCase() === normalized)
+    })
+  }
+
+  const applyClientToForm = (client: ClientRecord | undefined, extra: Partial<InvoiceForm> = {}) => {
+    setForm(prev => ({
+      ...prev,
+      ...extra,
+      clientId: client ? client.id : extra.clientId ?? prev.clientId,
+      customer: client ? clientDisplayName(client) : extra.customer ?? prev.customer,
+      email: client ? clientBillingEmail(client) : extra.email ?? prev.email,
+      billTo: client ? extra.billTo ?? clientBillingBlock(client) : extra.billTo ?? prev.billTo,
+    }))
+  }
+
+  const updateCustomer = (value: string) => {
+    const matchedClient = clientOptions.find(client => clientDisplayName(client).toLowerCase() === value.trim().toLowerCase())
+    if (matchedClient) {
+      applyClientToForm(matchedClient, { customer: value })
+      return
+    }
+
+    setForm(prev => ({ ...prev, clientId: '', customer: value, email: '' }))
+  }
+
+  const updateCustomerSelection = (value: string) => {
+    if (!value) {
+      setForm(prev => ({ ...prev, clientId: '', customer: '', email: '', billTo: '' }))
+      return
+    }
+
+    if (value === manualCustomerOption) {
+      setForm(prev => ({
+        ...prev,
+        clientId: '',
+        customer: prev.clientId ? '' : prev.customer,
+        email: prev.clientId ? '' : prev.email,
+        billTo: prev.clientId ? '' : prev.billTo,
+      }))
+      return
+    }
+
+    const matchedClient = clientOptions.find(client => client.id === value)
+    if (matchedClient) applyClientToForm(matchedClient)
+  }
+
+  const updateBillTo = (value: string) => {
+    const matchedClient = findClientByBillingText(value)
+    if (matchedClient) {
+      applyClientToForm(matchedClient)
+      return
+    }
+
+    setForm(prev => ({ ...prev, billTo: value }))
   }
 
   const toggleSelected = (id: string) => setSelected(prev => prev.includes(id) ? prev.filter(item => item !== id) : [...prev, id])
@@ -337,7 +443,7 @@ export default function AccountingInvoicesPage() {
             <Search size={16} color="#64748b" />
             <input value={search} onChange={event => setSearch(event.target.value)} placeholder="Search invoices, clients..." />
           </label>
-          <button type="button" className={filtersOpen ? 'invoices-toolbar-button is-active' : 'invoices-toolbar-button'} onClick={() => setFiltersOpen(open => !open)}><Filter size={15} /> Filters</button>
+          <button type="button" className="invoices-toolbar-button" onClick={exportInvoices}><Download size={15} /> Export CSV</button>
           <button type="button" className="invoices-primary-button" onClick={openCreate}><Plus size={15} /> New Invoice <ChevronDown size={13} /></button>
         </div>
       </div>
@@ -365,17 +471,6 @@ export default function AccountingInvoicesPage() {
           </button>
         ))}
       </nav>
-
-      {filtersOpen && (
-        <section className="invoices-filter-panel">
-          <label>Status
-            <select value={activeTab} onChange={event => setActiveTab(event.target.value)}>
-              {tabs.map(tab => <option key={tab}>{tab}</option>)}
-            </select>
-          </label>
-          <button type="button" onClick={() => { setSearch(''); setActiveTab('All') }}>Reset Filters</button>
-        </section>
-      )}
 
       {createPanelOpen && (
         <section className="invoices-card invoices-create-panel">
@@ -415,18 +510,38 @@ export default function AccountingInvoicesPage() {
               </label>
               <label>
                 <span>Bill to</span>
-                <textarea value={form.billTo} onChange={event => setForm(prev => ({ ...prev, billTo: event.target.value }))} placeholder="Client company, billing address, contact person" />
+                <textarea
+                  value={form.billTo}
+                  onChange={event => updateBillTo(event.target.value)}
+                  placeholder={clientOptions.length ? 'Select a customer to fill billing details, or type manually' : 'Client name, email, phone, tax ID, and billing address'}
+                />
               </label>
             </div>
 
             <div className="invoices-maker-meta">
               <label>
                 <span>Customer</span>
-                <input value={form.customer} onChange={event => setForm(prev => ({ ...prev, customer: event.target.value }))} placeholder="Client or company name" required />
+                <select
+                  value={form.clientId || (form.customer ? manualCustomerOption : '')}
+                  onChange={event => updateCustomerSelection(event.target.value)}
+                  required
+                >
+                  <option value="">{clientOptions.length ? 'Select client' : 'No clients available'}</option>
+                  {clientOptions.map(client => <option key={client.id} value={client.id}>{clientDisplayName(client)}</option>)}
+                  <option value={manualCustomerOption}>Manual customer</option>
+                </select>
+                {!form.clientId && (
+                  <input
+                    value={form.customer}
+                    onChange={event => updateCustomer(event.target.value)}
+                    placeholder="Type customer name"
+                    required
+                  />
+                )}
               </label>
               <label>
                 <span>Email</span>
-                <input value={form.email} onChange={event => setForm(prev => ({ ...prev, email: event.target.value }))} type="email" placeholder="billing@client.com" />
+                <input value={form.email} onChange={event => setForm(prev => ({ ...prev, email: event.target.value }))} type="email" placeholder="billing@client.com" readOnly={Boolean(form.clientId)} />
               </label>
               <label>
                 <span>Currency</span>
@@ -456,6 +571,7 @@ export default function AccountingInvoicesPage() {
             <section className="invoices-line-items" aria-label="Invoice line items">
               <div className="invoices-line-heading">
                 <span>Item description</span>
+                <span>Unit</span>
                 <span>Unit cost</span>
                 <span>Quantity</span>
                 <span>Amount</span>
@@ -469,6 +585,12 @@ export default function AccountingInvoicesPage() {
                     <label>
                       <span>Item description</span>
                       <input value={item.description} onChange={event => updateLineItem(item.id, 'description', event.target.value)} placeholder="Design, materials, labor..." />
+                    </label>
+                    <label>
+                      <span>Unit</span>
+                      <select value={item.unitType} onChange={event => updateLineItem(item.id, 'unitType', event.target.value)}>
+                        {invoiceUnitTypes.map(unitType => <option key={unitType}>{unitType}</option>)}
+                      </select>
                     </label>
                     <label>
                       <span>Unit cost</span>
@@ -613,8 +735,8 @@ const invoicesCss = `
 .invoices-header-actions { display: flex; align-items: center; justify-content: flex-end; gap: 12px; flex-wrap: wrap; }
 .invoices-search { width: min(340px, 40vw); min-height: 40px; border-radius: 8px; background: #fff; display: flex; align-items: center; gap: 10px; padding: 0 13px; border: 1px solid #e8edf4; }
 .invoices-search input { flex: 1; min-width: 0; border: 0; outline: 0; background: transparent; font-size: 12.5px; color: #0f172a; }
-.invoices-toolbar-button, .invoices-primary-button { min-height: 38px; border-radius: 8px; border: 1px solid #e8edf4; background: #fff; color: #0f172a; display: flex; align-items: center; gap: 8px; padding: 0 12px; font-size: 12.5px; font-weight: 850; cursor: pointer; }
-.invoices-toolbar-button.is-active { border-color: #bbf7d0; background: #ecfdf3; color: #047857; }
+.invoices-toolbar-button { min-height: 38px; border-radius: 8px; border: 1px solid #e8edf4; background: #fff; color: #0f172a; display: flex; align-items: center; gap: 8px; padding: 0 12px; font-size: 12.5px; font-weight: 850; cursor: pointer; }
+.invoices-primary-button { min-height: 38px; border-radius: 8px; border: 1px solid #e8edf4; background: #fff; color: #0f172a; display: flex; align-items: center; gap: 8px; padding: 0 12px; font-size: 12.5px; font-weight: 850; cursor: pointer; }
 .invoices-primary-button { border-color: #16a34a; background: #16a34a; color: #fff; font-weight: 950; }
 .invoices-metrics { display: grid; grid-template-columns: repeat(5, minmax(170px, 1fr)); gap: 18px; margin-bottom: 18px; }
 .invoices-card { background: #fff; border: 1px solid #e8edf4; border-radius: 8px; padding: 18px; box-shadow: 0 1px 2px rgba(15, 23, 42, .03); }
@@ -628,10 +750,6 @@ const invoicesCss = `
 .invoices-tabs button.is-active { color: #16a34a; border-bottom-color: #16a34a; }
 .invoices-tabs span { min-width: 22px; min-height: 22px; border-radius: 999px; background: #f1f5f9; color: #475569; display: grid; place-items: center; font-size: 11px; }
 .invoices-tabs button.is-active span { background: #dcfce7; color: #15803d; }
-.invoices-filter-panel { margin: 16px 0 0; border: 1px solid #e8edf4; border-radius: 8px; background: #fff; padding: 14px; display: grid; grid-template-columns: minmax(180px, 240px) auto; gap: 12px; align-items: end; }
-.invoices-filter-panel label { display: grid; gap: 7px; color: #475569; font-size: 12px; font-weight: 900; }
-.invoices-filter-panel select, .invoices-filter-panel button { min-height: 38px; border: 1px solid #e8edf4; border-radius: 8px; background: #fff; color: #0f172a; padding: 0 12px; font-size: 12.5px; font-weight: 850; }
-.invoices-filter-panel button { cursor: pointer; justify-self: start; }
 .invoices-grid { display: grid; grid-template-columns: minmax(0, 1fr) 360px; gap: 16px; margin-top: 18px; }
 .invoices-side-stack { display: grid; align-content: start; gap: 16px; }
 .invoices-panel-header { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 16px; }
@@ -669,10 +787,11 @@ const invoicesCss = `
 .invoices-logo-upload strong { display: flex; align-items: center; gap: 8px; color: #0f172a; font-size: 12.5px; font-weight: 950; }
 .invoices-logo-upload small { color: #64748b; font-size: 11px; font-weight: 750; }
 .invoices-line-items { background: #f2f7ef; border: 1px solid #e2ecd9; border-radius: 10px; padding: 16px; display: grid; gap: 12px; }
-.invoices-line-heading, .invoices-line-row { display: grid; grid-template-columns: minmax(220px, 1fr) 130px 110px 150px 36px; gap: 10px; align-items: end; }
+.invoices-line-heading, .invoices-line-row { display: grid; grid-template-columns: minmax(220px, 1fr) 130px 130px 110px 150px 36px; gap: 10px; align-items: end; }
 .invoices-line-heading { align-items: center; color: #475569; font-size: 11px; font-weight: 950; padding: 0 0 2px; }
 .invoices-line-row label span { display: none; }
 .invoices-line-amount { display: grid; gap: 7px; }
+.invoices-line-amount span { display: none; }
 .invoices-line-amount strong { min-height: 40px; border: 1px solid #d7dde7; border-radius: 8px; background: #fff; display: flex; align-items: center; padding: 0 12px; color: #0f172a; font-size: 13px; }
 .invoices-icon-button { width: 36px; height: 40px; border: 0; background: transparent; color: #15803d; display: grid; place-items: center; cursor: pointer; }
 .invoices-add-item { justify-self: center; width: 86px; min-height: 64px; border: 0; background: transparent; color: #0f172a; display: grid; place-items: center; gap: 6px; font-size: 11px; font-weight: 900; cursor: pointer; }
@@ -704,7 +823,7 @@ const invoicesCss = `
   .invoices-metrics { grid-template-columns: repeat(3, minmax(180px, 1fr)); }
   .invoices-grid { grid-template-columns: 1fr; }
   .invoices-side-stack { grid-template-columns: 1fr 1fr; }
-  .invoices-line-heading, .invoices-line-row { grid-template-columns: minmax(180px, 1fr) 120px 100px 140px 36px; }
+  .invoices-line-heading, .invoices-line-row { grid-template-columns: minmax(180px, 1fr) 120px 120px 100px 140px 36px; }
 }
 @media (max-width: 820px) {
   .invoices-metrics, .invoices-side-stack, .invoices-form { grid-template-columns: 1fr 1fr; }
@@ -712,6 +831,7 @@ const invoicesCss = `
   .invoices-line-heading { display: none; }
   .invoices-line-row { grid-template-columns: 1fr 1fr; align-items: start; background: rgba(255,255,255,.72); border: 1px solid #e2ecd9; border-radius: 9px; padding: 12px; }
   .invoices-line-row label span { display: block; }
+  .invoices-line-amount span { display: block; }
   .invoices-line-amount { grid-column: span 1; }
   .invoices-icon-button { justify-self: start; align-self: end; }
   .invoices-panel-header { align-items: flex-start; flex-direction: column; }
@@ -724,7 +844,6 @@ const invoicesCss = `
   .invoices-line-items { margin-left: -6px; margin-right: -6px; padding: 12px; }
   .invoices-total-box > div, .invoices-total-box label { grid-template-columns: 1fr; gap: 7px; }
   .invoices-total-box input, .invoices-total-box strong { text-align: left; }
-  .invoices-filter-panel { grid-template-columns: 1fr; }
   .invoices-card-value { font-size: 21px; }
   .invoices-tabs { margin-left: -16px; margin-right: -16px; padding-left: 16px; padding-right: 16px; }
   .invoices-form-actions { align-items: stretch; flex-direction: column; }

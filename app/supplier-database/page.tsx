@@ -737,7 +737,7 @@ const supplierCss = `
   height: 100dvh;
   display: grid;
   grid-template-columns: 250px minmax(0, 1fr);
-  background: #f7f9fc;
+  background: #f3f4f6;
   color: #0f172a;
   overflow: hidden;
 }
@@ -847,6 +847,17 @@ const supplierCss = `
 .supplier-sidebar nav button.active svg {
   color: #16a34a !important;
 }
+/* Supplier sidebar — light theme */
+.supplier-sidebar { background: #ffffff; color: #0f172a; border-right: 1px solid #e5e7eb; }
+.supplier-brand > span { background: #0f172a; color: #ffffff; }
+.supplier-brand small { color: #64748b; }
+.supplier-back { border-color: #e5e7eb; background: #f8fafc; color: #0f172a; }
+.supplier-back:hover { background: #f1f5f9; }
+.supplier-nav-label { color: #64748b; }
+.supplier-sidebar nav button { color: #334155 !important; }
+.supplier-sidebar nav button svg { color: #64748b !important; }
+.supplier-sidebar nav button:not(.active):hover { background: #f1f5f9 !important; color: #0f172a !important; }
+.supplier-sidebar nav button:not(.active):hover svg { color: #334155 !important; }
 .supplier-main {
   min-width: 0;
   height: 100dvh;

@@ -21,6 +21,7 @@ import {
   Upload,
   Users,
 } from 'lucide-react'
+import { uploadFileObject } from '@/lib/uploads/client'
 
 type ActivityItem = {
   id: string
@@ -85,15 +86,6 @@ function initials(name?: string) {
     .join('')
     .slice(0, 2)
     .toUpperCase() || 'HR'
-}
-
-function readImageAsDataUrl(file: File) {
-  return new Promise<string>((resolve, reject) => {
-    const reader = new FileReader()
-    reader.onload = () => resolve(String(reader.result || ''))
-    reader.onerror = reject
-    reader.readAsDataURL(file)
-  })
 }
 
 function countStored(key: string) {
@@ -176,9 +168,9 @@ export default function HrSettingsPage() {
       return
     }
     try {
-      const dataUrl = await readImageAsDataUrl(file)
-      const nextAccount = { ...loadStored<StoredAccount>(accountKey, {}), profilePhoto: dataUrl, photo: dataUrl }
-      const nextSession = { ...loadStored<StoredAccount>(sessionKey, {}), profilePhoto: dataUrl, photo: dataUrl }
+      const uploaded = await uploadFileObject(file, 'employee-profile-photos')
+      const nextAccount = { ...loadStored<StoredAccount>(accountKey, {}), profilePhoto: uploaded.url, photo: uploaded.url }
+      const nextSession = { ...loadStored<StoredAccount>(sessionKey, {}), profilePhoto: uploaded.url, photo: uploaded.url }
       saveStored(accountKey, nextAccount)
       saveStored(sessionKey, nextSession)
       setAccount({ ...nextSession, ...nextAccount })
@@ -186,7 +178,7 @@ export default function HrSettingsPage() {
       window.dispatchEvent(new Event('storage'))
       window.dispatchEvent(new Event('wiseflow:hr-account-updated'))
     } catch {
-      setProfileError('Could not read this image. Please try another file.')
+      setProfileError('Could not upload this image. Please try another file.')
     }
   }
 

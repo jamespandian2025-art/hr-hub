@@ -101,7 +101,7 @@ const warehouseShellCss = `
   overflow: hidden;
   display: grid;
   grid-template-columns: 252px minmax(0, 1fr);
-  background: #f8fafc;
+  background: #f3f4f6;
   color: #0f172a;
   font-family: var(--font-body);
 }
@@ -109,8 +109,9 @@ const warehouseShellCss = `
 .warehouse-sidebar {
   height: 100dvh;
   min-height: 0;
-  background: #020617;
-  color: #e5e7eb;
+  background: #ffffff;
+  color: #0f172a;
+  border-right: 1px solid #e5e7eb;
   padding: 18px 12px;
   display: flex;
   flex-direction: column;
@@ -135,13 +136,13 @@ const warehouseShellCss = `
 }
 .warehouse-brand strong {
   display: block;
-  color: #f8fafc;
+  color: #0f172a;
   font-size: 16px;
   line-height: 1;
 }
 .warehouse-brand small {
   display: block;
-  color: #94a3b8;
+  color: #64748b;
   font-size: 12px;
   margin-top: 5px;
   font-weight: 650;
@@ -151,25 +152,28 @@ const warehouseShellCss = `
   margin-left: auto;
   width: 34px;
   height: 34px;
-  border: 1px solid rgba(148, 163, 184, .22);
+  border: 1px solid #e5e7eb;
   border-radius: 8px;
   background: transparent;
-  color: #e2e8f0;
+  color: #475569;
   place-items: center;
 }
 .warehouse-back-link {
   min-height: 38px;
-  border: 1px solid rgba(148, 163, 184, .22);
+  border: 1px solid #e5e7eb;
   border-radius: 8px;
   display: flex;
   align-items: center;
   gap: 9px;
   padding: 0 10px;
-  color: #e2e8f0;
+  color: #0f172a;
   text-decoration: none;
   font-size: 13px;
   font-weight: 850;
-  background: rgba(255,255,255,.03);
+  background: #f8fafc;
+}
+.warehouse-back-link:hover {
+  background: #f1f5f9;
 }
 .warehouse-nav-label {
   color: #64748b;
@@ -193,25 +197,28 @@ const warehouseShellCss = `
   gap: 10px;
   padding: 0 10px;
   border-radius: 8px;
-  color: #a1a1aa;
+  color: #334155;
   text-decoration: none;
   font-size: 13px;
-  font-weight: 800;
+  font-weight: 700;
 }
 .warehouse-nav-row svg {
-  color: #94a3b8;
+  color: #64748b;
   flex: 0 0 auto;
 }
 .warehouse-nav-row:hover {
-  background: rgba(255,255,255,.06);
-  color: #f8fafc;
+  background: #f1f5f9;
+  color: #0f172a;
+}
+.warehouse-nav-row:hover svg {
+  color: #334155;
 }
 .warehouse-nav-row.active {
-  background: #dcfce7;
-  color: #052e16;
+  background: #ecfdf5;
+  color: #065f46;
 }
 .warehouse-nav-row.active svg {
-  color: #16a34a;
+  color: #10b981;
 }
 .warehouse-main {
   min-width: 0;
@@ -323,7 +330,7 @@ const warehouseShellCss = `
   min-width: 0;
   min-height: 0;
   overflow: auto;
-  background: #f8fafc;
+  background: #f3f4f6;
   padding-inline: max(0px, calc((100% - var(--wf-content-max)) / 2));
 }
 .warehouse-backdrop {

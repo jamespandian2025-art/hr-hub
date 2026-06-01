@@ -8,10 +8,13 @@ import {
   CalendarDays,
   CheckSquare,
   ChevronDown,
+  ChevronLeft,
+  ChevronRight,
   Clock3,
   Copy,
   Database,
   FileSpreadsheet,
+  Filter,
   Folder,
   Grid2X2,
   Hash,
@@ -34,6 +37,7 @@ import {
   Table2,
   Text,
   Trash2,
+  Undo2,
   UploadCloud,
   User,
   Users,
@@ -45,6 +49,9 @@ import { DragEvent, FormEvent, MouseEvent, ReactNode, useEffect, useMemo, useSta
 import CompanySwitcher from '@/components/CompanySwitcher'
 import StateFeedback from '@/components/StateFeedback'
 import { companyChangeEvent, companyScopedKey, getActiveCompany } from '@/lib/tenant/company'
+import { uploadFileObject } from '@/lib/uploads/client'
+import { listBusinessRecords } from '@/lib/business/client'
+import type { BusinessCollection } from '@/lib/business/collections'
 
 type DatasetSection =
   | 'overview'
@@ -141,6 +148,7 @@ type DatasetView = {
   default?: boolean
   filterFieldId?: string
   filterValue?: string
+  records?: DatasetRecord[]
 }
 
 type Dataset = {
@@ -225,6 +233,7 @@ type WorkspaceSettings = {
   auditHistory: boolean
   syncWarnings: boolean
   defaultOwner: string
+  clientDatasetTemplateSeeded: boolean
 }
 
 type WorkspaceState = {
@@ -238,11 +247,23 @@ type WorkspaceState = {
   history: HistoryEvent[]
 }
 
-type ModalName = 'dataset' | 'fieldPicker' | 'field' | 'record' | 'view' | 'import' | 'relationship' | 'automation' | 'quality' | 'key' | 'folder' | null
+type ModalName = 'dataset' | 'template' | 'fieldPicker' | 'field' | 'record' | 'view' | 'import' | 'relationship' | 'automation' | 'quality' | 'key' | 'folder' | null
 
 type StoredRow = Record<string, unknown>
 type ClientChoice = { value: string; label: string; detail: string }
 type FolderGroup = { id: string; name: string; description: string; datasets: Dataset[]; createdAt: string }
+type SourceFieldDefinition =
+  | readonly [string, string, FieldType, boolean]
+  | readonly [string, string, FieldType, boolean, readonly string[]]
+type SourceDefinition = {
+  label: string
+  storageKeys: string[]
+  businessCollection?: BusinessCollection
+  datasetName: string
+  folder: string
+  fields: readonly SourceFieldDefinition[]
+  map: (row: StoredRow) => Record<string, string>
+}
 
 const storageKey = 'wiseflow-rework-datasets-workspace'
 const legacyStorageKey = 'wiseflow-rework-datasets'
@@ -260,9 +281,18 @@ const emptyState: WorkspaceState = {
     auditHistory: true,
     syncWarnings: true,
     defaultOwner: '',
+    clientDatasetTemplateSeeded: false,
   },
   history: [],
 }
+
+const clientImportTemplateSource = 'Client Dataset Template'
+const clientImportTemplateName = 'Client Import Template'
+const paymentTermOptions = ['Due on receipt', 'Net 15', 'Net 30', 'Net 45', 'Net 60']
+const annualRevenueOptions = ['Below PHP 10M', 'PHP 10M - PHP 20M', 'PHP 20M - PHP 50M', 'PHP 50M - PHP 100M', 'PHP 100M+']
+const companyTypeOptions = ['Private', 'Corporation', 'Startup', 'Government', 'Non-profit']
+const companySizeOptions = ['1 - 10 employees', '11 - 50 employees', '51 - 200 employees', '201 - 500 employees', '500+ employees']
+const industryOptions = ['Technology', 'Construction', 'Residential', 'Consulting', 'IT Services', 'Logistics', 'Marketing', 'Healthcare', 'Finance']
 
 const fieldTypes: FieldType[] = [
   'Link to another record (beta)',
@@ -329,30 +359,56 @@ const fieldCards: Array<{ type: FieldType; description: string; tone: string; ic
   { type: 'Multiple files', description: 'Pick multiple files', tone: 'blue', icon: <Paperclip size={16} /> },
   { type: 'Lookup (beta)', description: 'See values from a field in a linked record', tone: 'purple', icon: <Search size={16} /> },
 ]
-const sourceDefinitions = [
+const sourceDefinitions: SourceDefinition[] = [
   {
     label: 'Client Database',
     storageKeys: ['flowsys-clients'],
+    businessCollection: 'clients',
     datasetName: 'Client Master',
     folder: 'CRM',
     fields: [
+      ['client_type', 'Client Type', 'Select', false],
       ['name', 'Client Name', 'Text', true],
-      ['stage', 'Stage', 'Select', false],
-      ['owner', 'Owner', 'Text', false],
-      ['email', 'Email', 'Email', false],
-      ['phone', 'Phone', 'Phone', false],
+      ['email', 'Company Email', 'Email', false],
+      ['phone', 'Phone Number', 'Phone', false],
+      ['website', 'Company Website', 'URL', false],
+      ['industry', 'Industry', 'Select', false, industryOptions],
+      ['company_size', 'Company Size', 'Select', false, companySizeOptions],
+      ['company_type', 'Company Type', 'Select', false, companyTypeOptions],
+      ['tax_id', 'Tax ID / VAT Number', 'Text', false],
+      ['annual_revenue', 'Annual Revenue', 'Select', false, annualRevenueOptions],
+      ['billing_address', 'Billing Address', 'Long text', false],
+      ['account_manager', 'Account Manager', 'Single user', false],
+      ['default_currency', 'Default Currency', 'Select', false],
+      ['payment_terms', 'Payment Terms', 'Select', false, paymentTermOptions],
+      ['description', 'Description / Notes', 'Long text', false],
+      ['tags', 'Tags', 'Text', false],
+      ['status', 'Status', 'Select', false],
     ] as const,
     map: (row: StoredRow) => ({
+      client_type: text(row.clientType),
       name: text(row.name ?? row.clientName ?? row.companyName),
-      stage: text(row.stage ?? row.status),
-      owner: text(row.owner ?? row.accountManager),
       email: text(row.email),
       phone: text(row.phone),
+      website: text(row.website),
+      industry: text(row.industry),
+      company_size: text(row.companySize),
+      company_type: text(row.companyType),
+      tax_id: text(row.taxId),
+      annual_revenue: text(row.annualRevenue),
+      billing_address: text(row.billingAddress),
+      account_manager: text(row.accountManager),
+      default_currency: text(row.defaultCurrency),
+      payment_terms: text(row.paymentTerms),
+      description: text(row.description),
+      tags: Array.isArray(row.tags) ? row.tags.map(text).filter(Boolean).join(', ') : text(row.tags),
+      status: text(row.stage ?? row.status),
     }),
   },
   {
     label: 'Supplier Database',
     storageKeys: ['flowsys-suppliers'],
+    businessCollection: 'suppliers',
     datasetName: 'Supplier Registry',
     folder: 'Supply Chain',
     fields: [
@@ -373,6 +429,7 @@ const sourceDefinitions = [
   {
     label: 'Procurement Pricebook',
     storageKeys: ['flowsys-pricebook-items'],
+    businessCollection: 'pricebook-items',
     datasetName: 'Pricebook Items',
     folder: 'Procurement',
     fields: [
@@ -413,6 +470,7 @@ const sourceDefinitions = [
   {
     label: 'Warehouse Inventory',
     storageKeys: ['flowsys-warehouse-inventory', 'wiseflow-warehouse-workspace'],
+    businessCollection: 'warehouse-inventory',
     datasetName: 'Warehouse Items',
     folder: 'Warehouse',
     fields: [
@@ -426,7 +484,7 @@ const sourceDefinitions = [
       sku: text(row.sku),
       name: text(row.name ?? row.itemName),
       location: text(row.location ?? row.warehouse),
-      quantity: text(row.quantity ?? row.stockOnHand ?? row.onHand),
+      quantity: text(row.quantity ?? row.stock ?? row.stockOnHand ?? row.onHand),
       unit: text(row.unit ?? row.uom),
     }),
   },
@@ -444,6 +502,8 @@ export default function ReworkDatasetsModule({ section = 'overview' }: { section
   const [addFieldTab, setAddFieldTab] = useState<'new' | 'existing'>('new')
   const [showDatasetDetail, setShowDatasetDetail] = useState(false)
   const [showFoldersPage, setShowFoldersPage] = useState(false)
+  const [sourceRows, setSourceRows] = useState<Record<string, StoredRow[]>>({})
+  const [syncingSource, setSyncingSource] = useState('')
 
   useEffect(() => {
     const load = () => {
@@ -465,6 +525,21 @@ export default function ReworkDatasetsModule({ section = 'overview' }: { section
     }
   }, [])
 
+  useEffect(() => {
+    let cancelled = false
+
+    Promise.all(sourceDefinitions.map(async source => {
+      const rows = await loadSourceRows(source, companyId)
+      return [source.label, rows] as const
+    })).then(entries => {
+      if (!cancelled) setSourceRows(Object.fromEntries(entries))
+    })
+
+    return () => {
+      cancelled = true
+    }
+  }, [companyId])
+
   const account = useMemo(() => readAccount(), [])
   const selectedDataset = state.datasets.find(dataset => dataset.id === selectedDatasetId) || state.datasets[0]
   const activeView = selectedDataset?.views.find(view => view.id === activeViewId) || selectedDataset?.views.find(view => view.default) || selectedDataset?.views[0]
@@ -478,7 +553,11 @@ export default function ReworkDatasetsModule({ section = 'overview' }: { section
   const filteredRecords = useMemo(() => {
     if (!selectedDataset) return []
     const needle = recordQuery.trim().toLowerCase()
-    return selectedDataset.records.filter(record => {
+    // Default view shares dataset.records; non-default views own their own.
+    const sourceRecords = activeView && !activeView.default
+      ? (activeView.records ?? [])
+      : selectedDataset.records
+    return sourceRecords.filter(record => {
       const matchesQuery = !needle || Object.values(record.values).join(' ').toLowerCase().includes(needle)
       const matchesView = !activeView?.filterFieldId || !activeView.filterValue || record.values[activeView.filterFieldId]?.toLowerCase().includes(activeView.filterValue.toLowerCase())
       return matchesQuery && matchesView
@@ -557,6 +636,63 @@ export default function ReworkDatasetsModule({ section = 'overview' }: { section
     save({ ...state, datasets: [dataset, ...state.datasets] }, 'Created dataset', dataset.name)
     setSelectedDatasetId(dataset.id)
     setActiveViewId(dataset.views[0]?.id || '')
+    setShowFoldersPage(false)
+    setShowDatasetDetail(true)
+    closeModal()
+  }
+
+  function applyClientImportTemplate() {
+    const timestamp = now()
+    const template = makeClientImportTemplateDataset(state.settings.defaultOwner || account.name)
+    const templateFields = ensureDefaultDatasetFields(template.fields)
+    const existingTemplate = state.datasets.find(isClientImportTemplateDataset)
+    const folders = state.folders.some(folder => folder.name === 'CRM')
+      ? state.folders
+      : [{ id: 'folder_client_import_template_crm', name: 'CRM', description: 'Client import-ready datasets.', createdAt: timestamp }, ...state.folders]
+
+    if (existingTemplate) {
+      const restoredTemplate: Dataset = {
+        ...existingTemplate,
+        name: clientImportTemplateName,
+        description: template.description,
+        folder: 'CRM',
+        source: clientImportTemplateSource,
+        owner: existingTemplate.owner || template.owner,
+        fields: templateFields,
+        records: existingTemplate.records.length ? existingTemplate.records : template.records,
+        views: existingTemplate.views.length ? existingTemplate.views : template.views,
+        updatedAt: timestamp,
+      }
+
+      save({
+        ...state,
+        settings: { ...state.settings, clientDatasetTemplateSeeded: true },
+        folders,
+        datasets: state.datasets.map(dataset => dataset.id === existingTemplate.id ? restoredTemplate : dataset),
+      }, 'Restored template', clientImportTemplateName)
+      setSelectedDatasetId(restoredTemplate.id)
+      setActiveViewId(restoredTemplate.views.find(view => view.default)?.id || restoredTemplate.views[0]?.id || '')
+      setShowFoldersPage(false)
+      setShowDatasetDetail(true)
+      closeModal()
+      return
+    }
+
+    const dataset: Dataset = {
+      ...template,
+      fields: templateFields,
+      createdAt: timestamp,
+      updatedAt: timestamp,
+    }
+
+    save({
+      ...state,
+      settings: { ...state.settings, clientDatasetTemplateSeeded: true },
+      folders,
+      datasets: [dataset, ...state.datasets],
+    }, 'Created template', clientImportTemplateName)
+    setSelectedDatasetId(dataset.id)
+    setActiveViewId(dataset.views.find(view => view.default)?.id || dataset.views[0]?.id || '')
     setShowFoldersPage(false)
     setShowDatasetDetail(true)
     closeModal()
@@ -647,13 +783,37 @@ export default function ReworkDatasetsModule({ section = 'overview' }: { section
     updateDataset({ ...selectedDataset, fields, updatedAt: now() }, 'Reordered fields')
   }
 
+  // When the active tab is a non-default view, records live on the view itself.
+  // Otherwise they live on the dataset. These helpers transparently route the write.
+  function viewOwnsRecords(): boolean {
+    return !!(activeView && !activeView.default)
+  }
+
+  function withMutatedRecords(
+    dataset: Dataset,
+    mutate: (records: DatasetRecord[]) => DatasetRecord[],
+    timestamp: string,
+  ): Dataset {
+    if (viewOwnsRecords() && activeView) {
+      return {
+        ...dataset,
+        views: dataset.views.map(view => view.id === activeView.id
+          ? { ...view, records: mutate(view.records ?? []) }
+          : view),
+        updatedAt: timestamp,
+      }
+    }
+    return { ...dataset, records: mutate(dataset.records), updatedAt: timestamp }
+  }
+
   function createRecord(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     if (!selectedDataset) return
     const editableFields = selectedDataset.fields.filter(field => !isSystemField(field) && !isComputedField(field))
     const values = Object.fromEntries(editableFields.map(field => [field.id, form[field.id] || '']))
-    const record: DatasetRecord = { id: id('rec'), values, createdBy: account.name, createdAt: now(), updatedAt: now() }
-    const nextDataset = { ...selectedDataset, records: [record, ...selectedDataset.records], updatedAt: now() }
+    const timestamp = now()
+    const record: DatasetRecord = { id: id('rec'), values, createdBy: account.name, createdAt: timestamp, updatedAt: timestamp }
+    const nextDataset = withMutatedRecords(selectedDataset, records => [record, ...records], timestamp)
     const errors = validateDataset(nextDataset, state.qualityRules)
     if (state.settings.strictValidation && errors.length) {
       window.alert(errors.slice(0, 4).join('\n'))
@@ -675,27 +835,29 @@ export default function ReworkDatasetsModule({ section = 'overview' }: { section
       createdAt: timestamp,
       updatedAt: timestamp,
     }
-    updateDataset({ ...selectedDataset, records: [...selectedDataset.records, record], updatedAt: timestamp }, 'Added record')
+    const nextDataset = withMutatedRecords(selectedDataset, records => [...records, record], timestamp)
+    updateDataset(nextDataset, 'Added record')
   }
 
-  function deleteRecord(recordId: string) {
-    if (!selectedDataset) return
-    const nextDataset = { ...selectedDataset, records: selectedDataset.records.filter(record => record.id !== recordId), updatedAt: now() }
-    save(runAutomations({ ...state, datasets: state.datasets.map(dataset => dataset.id === nextDataset.id ? nextDataset : dataset) }, selectedDataset.id, 'Record deleted', `Record removed from ${selectedDataset.name}`), 'Deleted record', selectedDataset.name)
+  function deleteRecords(recordIds: string[]) {
+    if (!selectedDataset || !recordIds.length) return
+    const recordIdSet = new Set(recordIds)
+    const timestamp = now()
+    const nextDataset = withMutatedRecords(selectedDataset, records => records.filter(record => !recordIdSet.has(record.id)), timestamp)
+    const count = recordIdSet.size
+    const label = count === 1 ? 'Record deleted' : 'Records deleted'
+    const detail = `${count} record${count === 1 ? '' : 's'} removed from ${selectedDataset.name}`
+    save(runAutomations({ ...state, datasets: state.datasets.map(dataset => dataset.id === nextDataset.id ? nextDataset : dataset) }, selectedDataset.id, label, detail), label, selectedDataset.name)
   }
 
   function updateRecordValue(recordId: string, fieldId: string, value: string) {
     if (!selectedDataset) return
     const timestamp = now()
-    const nextDataset = {
-      ...selectedDataset,
-      records: selectedDataset.records.map(record => record.id === recordId ? {
-        ...record,
-        values: { ...record.values, [fieldId]: value },
-        updatedAt: timestamp,
-      } : record),
+    const nextDataset = withMutatedRecords(selectedDataset, records => records.map(record => record.id === recordId ? {
+      ...record,
+      values: { ...record.values, [fieldId]: value },
       updatedAt: timestamp,
-    }
+    } : record), timestamp)
     const errors = validateDataset(nextDataset, state.qualityRules)
     if (state.settings.strictValidation && errors.length) {
       window.alert(errors.slice(0, 4).join('\n'))
@@ -715,6 +877,7 @@ export default function ReworkDatasetsModule({ section = 'overview' }: { section
       enabled: true,
       filterFieldId: form.filterFieldId || undefined,
       filterValue: form.filterValue || undefined,
+      records: [],
     }
     updateDataset({ ...selectedDataset, views: [...selectedDataset.views, view], updatedAt: now() }, 'Created view')
     setActiveViewId(view.id)
@@ -890,36 +1053,71 @@ export default function ReworkDatasetsModule({ section = 'overview' }: { section
     closeModal()
   }
 
-  function syncSources() {
+  function sourceDataset(source: SourceDefinition, sourceIndex: number, rows: StoredRow[]) {
+    const fields = source.fields.map(([key, label, type, required, options]) => makeField(key, label, type, required, options ? [...options] : []))
+    return makeDataset({
+      name: source.datasetName,
+      description: `Synced from ${source.label}.`,
+      folder: source.folder,
+      owner: state.settings.defaultOwner || account.name,
+      source: source.label,
+      fields,
+      records: rows.map((row, index) => ({
+        id: text(row.id) || id(`src${sourceIndex}${index}`),
+        values: source.map(row),
+        createdBy: account.name,
+        createdAt: text(row.createdAt) || now(),
+        updatedAt: text(row.updatedAt) || now(),
+      })).filter(record => Object.values(record.values).some(Boolean)),
+    })
+  }
+
+  async function syncSource(source: SourceDefinition, sourceIndex: number) {
+    setSyncingSource(source.label)
+    const rows = sourceRows[source.label] || await loadSourceRows(source, companyId)
+    setSourceRows(current => ({ ...current, [source.label]: rows }))
+    if (!rows.length) {
+      setSyncingSource('')
+      if (state.settings.syncWarnings) window.alert(`No records were found in ${source.label}.`)
+      return
+    }
+
+    const existing = state.datasets.find(dataset => dataset.source === source.label)
+    const baseDataset = sourceDataset(source, sourceIndex, rows)
+    const nextDataset = {
+      ...baseDataset,
+      id: existing?.id || baseDataset.id,
+      createdAt: existing?.createdAt || now(),
+      updatedAt: now(),
+    }
+    save({ ...state, datasets: [nextDataset, ...state.datasets.filter(dataset => dataset.id !== existing?.id)] }, 'Synced app source', source.label)
+    setSelectedDatasetId(nextDataset.id)
+    setSyncingSource('')
+  }
+
+  async function syncSources() {
+    setSyncingSource('all')
+    const rowsBySource = Object.fromEntries(await Promise.all(sourceDefinitions.map(async source => {
+      const rows = sourceRows[source.label] || await loadSourceRows(source, companyId)
+      return [source.label, rows] as const
+    })))
+    setSourceRows(rowsBySource)
     const imported = sourceDefinitions.flatMap((source, sourceIndex) => {
-      const rows = source.storageKeys.flatMap(key => loadRows(key, companyId))
-      if (!rows.length) return []
-      const fields = source.fields.map(([key, label, type, required]) => makeField(key, label, type as FieldType, required))
-      return [makeDataset({
-        name: source.datasetName,
-        description: `Synced from ${source.label}.`,
-        folder: source.folder,
-        owner: state.settings.defaultOwner || account.name,
-        source: source.label,
-        fields,
-        records: rows.map((row, index) => ({
-          id: text(row.id) || id(`src${sourceIndex}${index}`),
-          values: source.map(row),
-          createdBy: account.name,
-          createdAt: text(row.createdAt) || now(),
-          updatedAt: text(row.updatedAt) || now(),
-        })).filter(record => Object.values(record.values).some(Boolean)),
-      })]
+      const rows = rowsBySource[source.label] || []
+      return rows.length ? [sourceDataset(source, sourceIndex, rows)] : []
     })
     if (!imported.length) {
+      setSyncingSource('')
       if (state.settings.syncWarnings) window.alert('No source records were found to sync yet.')
       return
     }
     const manual = state.datasets.filter(dataset => dataset.source === 'Manual')
     const existingBySource = new Map(state.datasets.filter(dataset => dataset.source !== 'Manual').map(dataset => [dataset.source, dataset.id]))
-    const synced = imported.map(dataset => ({ ...dataset, id: existingBySource.get(dataset.source) || dataset.id }))
+    const existingCreatedAt = new Map(state.datasets.filter(dataset => dataset.source !== 'Manual').map(dataset => [dataset.source, dataset.createdAt]))
+    const synced = imported.map(dataset => ({ ...dataset, id: existingBySource.get(dataset.source) || dataset.id, createdAt: existingCreatedAt.get(dataset.source) || dataset.createdAt, updatedAt: now() }))
     save({ ...state, datasets: [...synced, ...manual] }, 'Synced app sources', `${synced.length} dataset${synced.length === 1 ? '' : 's'}`)
     setSelectedDatasetId(synced[0]?.id || manual[0]?.id || '')
+    setSyncingSource('')
   }
 
   function updateSettings(nextSettings: WorkspaceSettings) {
@@ -929,7 +1127,7 @@ export default function ReworkDatasetsModule({ section = 'overview' }: { section
   function renderContent() {
     if (section === 'tables') return <TablesSection datasets={filteredDatasets} selectedId={selectedDataset?.id || ''} onSelect={setSelectedDatasetId} onCreate={() => openModal('dataset')} onDelete={deleteDataset} />
     if (section === 'views') return <ViewsSection datasets={filteredDatasets} onCreate={() => openModal('view')} onToggle={toggleView} onDelete={deleteView} />
-    if (section === 'imports') return <ImportsSection sources={sourceDefinitions} onSync={syncSources} onImport={() => openModal('import')} companyId={companyId} />
+    if (section === 'imports') return <ImportsSection sources={sourceDefinitions} datasets={state.datasets} sourceRows={sourceRows} syncingSource={syncingSource} onSyncAll={() => void syncSources()} onSyncSource={(source, sourceIndex) => void syncSource(source, sourceIndex)} />
     if (section === 'relationships') return <RelationshipsSection datasets={state.datasets} relationships={state.relationships} onCreate={() => openModal('relationship')} onDelete={idValue => deleteItem('relationships', idValue)} />
     if (section === 'automations') return <AutomationsSection datasets={state.datasets} automations={state.automations} onCreate={() => openModal('automation')} onToggle={toggleAutomation} onDelete={idValue => deleteItem('automations', idValue)} />
     if (section === 'quality-rules') return <QualitySection datasets={state.datasets} rules={state.qualityRules} onCreate={() => openModal('quality')} onToggle={toggleRule} onDelete={idValue => deleteItem('qualityRules', idValue)} />
@@ -956,6 +1154,7 @@ export default function ReworkDatasetsModule({ section = 'overview' }: { section
           query={query}
           setQuery={setQuery}
           onCreateDataset={() => openModal('dataset')}
+          onChooseTemplate={() => openModal('template')}
           onOpenDataset={openDataset}
         />
       )
@@ -984,7 +1183,7 @@ export default function ReworkDatasetsModule({ section = 'overview' }: { section
         onDeleteView={deleteView}
         onDeleteField={deleteField}
         onReorderFields={reorderFields}
-        onDeleteRecord={deleteRecord}
+        onDeleteRecords={deleteRecords}
         onUpdateRecordValue={updateRecordValue}
       />
     )
@@ -1065,6 +1264,7 @@ export default function ReworkDatasetsModule({ section = 'overview' }: { section
             <div className="rw-top-actions">
               <CompanySwitcher compact />
               <button type="button" className="rw-notification" aria-label="Notifications"><Bell size={18} /><em>14</em></button>
+              <button type="button" className="rw-top-secondary" onClick={() => openModal('template')}><FileSpreadsheet size={15} /> Choose template</button>
               <button type="button" className="rw-top-primary" onClick={() => openModal('dataset')}><Plus size={15} /> New dataset</button>
               <span>{initials(account.name).slice(0, 2)}</span>
             </div>
@@ -1077,6 +1277,7 @@ export default function ReworkDatasetsModule({ section = 'overview' }: { section
       {modal && (
         <Modal title={modal === 'fieldPicker' && selectedDataset ? selectedDataset.name : modalTitle(modal)} onClose={closeModal} wide={modal === 'fieldPicker' || modal === 'field'} variant={modal}>
           {modal === 'dataset' && <DatasetForm form={form} setForm={setForm} onSubmit={createDataset} onCancel={closeModal} settings={state.settings} accountName={account.name} folderOptions={Array.from(new Set([...state.folders.map(folder => folder.name), ...state.datasets.map(dataset => dataset.folder || 'Uncategorized')])).filter(Boolean)} />}
+          {modal === 'template' && <TemplateChooser hasClientImportTemplate={state.datasets.some(isClientImportTemplateDataset)} onUseClientImportTemplate={applyClientImportTemplate} />}
           {modal === 'fieldPicker' && selectedDataset && (
             <AddFieldsPicker
               activeTab={addFieldTab}
@@ -1088,6 +1289,7 @@ export default function ReworkDatasetsModule({ section = 'overview' }: { section
               onStartField={startField}
               onCopyField={copyExistingField}
               onUpdateDataset={nextDataset => updateDataset(nextDataset, 'Updated dataset settings')}
+              onApplyClientTemplate={nextDataset => updateDataset(nextDataset, 'Applied client import template')}
               onToggleView={toggleView}
               onSetDefaultView={setDefaultView}
               onDeleteView={deleteView}
@@ -1115,56 +1317,359 @@ function DatasetManagementList({
   query,
   setQuery,
   onCreateDataset,
+  onChooseTemplate,
   onOpenDataset,
 }: {
   datasets: Dataset[]
   query: string
   setQuery: (value: string) => void
   onCreateDataset: () => void
+  onChooseTemplate: () => void
   onOpenDataset: (datasetId: string) => void
 }) {
+  const [page, setPage] = useState(1)
+  const [pageSize, setPageSize] = useState(10)
+  const [referenceTime] = useState(() => Date.now())
+
+  const thirtyDaysMs = 30 * 24 * 60 * 60 * 1000
+
+  const totalDatasets = datasets.length
+  const activeDatasets = datasets.filter(dataset => dataset.status === 'ACTIVE').length
+  const ownerSet = new Set<string>()
+  datasets.forEach(dataset => {
+    if (dataset.owner) ownerSet.add(dataset.owner)
+    ;(dataset.owners || []).forEach(owner => owner && ownerSet.add(owner))
+  })
+  const recentlyUpdated = datasets.filter(dataset => {
+    const stamp = new Date(dataset.updatedAt || dataset.createdAt).getTime()
+    return Number.isFinite(stamp) && referenceTime - stamp < thirtyDaysMs
+  }).length
+
+  const stats: StatTile[] = [
+    { key: 'total', tone: 'green', icon: <Database size={18} />, value: totalDatasets, label: 'Total datasets', hint: 'Across all folders' },
+    { key: 'active', tone: 'blue', icon: <FileSpreadsheet size={18} />, value: activeDatasets, label: 'Active datasets', hint: 'Currently in use' },
+    { key: 'owners', tone: 'purple', icon: <Users size={18} />, value: ownerSet.size, label: 'Owners', hint: 'Users with access' },
+    { key: 'recent', tone: 'orange', icon: <CalendarDays size={18} />, value: recentlyUpdated, label: 'Recent updates', hint: 'In the last 30 days' },
+  ]
+
+  const totalPages = Math.max(1, Math.ceil(datasets.length / pageSize))
+  const safePage = Math.min(page, totalPages)
+  const pageStart = (safePage - 1) * pageSize
+  const visibleDatasets = datasets.slice(pageStart, pageStart + pageSize)
+
   return (
-    <section className="rw-management-page rw-datasets-management-page">
-      <header className="rw-management-header">
-        <div className="rw-management-title">
-          <Table2 size={24} />
-          <div>
-            <h1>Datasets management</h1>
-            <p>Manager datasets</p>
-          </div>
+    <section className="rw-management-page rw-datasets-management-page rw-mgmt">
+      <header className="rw-mgmt-header">
+        <div className="rw-mgmt-title">
+          <h1>Datasets management</h1>
+          <p>View, organize and manage your datasets.</p>
         </div>
-        <div className="rw-management-actions">
-          <label>
+        <div className="rw-mgmt-actions">
+          <label className="rw-mgmt-search">
             <input value={query} onChange={event => setQuery(event.target.value)} placeholder="Quick find" />
-            <Search size={16} />
+            <Search size={15} />
           </label>
-          <button type="button" onClick={onCreateDataset}>Create</button>
+          <button type="button" className="rw-mgmt-filter">
+            <Filter size={14} /> Filter
+          </button>
+          <button type="button" className="rw-mgmt-template" onClick={onChooseTemplate}>
+            <FileSpreadsheet size={15} /> Choose template
+          </button>
+          <button type="button" className="rw-mgmt-create" onClick={onCreateDataset}>
+            <Plus size={15} /> Create dataset
+          </button>
         </div>
       </header>
 
-      <div className="rw-management-table">
-        <div className="rw-management-row head">
+      <div className="rw-mgmt-stats">
+        {stats.map(stat => (
+          <article key={stat.key} className={`rw-mgmt-stat tone-${stat.tone}`}>
+            <span className="rw-mgmt-stat-icon">{stat.icon}</span>
+            <div className="rw-mgmt-stat-body">
+              <div className="rw-mgmt-stat-value">{stat.value}</div>
+              <div className="rw-mgmt-stat-label">{stat.label}</div>
+            </div>
+            <div className="rw-mgmt-stat-foot">
+              <span>{stat.hint}</span>
+              <Sparkline tone={stat.tone} seed={stat.value + stat.key.length} />
+            </div>
+          </article>
+        ))}
+      </div>
+
+      {datasets.length > 0 && (
+        <section className="rw-mgmt-pinned">
+          <header>
+            <div>
+              <h2>Pinned datasets</h2>
+              <p>Your most recently updated workspaces.</p>
+            </div>
+            <button type="button" className="rw-mgmt-link-btn">View all</button>
+          </header>
+          <div className="rw-mgmt-pinned-strip">
+            {[...datasets]
+              .sort((a, b) => new Date(b.updatedAt || b.createdAt).getTime() - new Date(a.updatedAt || a.createdAt).getTime())
+              .slice(0, 4)
+              .map((dataset, index) => {
+                const tone = ['gold', 'red', 'teal', 'violet'][index % 4]
+                const records = dataset.records.length
+                const fields = dataset.fields.length
+                return (
+                  <button
+                    type="button"
+                    key={dataset.id}
+                    className={`rw-mgmt-pin-card tone-${tone}`}
+                    onClick={() => onOpenDataset(dataset.id)}
+                  >
+                    <span className="rw-mgmt-pin-icon"><Grid2X2 size={16} /></span>
+                    <span className="rw-mgmt-pin-folder">{dataset.folder || 'Uncategorized'}</span>
+                    <strong>{dataset.name}</strong>
+                    <span className="rw-mgmt-pin-meta">
+                      <em>{records} {records === 1 ? 'record' : 'records'}</em>
+                      <i />
+                      <em>{fields} {fields === 1 ? 'field' : 'fields'}</em>
+                    </span>
+                  </button>
+                )
+              })}
+          </div>
+        </section>
+      )}
+
+      <div className="rw-mgmt-main">
+      <div className="rw-mgmt-table-card">
+        <div className="rw-mgmt-table-row head">
+          <span className="cell-check"><input type="checkbox" aria-label="Select all" readOnly /></span>
           <span>Dataset</span>
           <span>Status</span>
           <span>Owners</span>
-          <span>Date</span>
-          <span />
+          <span>Last updated</span>
+          <span className="cell-actions">Actions</span>
         </div>
-        {datasets.map((dataset, index) => (
-          <button type="button" className="rw-management-row" key={dataset.id} onClick={() => onOpenDataset(dataset.id)}>
-            <span className="dataset">
-              <b className={index % 2 ? 'red' : 'gold'}><Grid2X2 size={16} /></b>
-              <span><strong>{dataset.name}</strong><small>{dataset.description || 'No description'}</small></span>
-            </span>
-            <span><em>ACTIVE</em></span>
-            <span className="owner"><i>{initials(dataset.owner).slice(0, 1)}</i></span>
-            <span>{formatDateOnly(dataset.updatedAt || dataset.createdAt)}</span>
-            <span className="more"><MoreHorizontal size={18} /></span>
-          </button>
-        ))}
-        {!datasets.length && <EmptyState icon={<Database size={34} />} title="No datasets yet" detail="Create a dataset first, then click it to add fields." action="Create" onAction={onCreateDataset} />}
+        {visibleDatasets.map((dataset, index) => {
+          const updatedAt = new Date(dataset.updatedAt || dataset.createdAt)
+          const validDate = !Number.isNaN(updatedAt.getTime())
+          const dateText = validDate
+            ? updatedAt.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })
+            : '—'
+          const timeText = validDate
+            ? updatedAt.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' })
+            : ''
+          const ownerLabel = dataset.owner || 'Unassigned'
+          const ownerInitial = (initials(ownerLabel) || '?').slice(0, 1)
+          const datasetIdShort = dataset.id ? dataset.id.slice(0, 8).toUpperCase() : ''
+          return (
+            <button type="button" className="rw-mgmt-table-row" key={dataset.id} onClick={() => onOpenDataset(dataset.id)}>
+              <span className="cell-check"><input type="checkbox" onClick={event => event.stopPropagation()} readOnly /></span>
+              <span className="cell-dataset">
+                <b className={index % 2 ? 'red' : 'gold'}><Grid2X2 size={16} /></b>
+                <span className="cell-dataset-text">
+                  <strong>{dataset.name}</strong>
+                  <small>
+                    {dataset.description || 'No description'}
+                    {datasetIdShort && <em className="rw-id-chip">ID: {datasetIdShort}</em>}
+                  </small>
+                </span>
+              </span>
+              <span className="cell-status">
+                <span className={`rw-status-pill ${dataset.status === 'ACTIVE' ? 'active' : 'paused'}`}>
+                  <i /> {dataset.status === 'ACTIVE' ? 'Active' : 'Paused'}
+                </span>
+              </span>
+              <span className="cell-owner">
+                <i>{ownerInitial}</i>
+                <span>
+                  <strong>{ownerLabel}</strong>
+                  <small>Owner</small>
+                </span>
+              </span>
+              <span className="cell-date">
+                <strong>{dateText}</strong>
+                {timeText && <small>{timeText}</small>}
+              </span>
+              <span className="cell-actions" onClick={event => event.stopPropagation()}>
+                <MoreHorizontal size={18} />
+              </span>
+            </button>
+          )
+        })}
+        {!visibleDatasets.length && (
+          <div className="rw-mgmt-empty">
+            <EmptyState icon={<Database size={34} />} title="No datasets yet" detail="Create a dataset first, then click it to add fields." action="Create dataset" onAction={onCreateDataset} />
+          </div>
+        )}
+
+        <footer className="rw-mgmt-table-foot">
+          <span className="rw-mgmt-count">
+            Showing {datasets.length === 0 ? 0 : pageStart + 1} to {Math.min(pageStart + pageSize, datasets.length)} of {datasets.length} dataset{datasets.length === 1 ? '' : 's'}
+          </span>
+          <div className="rw-mgmt-pagination">
+            <button
+              type="button"
+              className="rw-mgmt-page-nav"
+              onClick={() => setPage(Math.max(1, safePage - 1))}
+              disabled={safePage <= 1}
+              aria-label="Previous page"
+            >
+              <ChevronLeft size={14} />
+            </button>
+            <button type="button" className="rw-mgmt-page-current">{safePage}</button>
+            <button
+              type="button"
+              className="rw-mgmt-page-nav"
+              onClick={() => setPage(Math.min(totalPages, safePage + 1))}
+              disabled={safePage >= totalPages}
+              aria-label="Next page"
+            >
+              <ChevronRight size={14} />
+            </button>
+          </div>
+          <label className="rw-mgmt-page-size">
+            <select value={pageSize} onChange={event => { setPageSize(Number(event.target.value)); setPage(1) }}>
+              <option value={10}>10 / page</option>
+              <option value={25}>25 / page</option>
+              <option value={50}>50 / page</option>
+            </select>
+            <ChevronDown size={13} />
+          </label>
+        </footer>
+      </div>
+
+      <aside className="rw-mgmt-activity">
+        <header>
+          <div>
+            <h2>Recent activity</h2>
+            <p>Latest changes across your datasets.</p>
+          </div>
+          <button type="button" className="rw-mgmt-link-btn">View all</button>
+        </header>
+        {datasets.length === 0 ? (
+          <div className="rw-mgmt-activity-empty">
+            <Activity size={24} />
+            <strong>No activity yet</strong>
+            <span>Create your first dataset to see updates here.</span>
+          </div>
+        ) : (
+          <ul className="rw-mgmt-activity-list">
+            {[...datasets]
+              .flatMap(dataset => {
+                const created = new Date(dataset.createdAt)
+                const updated = new Date(dataset.updatedAt || dataset.createdAt)
+                const sameStamp = created.getTime() === updated.getTime()
+                const items: ActivityItem[] = [
+                  { id: `${dataset.id}-created`, datasetId: dataset.id, datasetName: dataset.name, action: 'created', actor: dataset.owner || 'Workspace', timestamp: created },
+                ]
+                if (!sameStamp) {
+                  items.push({ id: `${dataset.id}-updated`, datasetId: dataset.id, datasetName: dataset.name, action: 'updated', actor: dataset.owner || 'Workspace', timestamp: updated })
+                }
+                return items
+              })
+              .sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime())
+              .slice(0, 6)
+              .map(item => (
+                <li
+                  key={item.id}
+                  className="rw-mgmt-activity-item"
+                  onClick={() => onOpenDataset(item.datasetId)}
+                  role="button"
+                  tabIndex={0}
+                  onKeyDown={event => {
+                    if (event.key !== 'Enter' && event.key !== ' ') return
+                    event.preventDefault()
+                    onOpenDataset(item.datasetId)
+                  }}
+                >
+                  <span className={`rw-mgmt-activity-dot tone-${item.action === 'created' ? 'green' : 'blue'}`}>
+                    {item.action === 'created' ? <Plus size={12} /> : <Pencil size={12} />}
+                  </span>
+                  <div>
+                    <p>
+                      <strong>{item.actor}</strong> {item.action} <em>{item.datasetName}</em>
+                    </p>
+                    <small>{relativeTime(item.timestamp)}</small>
+                  </div>
+                </li>
+              ))}
+          </ul>
+        )}
+      </aside>
       </div>
     </section>
+  )
+}
+
+type ActivityItem = {
+  id: string
+  datasetId: string
+  datasetName: string
+  action: 'created' | 'updated'
+  actor: string
+  timestamp: Date
+}
+
+function relativeTime(date: Date) {
+  const delta = Date.now() - date.getTime()
+  if (!Number.isFinite(delta) || delta < 0) return 'Just now'
+  const minute = 60_000
+  const hour = 60 * minute
+  const day = 24 * hour
+  if (delta < minute) return 'Just now'
+  if (delta < hour) {
+    const n = Math.floor(delta / minute)
+    return `${n} min${n === 1 ? '' : 's'} ago`
+  }
+  if (delta < day) {
+    const n = Math.floor(delta / hour)
+    return `${n} hr${n === 1 ? '' : 's'} ago`
+  }
+  if (delta < 7 * day) {
+    const n = Math.floor(delta / day)
+    return `${n} day${n === 1 ? '' : 's'} ago`
+  }
+  return date.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })
+}
+
+type StatTone = 'green' | 'blue' | 'purple' | 'orange'
+type StatTile = {
+  key: string
+  tone: StatTone
+  icon: ReactNode
+  value: number
+  label: string
+  hint: string
+}
+
+function Sparkline({ tone, seed }: { tone: StatTone; seed: number }) {
+  // Deterministic pseudo-random sequence so each tile renders a stable shape.
+  const points = useMemo(() => {
+    const values: number[] = []
+    let cursor = (seed || 1) * 9973
+    for (let index = 0; index < 12; index += 1) {
+      cursor = (cursor * 1103515245 + 12345) & 0x7fffffff
+      values.push((cursor % 1000) / 1000)
+    }
+    return values
+  }, [seed])
+
+  const width = 72
+  const height = 22
+  const max = Math.max(...points)
+  const min = Math.min(...points)
+  const range = max - min || 1
+  const path = points
+    .map((value, index) => {
+      const x = (index / (points.length - 1)) * width
+      const y = height - ((value - min) / range) * height
+      return `${index === 0 ? 'M' : 'L'}${x.toFixed(2)},${y.toFixed(2)}`
+    })
+    .join(' ')
+
+  const stroke = tone === 'green' ? '#22c55e' : tone === 'blue' ? '#3b82f6' : tone === 'purple' ? '#8b5cf6' : '#f59e0b'
+
+  return (
+    <svg className="rw-mgmt-stat-spark" width={width} height={height} viewBox={`0 0 ${width} ${height}`} aria-hidden="true">
+      <path d={path} fill="none" stroke={stroke} strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
   )
 }
 
@@ -1271,7 +1776,7 @@ function OverviewSection(props: {
   onDeleteView: (datasetId: string, viewId: string) => void
   onDeleteField: (fieldId: string) => void
   onReorderFields: (draggedFieldId: string, targetFieldId: string) => void
-  onDeleteRecord: (recordId: string) => void
+  onDeleteRecords: (recordIds: string[]) => void
   onUpdateRecordValue: (recordId: string, fieldId: string, value: string) => void
 }) {
   const selectedDataset = props.selectedDataset
@@ -1375,7 +1880,7 @@ function OverviewSection(props: {
             )}
             <button type="button"><Users size={14} /> Group by: None</button>
           </div>
-          <RecordsTable dataset={selectedDataset} datasets={props.allDatasets} records={sortedRecords} rowHeight={rowHeight} onCreateField={props.onCreateField} onCreateRecord={props.onCreateInlineRecord} onDeleteField={props.onDeleteField} onReorderFields={props.onReorderFields} onDeleteRecord={props.onDeleteRecord} onUpdateRecordValue={props.onUpdateRecordValue} />
+          <RecordsTable dataset={selectedDataset} datasets={props.allDatasets} records={sortedRecords} rowHeight={rowHeight} onCreateField={props.onCreateField} onCreateRecord={props.onCreateInlineRecord} onDeleteField={props.onDeleteField} onReorderFields={props.onReorderFields} onDeleteRecords={props.onDeleteRecords} onUpdateRecordValue={props.onUpdateRecordValue} />
         </>
       ) : (
         <EmptyState icon={<FileSpreadsheet size={34} />} title="No dataset selected" detail="Create a dataset or sync real records from another WiseFlow app." action="Create dataset" onAction={props.onCreateDataset} />
@@ -1406,8 +1911,74 @@ function ViewsSection({ datasets, onCreate, onToggle, onDelete }: { datasets: Da
   return <section className="rw-grid-cards">{views.map(({ dataset, view }) => <article className="rw-mini-card" key={`${dataset.id}-${view.id}`}><Grid2X2 size={22} /><h3>{view.name}</h3><p>{dataset.name}</p><small>{view.filterFieldId ? 'Filtered view' : 'All records'}</small><footer><button type="button" onClick={() => onToggle(dataset.id, view.id)}>{view.enabled ? 'Disable' : 'Enable'}</button><button type="button" className="danger" onClick={() => onDelete(dataset.id, view.id)}><Trash2 size={15} /></button></footer></article>)}{!views.length && <EmptyState icon={<Grid2X2 size={34} />} title="No views yet" detail="Create a dataset first, then save filtered views." action="Create view" onAction={onCreate} />}<button type="button" className="rw-create-tile" onClick={onCreate}><Plus size={20} /> Create view</button></section>
 }
 
-function ImportsSection({ sources, companyId, onSync, onImport }: { sources: typeof sourceDefinitions; companyId: string; onSync: () => void; onImport: () => void }) {
-  return <section className="rw-card"><header><h2>Imports</h2><div><button type="button" onClick={onImport}><UploadCloud size={15} /> Paste import</button><button type="button" className="primary" onClick={onSync}><RefreshCw size={15} /> Sync sources</button></div></header>{sources.map(source => <div className="rw-line" key={source.label}><UploadCloud size={18} /><div><strong>{source.label}</strong><p>{source.storageKeys.join(', ')}</p></div><span>{source.storageKeys.reduce((sum, key) => sum + loadRows(key, companyId).length, 0)} rows</span></div>)}</section>
+function ImportsSection({
+  sources,
+  datasets,
+  sourceRows,
+  syncingSource,
+  onSyncAll,
+  onSyncSource,
+}: {
+  sources: SourceDefinition[]
+  datasets: Dataset[]
+  sourceRows: Record<string, StoredRow[]>
+  syncingSource: string
+  onSyncAll: () => void
+  onSyncSource: (source: SourceDefinition, sourceIndex: number) => void
+}) {
+  const hasRows = sources.some(source => (sourceRows[source.label] || []).length > 0)
+
+  return (
+    <section className="rw-card rw-source-syncs">
+      <header>
+        <div>
+          <h2>Source syncs</h2>
+          <p>Sync app module records into managed dataset tables.</p>
+        </div>
+        <button type="button" className="primary" onClick={onSyncAll} disabled={syncingSource === 'all'}>
+          <RefreshCw size={15} /> {syncingSource === 'all' ? 'Syncing...' : 'Sync all sources'}
+        </button>
+      </header>
+
+      <div className="rw-source-sync-head">
+        <span>Source module</span>
+        <span>Target dataset</span>
+        <span>Available records</span>
+        <span>Last synced</span>
+        <span>Status</span>
+        <span />
+      </div>
+
+      {sources.map((source, sourceIndex) => {
+        const rows = sourceRows[source.label] || []
+        const syncedDataset = datasets.find(dataset => dataset.source === source.label)
+        const status = !rows.length ? 'No records' : syncedDataset ? 'Synced' : 'Ready'
+        return (
+          <div className="rw-source-sync-row" key={source.label}>
+            <div>
+              <strong>{source.label}</strong>
+              <p>{source.storageKeys.join(', ')}</p>
+            </div>
+            <span>{source.datasetName}</span>
+            <span>{rows.length} row{rows.length === 1 ? '' : 's'}</span>
+            <span>{syncedDataset ? formatDate(syncedDataset.updatedAt) : '-'}</span>
+            <em className={`sync-${slugify(status)}`}>{status}</em>
+            <button type="button" disabled={!rows.length || syncingSource === source.label || syncingSource === 'all'} onClick={() => onSyncSource(source, sourceIndex)}>
+              <RefreshCw size={14} /> {syncingSource === source.label ? 'Syncing...' : 'Sync to dataset'}
+            </button>
+          </div>
+        )
+      })}
+
+      {!hasRows && (
+        <div className="rw-source-sync-empty">
+          <UploadCloud size={24} />
+          <strong>No source records found yet</strong>
+          <span>Add records in Client Database, Supplier Database, HR Employees, or Warehouse Inventory, then return here to sync them into datasets.</span>
+        </div>
+      )}
+    </section>
+  )
 }
 
 function RelationshipsSection({ datasets, relationships, onCreate, onDelete }: { datasets: Dataset[]; relationships: Relationship[]; onCreate: () => void; onDelete: (id: string) => void }) {
@@ -1627,6 +2198,7 @@ function RecordsTable({
   onCreateRecord,
   onDeleteField,
   onReorderFields,
+  onDeleteRecords,
   onUpdateRecordValue,
 }: {
   dataset: Dataset
@@ -1637,7 +2209,7 @@ function RecordsTable({
   onCreateRecord: (name: string) => void
   onDeleteField: (fieldId: string) => void
   onReorderFields: (draggedFieldId: string, targetFieldId: string) => void
-  onDeleteRecord: (recordId: string) => void
+  onDeleteRecords: (recordIds: string[]) => void
   onUpdateRecordValue: (recordId: string, fieldId: string, value: string) => void
 }) {
   const [draggedFieldId, setDraggedFieldId] = useState('')
@@ -1646,7 +2218,9 @@ function RecordsTable({
   const [draftRecordName, setDraftRecordName] = useState('')
   const [selectedRecordIds, setSelectedRecordIds] = useState<string[]>([])
   const [columnWidths, setColumnWidths] = useState<Record<string, number>>({})
-  const allRecordsSelected = records.length > 0 && selectedRecordIds.length === records.length
+  const visibleRecordIdSet = new Set(records.map(record => record.id))
+  const selectedVisibleRecordIds = selectedRecordIds.filter(recordId => visibleRecordIdSet.has(recordId))
+  const allRecordsSelected = records.length > 0 && selectedVisibleRecordIds.length === records.length
   const rowHeightClass = `row-height-${slugify(rowHeight).replace(/_/g, '-')}`
 
   function startFieldDrag(event: DragEvent<HTMLTableCellElement>, fieldId: string) {
@@ -1677,6 +2251,19 @@ function RecordsTable({
 
   function toggleAllRecords() {
     setSelectedRecordIds(allRecordsSelected ? [] : records.map(record => record.id))
+  }
+
+  function confirmDeleteRecords(recordIds: string[]) {
+    const targetIds = Array.from(new Set(recordIds)).filter(recordId => visibleRecordIdSet.has(recordId))
+    if (!targetIds.length) return
+    const count = targetIds.length
+    const targetRecord = records.find(record => record.id === targetIds[0])
+    const message = count === 1 && targetRecord
+      ? `Delete record "${recordLabel(dataset, targetRecord)}"?`
+      : `Delete ${count} selected records?`
+    if (!window.confirm(message)) return
+    onDeleteRecords(targetIds)
+    setSelectedRecordIds(current => current.filter(recordId => !targetIds.includes(recordId)))
   }
 
   function columnWidth(field: DatasetField) {
@@ -1710,7 +2297,21 @@ function RecordsTable({
       <table className={`records ${rowHeightClass}`}>
         <thead>
           <tr>
-            <th className="record-select"><input type="checkbox" aria-label="Select all records" checked={allRecordsSelected} onChange={toggleAllRecords} /></th>
+            <th className="record-select">
+              <div className="record-select-controls">
+                <input type="checkbox" aria-label="Select all records" checked={allRecordsSelected} onChange={toggleAllRecords} />
+                <button
+                  type="button"
+                  className={`record-delete-action record-bulk-delete ${selectedVisibleRecordIds.length ? 'active' : ''}`}
+                  aria-label="Delete selected records"
+                  title="Delete selected records"
+                  disabled={!selectedVisibleRecordIds.length}
+                  onClick={() => confirmDeleteRecords(selectedVisibleRecordIds)}
+                >
+                  <Trash2 size={13} />
+                </button>
+              </div>
+            </th>
             {dataset.fields.map(field => {
               const isDragging = draggedFieldId === field.id
               const isDropTarget = dropFieldId === field.id && draggedFieldId !== field.id
@@ -1757,14 +2358,33 @@ function RecordsTable({
         </thead>
         <tbody>
           {records.map(record => (
-            <tr key={record.id}>
-              <td className="record-select"><input type="checkbox" aria-label="Select record" checked={selectedRecordIds.includes(record.id)} onChange={() => toggleRecordSelection(record.id)} /></td>
+            <tr key={record.id} className={selectedRecordIds.includes(record.id) ? 'record-selected' : undefined}>
+              <td className="record-select">
+                <div className="record-select-controls">
+                  <input type="checkbox" aria-label="Select record" checked={selectedRecordIds.includes(record.id)} onChange={() => toggleRecordSelection(record.id)} />
+                  <button
+                    type="button"
+                    className="record-delete-action record-row-delete"
+                    aria-label={`Delete ${recordLabel(dataset, record)} record`}
+                    title="Delete record"
+                    onClick={() => confirmDeleteRecords([record.id])}
+                  >
+                    <Trash2 size={13} />
+                  </button>
+                </div>
+              </td>
               {dataset.fields.map(field => (
                 <td key={field.id} style={{ width: columnWidth(field), minWidth: columnWidth(field) }}>
                   {isTimeField(field) ? (
                     <TimeCell
                       field={field}
                       record={record}
+                      value={record.values[field.id] || ''}
+                      onSave={value => onUpdateRecordValue(record.id, field.id, value)}
+                    />
+                  ) : isSingleSelectField(field) && field.options.length ? (
+                    <SelectCell
+                      field={field}
                       value={record.values[field.id] || ''}
                       onSave={value => onUpdateRecordValue(record.id, field.id, value)}
                     />
@@ -1801,19 +2421,20 @@ function RecordsTable({
             ))}
             <td />
           </tr>
-          <tr className="record-blank-row">
-            <td />
-            {dataset.fields.map(field => <td key={field.id} style={{ width: columnWidth(field), minWidth: columnWidth(field) }} />)}
-            <td />
-          </tr>
-          <tr className="record-summary-row">
-            <td />
-            {dataset.fields.map(field => <td key={field.id} style={{ width: columnWidth(field), minWidth: columnWidth(field) }} />)}
-            <td />
-          </tr>
         </tbody>
       </table>
     </div>
+  )
+}
+
+function SelectCell({ field, value, onSave }: { field: DatasetField; value: string; onSave: (value: string) => void }) {
+  const options = value && !field.options.includes(value) ? [value, ...field.options] : field.options
+
+  return (
+    <select className="record-option-cell" value={value} onChange={event => onSave(event.target.value)} aria-label={field.label}>
+      <option value="">-</option>
+      {options.map(option => <option value={option} key={option}>{option}</option>)}
+    </select>
   )
 }
 
@@ -1948,6 +2569,22 @@ function DatasetForm({ form, setForm, onSubmit, onCancel, settings, accountName,
   )
 }
 
+function TemplateChooser({ hasClientImportTemplate, onUseClientImportTemplate }: { hasClientImportTemplate: boolean; onUseClientImportTemplate: () => void }) {
+  return (
+    <section className="rw-template-chooser">
+      <p className="rw-template-intro">Choose a ready dataset template to create or restore a table with the right fields.</p>
+      <button type="button" className="rw-template-card" onClick={onUseClientImportTemplate}>
+        <span className="rw-template-icon"><FileSpreadsheet size={20} /></span>
+        <span>
+          <strong>Client Import Template</strong>
+          <small>Client type, logo/photo, contact details, account manager, revenue, payment terms, tags, and status.</small>
+        </span>
+        <em>{hasClientImportTemplate ? 'Restore template' : 'Use template'}</em>
+      </button>
+    </section>
+  )
+}
+
 type FormProps = { form: Record<string, string>; setForm: (form: Record<string, string>) => void; onSubmit: (event: FormEvent<HTMLFormElement>) => void }
 
 function AddFieldsPicker({
@@ -1960,6 +2597,7 @@ function AddFieldsPicker({
   onStartField,
   onCopyField,
   onUpdateDataset,
+  onApplyClientTemplate,
   onToggleView,
   onSetDefaultView,
   onDeleteView,
@@ -1975,6 +2613,7 @@ function AddFieldsPicker({
   onStartField: (type: FieldType) => void
   onCopyField: (field: DatasetField) => void
   onUpdateDataset: (dataset: Dataset) => void
+  onApplyClientTemplate: (dataset: Dataset) => void
   onToggleView: (datasetId: string, viewId: string) => void
   onSetDefaultView: (datasetId: string, viewId: string) => void
   onDeleteView: (datasetId: string, viewId: string) => void
@@ -1987,12 +2626,30 @@ function AddFieldsPicker({
   const [viewDraft, setViewDraft] = useState('')
   const [exportFieldIds, setExportFieldIds] = useState(() => dataset.fields.filter(field => !isSystemField(field)).map(field => field.id))
   const [importPayload, setImportPayload] = useState('')
+  const [templateUndoDataset, setTemplateUndoDataset] = useState<Dataset | null>(null)
   const reusableFields = datasets
     .flatMap(item => item.fields.map(field => ({ dataset: item, field })))
     .filter(item => item.dataset.id !== dataset.id || !dataset.fields.some(field => field.id === item.field.id))
 
   function saveDraft() {
     onUpdateDataset({ ...draft, updatedAt: now() })
+  }
+
+  function applyClientTemplate() {
+    const nextDataset = applyClientImportTemplateFields(dataset, accountName)
+    setTemplateUndoDataset(dataset)
+    setDraft(nextDataset)
+    setSettingsTab('fields')
+    onApplyClientTemplate(nextDataset)
+  }
+
+  function undoClientTemplate() {
+    if (!templateUndoDataset) return
+    const restoredDataset = { ...templateUndoDataset, updatedAt: now() }
+    setDraft(restoredDataset)
+    setTemplateUndoDataset(null)
+    setSettingsTab('fields')
+    onUpdateDataset(restoredDataset)
   }
 
   function handleFile(file?: File) {
@@ -2023,6 +2680,9 @@ function AddFieldsPicker({
           <button type="button" className={settingsTab === 'access' ? 'active' : undefined} onClick={() => setSettingsTab('access')}><ShieldCheck size={15} /> Access & visibilities</button>
           <button type="button" className={settingsTab === 'fields' ? 'active' : undefined} onClick={() => setSettingsTab('fields')}><CheckSquare size={15} /> Manage fields</button>
           <button type="button" className={settingsTab === 'views' ? 'active' : undefined} onClick={() => setSettingsTab('views')}><Table2 size={15} /> Manage views</button>
+          <h3>Templates</h3>
+          <button type="button" className="template-action" onClick={applyClientTemplate}><FileSpreadsheet size={15} /> Use Client Import Template</button>
+          {templateUndoDataset && <button type="button" className="undo-template-action" onClick={undoClientTemplate}><Undo2 size={15} /> Undo template</button>}
           <h3>Quick actions</h3>
           <button type="button" className={settingsTab === 'export' ? 'active' : undefined} onClick={() => setSettingsTab('export')}><FileSpreadsheet size={15} /> Export records to Excel</button>
           <button type="button" className={settingsTab === 'import' ? 'active' : undefined} onClick={() => setSettingsTab('import')}><UploadCloud size={15} /> Import records from Excel</button>
@@ -2030,7 +2690,7 @@ function AddFieldsPicker({
         <main>
           {settingsTab === 'info' && <DatasetInfoSettings draft={draft} setDraft={setDraft} folderOptions={folderOptions} onSave={saveDraft} />}
           {settingsTab === 'access' && <DatasetAccessSettings draft={draft} setDraft={setDraft} activeOwners={activeOwners} activeFollowers={activeFollowers} onSave={saveDraft} />}
-          {settingsTab === 'fields' && <DatasetFieldsSettings dataset={dataset} onAddField={() => setMode('add')} onDeleteField={fieldId => {
+          {settingsTab === 'fields' && <DatasetFieldsSettings dataset={dataset} onAddField={() => setMode('add')} onApplyTemplate={applyClientTemplate} onUndoTemplate={undoClientTemplate} canUndoTemplate={Boolean(templateUndoDataset)} onDeleteField={fieldId => {
             const nextRecords = dataset.records.map(record => {
               const values = { ...record.values }
               delete values[fieldId]
@@ -2164,7 +2824,21 @@ function PeopleEditor({ label, people, onChange }: { label: string; people: stri
   )
 }
 
-function DatasetFieldsSettings({ dataset, onAddField, onDeleteField }: { dataset: Dataset; onAddField: () => void; onDeleteField: (fieldId: string) => void }) {
+function DatasetFieldsSettings({
+  dataset,
+  onAddField,
+  onApplyTemplate,
+  onUndoTemplate,
+  canUndoTemplate,
+  onDeleteField,
+}: {
+  dataset: Dataset
+  onAddField: () => void
+  onApplyTemplate: () => void
+  onUndoTemplate: () => void
+  canUndoTemplate: boolean
+  onDeleteField: (fieldId: string) => void
+}) {
   const [openFieldId, setOpenFieldId] = useState('')
   const [pendingDeleteField, setPendingDeleteField] = useState<DatasetField | null>(null)
 
@@ -2188,7 +2862,15 @@ function DatasetFieldsSettings({ dataset, onAddField, onDeleteField }: { dataset
     <>
       <h2>Dataset fields</h2>
       <section>
-        <header><h3>Fields</h3><div><button type="button" aria-label="More field actions"><MoreHorizontal size={18} /></button><button type="button" onClick={onAddField}>Add field</button></div></header>
+        <header>
+          <h3>Fields</h3>
+          <div>
+            <button type="button" aria-label="More field actions"><MoreHorizontal size={18} /></button>
+            {canUndoTemplate && <button type="button" className="undo-template" onClick={onUndoTemplate}><Undo2 size={15} /> Undo</button>}
+            <button type="button" className="template" onClick={onApplyTemplate}><FileSpreadsheet size={15} /> Use template</button>
+            <button type="button" onClick={onAddField}>Add field</button>
+          </div>
+        </header>
         <div className="rw-active-field-list">
           {dataset.fields.map(field => (
             <article key={field.id}>
@@ -2238,7 +2920,7 @@ function DatasetViewsSettings({ dataset, viewDraft, setViewDraft, onToggleView, 
         <p>Set up default view and display options.</p>
         <div className="rw-view-settings-list">{dataset.views.map(view => <article key={view.id}><label className="switch"><input type="checkbox" checked={view.enabled} onChange={() => onToggleView(dataset.id, view.id)} /><span /></label><Table2 size={14} /><strong>{view.name}</strong>{view.default && <em>DEFAULT VIEW</em>}{!view.default && <button type="button" onClick={() => onSetDefaultView(dataset.id, view.id)}>Make default</button>}{!view.default && dataset.views.length > 1 && <button type="button" className="danger" onClick={() => onDeleteView(dataset.id, view.id)}><Trash2 size={14} /></button>}</article>)}</div>
         <div className="rw-inline-view-form"><button type="button" onClick={() => {
-          const view: DatasetView = { id: id('view'), name: viewDraft.trim() || `View ${dataset.views.length + 1}`, enabled: true }
+          const view: DatasetView = { id: id('view'), name: viewDraft.trim() || `View ${dataset.views.length + 1}`, enabled: true, records: [] }
           onUpdateDataset({ ...dataset, views: [...dataset.views, view], updatedAt: now() })
           setViewDraft('')
         }}><Plus size={14} /> Create</button><input value={viewDraft} onChange={event => setViewDraft(event.target.value)} placeholder="View name" /></div>
@@ -2504,26 +3186,49 @@ function RecordForm({ dataset, datasets, form, setForm, onSubmit, onCancel, acco
   const editableFields = dataset.fields.filter(field => !isSystemField(field) && !isComputedField(field))
   const primaryField = editableFields.find(field => field.id === 'name') || editableFields[0]
   const customFields = editableFields.filter(field => field.id !== primaryField?.id)
+  const requiredCount = editableFields.filter(field => field.required).length
 
   return (
     <form onSubmit={onSubmit} className="rw-record-form">
       <section className="rw-record-main">
-        {primaryField && <RecordFieldControl field={primaryField} datasets={datasets} form={form} setForm={setForm} clientChoices={clientChoices} primary />}
-        {customFields.length > 0 && (
-          <div className="rw-custom-field-divider">
-            <span>CUSTOM FIELDS</span>
+        <div className="rw-record-heading">
+          <span><FileSpreadsheet size={18} /></span>
+          <div>
+            <strong>Record details</strong>
+            <small>{dataset.name}</small>
+          </div>
+          <em>{requiredCount} required</em>
+        </div>
+        {primaryField && (
+          <div className="rw-record-primary-card">
+            <RecordFieldControl field={primaryField} datasets={datasets} form={form} setForm={setForm} clientChoices={clientChoices} primary />
           </div>
         )}
-        {customFields.map(field => <RecordFieldControl key={field.id} field={field} datasets={datasets} form={form} setForm={setForm} clientChoices={clientChoices} />)}
+        {customFields.length > 0 && (
+          <div className="rw-custom-field-divider">
+            <span>Fields</span>
+            <small>{customFields.length}</small>
+          </div>
+        )}
+        <div className="rw-record-fields-grid">
+          {customFields.map(field => <RecordFieldControl key={field.id} field={field} datasets={datasets} form={form} setForm={setForm} clientChoices={clientChoices} />)}
+        </div>
       </section>
       <aside className="rw-record-settings">
-        <h3>Additional settings</h3>
-        <RecordPeopleBox label="Owners" name={accountName} />
-        <RecordPeopleBox label="Followers" name={accountName} />
+        <div className="rw-record-dataset-card">
+          <span><Database size={17} /></span>
+          <strong>{dataset.name}</strong>
+          <small>{editableFields.length} fields</small>
+        </div>
+        <div className="rw-record-settings-card">
+          <h3>Access</h3>
+          <RecordPeopleBox label="Owners" name={accountName} />
+          <RecordPeopleBox label="Followers" name={accountName} />
+        </div>
       </aside>
       <footer>
         <button type="button" onClick={onCancel}>Cancel</button>
-        <button type="submit" className="primary">Save</button>
+        <button type="submit" className="primary">Save Record</button>
       </footer>
     </form>
   )
@@ -2574,7 +3279,10 @@ function RecordFieldControl({ field, datasets, form, setForm, clientChoices, pri
             </label>
           )
         }
-        if (field.type.includes('Dropdown')) {
+        if (field.type === 'Dropdown, multiple') {
+          return <MultiOptionField key={field.id} field={field} value={form[field.id]} onChange={value => setForm({ ...form, [field.id]: value })} />
+        }
+        if (field.type === 'Select' || field.type === 'Dropdown, single') {
           return (
             <label className="rw-form-line" key={field.id}>
               {label}
@@ -2590,9 +3298,6 @@ function RecordFieldControl({ field, datasets, form, setForm, clientChoices, pri
         }
         if (field.type === 'Multi-line text' || field.type === 'Multi-line text editor') {
           return <TextareaField key={field.id} label={label} value={form[field.id]} onChange={value => setForm({ ...form, [field.id]: value })} placeholder={field.label} />
-        }
-        if (field.type === 'Dropdown, multiple') {
-          return <MultiOptionField key={field.id} field={field} value={form[field.id]} onChange={value => setForm({ ...form, [field.id]: value })} />
         }
         if (field.type === 'Simple list') {
           return <TextareaField key={field.id} label={label} value={form[field.id]} onChange={value => setForm({ ...form, [field.id]: value })} placeholder="One item per line" />
@@ -2627,7 +3332,7 @@ function RecordFieldControl({ field, datasets, form, setForm, clientChoices, pri
 }
 
 function TextareaField({ label, value, onChange, placeholder }: { label: string; value?: string; onChange: (value: string) => void; placeholder?: string }) {
-  return <label className="rw-form-line">{label}<textarea value={value || ''} onChange={event => onChange(event.target.value)} placeholder={placeholder} /></label>
+  return <label className="rw-form-line wide">{label}<textarea value={value || ''} onChange={event => onChange(event.target.value)} placeholder={placeholder} /></label>
 }
 
 function MultiOptionField({ field, value, onChange }: { field: DatasetField; value?: string; onChange: (value: string) => void }) {
@@ -2653,26 +3358,41 @@ function MultiOptionField({ field, value, onChange }: { field: DatasetField; val
 }
 
 function FileNameField({ field, value, onChange }: { field: DatasetField; value?: string; onChange: (value: string) => void }) {
+  const files = fileUploads(value || '')
+  const fileText = files.length
+    ? files.map(file => file.name).join(', ')
+    : field.type === 'Multiple files' ? 'Choose files' : 'Choose file'
+
   async function readFiles(files: FileList | null) {
     const selectedFiles = Array.from(files || [])
-    const payload = await Promise.all(selectedFiles.map(async file => ({
-      name: file.name,
-      type: file.type,
-      dataUrl: file.type.startsWith('image/') ? await fileToDataUrl(file) : '',
-    })))
+    const payload = await Promise.all(selectedFiles.map(async file => {
+      const uploaded = await uploadDatasetFile(file)
+      return {
+        name: file.name,
+        type: file.type,
+        dataUrl: uploaded?.url || '',
+        fileUrl: uploaded?.url || '',
+        objectKey: uploaded?.objectKey || '',
+        storageProvider: uploaded?.storageProvider || '',
+      }
+    }))
     onChange(JSON.stringify(payload))
   }
 
   return (
-    <label className="rw-form-line">
-      {field.label}{field.required ? ' *' : ''}
-      <input
-        type="file"
-        accept={field.label.toLowerCase().includes('image') ? 'image/*' : undefined}
-        multiple={field.type === 'Multiple files'}
-        onChange={event => void readFiles(event.target.files)}
-      />
-      {value && <small>{fileUploads(value).map(file => file.name).join(', ')}</small>}
+    <label className="rw-form-line rw-file-field">
+      <span>{field.label}{field.required ? ' *' : ''}</span>
+      <span className={files.length ? 'rw-file-picker has-file' : 'rw-file-picker'}>
+        <UploadCloud size={18} />
+        <strong>{fileText}</strong>
+        <small>{field.label.toLowerCase().includes('image') ? 'Image upload' : 'File upload'}</small>
+        <input
+          type="file"
+          accept={field.label.toLowerCase().includes('image') ? 'image/*' : undefined}
+          multiple={field.type === 'Multiple files'}
+          onChange={event => void readFiles(event.target.files)}
+        />
+      </span>
     </label>
   )
 }
@@ -2846,6 +3566,7 @@ function Progress({ value }: { value: number }) {
 function modalTitle(modal: ModalName) {
   return ({
     dataset: 'CREATE NEW DATASET',
+    template: 'CHOOSE TEMPLATE',
     fieldPicker: 'Add fields',
     field: 'CREATE A NEW STANDARD FIELD',
     record: 'New record',
@@ -2881,6 +3602,101 @@ function makeField(key: string, label: string, type: FieldType, required = false
   return { id: slugify(key || label), key: slugify(key || label), label, type, required, options, linkedDatasetId, ...extras }
 }
 
+function makeClientImportTemplateDataset(accountName: string): Dataset {
+  const fields = [
+    makeField('client_type', 'Client Type', 'Select', false, ['Commercial', 'Residential']),
+    makeField('client_name', 'Client Name', 'Text', true),
+    makeField('company_email', 'Company Email', 'Email', true),
+    makeField('phone_number', 'Phone Number', 'Phone', true),
+    makeField('company_website', 'Company Website', 'URL'),
+    makeField('industry', 'Industry', 'Select', true, industryOptions),
+    makeField('company_size', 'Company Size', 'Select', false, companySizeOptions),
+    makeField('company_type', 'Company Type', 'Select', true, companyTypeOptions),
+    makeField('tax_id_vat_number', 'Tax ID / VAT Number', 'Text'),
+    makeField('annual_revenue', 'Annual Revenue', 'Select', false, annualRevenueOptions),
+    makeField('billing_address', 'Billing Address', 'Long text'),
+    makeField('account_manager', 'Account Manager', 'Single user'),
+    makeField('default_currency', 'Default Currency', 'Select', true, ['PHP - Philippine Peso']),
+    makeField('payment_terms', 'Payment Terms', 'Select', false, paymentTermOptions),
+    makeField('description_notes', 'Description / Notes', 'Long text'),
+    makeField('tags', 'Tags', 'Text'),
+    makeField('status', 'Status', 'Select', false, ['Active', 'Inactive']),
+  ]
+  const createdAt = now()
+  return makeDataset({
+    name: clientImportTemplateName,
+    description: 'Ready-to-import Client Database table using the Add Client form fields.',
+    folder: 'CRM',
+    owner: accountName,
+    source: clientImportTemplateSource,
+    fields,
+    records: [{
+      id: 'client-template-mcdonald',
+      values: {
+        client_type: 'Commercial',
+        client_name: 'MCDonald',
+        company_email: 'info@mcdo.com',
+        phone_number: '09457850160',
+        company_website: 'mcdo.com',
+        industry: 'Marketing',
+        company_size: '500+ employees',
+        company_type: 'Corporation',
+        tax_id_vat_number: '9632655356',
+        annual_revenue: 'PHP 50M - PHP 100M',
+        billing_address: '',
+        account_manager: '',
+        default_currency: 'PHP - Philippine Peso',
+        payment_terms: '',
+        description_notes: '',
+        tags: 'Commercial, Marketing',
+        status: 'Active',
+      },
+      createdBy: accountName,
+      createdAt,
+      updatedAt: createdAt,
+    }],
+  })
+}
+
+function applyClientImportTemplateFields(dataset: Dataset, accountName: string): Dataset {
+  const template = makeClientImportTemplateDataset(dataset.owner || accountName)
+  const templateFields = ensureDefaultDatasetFields(template.fields)
+  const existingFields = dataset.fields
+  const consumedFieldIds = new Set<string>()
+
+  const restoredFields = templateFields.map(templateField => {
+    const existingField = findMatchingField(existingFields, templateField, consumedFieldIds)
+    if (!existingField) return templateField
+    consumedFieldIds.add(existingField.id)
+    return {
+      ...existingField,
+      label: templateField.label,
+      type: templateField.type,
+      required: templateField.required,
+      options: [...templateField.options],
+      linkedDatasetId: templateField.linkedDatasetId || existingField.linkedDatasetId,
+      description: existingField.description || templateField.description,
+    }
+  })
+
+  const extraFields = existingFields.filter(field => !consumedFieldIds.has(field.id))
+  return {
+    ...dataset,
+    description: dataset.description || template.description,
+    fields: [...restoredFields, ...extraFields],
+    updatedAt: now(),
+  }
+}
+
+function findMatchingField(fields: DatasetField[], templateField: DatasetField, consumedFieldIds: Set<string>) {
+  const templateAliases = fieldAliases(templateField)
+  return fields.find(field => !consumedFieldIds.has(field.id) && fieldAliases(field).some(alias => templateAliases.includes(alias)))
+}
+
+function fieldAliases(field: DatasetField) {
+  return Array.from(new Set([field.id, field.key, field.label].map(value => slugify(value || '')).filter(Boolean)))
+}
+
 function defaultDatasetFields() {
   return [
     makeField('name', 'Name', 'Text', true),
@@ -2901,8 +3717,13 @@ function ensureDefaultDatasetFields(fields: DatasetField[]) {
 function loadWorkspace(companyId: string, accountName: string): WorkspaceState {
   if (typeof window === 'undefined') return emptyState
   const stored = readJson<WorkspaceState>(companyScopedKey(storageKey, companyId))
-  if (stored) return normalizeWorkspace(stored, accountName)
-  const legacy = migrateLegacy(companyId, accountName)
+  if (stored) {
+    const normalized = normalizeWorkspace(stored, accountName)
+    const ready = ensureClientImportTemplate(normalized, accountName)
+    if (ready !== normalized) persistWorkspace(companyId, ready)
+    return ready
+  }
+  const legacy = ensureClientImportTemplate(migrateLegacy(companyId, accountName), accountName)
   persistWorkspace(companyId, legacy)
   return legacy
 }
@@ -2942,7 +3763,20 @@ function legacyDatasetToDataset(row: StoredRow, accountName: string): Dataset | 
     source: text(row.source) || 'Manual',
     fields: ensureDefaultDatasetFields(fields.length ? fields : defaultDatasetFields()),
     records,
-    views: ensureDefaultView(readArray(row.views).filter(isRecord).map(view => ({ id: text(view.id) || id('view'), name: text(view.name) || 'View', enabled: view.enabled !== false, default: Boolean(view.default) }))),
+    views: ensureDefaultView(readArray(row.views).filter(isRecord).map(view => {
+      const viewRecords = Array.isArray(view.records)
+        ? (view.records as DatasetRecord[]).filter(rec => rec && typeof rec === 'object' && typeof (rec as DatasetRecord).id === 'string')
+        : undefined
+      return {
+        id: text(view.id) || id('view'),
+        name: text(view.name) || 'View',
+        enabled: view.enabled !== false,
+        default: Boolean(view.default),
+        filterFieldId: text(view.filterFieldId) || undefined,
+        filterValue: text(view.filterValue) || undefined,
+        records: viewRecords,
+      }
+    })),
     createdAt,
     updatedAt: text(row.updatedAt) || createdAt,
   }
@@ -2959,6 +3793,87 @@ function normalizeWorkspace(input: Partial<WorkspaceState>, accountName: string)
     settings: { ...emptyState.settings, ...input.settings, defaultOwner: input.settings?.defaultOwner || accountName },
     history: Array.isArray(input.history) ? input.history.filter(isRecord) as HistoryEvent[] : [],
   }
+}
+
+function ensureClientImportTemplate(state: WorkspaceState, accountName: string): WorkspaceState {
+  const stateWithClientDropdowns = ensureClientDatasetDropdowns(state)
+  const hasTemplate = stateWithClientDropdowns.datasets.some(isClientImportTemplateDataset)
+  if (stateWithClientDropdowns.settings.clientDatasetTemplateSeeded || hasTemplate) {
+    return stateWithClientDropdowns.settings.clientDatasetTemplateSeeded ? stateWithClientDropdowns : {
+      ...stateWithClientDropdowns,
+      settings: { ...stateWithClientDropdowns.settings, clientDatasetTemplateSeeded: true },
+    }
+  }
+
+  const dataset = makeClientImportTemplateDataset(stateWithClientDropdowns.settings.defaultOwner || accountName)
+  const folders = stateWithClientDropdowns.folders.some(folder => folder.name === 'CRM')
+    ? stateWithClientDropdowns.folders
+    : [{ id: 'folder_client_import_template_crm', name: 'CRM', description: 'Client import-ready datasets.', createdAt: dataset.createdAt }, ...stateWithClientDropdowns.folders]
+
+  return {
+    ...stateWithClientDropdowns,
+    settings: { ...stateWithClientDropdowns.settings, clientDatasetTemplateSeeded: true },
+    folders,
+    datasets: [dataset, ...stateWithClientDropdowns.datasets],
+    history: [{
+      id: id('history'),
+      action: 'Created dataset',
+      detail: clientImportTemplateName,
+      createdAt: dataset.createdAt,
+    }, ...stateWithClientDropdowns.history],
+  }
+}
+
+function ensureClientDatasetDropdowns(state: WorkspaceState): WorkspaceState {
+  let changed = false
+  const updatedAt = now()
+  const datasets = state.datasets.map(dataset => {
+    if (!isClientDatasetWithFormFields(dataset)) return dataset
+    let datasetChanged = false
+    const fields = dataset.fields.map(field => {
+      const desiredOptions = clientDatasetDropdownOptions(field)
+      if (!desiredOptions) return field
+      const options = mergeOptions(field.options, desiredOptions)
+      const shouldUpdate = field.type !== 'Select' || options.length !== field.options.length || options.some((option, index) => option !== field.options[index])
+      if (!shouldUpdate) return field
+      datasetChanged = true
+      return { ...field, type: 'Select' as FieldType, options }
+    })
+    if (!datasetChanged) return dataset
+    changed = true
+    return { ...dataset, fields, updatedAt }
+  })
+
+  return changed ? { ...state, datasets } : state
+}
+
+function isClientDatasetWithFormFields(dataset: Dataset) {
+  return isClientImportTemplateDataset(dataset)
+    || dataset.source === 'Client Database'
+    || dataset.name === 'Client Master'
+}
+
+function isClientImportTemplateDataset(dataset: Dataset) {
+  return dataset.source === clientImportTemplateSource || dataset.name === clientImportTemplateName
+}
+
+function clientDatasetDropdownOptions(field: DatasetField) {
+  const normalized = slugify(field.key || field.id || field.label)
+  const label = field.label.trim().toLowerCase()
+  if (normalized === 'payment_terms' || label === 'payment terms') return paymentTermOptions
+  if (normalized === 'annual_revenue' || label === 'annual revenue') return annualRevenueOptions
+  if (normalized === 'company_type' || label === 'company type') return companyTypeOptions
+  if (normalized === 'company_size' || label === 'company size') return companySizeOptions
+  if (normalized === 'industry' || label === 'industry') return industryOptions
+  return null
+}
+
+function mergeOptions(existing: string[], desired: string[]) {
+  const next = [...desired]
+  existing.forEach(option => {
+    if (option && !next.includes(option)) next.push(option)
+  })
+  return next
 }
 
 function isDataset(value: unknown): value is Dataset {
@@ -3200,6 +4115,25 @@ function loadRows(key: string, companyId: string): StoredRow[] {
   return []
 }
 
+async function loadSourceRows(source: SourceDefinition, companyId: string): Promise<StoredRow[]> {
+  const localRows = source.storageKeys.flatMap(key => loadRows(key, companyId))
+  const serverRows = source.businessCollection && companyId
+    ? await listBusinessRecords<StoredRow>(source.businessCollection, companyId).catch(() => [])
+    : []
+  return uniqueRows([...serverRows, ...localRows])
+}
+
+function uniqueRows(rows: StoredRow[]) {
+  const seen = new Set<string>()
+  return rows.filter((row, index) => {
+    const key = text(row.id) || text(row.email) || text(row.sku) || text(row.name ?? row.companyName ?? row.itemName) || `row-${index}`
+    const normalized = key.toLowerCase()
+    if (seen.has(normalized)) return false
+    seen.add(normalized)
+    return true
+  })
+}
+
 function loadClientChoices(companyId: string): ClientChoice[] {
   const rows = loadRows('flowsys-clients', companyId)
   const seen = new Set<string>()
@@ -3302,6 +4236,10 @@ function inputType(type: FieldType) {
 
 function isTimeField(field: DatasetField) {
   return field.type === 'Time picker' || field.type.toLowerCase().includes('time')
+}
+
+function isSingleSelectField(field: DatasetField) {
+  return field.type === 'Select' || field.type === 'Dropdown, single'
 }
 
 function normalizeTime(value: string) {
@@ -3494,18 +4432,20 @@ function fileUploads(value?: string) {
       name: text(file.name),
       type: text(file.type),
       dataUrl: text(file.dataUrl),
+      fileUrl: text(file.fileUrl),
+      objectKey: text(file.objectKey),
+      storageProvider: text(file.storageProvider),
     })).filter(file => file.name)
   }
-  return (value || '').split(',').map(name => ({ name: name.trim(), type: '', dataUrl: '' })).filter(file => file.name)
+  return (value || '').split(',').map(name => ({ name: name.trim(), type: '', dataUrl: '', fileUrl: '', objectKey: '', storageProvider: '' })).filter(file => file.name)
 }
 
-function fileToDataUrl(file: File) {
-  return new Promise<string>(resolve => {
-    const reader = new FileReader()
-    reader.onload = () => resolve(typeof reader.result === 'string' ? reader.result : '')
-    reader.onerror = () => resolve('')
-    reader.readAsDataURL(file)
-  })
+async function uploadDatasetFile(file: File) {
+  try {
+    return await uploadFileObject(file, 'dataset-uploads')
+  } catch {
+    return undefined
+  }
 }
 
 function recordLabel(dataset: Dataset, record: DatasetRecord) {
@@ -3602,7 +4542,7 @@ function randomToken() {
 }
 
 const styles = `
-.rw-app{height:100vh;background:#f8fafc;color:#111827;font-family:var(--font-body);font-size:14px;overflow:hidden}
+.rw-app{height:100vh;background:#f3f4f6;color:#111827;font-family:var(--font-body);font-size:14px;overflow:hidden}
 .rw-app *{box-sizing:border-box}
 .rw-topbar{height:62px;background:#fff;color:#111827;border-bottom:1px solid #e5e7eb;display:grid;grid-template-columns:240px minmax(360px,505px) minmax(260px,1fr);align-items:center;gap:18px;padding:0 18px}
 .rw-top-left,.rw-top-actions{display:flex;align-items:center;gap:10px}
@@ -3617,6 +4557,7 @@ const styles = `
 .rw-top-actions > span{width:36px;height:36px;border:3px solid #d9f7e4;border-radius:999px;background:#20c75a;color:#0a2112;display:inline-grid;place-items:center;font-size:12px;font-weight:900}
 .rw-notification{position:relative!important;width:36px!important;height:36px!important;min-height:36px!important;border-radius:999px!important;background:#fff!important;color:#0f172a!important;padding:0!important}
 .rw-notification em{position:absolute;top:-6px;right:-5px;width:17px;height:17px;border-radius:999px;background:#ff1f1f;color:#fff;border:1px solid #fff;display:grid;place-items:center;font-size:9px;font-style:normal;font-weight:900}
+.rw-top-secondary{height:34px!important;min-height:34px!important;border:1px solid #d7dee8!important;border-radius:999px!important;background:#fff!important;color:#0f172a!important;padding:0 14px!important;font-size:12px!important;font-weight:900!important;white-space:nowrap}
 .rw-top-primary{height:34px!important;min-height:34px!important;border-color:#22c55e!important;border-radius:999px!important;background:#22c55e!important;color:#001b0b!important;padding:0 16px!important;font-size:12px!important;font-weight:900!important;white-space:nowrap}
 .rw-body{display:grid;grid-template-columns:257px minmax(0,1fr);height:100vh}
 .rw-workspace-panel{background:#000!important;color:#e5e7eb!important;min-width:0;height:100vh;overflow:auto;padding:21px 26px 18px;border-color:#242424!important}
@@ -3707,7 +4648,7 @@ const styles = `
 .rw-app button.create,.rw-app button.primary,.primary{background:#1eb200!important;border-color:#1eb200!important;color:#fff!important;font-weight:800}
 .rw-app button.danger,.danger{color:#dc2626!important}
 .rw-dataset-screen{height:calc(100vh - 62px);display:grid;grid-template-rows:auto auto auto minmax(0,1fr);overflow:hidden;background:#fff;border-top:6px solid #0f838a}
-.rw-management-page{height:calc(100vh - 62px);background:#f7f7f7;color:#111827;overflow:auto;padding-inline:max(0px,calc((100% - var(--wf-content-max)) / 2))}
+.rw-management-page{height:calc(100vh - 62px);background:#f3f4f6;color:#111827;overflow:auto;padding-inline:max(0px,calc((100% - var(--wf-content-max)) / 2))}
 .rw-datasets-management-page{background:#fff;border-top:8px solid #0f838a}
 .rw-management-header{height:78px;border-bottom:1px solid #ddd;background:#fff;display:flex;align-items:center;justify-content:space-between;padding:0 20px}
 .rw-datasets-management-page .rw-management-header{height:84px;padding:0 20px}
@@ -3739,7 +4680,7 @@ const styles = `
 .rw-management-row .owner i{width:26px;height:26px;border-radius:999px;background:#9290ee;color:#fff;display:grid;place-items:center;font-style:normal;font-weight:900}
 .rw-datasets-management-page .rw-management-row .owner i{margin-left:4px}
 .rw-management-row .more{color:#999;display:grid;place-items:center}
-.rw-folders-page{height:calc(100vh - 62px);background:#f7f7f7;color:#111827;overflow:auto;padding-inline:max(0px,calc((100% - var(--wf-content-max)) / 2))}
+.rw-folders-page{height:calc(100vh - 62px);background:#f3f4f6;color:#111827;overflow:auto;padding-inline:max(0px,calc((100% - var(--wf-content-max)) / 2))}
 .rw-folder-list-card{width:min(1000px,calc(100% - 64px));margin:20px auto 48px;background:#fff;border:1px solid #e8e8e8;border-radius:3px;box-shadow:0 2px 5px rgba(15,23,42,.08);overflow:hidden}
 .rw-folder-list-row{min-height:65px;display:grid;grid-template-columns:minmax(360px,1fr) 330px 38px;align-items:center;border-bottom:1px solid #ececec;padding:0 20px;gap:16px}
 .rw-folder-list-row:last-child{border-bottom:0}
@@ -3844,16 +4785,25 @@ const styles = `
 .record-column-resizer{position:absolute;right:-3px;top:0;width:7px;height:100%;cursor:col-resize;z-index:4}
 .record-column-resizer:hover{background:#b7b7b7}
 .rw-resizing-column,.rw-resizing-column *{cursor:col-resize!important;user-select:none!important}
-.records .record-select{min-width:50px!important;width:50px!important;text-align:center;padding:0}
+.records th.record-select{cursor:default}
+.records .record-select{min-width:72px!important;width:72px!important;text-align:center;padding:0}
+.records .record-select .record-select-controls{display:flex;align-items:center;justify-content:center;gap:6px;height:100%}
 .records .record-select input{width:17px;height:17px;appearance:none;border:1px solid #cfcfcf;border-radius:1px;background:#f8f8f8;vertical-align:middle;display:inline-grid;place-items:center;cursor:pointer}
 .records .record-select input:checked{background:#128696;border-color:#128696}
 .records .record-select input:checked:after{content:"";width:8px;height:4px;border-left:2px solid #fff;border-bottom:2px solid #fff;transform:rotate(-45deg);display:block;margin:4px 0 0 3px}
+.records .record-select button{position:static;width:24px;height:24px;min-height:24px;border:0;border-radius:3px;background:transparent;color:#9f1239;padding:0;display:inline-grid;place-items:center;transition:opacity .15s ease,background .15s ease,color .15s ease}
+.records .record-select button:hover,.records .record-select button:focus-visible{background:#fee2e2;color:#be123c;outline:0}
+.records .record-select button:disabled{color:#cfcfcf;cursor:default}
+.records .record-select .record-row-delete{opacity:0;pointer-events:none}
+.records tbody tr:hover .record-row-delete,.records tbody tr.record-selected .record-row-delete,.records .record-select .record-row-delete:focus-visible{opacity:1;pointer-events:auto}
+.records .record-select .record-bulk-delete{opacity:0;pointer-events:none}
+.records .record-select .record-bulk-delete.active{opacity:1;pointer-events:auto}
 .records .record-add-field{min-width:100px!important;width:100px!important;text-align:center;cursor:default}
 .records th.record-add-field,.records td:last-child{min-width:100px!important;width:100px!important}
 .records .record-add-field button{position:static;width:28px;height:28px;min-height:28px;border:0;background:transparent;color:#8a8a8a;padding:0}
 .records td .danger{border:0;background:transparent;padding:0;width:28px;height:28px}
 .records .record-add-row td{height:34px}
-.records .record-add-row td:first-child{min-width:50px!important;width:50px!important;text-align:center;padding:0}
+.records .record-add-row td:first-child{min-width:72px!important;width:72px!important;text-align:center;padding:0}
 .records .record-add-row td:nth-child(2){min-width:300px}
 .records .record-add-row.editing td{height:38px}
 .records .record-add-row button{width:28px;height:28px;min-height:28px;border:0;background:transparent;color:#111;padding:0}
@@ -3862,6 +4812,8 @@ const styles = `
 .record-inline-input span svg{width:14px;height:14px}
 .record-inline-input input{width:100%;height:32px;border:0;outline:0;background:transparent;color:#111;font-size:13px;padding:0 8px}
 .record-inline-input input::placeholder{color:#777}
+.record-option-cell{width:calc(100% + 20px);height:34px;margin:0 -10px;border:0;background:#fff;color:#111;font-size:13px;padding:0 28px 0 10px;outline:0}
+.record-option-cell:focus{border:1px solid #0c8fa0}
 .record-user-cell{display:inline-flex;align-items:center;gap:7px}
 .record-user-cell i{width:16px;height:16px;border-radius:999px;background:#9290ee;color:#fff;display:grid;place-items:center;font-size:10px;font-style:normal;font-weight:900}
 .record-users-cell{display:inline-flex;align-items:center;gap:4px;min-height:22px}
@@ -3892,9 +4844,6 @@ const styles = `
 .record-time-popover footer{height:43px;border-top:1px solid #e5e5e5;background:#f7f7f7;display:flex;justify-content:flex-end;align-items:center;gap:8px;padding:0 20px;margin-top:8px}
 .record-time-popover footer button{height:30px!important;min-height:30px!important;border:0!important;border-radius:3px!important;font-weight:800!important}
 .record-time-popover footer .primary{background:#128696!important;border-color:#128696!important;color:#fff!important}
-.records .record-blank-row td{height:200px}
-.records .record-blank-row td:first-child,.records .record-summary-row td:first-child{min-width:50px!important;width:50px!important;padding:0}
-.records .record-summary-row td{height:31px;color:#777;font-size:12px}
 .rw-bottom-status{height:92px;border-top:1px solid #e5e5e5;background:#fafafa;display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:0}
 .rw-metric{border-right:1px solid #e5e5e5;padding:14px 18px;display:grid;grid-template-columns:34px 1fr;align-items:center;column-gap:10px}
 .rw-metric span{width:30px;height:30px;border-radius:999px;background:#e9f7f8;color:#0f838a;display:grid;place-items:center;grid-row:1 / span 2}
@@ -3921,6 +4870,25 @@ const styles = `
 .rw-line>svg{color:#0f838a}
 .rw-line strong{display:block}
 .rw-line p{margin:4px 0 0;color:#777;font-size:13px}
+.rw-source-syncs>header{min-height:72px}
+.rw-source-syncs>header>div{display:grid;gap:4px}
+.rw-source-syncs>header p{margin:0;color:#667085;font-size:13px}
+.rw-source-sync-head,.rw-source-sync-row{display:grid;grid-template-columns:minmax(210px,1.2fr) minmax(170px,1fr) 140px 150px 100px 160px;align-items:center;gap:14px;padding:0 18px}
+.rw-source-sync-head{min-height:40px;background:#f8fafc;border-bottom:1px solid #e5e5e5;color:#667085;font-size:11px;font-weight:900;text-transform:uppercase;letter-spacing:.04em}
+.rw-source-sync-row{min-height:74px;border-bottom:1px solid #e5e5e5;color:#111;font-size:13px}
+.rw-source-sync-row:last-of-type{border-bottom:0}
+.rw-source-sync-row strong{display:block;color:#111;font-size:14px}
+.rw-source-sync-row p{margin:4px 0 0;color:#667085;font-size:12px}
+.rw-source-sync-row em{justify-self:start;border-radius:999px;padding:4px 9px;font-style:normal;font-size:12px;font-weight:800}
+.rw-source-sync-row em.sync-ready{background:#e0f2fe;color:#075985}
+.rw-source-sync-row em.sync-synced{background:#dcfce7;color:#166534}
+.rw-source-sync-row em.sync-no_records{background:#f1f5f9;color:#64748b}
+.rw-source-sync-row button{height:34px!important;min-height:34px!important;border:1px solid #dbe3ef!important;border-radius:6px!important;background:#fff!important;color:#111!important;padding:0 11px!important;font-size:12px!important;font-weight:800!important;gap:7px!important}
+.rw-source-sync-row button:not(:disabled):hover{background:#f8fafc!important;border-color:#94a3b8!important}
+.rw-source-sync-row button:disabled{opacity:.55;cursor:not-allowed}
+.rw-source-sync-empty{margin:18px;border:1px dashed #cbd5e1;border-radius:10px;background:#f8fafc;display:grid;justify-items:center;text-align:center;gap:6px;padding:26px;color:#64748b}
+.rw-source-sync-empty strong{color:#0f172a;font-size:14px}
+.rw-source-sync-empty span{max-width:540px;font-size:13px;line-height:1.5}
 .rw-security-note{border:1px solid #bfdbfe;background:#eff6ff;color:#1e3a8a;border-radius:8px;padding:12px;display:flex;gap:10px;align-items:flex-start;font-size:13px;font-weight:800;margin:12px 18px}
 .rw-security-note svg{flex:0 0 auto;color:#2563eb}
 .rw-quality{display:grid;grid-template-columns:minmax(0,1fr) 220px;gap:18px;align-items:center;padding:14px 18px;border-bottom:1px solid #e5e5e5}
@@ -3938,6 +4906,9 @@ const styles = `
 .rw-modal-backdrop{position:fixed;inset:0;z-index:90;background:rgba(0,0,0,.42);display:grid;place-items:center;padding:48px}
 .rw-modal{width:min(780px,calc(100vw - 80px));max-height:calc(100vh - 96px);overflow:auto;background:#fff;box-shadow:0 14px 48px rgba(0,0,0,.24)}
 .rw-modal.wide{width:min(900px,calc(100vw - 80px))}
+.rw-modal-record{width:min(880px,calc(100vw - 56px));border-radius:14px}
+.rw-modal-record>header{position:sticky;top:0;z-index:3;background:#fff;height:58px;padding:0 24px;border-bottom:1px solid #ececf0}
+.rw-modal-record>header h2{font-size:15px;font-weight:800;letter-spacing:.04em}
 .rw-modal>header{height:52px;border-bottom:1px solid #ddd;display:flex;align-items:center;justify-content:space-between;padding:0 20px}
 .rw-modal h2{margin:0;font-size:18px}
 .rw-modal>header button{width:32px;height:32px;border:0;background:transparent;padding:0}
@@ -3945,6 +4916,17 @@ const styles = `
 .rw-modal-dataset>header{height:51px;padding:0 19px;border-bottom:1px solid #e5e5e5}
 .rw-modal-dataset h2{font-size:16px;font-weight:900;color:#000;text-transform:uppercase}
 .rw-modal-dataset>header button{color:#8b949e}
+.rw-modal-template{width:min(620px,calc(100vw - 80px));border-radius:6px}
+.rw-template-chooser{display:grid;gap:14px;padding:20px}
+.rw-template-intro{margin:0;color:#475569;font-size:13px;line-height:1.5}
+.rw-template-card{width:100%;min-height:108px!important;border:1px solid #dbe3ef!important;border-radius:10px!important;background:#fff!important;color:#0f172a!important;display:grid!important;grid-template-columns:46px minmax(0,1fr)!important;align-items:center!important;gap:14px!important;padding:16px!important;text-align:left!important}
+.rw-template-card:hover{border-color:#0f838a!important;background:#f8fffe!important}
+.rw-template-card>span:nth-child(2){min-width:0}
+.rw-template-card strong{display:block;font-size:15px;font-weight:850;color:#0f172a;margin-bottom:5px}
+.rw-template-card small{display:block;color:#64748b;font-size:12px;line-height:1.45;font-weight:500;overflow-wrap:anywhere}
+.rw-template-card em{grid-column:2;font-style:normal;color:#0f838a;font-size:12px;font-weight:900;white-space:normal;justify-self:start}
+@media (min-width:700px){.rw-template-card{grid-template-columns:46px minmax(0,1fr) auto!important}.rw-template-card em{grid-column:auto;white-space:nowrap;justify-self:end}}
+.rw-template-icon{width:46px;height:46px;border-radius:10px;background:#ecfdf5;color:#0f838a;display:grid;place-items:center}
 .rw-modal-fieldPicker{width:min(1160px,calc(100vw - 48px));height:min(802px,calc(100vh - 48px));border-radius:3px;box-shadow:0 20px 60px rgba(0,0,0,.24);overflow:hidden}
 .rw-modal-fieldPicker>header{height:51px;border-bottom:1px solid #dedede;padding:0 20px}
 .rw-modal-fieldPicker h2{font-size:18px;font-weight:900;color:#111;text-transform:none}
@@ -3954,6 +4936,8 @@ const styles = `
 .rw-manage-fields-dialog aside h3:nth-of-type(2){margin-top:30px}
 .rw-manage-fields-dialog aside button{width:100%;height:32px!important;min-height:32px!important;border:0!important;border-radius:2px!important;background:transparent!important;color:#5f6871!important;justify-content:flex-start!important;font-size:14px!important;padding:0 10px!important}
 .rw-manage-fields-dialog aside button.active{background:#e8e8e8!important;color:#111!important;font-weight:800!important}
+.rw-manage-fields-dialog aside button.template-action{background:#ecfdf5!important;color:#0f838a!important;font-weight:850!important}
+.rw-manage-fields-dialog aside button.undo-template-action{background:#fff7ed!important;color:#9a3412!important;font-weight:850!important}
 .rw-manage-fields-dialog main{padding:0 20px 28px;overflow:auto}
 .rw-manage-fields-dialog main>h2{height:55px;display:flex;align-items:center;margin:0;font-size:20px;font-weight:900}
 .rw-manage-fields-dialog main>section{background:#fff;border:1px solid #e0e0e0;padding:20px;margin-top:20px}
@@ -3961,6 +4945,8 @@ const styles = `
 .rw-manage-fields-dialog main>section h3{margin:0;font-size:22px}
 .rw-manage-fields-dialog main>section header div{display:flex;gap:12px}
 .rw-manage-fields-dialog main>section header button{height:32px!important;min-height:32px!important;border:1px solid #cfd8df!important;border-radius:2px!important;background:#fff!important;color:#128696!important;font-weight:800!important}
+.rw-manage-fields-dialog main>section header button.template{border-color:#b7e7ca!important;background:#ecfdf5!important;color:#0f838a!important;gap:6px!important}
+.rw-manage-fields-dialog main>section header button.undo-template{border-color:#fed7aa!important;background:#fff7ed!important;color:#9a3412!important;gap:6px!important}
 .rw-settings-panel{display:grid;gap:14px}
 .rw-settings-panel.compact{margin-top:22px}
 .rw-settings-panel h3{font-size:18px!important}
@@ -4081,23 +5067,53 @@ const styles = `
 .rw-standard-field-form>footer button{height:38px!important;min-height:38px!important;border:0!important;border-radius:3px!important;font-weight:800!important;font-size:14px!important}
 .rw-standard-field-form>footer button:first-child{background:#f4f4f4!important;color:#777!important}
 .rw-standard-field-form>footer .primary{background:#20b80d!important;border-color:#20b80d!important;color:#fff!important}
-.rw-modal-record{width:min(800px,calc(100vw - 80px));border-radius:3px;box-shadow:0 20px 60px rgba(0,0,0,.24)}
-.rw-modal-record>header{height:52px;border-bottom:1px solid #dedede;padding:0 20px}
-.rw-modal-record h2{font-size:16px;font-weight:900;color:#000;text-transform:uppercase}
-.rw-record-form{display:grid;grid-template-columns:1.1fr .8fr;min-height:488px}
-.rw-record-main{display:grid;align-content:start;gap:18px;padding:20px;border-right:1px solid #dedede}
-.rw-record-settings{display:grid;align-content:start;gap:18px;padding:20px;background:#fafafa}
-.rw-record-settings h3{margin:0;font-size:16px;color:#111}
-.rw-record-form .rw-form-line{font-size:13px;color:#111;font-weight:500}
-.rw-record-form .rw-form-line input,.rw-record-form .rw-form-line select{height:42px;border:1px solid #c9c9c9;font-size:16px}
-.rw-record-form .rw-form-line textarea{min-height:80px;border:1px solid #c9c9c9;font-size:15px;padding:10px;resize:vertical}
-.rw-record-form .rw-form-line:first-child input{font-size:21px}
-.rw-custom-field-divider{height:16px;display:flex;align-items:center;gap:10px;color:#8a8a8a;font-size:11px;font-weight:900}
-.rw-custom-field-divider:after{content:"";height:1px;background:#e0e0e0;flex:1}
+.rw-modal-record{width:min(1040px,calc(100vw - 64px));max-height:calc(100vh - 56px);border-radius:16px;overflow:hidden;box-shadow:0 28px 80px rgba(15,23,42,.28)}
+.rw-modal-record>header{height:64px;border-bottom:1px solid #e5eaf0;padding:0 24px;background:#fff}
+.rw-modal-record h2{font-size:18px;font-weight:850;color:#0f172a;text-transform:none;letter-spacing:0}
+.rw-modal-record>header button{border-radius:999px;color:#64748b}
+.rw-record-form{display:grid;grid-template-columns:minmax(0,1fr) 300px;min-height:560px;max-height:calc(100vh - 120px);background:#f8fafc}
+.rw-record-main{display:grid;align-content:start;gap:18px;padding:24px 28px 30px;background:#fff;border-right:1px solid #e5eaf0;overflow:auto}
+.rw-record-main::-webkit-scrollbar{width:10px}
+.rw-record-main::-webkit-scrollbar-thumb{background:#d8dee8;border:3px solid #fff;border-radius:999px}
+.rw-record-heading{display:grid;grid-template-columns:42px minmax(0,1fr) auto;align-items:center;gap:12px;padding-bottom:2px}
+.rw-record-heading>span{width:42px;height:42px;border-radius:11px;background:#ecfdf5;color:#0f838a;display:grid;place-items:center}
+.rw-record-heading strong{display:block;color:#0f172a;font-size:17px;font-weight:850}
+.rw-record-heading small{display:block;margin-top:3px;color:#64748b;font-size:12.5px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.rw-record-heading em{font-style:normal;border:1px solid #dbe3ef;border-radius:999px;background:#f8fafc;color:#475569;padding:6px 10px;font-size:12px;font-weight:800;white-space:nowrap}
+.rw-record-primary-card{border:1px solid #dbe6ef;border-radius:12px;background:linear-gradient(180deg,#ffffff 0%,#fbfdff 100%);padding:16px;box-shadow:0 1px 2px rgba(15,23,42,.04)}
+.rw-record-fields-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:15px 16px}
+.rw-record-fields-grid:empty{display:none}
+.rw-record-fields-grid .rw-form-line.wide,.rw-record-fields-grid .rw-file-field,.rw-record-fields-grid .rw-location-field,.rw-record-fields-grid .rw-multi-options{grid-column:1/-1}
+.rw-record-settings{display:grid;align-content:start;gap:16px;padding:24px;background:#f8fafc}
+.rw-record-dataset-card,.rw-record-settings-card{border:1px solid #e2e8f0;border-radius:12px;background:#fff;box-shadow:0 1px 2px rgba(15,23,42,.04)}
+.rw-record-dataset-card{display:grid;grid-template-columns:36px minmax(0,1fr);gap:10px;align-items:center;padding:14px}
+.rw-record-dataset-card>span{width:36px;height:36px;border-radius:9px;background:#eff6ff;color:#2563eb;display:grid;place-items:center}
+.rw-record-dataset-card strong{display:block;color:#0f172a;font-size:13px;font-weight:850;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.rw-record-dataset-card small{display:block;margin-top:3px;color:#64748b;font-size:12px;font-weight:600}
+.rw-record-settings-card{display:grid;gap:15px;padding:16px}
+.rw-record-settings h3{margin:0;font-size:12px;font-weight:850;color:#0f172a;letter-spacing:.06em;text-transform:uppercase}
+.rw-record-form .rw-form-line{display:grid;gap:8px;font-size:12.5px;color:#334155;font-weight:750;min-width:0}
+.rw-record-form .rw-form-line input,.rw-record-form .rw-form-line select,.rw-record-form .rw-form-line textarea{width:100%;box-sizing:border-box;border:1px solid #ccd7e4;border-radius:10px!important;background:#fff;color:#0f172a;font-size:14px;transition:border-color .15s ease,box-shadow .15s ease,background .15s ease}
+.rw-record-form .rw-form-line input,.rw-record-form .rw-form-line select{height:44px;padding:0 13px}
+.rw-record-form .rw-form-line textarea{min-height:104px;padding:12px 13px;line-height:1.5;resize:vertical}
+.rw-record-form .rw-form-line input::placeholder,.rw-record-form .rw-form-line textarea::placeholder{color:#94a3b8}
+.rw-record-form .rw-form-line input:focus,.rw-record-form .rw-form-line select:focus,.rw-record-form .rw-form-line textarea:focus{border-color:#0f838a;box-shadow:0 0 0 3px rgba(15,131,138,.14);outline:0;background:#fff}
+.rw-record-primary-card .rw-form-line input{height:54px;font-size:20px;font-weight:700}
+.rw-record-primary-card .rw-form-line select{height:54px;font-size:16px;font-weight:700}
+.rw-custom-field-divider{height:22px;display:flex;align-items:center;gap:10px;color:#64748b;font-size:12px;font-weight:850;letter-spacing:.03em}
+.rw-custom-field-divider small{border:1px solid #e2e8f0;border-radius:999px;background:#f8fafc;color:#64748b;padding:2px 8px;font-size:11px;letter-spacing:0}
+.rw-custom-field-divider:after{content:"";height:1px;background:#e5eaf0;flex:1}
 .rw-link-error{display:block;border:1px solid #f0b1b1;background:#fff0f0;color:#111;padding:15px 18px;line-height:1.35;font-size:14px}
-.rw-multi-options{border:0;margin:0;padding:0;display:grid;gap:8px}
-.rw-multi-options legend{font-size:13px;margin-bottom:6px;color:#111}
-.rw-multi-options label{display:flex;align-items:center;gap:8px;font-size:14px;color:#111}
+.rw-file-picker{position:relative;min-height:78px;border:1px dashed #b7c5d6;border-radius:12px;background:#f8fafc;color:#334155;display:grid;grid-template-columns:36px minmax(0,1fr);grid-template-rows:auto auto;align-content:center;gap:3px 10px;padding:12px 14px;cursor:pointer}
+.rw-file-picker:hover{border-color:#0f838a;background:#f3fbfa}
+.rw-file-picker svg{grid-row:1/3;width:36px;height:36px;border-radius:9px;background:#fff;color:#0f838a;padding:8px;box-shadow:0 1px 2px rgba(15,23,42,.06)}
+.rw-file-picker strong{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:13.5px;color:#0f172a}
+.rw-file-picker small{font-size:12px;color:#64748b}
+.rw-file-picker input{position:absolute;inset:0;opacity:0;cursor:pointer;height:auto!important;padding:0!important}
+.rw-file-picker.has-file{border-style:solid;background:#f0fdf4;border-color:#b7e7ca}
+.rw-multi-options{border:1px solid #e2e8f0;border-radius:12px;background:#fff;margin:0;padding:14px;display:grid;gap:9px}
+.rw-multi-options legend{font-size:12.5px;margin:0 0 6px;color:#334155;font-weight:750}
+.rw-multi-options label{display:flex;align-items:center;gap:8px;font-size:14px;color:#0f172a}
 .rw-progress-field{display:grid;grid-template-columns:minmax(0,1fr) 46px;gap:8px;align-items:center;color:#111;font-size:13px}
 .rw-progress-field>span{grid-column:1/-1}
 .rw-progress-field input{width:100%}
@@ -4112,15 +5128,17 @@ const styles = `
 .rw-location-map iframe{width:100%;height:190px;border:1px solid #d9d9d9;background:#f7f7f7}
 .rw-location-map a{position:absolute;left:10px;top:10px;z-index:2;height:31px;background:#fff;border-radius:2px;box-shadow:0 1px 4px rgba(0,0,0,.25);display:inline-flex;align-items:center;gap:4px;padding:0 10px;color:#1a73e8;font-size:13px;font-weight:800;text-decoration:none}
 .rw-location-field small{color:#667085;font-size:12px}
-.rw-people-box{display:grid;gap:8px;color:#111;font-size:14px}
-.rw-people-box>span{font-weight:500}
-.rw-people-box>div{height:36px;border:1px solid #c9c9c9;background:#fff;display:flex;align-items:center;gap:7px;padding:0 10px}
-.rw-people-box b{width:19px;height:19px;border-radius:999px;background:#9290ee;color:#fff;display:grid;place-items:center;font-size:11px}
-.rw-people-box svg:last-child{margin-left:auto;color:#777}
-.rw-record-form>footer{grid-column:1/-1;height:88px;border-top:1px solid #dedede;background:#fff;display:grid;grid-template-columns:1fr 1fr;gap:16px;align-items:center;padding:0 20px}
-.rw-record-form>footer button{height:38px!important;min-height:38px!important;border:0!important;border-radius:3px!important;font-weight:800!important;font-size:14px!important}
-.rw-record-form>footer button:first-child{background:#f4f4f4!important;color:#777!important}
-.rw-record-form>footer .primary{background:#20b80d!important;border-color:#20b80d!important;color:#fff!important}
+.rw-people-box{display:grid;gap:8px;color:#0f172a;font-size:13px}
+.rw-people-box>span{font-weight:800;color:#334155;font-size:12px}
+.rw-people-box>div{min-height:46px;border:1px solid #dbe3ec;border-radius:10px;background:#fff;display:flex;align-items:center;gap:9px;padding:0 12px;font-size:13px;color:#0f172a}
+.rw-people-box b{width:24px;height:24px;border-radius:999px;background:#0f838a;color:#fff;display:grid;place-items:center;font-size:10px;font-weight:850}
+.rw-people-box svg:last-child{margin-left:auto;color:#94a3b8}
+.rw-record-form>footer{grid-column:1/-1;min-height:72px;border-top:1px solid #e5eaf0;background:#fff;display:flex;justify-content:flex-end;align-items:center;gap:10px;padding:14px 24px;position:sticky;bottom:0}
+.rw-record-form>footer button{height:42px!important;min-height:42px!important;border:1px solid transparent!important;border-radius:10px!important;font-weight:800!important;font-size:13.5px!important;padding:0 20px!important;cursor:pointer}
+.rw-record-form>footer button:first-child{background:#fff!important;border-color:#dbe3ec!important;color:#475569!important}
+.rw-record-form>footer button:first-child:hover{background:#f4f6f8!important}
+.rw-record-form>footer .primary{background:#0f172a!important;border-color:#0f172a!important;color:#fff!important;min-width:148px;justify-content:center}
+.rw-record-form>footer .primary:hover{background:#111827!important}
 .rw-dataset-form{display:grid;gap:16px;padding:20px}
 .rw-dataset-form-line{display:grid;gap:8px;color:#111827;font-size:12px;font-weight:500}
 .rw-dataset-name-input{height:44px;border:1px solid #12a8bd;background:#fff;display:grid;grid-template-columns:minmax(0,1fr) 34px;align-items:center}
@@ -4199,4 +5217,176 @@ const styles = `
 .rw-management-title h1,.rw-dataset-detail-title h1,.rw-titlebar h1,.rw-card h2,.rw-modal h2{font-weight:800}
 /* Slightly stronger empty-state copy hierarchy */
 .rw-empty strong,.rw-folder-empty strong{font-weight:800}
+/* Datasets sidebar — light theme */
+.rw-workspace-panel{background:#ffffff!important;color:#0f172a!important;border-color:#e5e7eb!important}
+.rw-panel-brand{background:#ffffff!important}
+.rw-panel-brand strong{color:#0f172a!important}
+.rw-panel-brand small{color:#64748b!important}
+.rw-back-dashboard{border-color:#e5e7eb!important;background:#f8fafc!important;color:#0f172a!important}
+.rw-back-dashboard svg{color:#334155!important;stroke:#334155!important}
+.rw-back-dashboard:hover{background:#f1f5f9!important}
+.rw-back-link{border-color:#e5e7eb!important;background:#f8fafc!important;color:#0f172a!important}
+.rw-back-link svg{color:#334155!important;stroke:#334155!important}
+.rw-back-link:hover{background:#f1f5f9!important}
+.rw-panel-label{color:#64748b!important;background:#ffffff!important}
+.rw-panel-nav{background:#ffffff!important}
+.rw-panel-nav a,.rw-panel-nav button{color:#334155!important}
+.rw-panel-nav a svg,.rw-panel-nav button svg{color:#64748b!important;stroke:#64748b!important}
+.rw-panel-nav a:hover,.rw-panel-nav button:hover{background:#f1f5f9!important;color:#0f172a!important}
+.rw-panel-nav a:hover svg,.rw-panel-nav button:hover svg{color:#334155!important;stroke:#334155!important}
+.rw-panel-nav a.active,.rw-panel-nav button.active{background:#eef2f7!important;color:#0f172a!important}
+.rw-panel-nav a.active svg,.rw-panel-nav button.active svg{color:#0f172a!important;stroke:#0f172a!important}
+.rw-simple-nav .rw-folder-group{background:#ffffff!important;color:#64748b!important;border-top-color:#e5e7eb!important}
+.rw-simple-nav .rw-folder-group svg{color:#64748b!important;stroke:#64748b!important}
+.rw-simple-nav .rw-sales-link{color:#334155!important;background:#ffffff!important}
+.rw-simple-nav .rw-sales-link.active{color:#0f172a!important;background:#eef2f7!important}
+.rw-sidebar-folders,.rw-sidebar-folders section{background:#ffffff!important}
+.rw-sidebar-folder-head{background:#ffffff!important;color:#475569!important;border-bottom-color:#e5e7eb!important}
+.rw-sidebar-folder-head svg{color:#64748b!important;stroke:#64748b!important}
+.rw-sidebar-folders section>button:not(.rw-sidebar-folder-head){background:#ffffff!important;color:#334155!important}
+.rw-sidebar-folders section>button:not(.rw-sidebar-folder-head):hover{background:#f1f5f9!important;color:#0f172a!important}
+.rw-sidebar-folders section>button.active:not(.rw-sidebar-folder-head){background:#eef2f7!important;color:#0f172a!important}
+
+/* ============================================================
+   DATASETS MANAGEMENT - polished overview
+   ============================================================ */
+.rw-mgmt{background:#f8fafc;padding:0 28px 40px;border-top:0}
+.rw-mgmt-header{display:flex;align-items:flex-start;justify-content:space-between;gap:24px;padding:28px 0 18px;border-bottom:0;height:auto}
+.rw-mgmt-title h1{margin:0;color:#0b1220;font-size:28px;line-height:1.15;font-weight:800;letter-spacing:-0.01em}
+.rw-mgmt-title p{margin:6px 0 0;color:#475569;font-size:14px;font-weight:500}
+.rw-mgmt-actions{display:flex;align-items:center;gap:10px;flex-shrink:0}
+.rw-mgmt-search{height:36px;min-width:220px;border:1px solid #e2e8f0;background:#ffffff;border-radius:8px;display:flex;align-items:center;gap:8px;padding:0 12px;color:#475569;box-shadow:0 1px 2px rgba(15,23,42,0.03)}
+.rw-mgmt-search input{flex:1;min-width:0;border:0;outline:0;background:transparent;color:#0b1220;font-size:13px}
+.rw-mgmt-search input::placeholder{color:#94a3b8}
+.rw-mgmt-search svg{color:#94a3b8;flex-shrink:0}
+.rw-mgmt-filter{height:36px!important;min-height:36px!important;padding:0 14px!important;border:1px solid #e2e8f0!important;background:#ffffff!important;border-radius:8px!important;color:#0b1220!important;font-size:13px!important;font-weight:600!important;gap:7px!important;box-shadow:0 1px 2px rgba(15,23,42,0.03)}
+.rw-mgmt-filter:hover{background:#f8fafc!important;border-color:#cbd5e1!important}
+.rw-mgmt-template{height:36px!important;min-height:36px!important;padding:0 14px!important;border:1px solid #cbd5e1!important;background:#ffffff!important;border-radius:8px!important;color:#0b1220!important;font-size:13px!important;font-weight:700!important;gap:7px!important;box-shadow:0 1px 2px rgba(15,23,42,0.03)}
+.rw-mgmt-template:hover{background:#f8fffe!important;border-color:#0f838a!important;color:#0f838a!important}
+.rw-mgmt-create{height:36px!important;min-height:36px!important;padding:0 16px!important;border:0!important;background:#0b3a2e!important;color:#ffffff!important;border-radius:8px!important;font-size:13px!important;font-weight:700!important;gap:7px!important;box-shadow:0 4px 12px rgba(11,58,46,0.18)}
+.rw-mgmt-create:hover{background:#0f5240!important}
+
+.rw-mgmt-stats{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:16px;margin:8px 0 24px}
+.rw-mgmt-stat{position:relative;background:#ffffff;border:1px solid #eef2f7;border-radius:14px;padding:18px 20px 16px;display:grid;grid-template-columns:auto 1fr;grid-template-rows:auto auto;column-gap:16px;row-gap:14px;box-shadow:0 1px 3px rgba(15,23,42,0.04)}
+.rw-mgmt-stat-icon{grid-row:1;width:44px;height:44px;border-radius:12px;display:grid;place-items:center;flex-shrink:0}
+.rw-mgmt-stat.tone-green .rw-mgmt-stat-icon{background:#dcfce7;color:#15803d}
+.rw-mgmt-stat.tone-blue .rw-mgmt-stat-icon{background:#dbeafe;color:#1d4ed8}
+.rw-mgmt-stat.tone-purple .rw-mgmt-stat-icon{background:#ede9fe;color:#6d28d9}
+.rw-mgmt-stat.tone-orange .rw-mgmt-stat-icon{background:#ffedd5;color:#c2410c}
+.rw-mgmt-stat-body{grid-row:1;align-self:center;min-width:0}
+.rw-mgmt-stat-value{color:#0b1220;font-size:30px;font-weight:800;line-height:1;letter-spacing:-0.02em}
+.rw-mgmt-stat-label{margin-top:6px;color:#0b1220;font-size:13px;font-weight:600}
+.rw-mgmt-stat-foot{grid-column:1 / -1;grid-row:2;display:flex;align-items:center;justify-content:space-between;gap:12px;border-top:1px solid #f1f5f9;padding-top:12px}
+.rw-mgmt-stat-foot span{color:#64748b;font-size:12px;font-weight:500}
+.rw-mgmt-stat-spark{flex-shrink:0}
+
+.rw-mgmt-table-card{background:#ffffff;border:1px solid #eef2f7;border-radius:14px;overflow:hidden;box-shadow:0 1px 3px rgba(15,23,42,0.04)}
+.rw-mgmt-table-row{width:100%;min-height:72px;border:0;border-bottom:1px solid #f1f5f9;background:#ffffff;color:#0b1220;display:grid!important;grid-template-columns:40px minmax(0,1fr) 112px 160px 130px 42px;align-items:center;gap:12px;padding:0 16px;text-align:left;cursor:pointer;transition:background 120ms ease}
+.rw-mgmt-table-row:hover:not(.head){background:#f8fafc}
+.rw-mgmt-table-row.head{min-height:46px;background:#f8fafc;color:#64748b;font-size:11px;font-weight:700;letter-spacing:0.06em;text-transform:uppercase;cursor:default;pointer-events:none}
+.rw-mgmt-table-row.head .cell-actions{text-align:right}
+.rw-mgmt-table-row .cell-check{display:flex;align-items:center;justify-content:center}
+.rw-mgmt-table-row .cell-check input{width:16px;height:16px;border:1.5px solid #cbd5e1;border-radius:4px;accent-color:#0b3a2e;cursor:pointer}
+.rw-mgmt-table-row .cell-dataset{display:grid;grid-template-columns:36px minmax(0,1fr);align-items:center;gap:12px;min-width:0}
+.rw-mgmt-table-row .cell-dataset b{width:36px;height:36px;border-radius:8px;color:#ffffff;display:grid;place-items:center;flex-shrink:0}
+.rw-mgmt-table-row .cell-dataset b.gold{background:#eab308}
+.rw-mgmt-table-row .cell-dataset b.red{background:#dc2626}
+.rw-mgmt-table-row .cell-dataset-text{min-width:0;display:grid;gap:3px}
+.rw-mgmt-table-row .cell-dataset strong{color:#0b1220;font-size:14px;font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.rw-mgmt-table-row .cell-dataset small{display:flex;align-items:center;flex-wrap:wrap;gap:5px 8px;color:#64748b;font-size:12px;font-weight:500;line-height:1.3;overflow:visible;text-overflow:clip;white-space:normal}
+.rw-mgmt-table-row .rw-id-chip{display:inline-flex;align-items:center;padding:2px 8px;border-radius:6px;background:#f1f5f9;color:#64748b;font-size:10px;font-weight:700;font-style:normal;letter-spacing:0.04em;flex-shrink:0}
+.rw-mgmt-table-row .cell-status{display:flex}
+.rw-status-pill{display:inline-flex;align-items:center;gap:6px;padding:4px 10px;border-radius:999px;font-size:12px;font-weight:600}
+.rw-status-pill i{width:6px;height:6px;border-radius:50%;display:inline-block}
+.rw-status-pill.active{background:#dcfce7;color:#166534}
+.rw-status-pill.active i{background:#16a34a}
+.rw-status-pill.paused{background:#fef3c7;color:#92400e}
+.rw-status-pill.paused i{background:#d97706}
+.rw-mgmt-table-row .cell-owner{display:grid;grid-template-columns:32px minmax(0,1fr);align-items:center;gap:10px;min-width:0}
+.rw-mgmt-table-row .cell-owner i{width:32px;height:32px;border-radius:50%;background:#7c3aed;color:#ffffff;display:grid;place-items:center;font-style:normal;font-size:12px;font-weight:700;flex-shrink:0}
+.rw-mgmt-table-row .cell-owner strong{display:block;color:#0b1220;font-size:13px;font-weight:600;line-height:1.2;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.rw-mgmt-table-row .cell-owner small{display:block;margin-top:2px;color:#64748b;font-size:11px;font-weight:500}
+.rw-mgmt-table-row .cell-date strong{display:block;color:#0b1220;font-size:13px;font-weight:600;line-height:1.2}
+.rw-mgmt-table-row .cell-date small{display:block;margin-top:2px;color:#64748b;font-size:11px;font-weight:500}
+.rw-mgmt-table-row .cell-actions{display:flex;align-items:center;justify-content:flex-end;color:#94a3b8;cursor:pointer;border-radius:6px;height:32px;width:32px;justify-self:end}
+.rw-mgmt-table-row .cell-actions:hover{background:#f1f5f9;color:#0b1220}
+
+.rw-mgmt-empty{padding:48px 24px}
+
+.rw-mgmt-table-foot{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:16px 22px;border-top:1px solid #f1f5f9;background:#fbfcfd}
+.rw-mgmt-count{color:#64748b;font-size:13px;font-weight:500}
+.rw-mgmt-pagination{display:flex;align-items:center;gap:6px;margin-left:auto}
+.rw-mgmt-page-nav{width:32px!important;height:32px!important;min-height:32px!important;padding:0!important;border:1px solid #e2e8f0!important;background:#ffffff!important;border-radius:6px!important;color:#64748b!important}
+.rw-mgmt-page-nav:hover:not(:disabled){background:#f8fafc!important;color:#0b1220!important}
+.rw-mgmt-page-nav:disabled{opacity:0.4;cursor:not-allowed}
+.rw-mgmt-page-current{width:32px!important;height:32px!important;min-height:32px!important;padding:0!important;border:1px solid #0b3a2e!important;background:#ffffff!important;border-radius:6px!important;color:#0b3a2e!important;font-size:13px!important;font-weight:700!important;cursor:default!important}
+.rw-mgmt-page-size{position:relative;display:inline-flex;align-items:center}
+.rw-mgmt-page-size select{height:32px;padding:0 28px 0 12px;border:1px solid #e2e8f0;background:#ffffff;border-radius:6px;color:#0b1220;font-size:13px;font-weight:500;cursor:pointer;appearance:none;-webkit-appearance:none}
+.rw-mgmt-page-size svg{position:absolute;right:10px;color:#94a3b8;pointer-events:none}
+
+/* Pinned datasets strip */
+.rw-mgmt-pinned{margin:0 0 22px}
+.rw-mgmt-pinned > header{display:flex;align-items:center;justify-content:space-between;gap:12px;margin:0 0 12px}
+.rw-mgmt-pinned > header h2{margin:0;color:#0b1220;font-size:15px;font-weight:700;letter-spacing:-0.005em}
+.rw-mgmt-pinned > header p{margin:3px 0 0;color:#64748b;font-size:12px;font-weight:500}
+.rw-mgmt-link-btn{height:32px!important;min-height:32px!important;padding:0 12px!important;border:0!important;background:transparent!important;color:#0b3a2e!important;font-size:12px!important;font-weight:700!important;border-radius:6px!important}
+.rw-mgmt-link-btn:hover{background:#ecfdf5!important}
+.rw-mgmt-pinned-strip{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px}
+.rw-mgmt-pin-card{position:relative;min-height:120px!important;padding:16px 16px 14px!important;border:1px solid #eef2f7!important;background:#ffffff!important;border-radius:14px!important;color:#0b1220!important;display:grid!important;grid-template-rows:auto auto 1fr auto;gap:8px;text-align:left;align-items:start;justify-items:start;box-shadow:0 1px 3px rgba(15,23,42,0.04)}
+.rw-mgmt-pin-card:hover{transform:translateY(-1px);border-color:#cbd5e1!important;box-shadow:0 6px 18px rgba(15,23,42,0.08)!important}
+.rw-mgmt-pin-icon{width:34px;height:34px;border-radius:9px;display:grid;place-items:center;color:#ffffff}
+.rw-mgmt-pin-card.tone-gold .rw-mgmt-pin-icon{background:#eab308}
+.rw-mgmt-pin-card.tone-red .rw-mgmt-pin-icon{background:#dc2626}
+.rw-mgmt-pin-card.tone-teal .rw-mgmt-pin-icon{background:#0f766e}
+.rw-mgmt-pin-card.tone-violet .rw-mgmt-pin-icon{background:#7c3aed}
+.rw-mgmt-pin-folder{color:#64748b;font-size:11px;font-weight:700;letter-spacing:0.06em;text-transform:uppercase}
+.rw-mgmt-pin-card strong{display:block;color:#0b1220;font-size:15px;font-weight:700;line-height:1.2;align-self:start;width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.rw-mgmt-pin-meta{display:flex;align-items:center;gap:8px;align-self:end;color:#64748b;font-size:11px;font-weight:500}
+.rw-mgmt-pin-meta em{font-style:normal}
+.rw-mgmt-pin-meta i{width:3px;height:3px;border-radius:50%;background:#cbd5e1}
+
+/* Two-column main: table + activity sidebar */
+.rw-mgmt-main{display:grid;grid-template-columns:minmax(0,1fr) 320px;gap:20px;align-items:start}
+
+/* Activity sidebar */
+.rw-mgmt-activity{background:#ffffff;border:1px solid #eef2f7;border-radius:14px;box-shadow:0 1px 3px rgba(15,23,42,0.04);padding:18px 18px 8px;position:sticky;top:20px}
+.rw-mgmt-activity > header{display:flex;align-items:center;justify-content:space-between;gap:12px;margin:0 0 12px}
+.rw-mgmt-activity > header h2{margin:0;color:#0b1220;font-size:14px;font-weight:700}
+.rw-mgmt-activity > header p{margin:2px 0 0;color:#64748b;font-size:11px;font-weight:500}
+.rw-mgmt-activity-list{list-style:none;padding:0;margin:0;display:grid;gap:2px}
+.rw-mgmt-activity-item{display:grid;grid-template-columns:28px minmax(0,1fr);gap:10px;align-items:start;padding:10px 8px;border-radius:8px;cursor:pointer;transition:background 120ms ease}
+.rw-mgmt-activity-item:hover{background:#f8fafc}
+.rw-mgmt-activity-item:focus-visible{outline:2px solid #0b3a2e;outline-offset:1px}
+.rw-mgmt-activity-dot{width:24px;height:24px;border-radius:50%;display:grid;place-items:center;margin-top:1px}
+.rw-mgmt-activity-dot.tone-green{background:#dcfce7;color:#15803d}
+.rw-mgmt-activity-dot.tone-blue{background:#dbeafe;color:#1d4ed8}
+.rw-mgmt-activity-item p{margin:0;color:#0b1220;font-size:12px;font-weight:500;line-height:1.4}
+.rw-mgmt-activity-item p strong{font-weight:700}
+.rw-mgmt-activity-item p em{font-style:normal;font-weight:600;color:#0b3a2e}
+.rw-mgmt-activity-item small{display:block;margin-top:2px;color:#94a3b8;font-size:11px;font-weight:500}
+.rw-mgmt-activity-empty{padding:32px 12px;display:grid;justify-items:center;text-align:center;gap:6px;color:#64748b}
+.rw-mgmt-activity-empty svg{color:#cbd5e1}
+.rw-mgmt-activity-empty strong{color:#0b1220;font-size:13px;font-weight:700}
+.rw-mgmt-activity-empty span{font-size:12px;color:#64748b}
+
+@media (max-width: 1280px){
+  .rw-mgmt-main{grid-template-columns:1fr}
+  .rw-mgmt-activity{position:static}
+}
+@media (max-width: 1100px){
+  .rw-mgmt-stats{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .rw-mgmt-pinned-strip{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .rw-mgmt-table-row{grid-template-columns:40px minmax(0,1fr) 104px 150px 120px 42px;gap:10px;padding:0 14px}
+}
+@media (max-width: 780px){
+  .rw-mgmt-stats{grid-template-columns:1fr}
+  .rw-mgmt-pinned-strip{grid-template-columns:1fr}
+  .rw-mgmt-header{flex-direction:column;align-items:stretch}
+  .rw-mgmt-actions{flex-wrap:wrap}
+  .rw-mgmt-table-row{grid-template-columns:32px minmax(0,1fr) 84px 34px;gap:8px;padding:0 10px}
+  .rw-mgmt-table-row .cell-owner,
+  .rw-mgmt-table-row .cell-date{display:none}
+  .rw-mgmt-table-row.head span:nth-child(4),
+  .rw-mgmt-table-row.head span:nth-child(5){display:none}
+}
 `

@@ -7,14 +7,14 @@
 :root,
 html[data-theme='light'] {
   --wf-content-max:       1440px;
-  --color-bg:             #F8FAFD;
+  --color-bg:             #f3f4f6;
   --color-surface:        #FFFFFF;
   --color-surface-raised: #FFFFFF;
   --color-border:         #E5E7EB;
   --color-border-subtle:  #F3F4F6;
-  --color-text-primary:   #202124;
-  --color-text-secondary: #5F6368;
-  --color-text-muted:     #9CA3AF;
+  --color-text-primary:   #000000;
+  --color-text-secondary: #111827;
+  --color-text-muted:     #1F2937;
   --color-accent:         #1A73E8;
   --color-accent-hover:   #1557B0;
   --color-accent-light:   #E8F0FE;
@@ -39,9 +39,9 @@ html[data-theme='light'] {
   --wf-green:             #34A853;
   --wf-green-bright:      #46BF68;
   --wf-green-dark:        #1E8E3E;
-  --wf-black:             #202124;
-  --wf-space:             #5F6368;
-  --wf-gray:              #9CA3AF;
+  --wf-black:             #000000;
+  --wf-space:             #111827;
+  --wf-gray:              #1F2937;
   --wf-paper:             #FFFFFF;
   --wf-soft:              #F8FAFD;
   --wf-border:            #E5E7EB;
@@ -163,6 +163,59 @@ button:hover {
 
 button:active {
   transform: translateY(0);
+}
+
+/* ============================================================
+   BUTTON SIZE CONSISTENCY
+   Lock every button to a 36px target height so chrome, CTAs,
+   icon actions, and inline-styled buttons align on the same
+   baseline. Icon-only buttons square off to 36x36.
+   ============================================================ */
+
+button,
+a[role='button'] {
+  min-height: 36px !important;
+  box-sizing: border-box;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Icon-only buttons (single svg or img child) — square 36x36. */
+button:has(> svg:only-child),
+button:has(> img:only-child) {
+  min-width: 36px !important;
+  padding-inline: 0 !important;
+}
+
+/* Tiny utility buttons that should stay compact: notification dot
+   close, chat header micro-actions, scroll-to-top, etc. — opt out
+   by adding data-size="sm" or by being inside specific shells. */
+button[data-size='sm'],
+button.is-compact,
+.hr-chat-header-actions button,
+.hr-chat-composer button,
+.hr-chat-picker-head button,
+.hr-messenger-preview-close,
+.preview-close,
+button.modal-close,
+button.toast-close {
+  min-height: 28px !important;
+  min-width: 28px !important;
+}
+
+/* Pill / large CTAs explicitly want 40px — keep them at 40. */
+.employee-primary-button,
+.employee-secondary-button,
+.hr-user-button {
+  min-height: 40px !important;
+}
+
+/* Don't inflate items inside dropdown menus / option lists. */
+[role='menu'] button,
+[role='listbox'] button,
+[role='option'] {
+  min-height: 32px !important;
 }
 
 /* Global tabs use a clean underline active state. */
@@ -290,6 +343,88 @@ h1,
    SCROLLBAR
    â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• */
 
+/* ============================================================
+   GLOBAL CONTRAST BOOST (light theme)
+   Lift inline grey text values across the whole product so body
+   text and secondary labels meet a stronger contrast bar.
+   ============================================================ */
+
+html[data-theme='light'] [style*='color: #9ca3af' i],
+html[data-theme='light'] [style*='color:#9ca3af' i] { color: #111827 !important; }
+
+html[data-theme='light'] [style*='color: #6b7280' i],
+html[data-theme='light'] [style*='color:#6b7280' i] { color: #0F172A !important; }
+
+html[data-theme='light'] [style*='color: #64748b' i],
+html[data-theme='light'] [style*='color:#64748b' i] { color: #0F172A !important; }
+
+html[data-theme='light'] [style*='color: #94a3b8' i],
+html[data-theme='light'] [style*='color:#94a3b8' i] { color: #111827 !important; }
+
+html[data-theme='light'] [style*='color: #475569' i],
+html[data-theme='light'] [style*='color:#475569' i] { color: #0B1220 !important; }
+
+html[data-theme='light'] [style*='color: #737373' i],
+html[data-theme='light'] [style*='color:#737373' i] { color: #111827 !important; }
+
+html[data-theme='light'] [style*='color: #5F6368' i],
+html[data-theme='light'] [style*='color:#5F6368' i] { color: #0F172A !important; }
+
+html[data-theme='light'] [style*='color: #374151' i],
+html[data-theme='light'] [style*='color:#374151' i] { color: #0B1220 !important; }
+
+html[data-theme='light'] [style*='color: #334155' i],
+html[data-theme='light'] [style*='color:#334155' i] { color: #0B1220 !important; }
+
+/* Restore readability for intentionally-dark overlays sitting over a
+   light page (e.g. the global search popup). These render with a dark
+   background and rely on light grey text — keep it light, not remapped. */
+[role='listbox'][aria-label='Global search results'],
+[role='listbox'][aria-label='Global search results'] * {
+  color-scheme: dark;
+}
+[role='listbox'][aria-label='Global search results'] [style*='color: #9ca3af' i],
+[role='listbox'][aria-label='Global search results'] [style*='color:#9ca3af' i],
+[role='listbox'][aria-label='Global search results'] [style*='color: #6b7280' i],
+[role='listbox'][aria-label='Global search results'] [style*='color:#6b7280' i] {
+  color: #d4d4d8 !important;
+}
+[role='listbox'][aria-label='Global search results'] [role='option'] > span > span:first-child {
+  color: #f9fafb !important;
+}
+
+/* Stronger placeholder contrast on light surfaces */
+html[data-theme='light'] input::placeholder,
+html[data-theme='light'] textarea::placeholder { color: #111827 !important; opacity: 1 !important; }
+
+/* Sidebar section caps (CORE, FINANCE & PEOPLE, SUPPLY CHAIN, etc.) */
+html[data-theme='light'] .desktop-sidebar [style*='text-transform: uppercase'] {
+  color: #000000 !important;
+  font-weight: 700 !important;
+}
+
+/* Inactive top tabs (Projects / Sales / Financials / Operations) */
+html[data-theme='light'] .dashboard-tabs button:not(.is-active),
+html[data-theme='light'] .sales-tabs button:not(.is-active) {
+  color: #111827 !important;
+}
+
+/* Light-theme HR / employee chrome subtitles and meta labels */
+html[data-theme='light'] .hr-page-subtitle,
+html[data-theme='light'] .hr-user-copy small,
+html[data-theme='light'] .hr-module-header p,
+html[data-theme='light'] .hr-module-panel p,
+html[data-theme='light'] .employee-breadcrumb,
+html[data-theme='light'] .employee-page p { color: #111827 !important; }
+
+html[data-theme='light'] .hr-nav-group-label,
+html[data-theme='light'] .employee-nav-group-label { color: #000000 !important; font-weight: 700 !important; }
+
+html[data-theme='light'] .hr-nav-item { color: #0B1220 !important; }
+html[data-theme='light'] .hr-back-link { color: #0F172A !important; }
+html[data-theme='light'] .hr-nav-item svg,
+html[data-theme='light'] .hr-back-link svg { color: #0F172A !important; }
+
 ::-webkit-scrollbar { width: 5px; height: 6px; }
 ::-webkit-scrollbar-track { background: var(--color-border-subtle); }
 ::-webkit-scrollbar-thumb { background: var(--color-border); border-radius: 10px; }
@@ -401,7 +536,7 @@ h1,
   height: 100dvh;
   display: flex;
   align-items: flex-start;
-  background: #f8fafc;
+  background: #f3f4f6;
   color: #0f172a;
   font-family: var(--font-body);
   overflow: hidden;
@@ -548,6 +683,24 @@ h1,
 .hr-nav-item.is-active svg {
   color: rgb(237, 237, 237);
 }
+
+/* HR sidebar — light theme */
+.hr-sidebar,
+.hr-mobile-sidebar { background: #ffffff; color: #0f172a; border-right: 1px solid #e5e7eb; }
+.hr-brand-mark { background: #0f172a; color: #ffffff; }
+.hr-brand-title { color: #0f172a; }
+.hr-brand-subtitle { color: #64748b; }
+.hr-back-link { color: #475569; }
+.hr-back-link svg,
+.hr-nav-item svg { color: #64748b; }
+.hr-back-link:hover,
+.hr-nav-item:hover { background: #f1f5f9; color: #0f172a; }
+.hr-back-link:hover svg,
+.hr-nav-item:hover svg { color: #334155; }
+.hr-nav-group-label { color: #64748b; }
+.hr-nav-item { color: #334155; }
+.hr-nav-item.is-active { background: #eef2f7; color: #0f172a; box-shadow: inset 2px 0 0 #0f172a; }
+.hr-nav-item.is-active svg { color: #0f172a; }
 
 .hr-main {
   min-width: 0;
@@ -2916,8 +3069,8 @@ html[data-theme='dark'] .hr-topbar .hr-primary-button {
 
 /* â”€â”€ Standard laptop 1366px â€” charts fit in 3 cols, modules in 5 â”€â”€ */
 @media (max-width: 1366px) {
-  .charts-grid  { gap: 10px !important; }
-  .data-grid    { gap: 10px !important; }
+  .charts-grid  { gap: 14px !important; }
+  .data-grid    { gap: 14px !important; }
   .modules-grid { grid-template-columns: repeat(5, minmax(0, 1fr)) !important; }
 }
 
@@ -3269,10 +3422,10 @@ html[data-theme='dark'] .hr-topbar .hr-primary-button {
 
 /* â”€â”€ 1440p and wider â€” use more horizontal space â”€â”€ */
 @media (min-width: 1440px) {
-  .main-content { padding: 24px clamp(40px, 4vw, 80px) 16px; }
-  .kpi-grid    { gap: 14px !important; }
-  .charts-grid { gap: 14px !important; }
-  .data-grid   { gap: 14px !important; }
+  .main-content { padding: 28px clamp(40px, 4vw, 80px) 20px; }
+  .kpi-grid    { gap: 16px !important; }
+  .charts-grid { gap: 18px !important; }
+  .data-grid   { gap: 18px !important; }
 }
 
 /* â”€â”€ 4K / ultrawide (â‰¥2560px) â”€â”€ */
@@ -3524,14 +3677,29 @@ html[data-theme='dark'] .accounting-shell textarea::placeholder {
   .hr-content [style*='grid-template-columns: repeat(2'],
   .hr-content [style*='grid-template-columns: repeat(3'],
   .hr-content [style*='grid-template-columns: repeat(4'],
+  .hr-content [style*='grid-template-columns: repeat(5'],
+  .hr-content [style*='grid-template-columns: repeat(6'],
   .hr-content [style*='grid-template-columns: minmax'],
   .hr-content [style*='grid-template-columns: 1fr 1fr'],
   .hr-content [style*='grid-template-columns: 1fr 1fr 1fr'],
   .client-portal-shell [style*='grid-template-columns: repeat(2'],
   .client-portal-shell [style*='grid-template-columns: repeat(3'],
+  .client-portal-shell [style*='grid-template-columns: repeat(4'],
+  .client-portal-shell [style*='grid-template-columns: repeat(5'],
   .client-portal-shell [style*='grid-template-columns: minmax'],
+  .client-portal-shell [style*='grid-template-columns: 240px'],
+  .client-portal-shell [style*='grid-template-columns: 260px'],
+  .client-portal-shell [style*='grid-template-columns: 280px'],
+  .client-portal-shell [style*='grid-template-columns: 300px'],
   .client-portal-shell [style*='grid-template-columns: 1fr 1fr'] {
     grid-template-columns: 1fr !important;
+  }
+
+  .client-portal-shell aside[style*='position: sticky'] {
+    position: static !important;
+    top: auto !important;
+    width: 100% !important;
+    min-height: 0 !important;
   }
 
   .main-content [style*='width: 520px'],
@@ -4060,7 +4228,7 @@ html body {
 .procurement-sidepanel + div,
 [class$='-page'],
 [class*='-page '] {
-  background: #ffffff !important;
+  background: #f3f4f6 !important;
   color: #000000 !important;
 }
 
@@ -4074,9 +4242,9 @@ html body {
 .procurement-sidepanel,
 .accounting-shell > .accounting-sidebar,
 .accounting-sidebar {
-  background: #000000 !important;
-  color: rgb(237, 237, 237) !important;
-  border-color: #242424 !important;
+  background: #ffffff !important;
+  color: #0f172a !important;
+  border-color: #e5e7eb !important;
   box-shadow: none !important;
 }
 
@@ -4369,8 +4537,8 @@ thead td,
 .procurement-sidepanel .active,
 .accounting-shell > .accounting-sidebar .active,
 .accounting-sidebar .active {
-  background: #1f1f1f !important;
-  color: rgb(237, 237, 237) !important;
+  background: #eef2f7 !important;
+  color: #0f172a !important;
   border-color: transparent !important;
   box-shadow: none !important;
   outline: none !important;
@@ -5547,6 +5715,29 @@ html[data-theme='dark'] .main-content .clients-page .client-row-action-menu-item
   stroke: currentColor !important;
 }
 
+.main-content .clients-page .client-row-action-menu-item.is-danger,
+.main-content .clients-page .client-row-action-menu-item.is-danger svg {
+  color: #dc2626 !important;
+  stroke: currentColor !important;
+}
+
+.main-content .clients-page .client-row-action-menu-item.is-danger:hover,
+.main-content .clients-page .client-row-action-menu-item.is-danger:focus-visible {
+  background: #fef2f2 !important;
+  color: #b91c1c !important;
+}
+
+html[data-theme='dark'] .main-content .clients-page .client-row-action-menu-item.is-danger,
+html[data-theme='dark'] .main-content .clients-page .client-row-action-menu-item.is-danger svg {
+  color: #f87171 !important;
+}
+
+html[data-theme='dark'] .main-content .clients-page .client-row-action-menu-item.is-danger:hover,
+html[data-theme='dark'] .main-content .clients-page .client-row-action-menu-item.is-danger:focus-visible {
+  background: rgba(248, 113, 113, 0.14) !important;
+  color: #fca5a5 !important;
+}
+
 html[data-theme='dark'] .main-content .clients-page .client-row-action-menu-item:hover,
 html[data-theme='dark'] .main-content .clients-page .client-row-action-menu-item:focus-visible {
   background: var(--card-hover) !important;
@@ -5685,6 +5876,34 @@ html[data-theme='light'] .client-form-page textarea::placeholder {
 
 html[data-theme='light'] .client-form-page small {
   color: #667085 !important;
+}
+
+.client-form-page [data-client-invalid='true'] input,
+.client-form-page [data-client-invalid='true'] select,
+.client-form-page [data-client-invalid='true'] textarea,
+.client-form-page [data-client-invalid='true'] [data-client-phone-prefix='true'] {
+  border-color: #f87171 !important;
+  background: rgba(127, 29, 29, 0.22) !important;
+  box-shadow: 0 0 0 3px rgba(248, 113, 113, 0.18) !important;
+}
+
+.client-form-page [data-client-invalid='true'] > span:first-child,
+.client-form-page [data-client-error-message='true'] {
+  color: #fca5a5 !important;
+}
+
+html[data-theme='light'] .client-form-page [data-client-invalid='true'] input,
+html[data-theme='light'] .client-form-page [data-client-invalid='true'] select,
+html[data-theme='light'] .client-form-page [data-client-invalid='true'] textarea,
+html[data-theme='light'] .client-form-page [data-client-invalid='true'] [data-client-phone-prefix='true'] {
+  border-color: #dc2626 !important;
+  background: #fff7f7 !important;
+  box-shadow: 0 0 0 3px rgba(220, 38, 38, 0.12) !important;
+}
+
+html[data-theme='light'] .client-form-page [data-client-invalid='true'] > span:first-child,
+html[data-theme='light'] .client-form-page [data-client-error-message='true'] {
+  color: #b91c1c !important;
 }
 
 html[data-theme='light'] .client-form-page a[href='/people/clients'] {
@@ -6976,5 +7195,610 @@ html[data-theme='light'] .desktop-sidebar .main-sidebar-subrow.is-active svg,
 html[data-theme='light'] .mobile-nav-drawer .main-sidebar-row.is-active svg,
 html[data-theme='light'] .mobile-nav-drawer .main-sidebar-subrow.is-active svg {
   color: var(--sidebar-icon) !important;
+}
+
+/* Global system background */
+:root,
+html[data-theme='light'] {
+  --background: #f8f8f8;
+  --color-bg: #f8f8f8;
+  --wf-soft: #f8f8f8;
+}
+
+html[data-theme='light'],
+html[data-theme='light'] body,
+html[data-theme='light'] .app-shell,
+html[data-theme='light'] .app-main,
+html[data-theme='light'] .main-content,
+html[data-theme='light'] .main-content > main,
+html[data-theme='light'] .main-content > div,
+html[data-theme='light'] .client-portal-shell,
+html[data-theme='light'] [class*='workspace'],
+html[data-theme='light'] [class*='module-page'],
+html[data-theme='light'] [class$='-shell'] {
+  background-color: #f8f8f8 !important;
+}
+
+/* A global catch-all `[class*="header"]` rule (see ~globals.css:4116) forces a
+   white background on anything with "header" in its class — including the
+   dashboard's `dash-header-row` and `dashboard-header-actions`. That catch-all
+   has specificity (0,3,0) and !important, so it beat the older
+   `.dashboard-page .dash-header-row` (0,2,0) rule and painted the header band
+   white. Prefixing with `html[data-theme]` raises specificity to (0,3,1) so
+   these stay transparent and show the page background instead. */
+html[data-theme] .dashboard-page .dash-header-row,
+html[data-theme] .dashboard-page .dashboard-header-actions {
+  background: transparent !important;
+  background-color: transparent !important;
+  border-color: transparent !important;
+  box-shadow: none !important;
+}
+html[data-theme] .dashboard-page .dash-header-row {
+  padding-left: 0 !important;
+  padding-right: 0 !important;
+}
+
+/* The dashboard <main> sits inside .main-content, which already provides the
+   top gutter. Drop the inner page's own top padding so the header doesn't get
+   a doubled band of whitespace above it. */
+.main-content > main.dashboard-page {
+  padding-top: 4px !important;
+}
+
+/* Light theme paints the whole shell #f8f8f8 (near-white), so the empty
+   dashboard header reads as a white void next to the card area. Pin the
+   dashboard surface to a clearer page-gray so white cards get contrast and the
+   header blends in as background rather than white. :has() also targets the
+   outer scroll container so its padding and side gutters match the inner
+   page — no seam where the two backgrounds meet. */
+html[data-theme='light'] .main-content:has(> main.dashboard-page),
+html[data-theme='light'] .main-content > main.dashboard-page {
+  background: #f3f4f6 !important;
+}
+
+/* The dashboard is a display surface, not an interactive list. Cancel the
+   global `[class*='row']:hover` tint so its rows don't flash a gray background
+   on mouseover. Rows are transparent at rest, so transparent on hover is the
+   correct "no effect" state. */
+html[data-theme='light'] .dashboard-page [class*='row']:hover,
+.dashboard-page [class*='row']:hover {
+  background-color: transparent !important;
+}
+
+/* WiseFlow AI Assistant */
+.ai-assistant-root {
+  position: fixed;
+  right: 84px;
+  bottom: 18px;
+  z-index: 220;
+  color: #0f172a;
+  font-family: var(--font-body);
+}
+
+.ai-assistant-root button:hover {
+  transform: none;
+}
+
+/* Dashboard blue header experiment */
+.main-content > main.dashboard-page {
+  --dashboard-inline-space: clamp(48px, 10.5vw, 176px);
+  --dashboard-max-width: 1640px;
+  width: 100% !important;
+  max-width: none !important;
+  padding: 0 !important;
+  background: #f3f4f6 !important;
+}
+
+html[data-theme] .main-content:has(> main.dashboard-page),
+.main-content:has(> main.dashboard-page) {
+  padding: 0 !important;
+}
+
+html[data-theme='light'] .main-content:has(> main.dashboard-page),
+html[data-theme='light'] .main-content > main.dashboard-page {
+  background: #f3f4f6 !important;
+}
+
+.dashboard-page .dashboard-hero {
+  background: linear-gradient(180deg, #e5f68c 0%, #e5f68c 46%, #f3f4f6 100%);
+  color: #0f172a;
+  margin: 0;
+  padding: 34px 0 64px;
+}
+
+.dashboard-page.dashboard-tab-sales .dashboard-hero {
+  background: linear-gradient(180deg, #d5f6e5 0%, #d5f6e5 46%, #f3f4f6 100%);
+}
+
+.dashboard-page.dashboard-tab-financials .dashboard-hero {
+  background: linear-gradient(180deg, #f7e7b5 0%, #f7e7b5 46%, #f3f4f6 100%);
+}
+
+.dashboard-page.dashboard-tab-operations .dashboard-hero {
+  background: linear-gradient(180deg, #d7e8ff 0%, #d7e8ff 46%, #f3f4f6 100%);
+}
+
+.dashboard-page .dashboard-inner {
+  width: min(var(--dashboard-max-width), calc(100% - var(--dashboard-inline-space)));
+  margin: 0 auto;
+}
+
+.dashboard-page .dashboard-content {
+  width: 100%;
+  max-width: none;
+  margin: 0;
+  padding: 0 0 32px;
+  background: #f3f4f6;
+  box-sizing: border-box;
+}
+
+.dashboard-page .dashboard-content > * {
+  width: min(var(--dashboard-max-width), calc(100% - var(--dashboard-inline-space)));
+  margin-left: auto !important;
+  margin-right: auto !important;
+}
+
+.dashboard-page .dashboard-hero .dash-header-row,
+.dashboard-page .dashboard-hero .dashboard-header-actions {
+  background: transparent !important;
+  background-color: transparent !important;
+  border-color: transparent !important;
+  box-shadow: none !important;
+}
+
+.dashboard-page .dashboard-hero h1,
+.dashboard-page .dashboard-hero p {
+  color: #0f172a !important;
+}
+
+.dashboard-page .dashboard-hero p {
+  opacity: 0.94;
+}
+
+.dashboard-page .dashboard-hero .dashboard-tabs {
+  border-bottom-color: rgba(15, 23, 42, 0.28) !important;
+}
+
+html[data-theme] .dashboard-page .dashboard-hero .dashboard-tabs button,
+html[data-theme='light'] .dashboard-page .dashboard-hero .dashboard-tabs button:not(.is-active) {
+  color: #0f172a !important;
+  background: transparent !important;
+}
+
+html[data-theme] .dashboard-page .dashboard-hero .dashboard-tabs button.is-active {
+  color: #0f172a !important;
+  border-bottom-color: #0f172a !important;
+}
+
+html[data-theme] .dashboard-page .dashboard-hero .dashboard-tabs button:hover,
+html[data-theme] .dashboard-page .dashboard-hero .dashboard-tabs button:focus-visible {
+  color: #0f172a !important;
+  background: #ffffff !important;
+  border-bottom-color: #0f172a !important;
+}
+
+.dashboard-page .dashboard-hero .dashboard-kpi-card {
+  position: relative;
+  overflow: hidden;
+  background:
+    linear-gradient(135deg, rgba(255, 255, 255, 0.94), rgba(255, 255, 255, 0.62) 48%, rgba(255, 255, 255, 0.86)) !important;
+  border: 1px solid rgba(255, 255, 255, 0.92) !important;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 1),
+    inset 0 -1px 0 rgba(255, 255, 255, 0.46),
+    0 18px 42px rgba(15, 23, 42, 0.08) !important;
+  backdrop-filter: blur(20px) saturate(190%);
+  -webkit-backdrop-filter: blur(20px) saturate(190%);
+}
+
+.dashboard-page .dashboard-hero .dashboard-kpi-card::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background:
+    linear-gradient(115deg, rgba(255, 255, 255, 0.92) 0%, rgba(255, 255, 255, 0.28) 34%, transparent 60%),
+    radial-gradient(circle at 12% 0%, rgba(255, 255, 255, 0.78), transparent 38%);
+  opacity: 0.88;
+}
+
+.dashboard-page .dashboard-hero .dashboard-kpi-card > * {
+  position: relative;
+  z-index: 1;
+}
+
+/* Client Database gradient header */
+html[data-theme] .main-content > .clients-page,
+.main-content > .clients-page {
+  width: 100% !important;
+  max-width: none !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  display: block !important;
+  background: #f3f4f6 !important;
+}
+
+.main-content:has(> .clients-page) {
+  padding: 0 !important;
+  background: #f3f4f6 !important;
+}
+
+.app-main:has(.clients-page) .main-content {
+  padding: 0 !important;
+  background: #f3f4f6 !important;
+}
+
+.clients-page {
+  --clients-inline-space: clamp(48px, 10.5vw, 176px);
+  --clients-max-width: 1640px;
+  width: 100% !important;
+  max-width: none !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  min-height: 100%;
+  background: #f3f4f6 !important;
+  color: #0f172a;
+}
+
+.clients-page .clients-hero {
+  background: linear-gradient(180deg, #e5f68c 0%, #e5f68c 46%, #f3f4f6 100%);
+  margin: 0;
+  padding: 34px 0 42px;
+  width: 100% !important;
+  max-width: none !important;
+}
+
+.clients-page .clients-inner,
+.clients-page .clients-content > * {
+  width: min(var(--clients-max-width), calc(100% - var(--clients-inline-space)));
+  margin-left: auto !important;
+  margin-right: auto !important;
+}
+
+.clients-page .clients-inner {
+  display: grid;
+  gap: 26px;
+}
+
+.clients-page .clients-content {
+  padding: 0 0 32px;
+  background: #f3f4f6;
+}
+
+.clients-page .client-stat-card {
+  position: relative;
+  overflow: hidden;
+  background:
+    linear-gradient(135deg, rgba(255, 255, 255, 0.94), rgba(255, 255, 255, 0.62) 48%, rgba(255, 255, 255, 0.86)) !important;
+  border: 1px solid rgba(255, 255, 255, 0.92) !important;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 1),
+    inset 0 -1px 0 rgba(255, 255, 255, 0.46),
+    0 18px 42px rgba(15, 23, 42, 0.08) !important;
+  backdrop-filter: blur(20px) saturate(190%);
+  -webkit-backdrop-filter: blur(20px) saturate(190%);
+}
+
+html[data-theme='light'] .clients-page .client-stat-card {
+  background:
+    linear-gradient(135deg, rgba(255, 255, 255, 0.94), rgba(255, 255, 255, 0.62) 48%, rgba(255, 255, 255, 0.86)) !important;
+  border: 1px solid rgba(255, 255, 255, 0.92) !important;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 1),
+    inset 0 -1px 0 rgba(255, 255, 255, 0.46),
+    0 18px 42px rgba(15, 23, 42, 0.08) !important;
+}
+
+.clients-page .client-stat-card::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background:
+    linear-gradient(115deg, rgba(255, 255, 255, 0.92) 0%, rgba(255, 255, 255, 0.28) 34%, transparent 60%),
+    radial-gradient(circle at 12% 0%, rgba(255, 255, 255, 0.78), transparent 38%);
+  opacity: 0.88;
+}
+
+.clients-page .client-stat-card > * {
+  position: relative;
+  z-index: 1;
+}
+
+.ai-assistant-fab {
+  width: 58px;
+  height: 58px;
+  border: 1px solid #dbe3ef;
+  border-radius: 50%;
+  background: #111827;
+  color: #ffffff;
+  display: grid;
+  place-items: center;
+  gap: 0;
+  cursor: pointer;
+  box-shadow: 0 18px 38px rgba(15, 23, 42, 0.22);
+}
+
+.ai-assistant-fab span {
+  font-size: 10px;
+  font-weight: 900;
+  line-height: 1;
+}
+
+.ai-assistant-panel {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  width: min(430px, calc(100vw - 32px));
+  height: min(640px, calc(100dvh - 118px));
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto auto;
+  overflow: hidden;
+  border: 1px solid #d8e0eb;
+  border-radius: 8px;
+  background: #ffffff;
+  box-shadow: 0 24px 70px rgba(15, 23, 42, 0.22);
+}
+
+.ai-assistant-header {
+  min-height: 64px;
+  padding: 12px 14px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  border-bottom: 1px solid #e5e7eb;
+  background: #ffffff;
+}
+
+.ai-assistant-title {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  gap: 10px;
+}
+
+.ai-assistant-mark,
+.ai-assistant-message-icon {
+  width: 30px;
+  height: 30px;
+  border-radius: 8px;
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+}
+
+.ai-assistant-mark {
+  background: #ecfdf5;
+  color: #15803d;
+}
+
+.ai-assistant-title strong,
+.ai-assistant-title small {
+  display: block;
+  min-width: 0;
+}
+
+.ai-assistant-title strong {
+  color: #0f172a;
+  font-size: 14px;
+  font-weight: 900;
+}
+
+.ai-assistant-title small {
+  margin-top: 2px;
+  color: #64748b;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.ai-assistant-actions {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.ai-assistant-actions button {
+  width: 32px;
+  height: 32px;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  background: #ffffff;
+  color: #334155;
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+}
+
+.ai-assistant-thread {
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  overflow-y: auto;
+  background: #f8fafc;
+}
+
+.ai-assistant-message {
+  width: fit-content;
+  max-width: 96%;
+  display: grid;
+  grid-template-columns: 30px minmax(0, 1fr);
+  align-items: flex-start;
+  gap: 8px;
+}
+
+.ai-assistant-message.is-user {
+  margin-left: auto;
+  grid-template-columns: minmax(0, 1fr) 30px;
+}
+
+.ai-assistant-message.is-user .ai-assistant-message-icon {
+  order: 2;
+}
+
+.ai-assistant-message-icon {
+  background: #eef2ff;
+  color: #2563eb;
+}
+
+.ai-assistant-message.is-user .ai-assistant-message-icon {
+  background: #fef3c7;
+  color: #b45309;
+}
+
+.ai-assistant-message p {
+  margin: 0;
+  padding: 10px 12px;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  background: #ffffff;
+  color: #0f172a;
+  font-size: 13px;
+  font-weight: 650;
+  line-height: 1.5;
+  white-space: pre-wrap;
+}
+
+.ai-assistant-message.is-user p {
+  border-color: #111827;
+  background: #111827;
+  color: #ffffff;
+}
+
+.ai-assistant-prompts {
+  padding: 10px 12px 0;
+  display: flex;
+  gap: 7px;
+  overflow-x: auto;
+  border-top: 1px solid #e5e7eb;
+  background: #ffffff;
+}
+
+.ai-assistant-prompts button {
+  flex: 0 0 auto;
+  min-height: 32px;
+  border: 1px solid #dbe3ef;
+  border-radius: 8px;
+  background: #f8fafc;
+  color: #334155;
+  padding: 0 10px;
+  font-size: 12px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.ai-assistant-prompts button:disabled {
+  opacity: .55;
+  cursor: wait;
+}
+
+.ai-assistant-composer {
+  padding: 12px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 42px;
+  gap: 9px;
+  align-items: end;
+  background: #ffffff;
+}
+
+.ai-assistant-composer textarea {
+  min-height: 44px;
+  max-height: 120px;
+  resize: vertical;
+  border: 1px solid #dbe3ef;
+  border-radius: 8px;
+  background: #ffffff;
+  color: #0f172a;
+  padding: 11px 12px;
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1.35;
+}
+
+.ai-assistant-composer button {
+  width: 42px;
+  height: 42px;
+  border: 0;
+  border-radius: 8px;
+  background: #16a34a;
+  color: #ffffff;
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+}
+
+.ai-assistant-composer button:disabled {
+  background: #94a3b8;
+  cursor: not-allowed;
+}
+
+.ai-assistant-spin {
+  animation: ai-assistant-spin 0.8s linear infinite;
+}
+
+@keyframes ai-assistant-spin {
+  to { transform: rotate(360deg); }
+}
+
+html[data-theme='dark'] .ai-assistant-panel,
+html[data-theme='dark'] .ai-assistant-header,
+html[data-theme='dark'] .ai-assistant-prompts,
+html[data-theme='dark'] .ai-assistant-composer {
+  background: #0a0a0a;
+  border-color: #2a2a2a;
+}
+
+html[data-theme='dark'] .ai-assistant-thread {
+  background: #000000;
+}
+
+html[data-theme='dark'] .ai-assistant-title strong,
+html[data-theme='dark'] .ai-assistant-message p,
+html[data-theme='dark'] .ai-assistant-composer textarea {
+  color: #ededed;
+}
+
+html[data-theme='dark'] .ai-assistant-title small {
+  color: #a1a1a1;
+}
+
+html[data-theme='dark'] .ai-assistant-actions button,
+html[data-theme='dark'] .ai-assistant-prompts button,
+html[data-theme='dark'] .ai-assistant-composer textarea,
+html[data-theme='dark'] .ai-assistant-message p {
+  background: #111111;
+  border-color: #2a2a2a;
+}
+
+html[data-theme='dark'] .ai-assistant-message.is-user p {
+  background: #ededed;
+  border-color: #ededed;
+  color: #000000;
+}
+
+@media (max-width: 640px) {
+  .ai-assistant-root {
+    right: 12px;
+    bottom: 74px;
+  }
+
+  .ai-assistant-panel {
+    right: 0;
+    bottom: 0;
+    width: calc(100vw - 24px);
+    height: min(620px, calc(100dvh - 154px));
+  }
+
+  .ai-assistant-prompts {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    overflow-x: visible;
+  }
+
+  .ai-assistant-prompts button {
+    width: 100%;
+    white-space: normal;
+  }
 }
 

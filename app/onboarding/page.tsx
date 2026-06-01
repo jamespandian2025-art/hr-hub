@@ -4,6 +4,8 @@ import { useRouter } from 'next/navigation'
 import type { CSSProperties } from 'react'
 import { useEffect, useMemo, useState } from 'react'
 import { ArrowRight, Building2, Check, FolderKanban, Mail, Sparkles, UserRound, Users } from 'lucide-react'
+import { withCsrfHeaders } from '@/lib/security/csrfClient'
+import { getActiveCompany } from '@/lib/tenant/company'
 
 const onboardingKey = 'flowsys-onboarding'
 const accountKey = 'flowsys-account'
@@ -169,7 +171,10 @@ export default function OnboardingPage() {
     try {
       const response = await fetch('/api/auth/invitations', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: withCsrfHeaders({
+          'Content-Type': 'application/json',
+          ...(getActiveCompany()?.id ? { 'x-wiseflow-company-id': getActiveCompany()?.id || '' } : {}),
+        }),
         body: JSON.stringify({
           email,
           role: inviteRole,

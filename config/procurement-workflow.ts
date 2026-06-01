@@ -70,7 +70,7 @@ export const procurementLifecycleSteps = [
     key: 'warehouseInventory',
     label: 'Warehouse Inventory Update',
     shortLabel: 'Inventory',
-    href: '/warehouse-inventory',
+    href: '/warehouse/inventory',
     icon: Warehouse,
     description: 'Completed receiving records update stock and create movement history.',
   },

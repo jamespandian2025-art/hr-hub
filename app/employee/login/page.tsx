@@ -1,85 +1,12 @@
 'use client'
 
 import { useState } from 'react'
+import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { Eye, Lock, Mail } from 'lucide-react'
-import { employeeKey, Employee, fullName, isEmployeeTeamManager, loadStored, saveStored } from '../employeeData'
-
-function text(value: unknown) {
-  if (value === null || value === undefined) return ''
-  if (typeof value === 'string') return value.trim().toLowerCase()
-  if (typeof value === 'number' || typeof value === 'boolean') return String(value).trim().toLowerCase()
-  return ''
-}
-
-function compact(value: unknown) {
-  return text(value).replace(/[^a-z0-9]/g, '')
-}
-
-function slug(value: unknown) {
-  return text(value)
-    .replace(/[^a-z0-9]+/g, '.')
-    .replace(/^\.+|\.+$/g, '')
-}
-
-function generatedPortalEmail(employee: Employee) {
-  const namePart = [slug(employee.firstName), slug(employee.lastName)].filter(Boolean).join('.') || 'employee'
-  const idPart = slug(employee.employeeId || employee.id) || 'new'
-  return `${namePart}.${idPart}@wiseflow.employee`
-}
-
-function loginEmailMatches(employee: Employee, loginEmail: string) {
-  const normalizedEmail = text(loginEmail)
-  const localPart = compact(normalizedEmail.split('@')[0])
-  const exactMatches = [
-    employee.portalEmail,
-    employee.email,
-    generatedPortalEmail(employee),
-  ].some(value => text(value) === normalizedEmail)
-
-  if (exactMatches) return true
-
-  const employeeIdMatches = [employee.employeeId, employee.id]
-    .map(compact)
-    .filter(value => value.length >= 4)
-    .some(value => localPart.includes(value))
-
-  if (employeeIdMatches) return true
-
-  const nameTokens = [employee.firstName, employee.middleName, employee.lastName]
-    .flatMap(value => text(value).split(/\s+/))
-    .filter(value => value.length > 1)
-    .map(compact)
-
-  return nameTokens.length >= 2 && nameTokens.every(token => localPart.includes(token))
-}
-
-function normalizePassword(value: unknown) {
-  if (value === null || value === undefined) return ''
-  if (typeof value === 'string') return value.replace(/[‐‑‒–—−]/g, '-').trim()
-  if (typeof value === 'number' || typeof value === 'boolean') return String(value).trim()
-  return ''
-}
-
-function normalizeCopiedPassword(value: unknown) {
-  return normalizePassword(value).replace(/[\u2010-\u2015\u2212]/g, '-')
-}
-
-function passwordFingerprint(value: unknown) {
-  if (value === null || value === undefined) return ''
-  const raw = typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean' ? String(value) : ''
-  return raw
-    .replace(/â€[\u0090\u0091\u0092\u0093\u0094]/g, '-')
-    .replace(/âˆ’/g, '-')
-    .replace(/[\u2010-\u2015\u2212]/g, '-')
-    .replace(/[^a-z0-9]/gi, '')
-    .toLowerCase()
-}
-
-function canUseEmployeePortal(employee: Employee) {
-  const status = text(employee.employmentStatus)
-  return !['archived', 'deleted', 'inactive', 'terminated', 'resigned'].includes(status)
-}
+import { employeeKey, type Employee, loadStored, saveStored } from '../employeeData'
+import { checkLoginAllowed, recordLoginAttempt } from '@/lib/auth/sessionClient'
+import { withCsrfHeaders } from '@/lib/security/csrfClient'
 
 function uniqueEmployees(rows: Employee[]) {
   const map = new Map<string, Employee>()
@@ -91,134 +18,10 @@ function uniqueEmployees(rows: Employee[]) {
   return Array.from(map.values())
 }
 
-function isPlainObject(value: unknown): value is Record<string, unknown> {
-  return Boolean(value) && typeof value === 'object' && !Array.isArray(value)
-}
-
-function looksLikeEmployee(value: unknown): value is Employee {
-  if (!isPlainObject(value)) return false
-  const hasEmployeeIdentity = Boolean(value.id || value.employeeId || value.portalEmail || value.email)
-  const hasEmployeeFields = Boolean(value.portalPassword || value.firstName || value.lastName || value.jobTitle || value.employmentStatus)
-  return hasEmployeeIdentity && hasEmployeeFields
-}
-
-function collectEmployees(value: unknown, depth = 0): Employee[] {
-  if (depth > 3) return []
-  if (looksLikeEmployee(value)) return [value]
-  if (Array.isArray(value)) return value.flatMap(item => collectEmployees(item, depth + 1))
-  if (!isPlainObject(value)) return []
-  return Object.values(value).flatMap(item => collectEmployees(item, depth + 1))
-}
-
-function parseEmployeesFromStorageValue(value: string | null) {
-  if (!value) return []
-  try {
-    return collectEmployees(JSON.parse(value))
-  } catch {
-    return []
-  }
-}
-
-function storageKeyCanContainEmployees(key: string) {
-  return /(employee|staff|hr|payroll|wiseflow|flowsys)/i.test(key)
-}
-
-function loadLocalEmployeePortalEmployees() {
-  const baseEmployees = loadStored<Employee[]>(employeeKey, [])
-  if (typeof window === 'undefined') return Array.isArray(baseEmployees) ? baseEmployees : []
-  const discoveredEmployees: Employee[] = []
-  for (let index = 0; index < window.localStorage.length; index += 1) {
-    const key = window.localStorage.key(index)
-    if (!key || key === employeeKey || !storageKeyCanContainEmployees(key)) continue
-    discoveredEmployees.push(...parseEmployeesFromStorageValue(window.localStorage.getItem(key)))
-  }
-  return uniqueEmployees([...(Array.isArray(baseEmployees) ? baseEmployees : []), ...discoveredEmployees])
-}
-
-async function loadRemoteEmployeePortalEmployees() {
-  try {
-    const response = await fetch('/api/hr/records/employees', {
-      headers: {
-        'x-hr-user-name': 'Employee Portal Login',
-        'x-hr-role': 'HR',
-      },
-      cache: 'no-store',
-    })
-    const payload = await response.json().catch(() => null)
-    return collectEmployees(payload?.records)
-  } catch {
-    return []
-  }
-}
-
-async function loadEmployeePortalEmployees() {
-  const localEmployees = loadLocalEmployeePortalEmployees()
-  const remoteEmployees = await loadRemoteEmployeePortalEmployees()
-  return uniqueEmployees([...localEmployees, ...remoteEmployees])
-}
-
-function displayNamePart(value: string) {
-  return value
-    .split(/[.\s_-]+/)
-    .filter(Boolean)
-    .map(part => `${part.charAt(0).toUpperCase()}${part.slice(1).toLowerCase()}`)
-    .join(' ')
-}
-
-function employeeIdFromPortalEmail(loginEmail: string) {
-  const localPart = text(loginEmail).split('@')[0] || ''
-  const match = localPart.match(/emp[.\-_]?(\d+)/i)
-  return match ? `EMP-${match[1]}` : 'EMP-PORTAL'
-}
-
-function employeeFromIssuedCredentials(loginEmail: string, enteredPassword: string): Employee | null {
-  const normalizedEmail = text(loginEmail)
-  const fingerprint = passwordFingerprint(enteredPassword)
-  if (!normalizedEmail.endsWith('@wiseflow.employee')) return null
-  if (!fingerprint.startsWith('wf') || fingerprint.length < 8) return null
-
-  const localPart = normalizedEmail.split('@')[0] || 'employee.user'
-  const namePart = localPart.replace(/\.?emp[.\-_]?\d+.*$/i, '')
-  const nameTokens = displayNamePart(namePart).split(/\s+/).filter(Boolean)
-  const employeeId = employeeIdFromPortalEmail(normalizedEmail)
-  return {
-    id: employeeId.toLowerCase().replace(/[^a-z0-9]+/g, '_'),
-    employeeId,
-    firstName: nameTokens[0] || 'Employee',
-    lastName: nameTokens.slice(1).join(' ') || 'User',
-    portalEmail: normalizedEmail,
-    portalPassword: normalizeCopiedPassword(enteredPassword),
-    mustChangePassword: true,
-    employmentStatus: 'Active',
-    jobTitle: 'Employee',
-  }
-}
-
 function rememberEmployeeForPortal(employee: Employee) {
   const current = loadStored<Employee[]>(employeeKey, [])
   const next = uniqueEmployees([...(Array.isArray(current) ? current : []), employee])
   saveStored(employeeKey, next)
-}
-
-function personMatches(value: unknown, employee: Employee) {
-  const rawCandidate = text(value)
-  const candidate = compact(rawCandidate)
-  const employeeName = compact(fullName(employee))
-  const employeeTokens = [employee.firstName, employee.middleName, employee.lastName].map(compact).filter(Boolean)
-  const candidateTokens = rawCandidate.split(/\s+/).map(compact).filter(Boolean)
-  return !!candidate && !!employeeName && (
-    candidate === employeeName
-    || candidate.includes(employeeName)
-    || employeeName.includes(candidate)
-    || (candidateTokens.length >= 2 && candidateTokens.every(token => employeeTokens.includes(token)))
-  )
-}
-
-function isAssignedManager(employee: Employee) {
-  const teams = loadStored<Array<{ managerName?: string; leadName?: string }>>('flowsys-hr-teams', [])
-  const departments = loadStored<Array<{ manager?: string }>>('flowsys-hr-departments', [])
-  return teams.some(team => personMatches(team.managerName, employee) || personMatches(team.leadName, employee))
-    || departments.some(department => personMatches(department.manager, employee))
 }
 
 export default function EmployeeLoginPage() {
@@ -240,59 +43,28 @@ export default function EmployeeLoginPage() {
     }
     setSigningIn(true)
     try {
-      const storedEmployees = await loadEmployeePortalEmployees()
       const loginEmail = email.trim().toLowerCase()
-      const enteredPassword = normalizeCopiedPassword(password)
-      const enteredFingerprint = passwordFingerprint(password)
-      let employees = Array.isArray(storedEmployees) ? storedEmployees.filter(canUseEmployeePortal) : []
-
-      if (!employees.length) {
-        const recoveredEmployee = employeeFromIssuedCredentials(loginEmail, enteredPassword)
-        if (!recoveredEmployee) {
-          setNotice('No active employee portal accounts are available yet.')
-          return
-        }
-        employees = [recoveredEmployee]
-      }
-
-      let candidates = employees.filter(item => loginEmailMatches(item, loginEmail))
-      if (!candidates.length) {
-        const recoveredEmployee = employeeFromIssuedCredentials(loginEmail, enteredPassword)
-        if (!recoveredEmployee) {
-          setNotice('No employee portal account is connected to that email yet.')
-          return
-        }
-        employees = [...employees, recoveredEmployee]
-        candidates = [recoveredEmployee]
-      }
-      const employee = candidates.find(item => passwordFingerprint(item.portalPassword) === enteredFingerprint) || candidates[0]
-      if (!normalizeCopiedPassword(employee.portalPassword)) {
-        setNotice('HR has not generated login details for this employee yet.')
+      await checkLoginAllowed(loginEmail)
+      const remoteResponse = await fetch('/api/hr/employee-portal-login', {
+        method: 'POST',
+        headers: withCsrfHeaders({ 'Content-Type': 'application/json' }),
+        body: JSON.stringify({ email: loginEmail, password }),
+      })
+      const remotePayload = await remoteResponse.json().catch(() => null) as { ok?: boolean; employee?: Employee; account?: Record<string, unknown> } | null
+      if (remoteResponse.ok && remotePayload?.ok && remotePayload.employee && remotePayload.account) {
+        rememberEmployeeForPortal(remotePayload.employee)
+        saveStored('flowsys-auth-session', remotePayload.account)
+        saveStored('flowsys-account', remotePayload.account)
+        saveStored('flowsys-employee-session', remotePayload.account)
+        await recordLoginAttempt(loginEmail, true)
+        router.push('/employee/dashboard')
         return
       }
-      if (normalizeCopiedPassword(employee.portalPassword) !== enteredPassword && passwordFingerprint(employee.portalPassword) !== enteredFingerprint) {
-        setNotice('Email or password is incorrect.')
-        return
-      }
-      const generatedEmail = generatedPortalEmail(employee)
-      let signedInEmployee = employee
-      if (!employee.portalEmail && generatedEmail) {
-        const updated = employees.map(item => item.id === employee.id ? { ...item, portalEmail: generatedEmail } : item)
-        saveStored(employeeKey, updated)
-        signedInEmployee = { ...employee, portalEmail: generatedEmail }
-      }
-      rememberEmployeeForPortal(signedInEmployee)
-      const account = {
-        userId: signedInEmployee.id,
-        employeeId: signedInEmployee.employeeId,
-        email: signedInEmployee.portalEmail || signedInEmployee.email || loginEmail,
-        fullName: fullName(signedInEmployee),
-        role: isEmployeeTeamManager(signedInEmployee) || isAssignedManager(signedInEmployee) ? 'Team Manager' : 'Employee',
-      }
-      saveStored('flowsys-auth-session', account)
-      saveStored('flowsys-account', account)
-      saveStored('flowsys-employee-session', account)
-      router.push('/employee/dashboard')
+
+      setNotice(remotePayload?.ok === false ? 'Email or password is incorrect.' : 'Employee portal sign-in is only available through the secure HR records service.')
+      await recordLoginAttempt(loginEmail, false)
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : 'Sign in failed. Please try again.')
     } finally {
       setSigningIn(false)
     }
@@ -313,7 +85,10 @@ export default function EmployeeLoginPage() {
           <span style={fieldStyle}><Lock size={18} /><input value={password} onChange={event => setPassword(event.target.value)} type="password" placeholder="Enter your password" style={inputStyle} /><Eye size={18} /></span>
         </label>
         <button type="button" onClick={signIn} disabled={signingIn} style={{ width: '100%', height: 52, border: 0, borderRadius: 8, marginTop: 26, background: signingIn ? '#15803d' : '#16a34a', color: '#ffffff', fontWeight: 900, fontSize: 15, cursor: signingIn ? 'wait' : 'pointer', opacity: signingIn ? 0.86 : 1 }}>{signingIn ? 'Signing In...' : 'Sign In'}</button>
-        <p style={{ textAlign: 'center', margin: '18px 0 0', color: '#64748b', fontSize: 13 }}>Use the login email and temporary password generated by HR.</p>
+        <p style={{ textAlign: 'center', margin: '18px 0 0', color: '#64748b', fontSize: 13 }}>Use the login email and password generated by HR.</p>
+        <p style={{ textAlign: 'center', margin: '10px 0 0', color: '#64748b', fontSize: 13 }}>
+          <Link href="/account-recovery?type=employee" style={{ color: '#14532d', fontWeight: 900, textDecoration: 'none' }}>Forgot password?</Link>
+        </p>
       </section>
     </main>
   )

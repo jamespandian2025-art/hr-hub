@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { listHrRecords } from '@/lib/hrms/client'
 import { buildEmployeeTaxBreakdown, deductionBreakdownTotal, defaultPayrollFrequency, PayrollFrequency, roundPayrollMoney } from '@/app/hr/payroll/taxRules'
+import type { PayrollAttendanceSummary } from '@/app/hr/payroll/attendanceRules'
 
 export type StoredAccount = {
   userId?: string
@@ -20,6 +21,11 @@ export type Employee = {
   lastName?: string
   email?: string
   portalEmail?: string
+  portalPasswordHash?: string
+  portalPasswordSalt?: string
+  portalPasswordAlgorithm?: 'pbkdf2-sha256'
+  portalPasswordUpdatedAt?: string
+  /** Legacy local records only. New records store portal password hashes instead. */
   portalPassword?: string
   mustChangePassword?: boolean
   phone?: string
@@ -63,7 +69,7 @@ export type LeaveRequest = {
   createdAt: string
   updatedAt?: string
   contactDuringLeave?: string
-  attachments?: Array<{ name: string; size: number; type: string; dataUrl?: string }>
+  attachments?: Array<{ name: string; size: number; type: string; dataUrl?: string; fileUrl?: string; objectKey?: string; storageProvider?: string }>
 }
 
 export type AttendanceRecord = {
@@ -97,6 +103,7 @@ export type PayrollRecord = {
   }
   allowanceLines?: Array<{ allowanceId: string; type: string; amount: number; date?: string; purpose?: string }>
   loanDeductions?: Array<{ loanId: string; type: string; amount: number }>
+  attendanceSummary?: PayrollAttendanceSummary
   net: number
   status: 'Paid' | 'Pending' | 'Processing' | 'Approved'
   source?: 'payroll-run'
@@ -159,6 +166,9 @@ export type HRDocument = {
   size?: string
   sizeBytes?: number
   dataUrl?: string
+  fileUrl?: string
+  objectKey?: string
+  storageProvider?: string
   category?: string
   uploadedAt?: string
   status?: string
@@ -485,7 +495,15 @@ function normalizePayrollTax(item: PayrollRecord, employee: Employee): PayrollRe
     (item.loanDeductions || []).reduce((sum, line) => sum + Number(line.amount || 0), 0) ||
     Number(item.deductionBreakdown?.loanOrCashAdvance || 0),
   )
-  const baseBreakdown = buildEmployeeTaxBreakdown(Number(item.gross || 0), Number(employee.deductions || 0), frequency)
+  const baseBreakdown = item.deductionBreakdown
+    ? {
+      sss: roundPayrollMoney(Number(item.deductionBreakdown.sss || 0)),
+      philHealth: roundPayrollMoney(Number(item.deductionBreakdown.philHealth || 0)),
+      pagIbig: roundPayrollMoney(Number(item.deductionBreakdown.pagIbig || 0)),
+      tax: roundPayrollMoney(Number(item.deductionBreakdown.tax || 0)),
+      loanOrCashAdvance: 0,
+    }
+    : buildEmployeeTaxBreakdown(Number(item.attendanceSummary?.earnedBasicPay ?? item.gross ?? 0), Number(employee.deductions || 0), frequency)
   const deductions = Math.min(Number(item.gross || 0), deductionBreakdownTotal(baseBreakdown) + loanOrCashAdvance)
   return {
     ...item,

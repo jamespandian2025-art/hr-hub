@@ -1,6 +1,9 @@
 'use client'
 
 import { ChangeEvent, useEffect, useMemo, useState } from 'react'
+import { clearLegacyBusinessRows, listBusinessRecords, readLegacyBusinessRows, replaceBusinessCollection } from '@/lib/business/client'
+import type { BusinessCollection } from '@/lib/business/collections'
+import { loadClients as loadClientDatabase } from '@/app/people/clients/clientData'
 
 const font = "var(--font-body)"
 const storageKey = 'flowsys-projects'
@@ -209,37 +212,67 @@ const buttonStyle = {
   cursor: 'pointer',
 }
 
-const loadProjects = () => {
-  if (typeof window === 'undefined') return []
-
+const loadProjects = async () => {
   try {
-    const stored = window.localStorage.getItem(storageKey)
-    return stored ? (JSON.parse(stored) as Partial<Project>[]).map(normalizeProject) : []
+    const serverRows = await listBusinessRecords<Partial<Project>>('project-legacy-records')
+    if (serverRows.length) return serverRows.map(normalizeProject)
+    const legacyRows = readLegacyBusinessRows<Partial<Project>>([storageKey])
+    if (legacyRows.length) {
+      const projects = legacyRows.map(normalizeProject)
+      await replaceBusinessCollection('project-legacy-records', projects)
+      clearLegacyBusinessRows([storageKey])
+      return projects
+    }
+    return []
   } catch {
     return []
   }
 }
 
-const loadClients = () => {
-  if (typeof window === 'undefined') return initialClients
-
+const loadProjectClients = async () => {
   try {
-    const stored = window.localStorage.getItem(clientsStorageKey)
-    return stored ? (JSON.parse(stored) as ClientRecord[]) : initialClients
+    const result = await loadClientDatabase()
+    if (result.clients.length) {
+      return result.clients.map((client, index) => ({
+        id: index + 1,
+        name: client.name,
+        email: client.email,
+        contact: client.phone,
+        completed: client.completedProjects,
+        total: client.totalProjects,
+        cost: client.totalRevenue,
+        color: colorFor(index + 1),
+      }))
+    }
+    const legacyRows = readLegacyBusinessRows<ClientRecord>([clientsStorageKey])
+    if (legacyRows.length) {
+      clearLegacyBusinessRows([clientsStorageKey])
+      return legacyRows
+    }
+    return initialClients
   } catch {
     return initialClients
   }
 }
 
-const loadStored = <T,>(key: string, fallback: T[]): T[] => {
-  if (typeof window === 'undefined') return fallback
-
+const loadStored = async <T extends object,>(collection: BusinessCollection, key: string, fallback: T[]): Promise<T[]> => {
   try {
-    const stored = window.localStorage.getItem(key)
-    return stored ? (JSON.parse(stored) as T[]) : fallback
+    const serverRows = await listBusinessRecords<T>(collection)
+    if (serverRows.length) return serverRows
+    const legacyRows = readLegacyBusinessRows<T>([key])
+    if (legacyRows.length) {
+      await replaceBusinessCollection(collection, legacyRows)
+      clearLegacyBusinessRows([key])
+      return legacyRows
+    }
+    return fallback
   } catch {
     return fallback
   }
+}
+
+const saveStored = <T extends object,>(collection: BusinessCollection, rows: T[]) => {
+  void replaceBusinessCollection(collection, rows).catch(() => undefined)
 }
 
 const money = (value: number | undefined | null) => `PHP ${(value ?? 0).toLocaleString('en-PH')}.00`
@@ -320,55 +353,64 @@ export default function ProjectsPage() {
   const calculatedUnpaidAmount = Math.max(projectCost - paidAmount, 0)
 
   useEffect(() => {
-    setMounted(true)
-    setProjects(loadProjects())
-    setClientRecords(loadClients())
-    setProjectTasks(loadStored<ProjectTask>(projectTasksStorageKey, []))
-    setProjectMessages(loadStored<ProjectMessage>(projectMessagesStorageKey, []))
-    setProjectAttachments(loadStored<ProjectAttachment>(projectAttachmentsStorageKey, []))
-    setProjectProgress(loadStored<ProjectProgressUpdate>(projectProgressStorageKey, []))
-    setChangeOrders(loadStored<ChangeOrder>(changeOrdersStorageKey, []))
-    setAssignedTasks(loadStored<AssignedTask>(assignedTasksStorageKey, []))
+    const timer = window.setTimeout(() => {
+      setMounted(true)
+      void Promise.all([
+        loadProjects(),
+        loadProjectClients(),
+        loadStored<ProjectTask>('project-tasks', projectTasksStorageKey, []),
+        loadStored<ProjectMessage>('project-messages', projectMessagesStorageKey, []),
+        loadStored<ProjectAttachment>('project-attachments', projectAttachmentsStorageKey, []),
+        loadStored<ProjectProgressUpdate>('project-progress', projectProgressStorageKey, []),
+        loadStored<ChangeOrder>('project-change-orders', changeOrdersStorageKey, []),
+        loadStored<AssignedTask>('assigned-tasks', assignedTasksStorageKey, []),
+      ]).then(([nextProjects, nextClients, nextTasks, nextMessages, nextAttachments, nextProgress, nextChangeOrders, nextAssignedTasks]) => {
+        setProjects(nextProjects)
+        setClientRecords(nextClients)
+        setProjectTasks(nextTasks)
+        setProjectMessages(nextMessages)
+        setProjectAttachments(nextAttachments)
+        setProjectProgress(nextProgress)
+        setChangeOrders(nextChangeOrders)
+        setAssignedTasks(nextAssignedTasks)
+      })
+    }, 0)
+    return () => window.clearTimeout(timer)
   }, [])
 
   useEffect(() => {
     if (!mounted) return
-    window.localStorage.setItem(storageKey, JSON.stringify(projects))
+    saveStored('project-legacy-records', projects)
   }, [mounted, projects])
 
   useEffect(() => {
     if (!mounted) return
-    window.localStorage.setItem(clientsStorageKey, JSON.stringify(clientRecords))
-  }, [mounted, clientRecords])
-
-  useEffect(() => {
-    if (!mounted) return
-    window.localStorage.setItem(projectTasksStorageKey, JSON.stringify(projectTasks))
+    saveStored('project-tasks', projectTasks)
   }, [mounted, projectTasks])
 
   useEffect(() => {
     if (!mounted) return
-    window.localStorage.setItem(projectMessagesStorageKey, JSON.stringify(projectMessages))
+    saveStored('project-messages', projectMessages)
   }, [mounted, projectMessages])
 
   useEffect(() => {
     if (!mounted) return
-    window.localStorage.setItem(projectAttachmentsStorageKey, JSON.stringify(projectAttachments))
+    saveStored('project-attachments', projectAttachments)
   }, [mounted, projectAttachments])
 
   useEffect(() => {
     if (!mounted) return
-    window.localStorage.setItem(projectProgressStorageKey, JSON.stringify(projectProgress))
+    saveStored('project-progress', projectProgress)
   }, [mounted, projectProgress])
 
   useEffect(() => {
     if (!mounted) return
-    window.localStorage.setItem(changeOrdersStorageKey, JSON.stringify(changeOrders))
+    saveStored('project-change-orders', changeOrders)
   }, [mounted, changeOrders])
 
   useEffect(() => {
     if (!mounted) return
-    window.localStorage.setItem(assignedTasksStorageKey, JSON.stringify(assignedTasks))
+    saveStored('assigned-tasks', assignedTasks)
   }, [mounted, assignedTasks])
 
   const clients = useMemo(() => clientRecords.map(record => record.name), [clientRecords])

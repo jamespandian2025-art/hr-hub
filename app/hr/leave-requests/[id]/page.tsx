@@ -17,6 +17,7 @@ import { listHrRecords, updateHrRecord } from '@/lib/hrms/client'
 const font = "var(--font-body)"
 const detailTabs = ['Overview', 'Attendance', 'Leave Requests', 'Leave Balance', 'Calendar', 'Documents', 'Activity'] as const
 type DetailTab = typeof detailTabs[number]
+const syncErrorStyle = { marginBottom: 16, padding: '10px 12px', border: '1px solid #fecaca', borderRadius: 10, background: '#fef2f2', color: '#b91c1c', fontSize: 13, fontWeight: 800 } as const
 const leaveEntitlements = [
   { type: 'Annual Leave', total: 20, color: '#16a34a' },
   { type: 'Vacation Leave', total: 20, color: '#16a34a' },
@@ -79,6 +80,7 @@ export default function EmployeeLeaveRequestsPage() {
   const [menuId, setMenuId] = useState<string | null>(null)
   const [activeTab, setActiveTab] = useState<DetailTab>('Leave Requests')
   const [calendarDate, setCalendarDate] = useState(() => new Date())
+  const [syncError, setSyncError] = useState('')
   const menuRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -186,21 +188,27 @@ export default function EmployeeLeaveRequestsPage() {
   }
 
   async function updateStatus(row: LeaveRow, status: LeaveStatus) {
+    setSyncError('')
     const next = requests.map(request => {
       if (request.id !== row.id) return request
       if (status === 'Cancelled') return { ...request, status, approvalStep: 'complete' as const, updatedAt: new Date().toISOString() }
       if (status === 'Pending') return { ...request, status, updatedAt: new Date().toISOString() }
       return decideLeaveRequest(request, row.employee, 'hr', status)
     })
-    persist(next)
     const changed = next.find(request => request.id === row.id)
     if (changed) {
       try {
         await updateHrRecord<LeaveRequest>('leave-requests', changed.id, changed as unknown as Record<string, unknown>)
       } catch (error) {
         console.error('Could not sync leave request decision', error)
+        setSyncError(error instanceof Error
+          ? `Could not update this leave request in HR records. ${error.message}`
+          : 'Could not update this leave request in HR records. Please try again.')
+        setMenuId(null)
+        return
       }
     }
+    persist(next)
     setMenuId(null)
   }
 
@@ -226,6 +234,7 @@ export default function EmployeeLeaveRequestsPage() {
   return (
     <div className="hr-module-page" style={{ fontFamily: font }}>
       <div style={{ color: '#64748b', fontSize: 12, marginBottom: 18 }}>HR Hub&nbsp;&nbsp;&gt;&nbsp;&nbsp;Leave Requests&nbsp;&nbsp;&gt;&nbsp;&nbsp;{name}</div>
+      {syncError && <div style={syncErrorStyle}>{syncError}</div>}
       <div style={{ ...cardStyle, padding: 24, marginBottom: 18 }}>
         <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) 420px', gap: 26 }}>
           <div>

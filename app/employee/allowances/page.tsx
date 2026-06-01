@@ -6,6 +6,7 @@ import EmployeeEmptyPage from '@/components/employee/EmployeeEmptyPage'
 import { allowanceRequestKey, AllowanceRequest, appendAuditLog, isFuelEligible, loadStored, saveStored } from '@/app/hr/enterpriseData'
 import { matchesEmployeeId, useEmployeePortalData } from '../employeeData'
 import { createHrRecord, listHrRecords } from '@/lib/hrms/client'
+import { uploadFileObject } from '@/lib/uploads/client'
 
 type AllowanceSelection = 'Meal' | 'Fuel' | 'Manual'
 
@@ -22,22 +23,25 @@ export default function EmployeeAllowancesPage() {
   const [attachmentDataUrl, setAttachmentDataUrl] = useState('')
   const [attachmentType, setAttachmentType] = useState('')
   const [notice, setNotice] = useState('')
+  const [noticeTone, setNoticeTone] = useState<'success' | 'error'>('success')
+  const [isSubmitting, setIsSubmitting] = useState(false)
   const myRequests = useMemo(() => requests.filter(item => matchesEmployeeId(item.employeeId, employee) || matchesEmployeeId(item.employeeCode, employee)), [employee, requests])
   const fuelAllowed = isFuelEligible(employee.jobTitle)
   const isManual = type === 'Manual'
   const displayType = isManual ? manualType.trim() || 'Custom Allowance' : type
 
-  const uploadReceipt = (file?: File) => {
+  const uploadReceipt = async (file?: File) => {
     if (!file) return
     setAttachmentName(file.name)
     setAttachmentType(file.type || 'application/octet-stream')
-    const reader = new FileReader()
-    reader.onload = () => setAttachmentDataUrl(typeof reader.result === 'string' ? reader.result : '')
-    reader.onerror = () => {
+    try {
+      const uploaded = await uploadFileObject(file, 'allowance-receipts')
+      setAttachmentDataUrl(uploaded.url)
+    } catch {
       setAttachmentDataUrl('')
-      setNotice('Could not read the receipt file. Please try another file.')
+      setNoticeTone('error')
+      setNotice('Could not upload the receipt file. Please try another file.')
     }
-    reader.readAsDataURL(file)
   }
 
   useEffect(() => {
@@ -73,65 +77,82 @@ export default function EmployeeAllowancesPage() {
   }, [employee.id, employee.employeeId, employeeName])
 
   const submit = async () => {
+    if (isSubmitting) return
     setNotice('')
     const amountValue = Number(amount || 0)
     if (isManual && !manualType.trim()) {
+      setNoticeTone('error')
       setNotice('Please enter the manual allowance type.')
       return
     }
     if (!date || amountValue <= 0 || !purpose.trim()) {
+      setNoticeTone('error')
       setNotice('Date, amount, and purpose/reason are required.')
       return
     }
-    const now = new Date().toISOString()
-    const request: AllowanceRequest = {
-      id: `ALW-${Date.now()}`,
-      employeeId: employee.id,
-      employeeName,
-      employeeCode: employee.employeeId,
-      department: employee.department,
-      jobTitle: employee.jobTitle,
-      type: isManual ? 'Other' : type,
-      customType: isManual ? manualType.trim() : undefined,
-      date,
-      amount: amountValue,
-      purpose: type === 'Fuel' ? purpose.trim() : undefined,
-      reason: type === 'Meal' ? purpose.trim() : undefined,
-      remarks: remarks.trim(),
-      attachmentName: attachmentName.trim() || undefined,
-      attachmentDataUrl: attachmentDataUrl || undefined,
-      attachmentType: attachmentType || undefined,
-      status: 'Pending',
-      managerDecision: 'Pending',
-      financeDecision: 'Pending',
-      createdAt: now,
-      updatedAt: now,
-    }
-    let savedRequest = request
+
+    setIsSubmitting(true)
     try {
-      savedRequest = await createHrRecord<AllowanceRequest>('allowance-requests', request as unknown as Record<string, unknown>)
-    } catch (error) {
-      console.error('Could not sync allowance request to Finance inbox', error)
+      const now = new Date().toISOString()
+      const request: AllowanceRequest = {
+        id: `ALW-${Date.now()}`,
+        employeeId: employee.id,
+        employeeName,
+        employeeCode: employee.employeeId,
+        department: employee.department,
+        jobTitle: employee.jobTitle,
+        type: isManual ? 'Other' : type,
+        customType: isManual ? manualType.trim() : undefined,
+        date,
+        amount: amountValue,
+        purpose: type === 'Fuel' ? purpose.trim() : undefined,
+        reason: type === 'Meal' ? purpose.trim() : undefined,
+        remarks: remarks.trim(),
+        attachmentName: attachmentName.trim() || undefined,
+        attachmentDataUrl: attachmentDataUrl || undefined,
+        attachmentType: attachmentType || undefined,
+        status: 'Pending',
+        managerDecision: 'Pending',
+        financeDecision: 'Pending',
+        createdAt: now,
+        updatedAt: now,
+      }
+
+      let savedRequest: AllowanceRequest
+      try {
+        savedRequest = await createHrRecord<AllowanceRequest>('allowance-requests', request as unknown as Record<string, unknown>)
+      } catch (error) {
+        console.error('Could not sync allowance request to Finance inbox', error)
+        setNoticeTone('error')
+        setNotice(error instanceof Error
+          ? `Could not submit this allowance request to Finance. ${error.message}`
+          : 'Could not submit this allowance request to Finance. Please try again.')
+        return
+      }
+
+      const nextRequests = [savedRequest, ...requests.filter(item => item.id !== savedRequest.id)]
+      setRequests(nextRequests)
+      saveStored(allowanceRequestKey, nextRequests)
+      window.dispatchEvent(new Event('storage'))
+      window.dispatchEvent(new Event('wiseflow:finance-requests-changed'))
+      appendAuditLog({ action: 'allowance.change', targetType: 'Allowance Request', targetId: request.id, summary: `${employeeName} filed ${displayType} allowance for ${amountValue}.` })
+      setAmount('')
+      setPurpose('')
+      setRemarks('')
+      setAttachmentName('')
+      setAttachmentDataUrl('')
+      setAttachmentType('')
+      if (isManual) setManualType('')
+      setNoticeTone('success')
+      setNotice(`${displayType} allowance request submitted for finance approval.`)
+    } finally {
+      setIsSubmitting(false)
     }
-    const nextRequests = [savedRequest, ...requests.filter(item => item.id !== savedRequest.id)]
-    setRequests(nextRequests)
-    saveStored(allowanceRequestKey, nextRequests)
-    window.dispatchEvent(new Event('storage'))
-    window.dispatchEvent(new Event('wiseflow:finance-requests-changed'))
-    appendAuditLog({ action: 'allowance.change', targetType: 'Allowance Request', targetId: request.id, summary: `${employeeName} filed ${displayType} allowance for ${amountValue}.` })
-    setAmount('')
-    setPurpose('')
-    setRemarks('')
-    setAttachmentName('')
-    setAttachmentDataUrl('')
-    setAttachmentType('')
-    if (isManual) setManualType('')
-    setNotice(`${displayType} allowance request submitted for finance approval.`)
   }
 
   return (
     <EmployeeEmptyPage title="My Allowances" subtitle="Request meal and eligible fuel allowances and track approval history.">
-      {notice && <div style={noticeStyle}>{notice}</div>}
+      {notice && <div style={noticeTone === 'success' ? noticeStyle : errorNoticeStyle}>{notice}</div>}
       <section className="employee-panel" style={{ padding: 18, marginBottom: 18 }}>
         <div style={formGrid}>
           <label style={fieldStyle}>Allowance type<select value={type} onChange={event => setType(event.target.value as AllowanceSelection)} style={inputStyle}><option>Meal</option><option>Fuel</option><option value="Manual">Add allowance type manually</option></select></label>
@@ -153,7 +174,7 @@ export default function EmployeeAllowancesPage() {
             </span>
           </label>
           <label style={fieldStyle}>Remarks<input value={remarks} onChange={event => setRemarks(event.target.value)} style={inputStyle} /></label>
-          <button type="button" onClick={submit} className="employee-primary-button"><Plus size={16} /> Submit</button>
+          <button type="button" onClick={submit} disabled={isSubmitting} className="employee-primary-button"><Plus size={16} /> {isSubmitting ? 'Submitting...' : 'Submit'}</button>
         </div>
         {type === 'Fuel' && !fuelAllowed && <div style={hintStyle}>Fuel is selectable. Finance will review eligibility for your position before approving.</div>}
       </section>
@@ -179,6 +200,7 @@ const fileInputStyle = { position: 'absolute', inset: 0, opacity: 0, cursor: 'po
 const receiptTextStyle = { display: 'inline-flex', alignItems: 'center', gap: 6, maxWidth: 220, color: '#0f172a' } as const
 const receiptLinkStyle = { ...receiptTextStyle, color: '#047857', textDecoration: 'none', fontWeight: 800 } as const
 const noticeStyle = { padding: 12, borderRadius: 10, background: '#ecfdf5', color: '#047857', fontWeight: 900, fontSize: 13, marginBottom: 16 } as const
+const errorNoticeStyle = { padding: 12, borderRadius: 10, background: '#fef2f2', color: '#b91c1c', fontWeight: 900, fontSize: 13, marginBottom: 16 } as const
 const hintStyle = { marginTop: 12, padding: 10, borderRadius: 8, background: '#fffbeb', color: '#92400e', fontWeight: 800, fontSize: 12 } as const
 const panelHeader = { padding: 18, borderBottom: '1px solid #e2e8f0' } as const
 const cell = { padding: '12px 16px', color: '#0f172a', fontSize: 13 } as const
