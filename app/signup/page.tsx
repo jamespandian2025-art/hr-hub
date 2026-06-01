@@ -10,6 +10,7 @@ import { constantTimeEqual } from '@/lib/security/constantTime'
 import {
   accountKey,
   type AccountRole,
+  type AuthProvider,
   type AuthUser,
   createPasswordFields,
   isGmailAddress,
@@ -32,6 +33,21 @@ import {
 
 const devDemoAdminEmail = 'wiseflow.demo@gmail.com'
 
+type SupabaseSignupUser = {
+  id: string
+  email?: string
+  app_metadata?: {
+    provider?: string
+    providers?: string[]
+  }
+  user_metadata?: {
+    company_name?: string
+    full_name?: string
+    name?: string
+    role?: string
+  }
+}
+
 function initialInviteEmail() {
   if (typeof window === 'undefined') return ''
   return new URLSearchParams(window.location.search).get('invite')?.trim().toLowerCase() || ''
@@ -47,6 +63,23 @@ function hasAdminOwner(authUsers: AuthUser[]) {
   } catch {
     return false
   }
+}
+
+function metadataText(input: unknown) {
+  return typeof input === 'string' ? input.trim() : ''
+}
+
+function roleFromMetadata(input: unknown) {
+  return typeof input === 'string' ? authRoleForCompanyRole(input) as AccountRole : null
+}
+
+function authProviderForSupabaseUser(user: SupabaseSignupUser): AuthProvider {
+  const provider = user.app_metadata?.provider || user.app_metadata?.providers?.[0]
+  return provider === 'email' ? 'email' : 'gmail'
+}
+
+function signupEmailRedirectTo() {
+  return typeof window === 'undefined' ? undefined : `${window.location.origin}/login`
 }
 
 export default function SignupPage() {
@@ -123,16 +156,18 @@ export default function SignupPage() {
     if (!supabase) return
 
     let mounted = true
-    const finishGoogleSignup = async () => {
+    const finishSupabaseSignup = async () => {
       if (window.localStorage.getItem(logoutIntentKey)) return
 
       const { data } = await supabase.auth.getSession()
-      const supabaseUser = data.session?.user
+      const supabaseUser = data.session?.user as SupabaseSignupUser | undefined
       if (!mounted || !supabaseUser) return
 
       const currentUsers = loadAuthUsers()
       const userEmail = (supabaseUser.email || '').trim().toLowerCase()
-      const userName = supabaseUser.user_metadata?.full_name || supabaseUser.user_metadata?.name || userEmail.split('@')[0] || 'Google User'
+      const metadata = supabaseUser.user_metadata || {}
+      const userName = metadataText(metadata.full_name) || metadataText(metadata.name) || userEmail.split('@')[0] || 'WiseFlow User'
+      const provider = authProviderForSupabaseUser(supabaseUser)
 
       if (!isGmailAddress(userEmail)) {
         setError('Use a Gmail account for workspace signup.')
@@ -146,46 +181,49 @@ export default function SignupPage() {
         return
       }
 
-    const googleInvite = findPendingCompanyInvitation(userEmail)
-    const googleRole = (googleInvite ? authRoleForCompanyRole(googleInvite.member.role) : 'Admin') as AccountRole
+      const supabaseInvite = findPendingCompanyInvitation(userEmail)
+      const supabaseRole = (supabaseInvite
+        ? authRoleForCompanyRole(supabaseInvite.member.role)
+        : roleFromMetadata(metadata.role) || 'Admin') as AccountRole
+      const supabaseCompanyName = supabaseInvite?.company.name || metadataText(metadata.company_name) || userName || 'WiseFlow Company'
 
-    if (hasAdminOwner(currentUsers) && !googleInvite) {
-      setError('An Admin owner already exists. Please log in or ask the Admin to invite you.')
-      await supabase.auth.signOut()
-      return
+      if (hasAdminOwner(currentUsers) && !supabaseInvite) {
+        setError('An Admin owner already exists. Please log in or ask the Admin to invite you.')
+        await supabase.auth.signOut()
+        return
       }
 
       await supabase.auth.updateUser({
         data: {
-          role: googleRole,
+          role: supabaseRole,
           full_name: userName,
           name: userName,
-          company_name: googleInvite?.company.name || userName || 'WiseFlow Company',
+          company_name: supabaseCompanyName,
         },
       }).catch(() => undefined)
 
-      const googleUser: AuthUser = {
+      const supabaseAuthUser: AuthUser = {
         id: currentUsers.reduce((max, user) => Math.max(max, user.id), 0) + 1,
         name: userName,
         email: userEmail,
-        provider: 'gmail',
-        role: googleRole,
+        provider,
+        role: supabaseRole,
       }
-      const nextUsers = [...currentUsers, googleUser]
+      const nextUsers = [...currentUsers, supabaseAuthUser]
       setUsers(nextUsers)
       saveAuthUsers(nextUsers)
-      const acceptedInvite = googleInvite ? acceptCompanyInvitation(userEmail, userName) : null
-      window.localStorage.setItem(sessionKey, JSON.stringify({ userId: googleUser.id, email: googleUser.email, provider: googleUser.provider, role: googleRole }))
+      const acceptedInvite = supabaseInvite ? acceptCompanyInvitation(userEmail, userName) : null
+      window.localStorage.setItem(sessionKey, JSON.stringify({ userId: supabaseAuthUser.id, email: supabaseAuthUser.email, provider: supabaseAuthUser.provider, role: supabaseRole }))
       window.localStorage.setItem(
         accountKey,
         JSON.stringify({
-          user: publicUser(googleUser),
-          company: acceptedInvite?.company.name || userName || 'WiseFlow Company',
+          user: publicUser(supabaseAuthUser),
+          company: acceptedInvite?.company.name || supabaseCompanyName,
           companyId: acceptedInvite?.company.id,
-          email: googleUser.email,
-          role: googleRole,
-          roleLocked: !googleInvite && googleRole === 'Admin',
-          onboardingComplete: Boolean(googleInvite),
+          email: supabaseAuthUser.email,
+          role: supabaseRole,
+          roleLocked: !supabaseInvite && supabaseRole === 'Admin',
+          onboardingComplete: Boolean(supabaseInvite),
           theme: 'Bright',
           density: 'Comfortable',
           emailNotifications: true,
@@ -193,14 +231,14 @@ export default function SignupPage() {
           invitations: [],
         })
       )
-      if (googleInvite) {
+      if (supabaseInvite) {
         window.localStorage.setItem(onboardingKey, JSON.stringify({ complete: true, step: 4 }))
       } else {
         window.localStorage.removeItem(onboardingKey)
       }
-      await establishServerSession({ userId: googleUser.id, email: googleUser.email, name: googleUser.name, provider: googleUser.provider, role: googleRole })
+      await establishServerSession({ userId: supabaseAuthUser.id, email: supabaseAuthUser.email, name: supabaseAuthUser.name, provider: supabaseAuthUser.provider, role: supabaseRole })
       const bootstrappedCompany = await bootstrapCompanyOnServer({
-        companyName: acceptedInvite?.company.name || userName || 'WiseFlow Company',
+        companyName: acceptedInvite?.company.name || supabaseCompanyName,
         companyId: acceptedInvite?.company.id,
         companyType: 'Operating Company',
       })
@@ -212,13 +250,13 @@ export default function SignupPage() {
         companyId: bootstrappedCompany.id,
       }))
       window.localStorage.setItem(activeCompanyKey, bootstrappedCompany.id)
-      router.push(googleInvite ? '/choose-account' : '/onboarding')
+      router.push(supabaseInvite ? '/choose-account' : '/onboarding')
     }
 
-    void finishGoogleSignup()
+    void finishSupabaseSignup()
 
     const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => {
-      if (session?.user) void finishGoogleSignup()
+      if (session?.user) void finishSupabaseSignup()
     })
 
     return () => {
@@ -267,6 +305,7 @@ export default function SignupPage() {
           email: trimmedEmail,
           password,
           options: {
+            emailRedirectTo: signupEmailRedirectTo(),
             data: {
               role: accountRole,
               full_name: name.trim() || company.trim() || 'WiseFlow User',
@@ -282,7 +321,7 @@ export default function SignupPage() {
         }
 
         if (!data.session) {
-          setError('Check your email to confirm the Supabase account, then log in to finish setup.')
+          setError('Supabase sent a confirmation email. Open it, then log in to finish workspace setup.')
           return
         }
       }

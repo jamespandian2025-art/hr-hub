@@ -34,6 +34,21 @@ interface AccountState {
   onboardingComplete?: boolean
 }
 
+type SupabaseLoginUser = {
+  id: string
+  email?: string
+  app_metadata?: {
+    provider?: string
+    providers?: string[]
+  }
+  user_metadata?: {
+    company_name?: string
+    full_name?: string
+    name?: string
+    role?: string
+  }
+}
+
 const accountRoles = new Set(['Admin', 'Finance', 'HR', 'Employee', 'Team Manager', 'Project Manager', 'Support', 'Client'])
 
 const loginStats = [
@@ -47,6 +62,15 @@ function invitedRole(input: unknown): AccountState['role'] | null {
   if (accountRoles.has(input)) return input as AccountState['role']
   if (['Member', 'Sales', 'Warehouse', 'Procurement'].includes(input)) return 'Support'
   return null
+}
+
+function metadataText(input: unknown) {
+  return typeof input === 'string' ? input.trim() : ''
+}
+
+function authProviderForSupabaseUser(user: SupabaseLoginUser): AuthUser['provider'] {
+  const provider = user.app_metadata?.provider || user.app_metadata?.providers?.[0]
+  return provider === 'email' ? 'email' : 'gmail'
 }
 
 function existingSessionRoute() {
@@ -90,23 +114,25 @@ export default function LoginPage() {
     if (!supabase) return
 
     let mounted = true
-    const completeGoogleLogin = async (sessionUser: { id: string; email?: string; user_metadata?: { full_name?: string; name?: string; role?: string } }) => {
+    const completeGoogleLogin = async (sessionUser: SupabaseLoginUser) => {
       if (!mounted) return
       if (window.localStorage.getItem(logoutIntentKey)) return
 
       const userEmail = (sessionUser.email || '').trim().toLowerCase()
       const registeredUsers = loadAuthUsers()
       let registeredUser = registeredUsers.find(user => user.email.toLowerCase() === userEmail)
-      const roleFromInvite = invitedRole(sessionUser.user_metadata?.role)
+      const metadata = sessionUser.user_metadata || {}
+      const roleFromInvite = invitedRole(metadata.role)
+      const provider = authProviderForSupabaseUser(sessionUser)
       const accountRaw = window.localStorage.getItem(accountKey)
       const account = accountRaw ? (JSON.parse(accountRaw) as AccountState) : {}
 
       if (!registeredUser && roleFromInvite) {
         registeredUser = {
           id: registeredUsers.reduce((max, user) => Math.max(max, user.id), 0) + 1,
-          name: sessionUser.user_metadata?.full_name || sessionUser.user_metadata?.name || userEmail.split('@')[0] || 'Invited User',
+          name: metadataText(metadata.full_name) || metadataText(metadata.name) || userEmail.split('@')[0] || 'Invited User',
           email: userEmail,
-          provider: 'gmail',
+          provider,
           role: roleFromInvite,
         }
         saveAuthUsers([...registeredUsers, registeredUser])
@@ -115,9 +141,9 @@ export default function LoginPage() {
       if (!registeredUser && account.role === 'Admin' && account.roleLocked === true && account.email?.toLowerCase() === userEmail) {
         registeredUser = {
           id: registeredUsers.reduce((max, user) => Math.max(max, user.id), 0) + 1,
-          name: account.fullName || account.name || sessionUser.user_metadata?.full_name || sessionUser.user_metadata?.name || userEmail.split('@')[0] || 'Admin Owner',
+          name: account.fullName || account.name || metadataText(metadata.full_name) || metadataText(metadata.name) || userEmail.split('@')[0] || 'Admin Owner',
           email: userEmail,
-          provider: 'gmail',
+          provider,
           role: 'Admin',
         }
         saveAuthUsers([...registeredUsers, registeredUser])
@@ -129,14 +155,15 @@ export default function LoginPage() {
         return
       }
 
-      const userName = registeredUser.name || sessionUser.user_metadata?.full_name || sessionUser.user_metadata?.name || userEmail.split('@')[0] || 'Google User'
+      const userName = registeredUser.name || metadataText(metadata.full_name) || metadataText(metadata.name) || userEmail.split('@')[0] || 'WiseFlow User'
       const role = registeredUser.role || account.role || 'Admin'
+      const companyName = metadataText(metadata.company_name) || account.company || userName || 'WiseFlow Company'
       await supabase.auth.updateUser({
         data: {
           role,
           full_name: userName,
           name: userName,
-          company_name: account.company || userName || 'WiseFlow Company',
+          company_name: companyName,
         },
       }).catch(() => undefined)
       window.localStorage.setItem(sessionKey, JSON.stringify({ userId: registeredUser.id, email: userEmail, provider: registeredUser.provider, role }))
@@ -145,13 +172,14 @@ export default function LoginPage() {
         user: publicUser({ ...registeredUser, name: userName, role }),
         name: userName,
         fullName: userName,
+        company: companyName,
         email: userEmail,
         role,
         theme: account.theme || 'Bright',
       }))
       await establishServerSession({ userId: registeredUser.id, email: userEmail, name: userName, provider: registeredUser.provider, role })
       const bootstrappedCompany = await bootstrapCompanyOnServer({
-        companyName: account.company || userName || 'WiseFlow Company',
+        companyName,
         companyId: account.companyId,
         companyType: 'Operating Company',
       })
