@@ -89,6 +89,11 @@ const allPermissions: CompanyPermission[] = [
   'settings',
   'members',
 ]
+const seededFallbackCompanyNames = new Set([
+  'wiseflow company',
+  'livewise construction',
+  'livwise construction',
+])
 
 export function rolePermissions(role: CompanyRole): CompanyPermission[] {
   if (role === 'Owner' || role === 'Admin') return allPermissions
@@ -112,17 +117,17 @@ export function authRoleForCompanyRole(role?: string) {
   return 'Support'
 }
 
-export function loadCompanies(): CompanyRecord[] {
+export function loadCompanies(accountSnapshot?: AccountSnapshot): CompanyRecord[] {
   if (typeof window === 'undefined') return []
   try {
     const parsed = JSON.parse(window.localStorage.getItem(companiesKey) || '[]') as unknown
     const records = Array.isArray(parsed) ? parsed.filter(isCompanyRecord) : []
-    const normalized = normalizeCompanyIds(records)
-    if (normalized.changed) {
-      window.localStorage.setItem(companiesKey, JSON.stringify(normalized.companies))
-      if (normalized.activeCompanyId) window.localStorage.setItem(activeCompanyKey, normalized.activeCompanyId)
+    const sanitized = sanitizeCompanies(records, accountSnapshot)
+    if (sanitized.changed) {
+      window.localStorage.setItem(companiesKey, JSON.stringify(sanitized.companies))
+      if (sanitized.activeCompanyId) window.localStorage.setItem(activeCompanyKey, sanitized.activeCompanyId)
     }
-    return normalized.companies
+    return sanitized.companies
   } catch {
     return []
   }
@@ -131,7 +136,7 @@ export function loadCompanies(): CompanyRecord[] {
 export function loadAccessibleCompanies(accountSnapshot?: AccountSnapshot): CompanyRecord[] {
   const actor = { ...getCurrentActor(), ...accountSnapshot }
   const actorEmail = actor.email || 'owner@wiseflow.local'
-  return loadCompanies().filter(company => isCompanyMember(company, actorEmail))
+  return loadCompanies(actor).filter(company => isCompanyMember(company, actorEmail))
 }
 
 export function saveCompanies(companies: CompanyRecord[]) {
@@ -414,6 +419,116 @@ function uniqueCompanyId(name: string) {
 function slugifyCompanyId(name: string) {
   const slug = name.toLowerCase().trim().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '')
   return slug || `company-${Date.now()}`
+}
+
+function sanitizeCompanies(companies: CompanyRecord[], accountSnapshot?: AccountSnapshot) {
+  const normalized = normalizeCompanyIds(companies)
+  const actor = { ...getCurrentActor(), ...accountSnapshot }
+  const deduped = mergeDuplicateCompanies(normalized.companies, normalized.activeCompanyId, actor)
+  const pruned = removeSeededFallbackCompanies(deduped.companies, deduped.activeCompanyId, actor)
+
+  return {
+    companies: pruned.companies,
+    changed: normalized.changed || deduped.changed || pruned.changed,
+    activeCompanyId: pruned.activeCompanyId || deduped.activeCompanyId || normalized.activeCompanyId,
+  }
+}
+
+function mergeDuplicateCompanies(companies: CompanyRecord[], activeCompanyId = '', actor: AccountSnapshot = getCurrentActor()) {
+  const groups: CompanyRecord[][] = []
+  let changed = false
+  let nextActiveCompanyId = activeCompanyId
+
+  for (const company of companies) {
+    const matchingGroup = groups.find(group => group.some(existing => isDuplicateCompany(existing, company)))
+    if (matchingGroup) {
+      matchingGroup.push(company)
+      changed = true
+    } else {
+      groups.push([company])
+    }
+  }
+
+  const merged = groups.map(group => {
+    if (group.length === 1) return group[0]
+    const primary = pickPreferredCompany(group, nextActiveCompanyId, actor)
+    if (group.some(company => company.id === nextActiveCompanyId)) nextActiveCompanyId = primary.id
+    return mergeCompanyGroup(primary, group)
+  })
+
+  return { companies: merged, changed, activeCompanyId: nextActiveCompanyId }
+}
+
+function removeSeededFallbackCompanies(companies: CompanyRecord[], activeCompanyId = '', actor: AccountSnapshot = getCurrentActor()) {
+  const actorEmail = actor.email || 'owner@wiseflow.local'
+  const accountCompanyName = canonicalCompanyName(actor.company)
+  const accessible = companies.filter(company => isCompanyMember(company, actorEmail))
+  const hasRealWorkspace = accessible.some(company => !isSeededFallbackCompany(company) || canonicalCompanyName(company.name) === accountCompanyName)
+
+  if (!hasRealWorkspace) return { companies, changed: false, activeCompanyId }
+
+  const filtered = companies.filter(company => {
+    if (!isSeededFallbackCompany(company)) return true
+    if (canonicalCompanyName(company.name) === accountCompanyName) return true
+    return !isCompanyMember(company, actorEmail)
+  })
+
+  if (filtered.length === companies.length) return { companies, changed: false, activeCompanyId }
+
+  const nextActiveCompanyId = filtered.some(company => company.id === activeCompanyId)
+    ? activeCompanyId
+    : preferredCompanyId(filtered, actor, actorEmail)
+
+  return { companies: filtered, changed: true, activeCompanyId: nextActiveCompanyId }
+}
+
+function canonicalCompanyName(name?: string) {
+  return (name || '').trim().replace(/\s+/g, ' ').toLowerCase()
+}
+
+function isSeededFallbackCompany(company: CompanyRecord) {
+  return seededFallbackCompanyNames.has(canonicalCompanyName(company.name))
+}
+
+function isDuplicateCompany(a: CompanyRecord, b: CompanyRecord) {
+  if (canonicalCompanyName(a.name) !== canonicalCompanyName(b.name)) return false
+  if (a.ownerEmail.toLowerCase() === b.ownerEmail.toLowerCase()) return true
+  const aMembers = new Set(a.members.map(member => member.email.toLowerCase()))
+  return b.members.some(member => aMembers.has(member.email.toLowerCase()))
+}
+
+function pickPreferredCompany(companies: CompanyRecord[], activeCompanyId = '', actor: AccountSnapshot = getCurrentActor()) {
+  const accountCompanyName = canonicalCompanyName(actor.company)
+  return companies.find(company => company.id === activeCompanyId)
+    || companies.find(company => actor.companyId && company.id === actor.companyId)
+    || companies.find(company => accountCompanyName && canonicalCompanyName(company.name) === accountCompanyName)
+    || companies.find(company => !isSeededFallbackCompany(company))
+    || companies[0]
+}
+
+function mergeCompanyGroup(primary: CompanyRecord, companies: CompanyRecord[]) {
+  const memberByEmail = new Map<string, CompanyMember>()
+  for (const company of companies) {
+    for (const member of company.members) {
+      const key = member.email.toLowerCase()
+      const existing = memberByEmail.get(key)
+      if (!existing || (existing.status !== 'Active' && member.status === 'Active') || member.role === 'Owner') {
+        memberByEmail.set(key, member)
+      }
+    }
+  }
+
+  return {
+    ...primary,
+    members: Array.from(memberByEmail.values()),
+  }
+}
+
+function preferredCompanyId(companies: CompanyRecord[], actor: AccountSnapshot, actorEmail: string) {
+  if (actor.companyId && companies.some(company => company.id === actor.companyId && isCompanyMember(company, actorEmail))) return actor.companyId
+  const accountCompanyName = canonicalCompanyName(actor.company)
+  const namedCompany = companies.find(company => accountCompanyName && canonicalCompanyName(company.name) === accountCompanyName && isCompanyMember(company, actorEmail))
+  return namedCompany?.id || companies.find(company => isCompanyMember(company, actorEmail))?.id || companies[0]?.id || ''
 }
 
 function normalizeCompanyIds(companies: CompanyRecord[]) {

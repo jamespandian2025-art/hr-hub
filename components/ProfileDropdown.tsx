@@ -1,5 +1,5 @@
 'use client'
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Check } from 'lucide-react'
 import { type CompanyRecord, companyChangeEvent, getActiveCompany, loadAccessibleCompanies, setActiveCompanyId } from '@/lib/tenant/company'
 
@@ -8,6 +8,10 @@ const font = "var(--font-body)"
 export default function ProfileDropdown() {
   const [companies, setCompanies] = useState<CompanyRecord[]>([])
   const [activeCompany, setActiveCompany] = useState<CompanyRecord | null>(null)
+  const profileCompanies = useMemo(() => {
+    if (activeCompany) return [activeCompany]
+    return companies.slice(0, 1)
+  }, [activeCompany, companies])
 
   useEffect(() => {
     const refresh = () => {
@@ -83,7 +87,7 @@ export default function ProfileDropdown() {
           Switch Settings
         </div>
 
-        {companies.map(company => (
+        {profileCompanies.map(company => (
           <div
             key={company.id}
             onClick={() => switchCompany(company.id)}
@@ -134,7 +138,7 @@ export default function ProfileDropdown() {
               borderRadius: '6px',
               fontWeight: 600
             }}>
-              {activeCompany?.id === company.id ? <Check size={13} /> : 'Member'}
+              <Check size={13} />
             </div>
           </div>
         ))}

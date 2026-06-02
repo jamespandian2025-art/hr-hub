@@ -220,13 +220,13 @@ const loanRequestsKey = 'flowsys-hr-loan-requests'
 const allowanceRequestsKey = 'flowsys-hr-allowance-requests'
 const readNotificationsKey = 'wiseflow-read-notifications'
 const initialAccount: AccountState = {
-  company: 'Livewise Construction',
-  email: 'livewiseofficial@gmail.com',
+  company: 'WiseFlow Company',
+  email: '',
   theme: 'Bright',
   density: 'Comfortable',
   emailNotifications: true,
   desktopNotifications: false,
-  invitations: [{ id: 1, email: 'projectmanager@example.com', role: 'Project Manager', status: 'Pending' }],
+  invitations: [],
 }
 
 function normalizeThemePreference(preference?: string) {
@@ -636,6 +636,10 @@ export default function Header({ onMenuClick, compactWorkspace = false }: Header
   const latestRequests = [...changeOrders].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()).slice(0, 8)
   const projectName = (id: number) => projects.find(project => project.id === id)?.name || `Project #${id}`
   const displayName = account.fullName || account.name || 'Reymark'
+  const profileMenuCompanies = useMemo(() => {
+    if (activeCompany) return [activeCompany]
+    return companies.slice(0, 1)
+  }, [activeCompany, companies])
   const role = account.role || 'Admin'
   const financeLoanNotifications = loanRequests.filter(request =>
     request.status === 'Pending' && request.financeApprovalStatus !== 'Approved'
@@ -1100,14 +1104,14 @@ export default function Header({ onMenuClick, compactWorkspace = false }: Header
               </div>
               <div style={{ padding: '14px 26px', display: 'grid', gap: 0, borderBottom: '1px solid #e8e8e8' }}>
                 <div style={{ ...tinyLabelStyle, marginBottom: 8 }}>Choose an account</div>
-                {companies.map(company => (
+                {profileMenuCompanies.map(company => (
                   <button key={company.id} onClick={() => switchCompany(company.id)} style={{ border: 0, borderTop: '1px solid #e8e8e8', background: '#fff', color: '#111827', minHeight: 76, padding: '12px 0', display: 'grid', gridTemplateColumns: '40px minmax(0, 1fr) auto', alignItems: 'center', gap: 12, cursor: 'pointer', textAlign: 'left' }}>
                     <span style={{ width: 34, height: 34, borderRadius: '50%', background: activeCompany?.id === company.id ? '#1a73e8' : '#eef0ff', color: activeCompany?.id === company.id ? '#fff' : '#6b6eea', display: 'grid', placeItems: 'center', fontSize: 12, fontWeight: 900 }}>{company.name.slice(0, 2).toUpperCase()}</span>
                     <span style={{ minWidth: 0 }}>
                       <span style={{ display: 'block', fontSize: 13, fontWeight: 800, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{company.name}</span>
                       <span style={{ display: 'block', fontSize: 12, color: '#6b7280', marginTop: 3 }}>{company.type}</span>
                     </span>
-                    {activeCompany?.id === company.id ? <span style={{ color: '#16a34a', fontSize: 12, fontWeight: 800 }}>Active</span> : <span style={{ color: '#111', fontSize: 12, fontWeight: 800 }}>Continue</span>}
+                    <span style={{ color: '#16a34a', fontSize: 12, fontWeight: 800 }}>Active</span>
                   </button>
                 ))}
               </div>
@@ -1535,14 +1539,14 @@ export default function Header({ onMenuClick, compactWorkspace = false }: Header
             </div>
             <div style={{ padding: '14px 26px', display: 'grid', gap: 0, borderBottom: '1px solid #e8e8e8' }}>
               <div style={{ ...tinyLabelStyle, marginBottom: 8 }}>Choose an account</div>
-              {companies.map(company => (
+              {profileMenuCompanies.map(company => (
                 <button key={company.id} onClick={() => switchCompany(company.id)} style={{ border: 0, borderTop: '1px solid #e8e8e8', background: '#fff', color: '#111827', minHeight: 76, padding: '12px 0', display: 'grid', gridTemplateColumns: '40px minmax(0, 1fr) auto', alignItems: 'center', gap: 12, cursor: 'pointer', textAlign: 'left' }}>
                   <span style={{ width: 34, height: 34, borderRadius: '50%', background: activeCompany?.id === company.id ? '#1a73e8' : '#eef0ff', color: activeCompany?.id === company.id ? '#fff' : '#6b6eea', display: 'grid', placeItems: 'center', fontSize: 12, fontWeight: 900 }}>{company.name.slice(0, 2).toUpperCase()}</span>
                   <span style={{ minWidth: 0 }}>
                     <span style={{ display: 'block', fontSize: 13, fontWeight: 800, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{company.name}</span>
                     <span style={{ display: 'block', fontSize: 12, color: '#6b7280', marginTop: 3 }}>{company.type}</span>
                   </span>
-                  {activeCompany?.id === company.id ? <span style={{ color: '#16a34a', fontSize: 12, fontWeight: 800 }}>Active</span> : <span style={{ color: '#111', fontSize: 12, fontWeight: 800 }}>Continue</span>}
+                  <span style={{ color: '#16a34a', fontSize: 12, fontWeight: 800 }}>Active</span>
                 </button>
               ))}
             </div>
