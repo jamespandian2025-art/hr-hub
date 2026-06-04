@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
 import { ArrowRight, Clock3, GitCompareArrows, PackageSearch, Search, Star, Trophy, UsersRound } from 'lucide-react'
+import { AnalyticsToggleButton, CollapsibleAnalytics, useAnalyticsDisclosure } from '@/components/AnalyticsDisclosure'
 import { companyChangeEvent, companyScopedKey, getActiveCompany } from '@/lib/tenant/company'
 
 const font = 'var(--font-body)'
@@ -48,6 +49,7 @@ export default function ProcurementVendorComparisonPage() {
   const [rfqs, setRfqs] = useState<StoredRow[]>([])
   const [receiving, setReceiving] = useState<StoredRow[]>([])
   const [search, setSearch] = useState('')
+  const analytics = useAnalyticsDisclosure('wiseflow:analytics:procurement-vendor-comparison')
 
   useEffect(() => {
     const load = () => {
@@ -99,18 +101,23 @@ export default function ProcurementVendorComparisonPage() {
             </div>
           </div>
         </div>
-        <label className="vendor-comparison-search">
-          <Search size={16} />
-          <input value={search} onChange={event => setSearch(event.target.value)} placeholder="Search suppliers, categories, status..." />
-        </label>
+        <div className="vendor-comparison-actions">
+          <AnalyticsToggleButton open={analytics.open} onToggle={analytics.toggle} panelId={analytics.panelId} className="vendor-comparison-secondary" />
+          <label className="vendor-comparison-search">
+            <Search size={16} />
+            <input value={search} onChange={event => setSearch(event.target.value)} placeholder="Search suppliers, categories, status..." />
+          </label>
+        </div>
       </header>
 
-      <section className="vendor-comparison-kpis" aria-label="Supplier comparison metrics">
-        <Kpi icon={UsersRound} title="Comparable Suppliers" value={String(comparisons.length)} helper={companyId ? 'From active company records' : 'From saved records'} />
-        <Kpi icon={PackageSearch} title="Comparable Items" value={String(itemComparisons.length)} helper="Items with supplier pricing" />
-        <Kpi icon={Trophy} title="Highest Spend Supplier" value={bestBySpend?.name || '-'} helper={bestBySpend ? formatCurrency(bestBySpend.totalSpend) : 'No purchase orders yet'} />
-        <Kpi icon={Clock3} title="Fastest Lead Time" value={fastest ? `${fastest.avgLeadTime.toFixed(1)} days` : '-'} helper={fastest?.name || 'No receiving lead time yet'} />
-      </section>
+      <CollapsibleAnalytics open={analytics.open} id={analytics.panelId}>
+        <section className="vendor-comparison-kpis" aria-label="Supplier comparison metrics">
+          <Kpi icon={UsersRound} title="Comparable Suppliers" value={String(comparisons.length)} helper={companyId ? 'From active company records' : 'From saved records'} />
+          <Kpi icon={PackageSearch} title="Comparable Items" value={String(itemComparisons.length)} helper="Items with supplier pricing" />
+          <Kpi icon={Trophy} title="Highest Spend Supplier" value={bestBySpend?.name || '-'} helper={bestBySpend ? formatCurrency(bestBySpend.totalSpend) : 'No purchase orders yet'} />
+          <Kpi icon={Clock3} title="Fastest Lead Time" value={fastest ? `${fastest.avgLeadTime.toFixed(1)} days` : '-'} helper={fastest?.name || 'No receiving lead time yet'} />
+        </section>
+      </CollapsibleAnalytics>
 
       <section className="vendor-comparison-guide">
         <strong>Guide rule</strong>
@@ -402,7 +409,7 @@ const comparisonCss = `
   display: flex;
   align-items: center;
   gap: 8px;
-  color: #64748b;
+  color: #000000;
   font-size: 13px;
   margin-bottom: 10px;
 }
@@ -427,12 +434,35 @@ const comparisonCss = `
   line-height: 1.05;
 }
 .vendor-comparison p {
-  color: #64748b;
+  color: #000000;
   line-height: 1.45;
 }
 .vendor-comparison-title p {
   margin: 7px 0 0;
   font-size: 14px;
+}
+.vendor-comparison-actions {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.vendor-comparison-secondary {
+  min-height: 44px;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  background: #fff;
+  color: #0f172a;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 0 14px;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 850;
+  cursor: pointer;
 }
 .vendor-comparison-search {
   width: min(420px, 100%);
@@ -482,7 +512,7 @@ const comparisonCss = `
 }
 .vendor-comparison-kpis small {
   display: block;
-  color: #64748b;
+  color: #000000;
   font-size: 12px;
   font-weight: 850;
 }
@@ -560,7 +590,7 @@ const comparisonCss = `
 .vendor-table-wrap th {
   text-align: left;
   background: #f8fafc;
-  color: #64748b;
+  color: #000000;
   font-size: 11px;
   text-transform: uppercase;
   letter-spacing: .04em;
@@ -578,7 +608,7 @@ const comparisonCss = `
 }
 .vendor-table-wrap td small {
   margin-top: 4px;
-  color: #64748b;
+  color: #000000;
 }
 .vendor-rating {
   display: inline-flex;
@@ -630,7 +660,7 @@ const comparisonCss = `
   display: block;
 }
 .price-comparison-list small {
-  color: #64748b;
+  color: #000000;
   margin-top: 4px;
 }
 .price-offers {
@@ -650,14 +680,14 @@ const comparisonCss = `
   display: grid;
   place-items: center;
   text-align: center;
-  color: #64748b;
+  color: #000000;
   padding: 24px;
 }
 .vendor-empty.compact {
   min-height: 170px;
 }
 .vendor-empty svg {
-  color: #94a3b8;
+  color: #000000;
 }
 .vendor-empty strong {
   display: block;

@@ -26,7 +26,7 @@ const leaveEntitlements = [
   { type: 'Maternity Leave', total: 105, color: '#ec4899' },
   { type: 'Paternity Leave', total: 7, color: '#7c3aed' },
   { type: 'Emergency Leave', total: 5, color: '#ef4444' },
-  { type: 'Unpaid Leave', total: 10, color: '#64748b' },
+  { type: 'Unpaid Leave', total: 10, color: '#000000' },
 ]
 
 function lookupKey(value?: string) {
@@ -223,7 +223,7 @@ export default function EmployeeLeaveRequestsPage() {
     return (
       <div className="hr-module-page" style={{ fontFamily: font }}>
         <button onClick={() => router.push('/hr/leave-requests')} style={secondaryButtonStyle}><ArrowLeft size={15} /> Back to leave requests</button>
-        <div style={{ ...cardStyle, marginTop: 18, textAlign: 'center', color: '#64748b' }}>Employee not found.</div>
+        <div style={{ ...cardStyle, marginTop: 18, textAlign: 'center', color: '#000000' }}>Employee not found.</div>
       </div>
     )
   }
@@ -233,7 +233,7 @@ export default function EmployeeLeaveRequestsPage() {
 
   return (
     <div className="hr-module-page" style={{ fontFamily: font }}>
-      <div style={{ color: '#64748b', fontSize: 12, marginBottom: 18 }}>HR Hub&nbsp;&nbsp;&gt;&nbsp;&nbsp;Leave Requests&nbsp;&nbsp;&gt;&nbsp;&nbsp;{name}</div>
+      <div style={{ color: '#000000', fontSize: 12, marginBottom: 18 }}>HR Hub&nbsp;&nbsp;&gt;&nbsp;&nbsp;Leave Requests&nbsp;&nbsp;&gt;&nbsp;&nbsp;{name}</div>
       {syncError && <div style={syncErrorStyle}>{syncError}</div>}
       <div style={{ ...cardStyle, padding: 24, marginBottom: 18 }}>
         <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) 420px', gap: 26 }}>
@@ -246,7 +246,7 @@ export default function EmployeeLeaveRequestsPage() {
                   <h1 style={{ margin: 0, color: '#0f172a', fontSize: 26 }}>{name}</h1>
                   <span style={{ ...pillStyle, background: '#dcfce7', color: '#15803d' }}>{status}</span>
                 </div>
-                <div style={{ marginTop: 6, color: '#475569', fontSize: 13 }}>{profileEmployee?.jobTitle || '-'} <span style={{ color: '#cbd5e1' }}>â€¢</span> <strong style={{ color: '#4f46e5' }}>{profileEmployee?.employeeId || profileEmployee?.id || '-'}</strong></div>
+                <div style={{ marginTop: 6, color: '#000000', fontSize: 13 }}>{profileEmployee?.jobTitle || '-'} <span style={{ color: '#000000' }}>â€¢</span> <strong style={{ color: '#4f46e5' }}>{profileEmployee?.employeeId || profileEmployee?.id || '-'}</strong></div>
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: '10px 28px', marginTop: 18, color: '#334155', fontSize: 12 }}>
                   <Info icon={Briefcase} text={profileEmployee?.department || '-'} />
                   <Info icon={Users} text={profileEmployee?.team || '-'} />
@@ -285,7 +285,7 @@ export default function EmployeeLeaveRequestsPage() {
                 <MiniStat label="Approved" value={stats.approved} color="#16a34a" />
                 <MiniStat label="Pending" value={stats.pending} color="#f59e0b" />
                 <MiniStat label="Rejected" value={stats.rejected} color="#ef4444" />
-                <MiniStat label="Cancelled" value={stats.cancelled} color="#64748b" />
+                <MiniStat label="Cancelled" value={stats.cancelled} color="#000000" />
               </div>
               <div style={cardStyle}>
                 <SectionTitle title="Leave Overview" />
@@ -302,7 +302,7 @@ export default function EmployeeLeaveRequestsPage() {
           {activeTab === 'Attendance' && (
             <div style={cardStyle}>
               <SectionTitle title="Attendance" />
-              <div style={{ color: '#475569', fontSize: 13, lineHeight: 1.6, marginBottom: 16 }}>Attendance records are managed in the attendance module.</div>
+              <div style={{ color: '#000000', fontSize: 13, lineHeight: 1.6, marginBottom: 16 }}>Attendance records are managed in the attendance module.</div>
               <button onClick={() => router.push(`/hr/attendance/${profileEmployee?.id}`)} style={secondaryButtonStyle}>Open Attendance Records</button>
             </div>
           )}
@@ -314,13 +314,13 @@ export default function EmployeeLeaveRequestsPage() {
                 <MiniStat label="Approved" value={stats.approved} color="#16a34a" />
                 <MiniStat label="Pending" value={stats.pending} color="#f59e0b" />
                 <MiniStat label="Rejected" value={stats.rejected} color="#ef4444" />
-                <MiniStat label="Cancelled" value={stats.cancelled} color="#64748b" />
+                <MiniStat label="Cancelled" value={stats.cancelled} color="#000000" />
               </div>
               <div style={cardStyle}>
                 <div style={{ display: 'grid', gridTemplateColumns: '180px 160px 1fr 42px', gap: 12, marginBottom: 16 }}>
                   <select value={typeFilter} onChange={event => setTypeFilter(event.target.value)} style={inputStyle}>{leaveTypes.map(type => <option key={type}>{type}</option>)}</select>
                   <select value={statusFilter} onChange={event => setStatusFilter(event.target.value as LeaveStatus | 'All')} style={inputStyle}>{['All', 'Pending', 'Approved', 'Rejected', 'Cancelled'].map(type => <option key={type}>{type}</option>)}</select>
-                  <label style={{ ...inputStyle, display: 'flex', alignItems: 'center', gap: 8 }}><Search size={14} color="#94a3b8" /><input value={query} onChange={event => setQuery(event.target.value)} placeholder="Search requests..." style={{ border: 'none', outline: 'none', background: 'transparent', width: '100%', font: 'inherit' }} /></label>
+                  <label style={{ ...inputStyle, display: 'flex', alignItems: 'center', gap: 8 }}><Search size={14} color="#000000" /><input value={query} onChange={event => setQuery(event.target.value)} placeholder="Search requests..." style={{ border: 'none', outline: 'none', background: 'transparent', width: '100%', font: 'inherit' }} /></label>
                   <button onClick={() => { setTypeFilter('All'); setStatusFilter('All'); setQuery('') }} style={secondaryIconButtonStyle}><XCircle size={16} /></button>
                 </div>
                 <div style={{ overflowX: 'auto' }}>
@@ -341,9 +341,9 @@ export default function EmployeeLeaveRequestsPage() {
                       {visibleRows.map(row => <RequestRow key={row.id} row={row} menuId={menuId} setMenuId={setMenuId} menuRef={menuRef} onStatus={updateStatus} />)}
                     </tbody>
                   </table>
-                  {visibleRows.length === 0 && <div style={{ textAlign: 'center', padding: 36, color: '#94a3b8' }}>No leave requests for this employee.</div>}
+                  {visibleRows.length === 0 && <div style={{ textAlign: 'center', padding: 36, color: '#000000' }}>No leave requests for this employee.</div>}
                 </div>
-                <div style={{ paddingTop: 14, color: '#475569', fontSize: 12 }}>Showing {visibleRows.length ? 1 : 0} to {visibleRows.length} of {employeeRows.length} requests</div>
+                <div style={{ paddingTop: 14, color: '#000000', fontSize: 12 }}>Showing {visibleRows.length ? 1 : 0} to {visibleRows.length} of {employeeRows.length} requests</div>
               </div>
             </>
           )}
@@ -356,10 +356,10 @@ export default function EmployeeLeaveRequestsPage() {
                   <div key={item.type} style={{ border: '1px solid #eef2f7', borderRadius: 10, padding: 14 }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, marginBottom: 8, fontSize: 13 }}>
                       <strong style={{ color: '#0f172a' }}>{item.type}</strong>
-                      <span style={{ color: '#64748b' }}>{item.remaining} / {item.total} days remaining</span>
+                      <span style={{ color: '#000000' }}>{item.remaining} / {item.total} days remaining</span>
                     </div>
                     <div style={{ height: 8, borderRadius: 99, background: '#e5e7eb', overflow: 'hidden' }}><div style={{ width: `${Math.min(100, (item.remaining / item.total) * 100)}%`, height: '100%', background: item.color }} /></div>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 7, fontSize: 12, color: '#64748b' }}><span>Used {item.used} day{item.used === 1 ? '' : 's'}</span><span>{item.remaining <= 0 ? 'Depleted' : 'Available'}</span></div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 7, fontSize: 12, color: '#000000' }}><span>Used {item.used} day{item.used === 1 ? '' : 's'}</span><span>{item.remaining <= 0 ? 'Depleted' : 'Available'}</span></div>
                   </div>
                 ))}
               </div>
@@ -371,7 +371,7 @@ export default function EmployeeLeaveRequestsPage() {
               <div style={calendarHeaderStyle}>
                 <div>
                   <SectionTitle title="Leave Calendar" />
-                  <div style={{ color: '#64748b', fontSize: 12, marginTop: -10 }}>Approved employee leaves shown by month.</div>
+                  <div style={{ color: '#000000', fontSize: 12, marginTop: -10 }}>Approved employee leaves shown by month.</div>
                 </div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
                   <button onClick={() => setCalendarDate(new Date())} style={calendarTodayButtonStyle}>Today</button>
@@ -392,7 +392,7 @@ export default function EmployeeLeaveRequestsPage() {
                   return (
                     <div key={dateKey(day)} style={{ ...calendarCellStyle, background: inMonth ? '#fff' : '#f8fafc' }}>
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', minHeight: 26 }}>
-                        <span style={isToday ? calendarTodayDateStyle : { ...calendarDateStyle, color: inMonth ? '#334155' : '#cbd5e1' }}>{day.getDate()}</span>
+                        <span style={isToday ? calendarTodayDateStyle : { ...calendarDateStyle, color: inMonth ? '#334155' : '#000000' }}>{day.getDate()}</span>
                       </div>
                       <div style={{ display: 'grid', gap: 4 }}>
                         {dayEvents.slice(0, 3).map(row => <CalendarEventChip key={`${row.id}-${dateKey(day)}`} row={row} />)}
@@ -414,7 +414,7 @@ export default function EmployeeLeaveRequestsPage() {
           {activeTab === 'Documents' && (
             <div style={cardStyle}>
               <SectionTitle title="Documents" />
-              <div style={{ color: '#475569', fontSize: 13, lineHeight: 1.6, marginBottom: 16 }}>Employee documents are stored in the employee profile and HR documents module.</div>
+              <div style={{ color: '#000000', fontSize: 13, lineHeight: 1.6, marginBottom: 16 }}>Employee documents are stored in the employee profile and HR documents module.</div>
               <button onClick={() => router.push(`/hr/employees/${profileEmployee?.id}`)} style={secondaryButtonStyle}>Open Employee Profile</button>
             </div>
           )}
@@ -446,7 +446,7 @@ export default function EmployeeLeaveRequestsPage() {
             <SectionTitle title="Manager" />
             <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
               <span style={{ width: 38, height: 38, borderRadius: '50%', background: '#dcfce7', color: '#15803d', display: 'grid', placeItems: 'center', fontWeight: 900 }}>{initials(profileEmployee?.reportsTo || 'HR')}</span>
-              <div><strong style={{ color: '#0f172a', fontSize: 13 }}>{profileEmployee?.reportsTo || '-'}</strong><div style={{ color: '#64748b', fontSize: 12 }}>Manager</div></div>
+              <div><strong style={{ color: '#0f172a', fontSize: 13 }}>{profileEmployee?.reportsTo || '-'}</strong><div style={{ color: '#000000', fontSize: 12 }}>Manager</div></div>
             </div>
           </div>
         </aside>
@@ -464,7 +464,7 @@ function RequestRow({ row, menuId, setMenuId, menuRef, onStatus }: { row: LeaveR
       <td style={tdStyle}><strong style={{ color: '#4f46e5' }}>{row.id.replace(/^leave_/, 'LR-')}</strong></td>
       <td style={tdStyle}><span style={{ ...pillStyle, background: typeTone.bg, color: typeTone.text }}>{row.leaveType}</span></td>
       <td style={tdStyle}>{row.days} Day{row.days === 1 ? '' : 's'}</td>
-      <td style={tdStyle}><div>{dateSpan(row)}</div><small style={{ color: '#64748b' }}>{formatDay(row.startDate)} - {formatDay(row.endDate)}</small></td>
+      <td style={tdStyle}><div>{dateSpan(row)}</div><small style={{ color: '#000000' }}>{formatDay(row.startDate)} - {formatDay(row.endDate)}</small></td>
       <td style={tdStyle}>{row.reason || '-'}</td>
       <td style={tdStyle}><span style={{ ...pillStyle, background: st.bg, color: st.text }}>{normalizeStatus(row.status)}</span></td>
       <td style={tdStyle}>{formatDateTime(row.createdAt)}</td>
@@ -487,19 +487,19 @@ function Avatar({ employee, name, size }: { employee?: Employee; name: string; s
 }
 
 function Info({ icon: Icon, text }: { icon: React.ComponentType<{ size?: number; color?: string }>; text: string }) {
-  return <span style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}><Icon size={14} color="#64748b" /><span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{text}</span></span>
+  return <span style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}><Icon size={14} color="#000000" /><span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{text}</span></span>
 }
 
 function ProfileFact({ label, value }: { label: string; value: string }) {
-  return <div><div style={{ color: '#64748b', fontSize: 12, marginBottom: 7 }}>{label}</div><strong style={{ color: '#0f172a', fontSize: 13 }}>{value}</strong></div>
+  return <div><div style={{ color: '#000000', fontSize: 12, marginBottom: 7 }}>{label}</div><strong style={{ color: '#0f172a', fontSize: 13 }}>{value}</strong></div>
 }
 
 function MiniStat({ label, value, color }: { label: string; value: number; color: string }) {
-  return <div style={{ ...cardStyle, display: 'flex', alignItems: 'center', gap: 12 }}><span style={{ width: 40, height: 40, borderRadius: '50%', background: `${color}18`, color, display: 'grid', placeItems: 'center' }}><Calendar size={19} color={color} /></span><span><div style={{ color: '#64748b', fontSize: 12 }}>{label}</div><strong style={{ display: 'block', color: '#0f172a', fontSize: 20, marginTop: 4 }}>{value}</strong></span></div>
+  return <div style={{ ...cardStyle, display: 'flex', alignItems: 'center', gap: 12 }}><span style={{ width: 40, height: 40, borderRadius: '50%', background: `${color}18`, color, display: 'grid', placeItems: 'center' }}><Calendar size={19} color={color} /></span><span><div style={{ color: '#000000', fontSize: 12 }}>{label}</div><strong style={{ display: 'block', color: '#0f172a', fontSize: 20, marginTop: 4 }}>{value}</strong></span></div>
 }
 
 function InfoCard({ label, value, sub }: { label: string; value: string; sub: string }) {
-  return <div style={{ border: '1px solid #eef2f7', borderRadius: 10, padding: 14 }}><div style={{ color: '#64748b', fontSize: 12, marginBottom: 8 }}>{label}</div><strong style={{ display: 'block', color: '#0f172a', fontSize: 16 }}>{value}</strong><small style={{ display: 'block', color: '#64748b', marginTop: 6 }}>{sub}</small></div>
+  return <div style={{ border: '1px solid #eef2f7', borderRadius: 10, padding: 14 }}><div style={{ color: '#000000', fontSize: 12, marginBottom: 8 }}>{label}</div><strong style={{ display: 'block', color: '#0f172a', fontSize: 16 }}>{value}</strong><small style={{ display: 'block', color: '#000000', marginTop: 6 }}>{sub}</small></div>
 }
 
 function CalendarEventChip({ row }: { row: LeaveRow }) {
@@ -514,7 +514,7 @@ function CalendarAgendaItem({ row }: { row: LeaveRow }) {
       <span style={{ color: tone.text, background: tone.bg, borderRadius: 8, padding: '8px 10px', textAlign: 'center', fontSize: 12, fontWeight: 900 }}>{formatDay(row.startDate)}</span>
       <span style={{ minWidth: 0 }}>
         <strong style={{ display: 'block', color: '#0f172a', fontSize: 13 }}>{row.leaveType}</strong>
-        <small style={{ color: '#64748b' }}>{dateSpan(row)} - {row.days} day{row.days === 1 ? '' : 's'}</small>
+        <small style={{ color: '#000000' }}>{dateSpan(row)} - {row.days} day{row.days === 1 ? '' : 's'}</small>
       </span>
     </div>
   )
@@ -522,7 +522,7 @@ function CalendarAgendaItem({ row }: { row: LeaveRow }) {
 
 function ActivityItem({ row }: { row: LeaveRow }) {
   const st = statusTone(row.status)
-  return <div style={{ display: 'grid', gridTemplateColumns: '10px 1fr', gap: 10, border: '1px solid #eef2f7', borderRadius: 10, padding: 12 }}><span style={{ width: 8, height: 8, borderRadius: '50%', background: st.dot, marginTop: 5 }} /><span><strong style={{ display: 'block', color: '#0f172a', fontSize: 13 }}>{row.leaveType} {normalizeStatus(row.status).toLowerCase()}</strong><small style={{ color: '#64748b' }}>{dateSpan(row)} - {formatDateTime(row.updatedAt || row.createdAt)}</small></span></div>
+  return <div style={{ display: 'grid', gridTemplateColumns: '10px 1fr', gap: 10, border: '1px solid #eef2f7', borderRadius: 10, padding: 12 }}><span style={{ width: 8, height: 8, borderRadius: '50%', background: st.dot, marginTop: 5 }} /><span><strong style={{ display: 'block', color: '#0f172a', fontSize: 13 }}>{row.leaveType} {normalizeStatus(row.status).toLowerCase()}</strong><small style={{ color: '#000000' }}>{dateSpan(row)} - {formatDateTime(row.updatedAt || row.createdAt)}</small></span></div>
 }
 
 function SectionTitle({ title }: { title: string }) {
@@ -534,7 +534,7 @@ function BalanceBar({ label, used, color }: { label: string; used: number; color
 }
 
 function EmptyMiniText({ children }: { children: React.ReactNode }) {
-  return <div style={{ color: '#94a3b8', fontSize: 12, lineHeight: 1.5 }}>{children}</div>
+  return <div style={{ color: '#000000', fontSize: 12, lineHeight: 1.5 }}>{children}</div>
 }
 
 function addMonths(date: Date, months: number) {
@@ -585,15 +585,15 @@ const cardStyle = { background: '#fff', border: '1px solid #e5e7eb', borderRadiu
 const calendarHeaderStyle = { display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16, padding: 18, borderBottom: '1px solid #eef2f7', flexWrap: 'wrap' as const }
 const calendarTodayButtonStyle = { minHeight: 34, border: '1px solid #e5e7eb', borderRadius: 8, background: '#fff', color: '#0f172a', padding: '0 14px', fontSize: 12, fontWeight: 900, cursor: 'pointer', fontFamily: font } as const
 const calendarViewPillStyle = { height: 30, borderRadius: 999, padding: '0 12px', background: '#dcfce7', color: '#15803d', display: 'inline-flex', alignItems: 'center', fontSize: 12, fontWeight: 900 } as const
-const calendarWeekHeaderStyle = { display: 'grid', gridTemplateColumns: 'repeat(7, minmax(112px, 1fr))', background: '#f8fafc', borderBottom: '1px solid #e5e7eb', color: '#64748b', fontSize: 11, fontWeight: 900, textTransform: 'uppercase' as const, letterSpacing: 0 }
+const calendarWeekHeaderStyle = { display: 'grid', gridTemplateColumns: 'repeat(7, minmax(112px, 1fr))', background: '#f8fafc', borderBottom: '1px solid #e5e7eb', color: '#000000', fontSize: 11, fontWeight: 900, textTransform: 'uppercase' as const, letterSpacing: 0 }
 const calendarGridStyle = { display: 'grid', gridTemplateColumns: 'repeat(7, minmax(112px, 1fr))', overflowX: 'auto' as const }
 const calendarCellStyle = { minHeight: 116, borderRight: '1px solid #eef2f7', borderBottom: '1px solid #eef2f7', padding: 8, display: 'flex', flexDirection: 'column' as const, gap: 6 }
 const calendarDateStyle = { width: 26, height: 26, borderRadius: '50%', display: 'inline-grid', placeItems: 'center', color: '#334155', fontSize: 12, fontWeight: 800 } as const
 const calendarTodayDateStyle = { ...calendarDateStyle, background: '#16a34a', color: '#fff' } as const
-const calendarMoreStyle = { color: '#64748b', fontSize: 11, fontWeight: 800, padding: '2px 4px' } as const
+const calendarMoreStyle = { color: '#000000', fontSize: 11, fontWeight: 800, padding: '2px 4px' } as const
 const calendarAgendaStyle = { display: 'grid', gap: 10, padding: 18, background: '#fbfdff' } as const
 const inputStyle = { width: '100%', minHeight: 38, border: '1px solid #e5e7eb', borderRadius: 8, background: '#fff', color: '#0f172a', padding: '0 12px', fontSize: 12, fontFamily: font } as const
-const thStyle = { padding: '12px 18px', textAlign: 'left' as const, color: '#475569', fontSize: 11, fontWeight: 800, background: '#fbfdff', whiteSpace: 'nowrap' as const }
+const thStyle = { padding: '12px 18px', textAlign: 'left' as const, color: '#000000', fontSize: 11, fontWeight: 800, background: '#fbfdff', whiteSpace: 'nowrap' as const }
 const tdStyle = { padding: '13px 18px', fontSize: 12, color: '#0f172a', verticalAlign: 'middle' as const }
 const pillStyle = { display: 'inline-flex', alignItems: 'center', borderRadius: 999, padding: '3px 8px', fontSize: 11, fontWeight: 800 } as const
 const secondaryButtonStyle = { minHeight: 38, border: '1px solid #e5e7eb', borderRadius: 8, background: '#fff', color: '#0f172a', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 8, padding: '0 15px', fontSize: 12, fontWeight: 900, cursor: 'pointer', fontFamily: font } as const

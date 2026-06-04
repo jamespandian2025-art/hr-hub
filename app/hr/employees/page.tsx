@@ -9,6 +9,8 @@ import {
   MoreHorizontal, Pencil, Plus, Search, Settings2, Trash2,
   Upload, UserMinus, UserPlus, Users,
 } from 'lucide-react'
+import { AnalyticsToggleButton, CollapsibleAnalytics, useAnalyticsDisclosure } from '@/components/AnalyticsDisclosure'
+import { deleteHrRecord, listHrRecords } from '@/lib/hrms/client'
 
 // â”€â”€â”€ Types â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
@@ -86,6 +88,19 @@ function loadStored<T>(key: string, fallback: T): T {
   try { const r = window.localStorage.getItem(key); return r ? (JSON.parse(r) as T) : fallback } catch { return fallback }
 }
 
+// Merge server + local employees by id, keeping whichever was updated last so an
+// edit made on another device wins while unsynced local edits are preserved.
+function mergeEmployeesById(rows: Employee[]) {
+  const map = new Map<string, Employee>()
+  for (const row of rows) {
+    if (!row?.id) continue
+    const stamp = (employee: Employee) => new Date(employee.updatedAt || employee.createdAt || 0).getTime()
+    const existing = map.get(row.id)
+    if (!existing || stamp(row) >= stamp(existing)) map.set(row.id, row)
+  }
+  return Array.from(map.values())
+}
+
 function fullName(e: Employee) { return [e.firstName, e.lastName].filter(Boolean).join(' ') }
 
 function initials(name: string) {
@@ -105,17 +120,17 @@ function deptColor(dept: string): { bg: string; text: string } {
     'Product':          { bg: '#fffbeb', text: '#b45309' },
     'Legal':            { bg: '#fdf4ff', text: '#a21caf' },
   }
-  return map[dept] || { bg: '#f3f4f6', text: '#6b7280' }
+  return map[dept] || { bg: '#f3f4f6', text: '#000000' }
 }
 
 function statusBadge(status: string): { bg: string; text: string } {
   switch (status?.toLowerCase()) {
     case 'active':      return { bg: '#dcfce7', text: '#15803d' }
     case 'on leave':    return { bg: '#dbeafe', text: '#1d4ed8' }
-    case 'inactive':    return { bg: '#f3f4f6', text: '#6b7280' }
+    case 'inactive':    return { bg: '#f3f4f6', text: '#000000' }
     case 'resigned':    return { bg: '#fee2e2', text: '#dc2626' }
     case 'terminated':  return { bg: '#fee2e2', text: '#dc2626' }
-    default:            return { bg: '#f3f4f6', text: '#6b7280' }
+    default:            return { bg: '#f3f4f6', text: '#000000' }
   }
 }
 
@@ -269,12 +284,39 @@ export default function EmployeesPage() {
   const [columnsOpen, setColumnsOpen] = useState(false)
   const [visibleColumns, setVisibleColumns] = useState<Set<EmployeeColumnKey>>(() => new Set(DEFAULT_EMPLOYEE_COLUMNS))
   const [exitPrompt, setExitPrompt] = useState<{ employee: Employee; reason: ExitReason; notes: string } | null>(null)
+  const analytics = useAnalyticsDisclosure('wiseflow:analytics:hr-employees')
 
   useEffect(() => {
-    const id = window.setTimeout(() => {
-      setEmployees(loadStored(employeesKey, []))
-    }, 0)
-    return () => window.clearTimeout(id)
+    let cancelled = false
+    const load = async () => {
+      const local = loadStored<Employee[]>(employeesKey, [])
+      const archivedIds = new Set(
+        loadStored<Array<{ id?: string }>>(deletedEmployeesKey, []).map(item => item.id).filter(Boolean) as string[],
+      )
+      try {
+        const server = await listHrRecords<Employee>('employees', { 'x-hr-role': 'HR' })
+        const merged = mergeEmployeesById([...server, ...local]).filter(employee => !archivedIds.has(employee.id))
+        if (cancelled) return
+        setEmployees(merged)
+        // Mirror the merged roster to localStorage so the other HR pages that read
+        // the employee list (attendance, payroll, teams) also see server employees.
+        if (JSON.stringify(merged) !== JSON.stringify(local)) window.localStorage.setItem(employeesKey, JSON.stringify(merged))
+      } catch {
+        if (!cancelled) setEmployees(local)
+      }
+    }
+    load()
+    window.addEventListener('storage', load)
+    window.addEventListener('focus', load)
+    window.addEventListener('wiseflow:hr-data-changed', load)
+    const timer = window.setInterval(load, 4000)
+    return () => {
+      cancelled = true
+      window.removeEventListener('storage', load)
+      window.removeEventListener('focus', load)
+      window.removeEventListener('wiseflow:hr-data-changed', load)
+      window.clearInterval(timer)
+    }
   }, [])
 
   // Close dropdowns on outside click
@@ -362,11 +404,18 @@ export default function EmployeesPage() {
     })
     setExitPrompt(null)
     window.dispatchEvent(new Event('wiseflow:hr-data-changed'))
+    // Remove from the shared HR store so the exit propagates cross-device; the
+    // local archive in deletedEmployeesKey also guards against a sync resurrecting it.
+    void deleteHrRecord('employees', employee.id).catch(() => undefined)
   }
 
   function clearAllEmployeeData() {
     const confirmed = window.confirm('Clear all employees and employee-linked HR demo records? This removes employee profiles, attendance, payroll, leave, loan, allowance, document, and performance records from this browser.')
     if (!confirmed) return
+
+    // Also clear the shared HR store, otherwise the server sync re-populates the
+    // roster within seconds and the local clear appears to do nothing.
+    void Promise.allSettled(employees.map(employee => deleteHrRecord('employees', employee.id)))
 
     employeeWorkspaceKeys.forEach(key => {
       window.localStorage.setItem(key, '[]')
@@ -511,7 +560,7 @@ export default function EmployeesPage() {
           { label: 'Payroll',      Icon: FileText, action: () => setOpenMenu(null) },
         ].map(item => (
           <button key={item.label} onClick={item.action} style={{ display: 'flex', alignItems: 'center', gap: 10, width: '100%', border: 'none', background: 'transparent', padding: '10px 12px', borderRadius: 8, fontSize: 13, color: '#374151', cursor: 'pointer', fontFamily: font, textAlign: 'left' }}>
-            <item.Icon size={13} color="#9ca3af" /> {item.label}
+            <item.Icon size={13} color="#000000" /> {item.label}
           </button>
         ))}
         <div style={{ height: 1, background: '#f3f4f6', margin: '4px 0' }} />
@@ -536,13 +585,13 @@ export default function EmployeesPage() {
               {renderEmployeeAvatar(emp)}
               <div>
                 <div style={{ fontSize: 13, fontWeight: 500, color: '#111827' }}>{fullName(emp)}</div>
-                <div style={{ fontSize: 11, color: '#9ca3af' }}>Joined {new Date(emp.dateOfJoining || emp.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</div>
+                <div style={{ fontSize: 11, color: '#000000' }}>Joined {new Date(emp.dateOfJoining || emp.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</div>
               </div>
             </Link>
           </td>
         )
       case 'employeeId':
-        return <td style={{ padding: '11px 12px', whiteSpace: 'nowrap', color: '#6b7280' }}>{emp.employeeId}</td>
+        return <td style={{ padding: '11px 12px', whiteSpace: 'nowrap', color: '#000000' }}>{emp.employeeId}</td>
       case 'position':
         return <td style={{ padding: '11px 12px', whiteSpace: 'nowrap' }}>{emp.jobTitle || '-'}</td>
       case 'department':
@@ -583,7 +632,7 @@ export default function EmployeesPage() {
         return (
           <td style={{ padding: '11px 12px' }}>
             <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
-              <button onClick={event => toggleActionMenu(emp.id, event)} style={{ border: '1px solid #e5e7eb', background: '#fff', cursor: 'pointer', width: 34, height: 34, borderRadius: 9, color: '#64748b', display: 'grid', placeItems: 'center' }} aria-label={`Open actions for ${fullName(emp)}`}>
+              <button onClick={event => toggleActionMenu(emp.id, event)} style={{ border: '1px solid #e5e7eb', background: '#fff', cursor: 'pointer', width: 34, height: 34, borderRadius: 9, color: '#000000', display: 'grid', placeItems: 'center' }} aria-label={`Open actions for ${fullName(emp)}`}>
                 <MoreHorizontal size={16} />
               </button>
               {renderActionsMenu(emp)}
@@ -600,7 +649,8 @@ export default function EmployeesPage() {
   const filterWrapStyle: React.CSSProperties = { position: 'relative', flex: '0 0 154px', minWidth: 154 }
   const filterTextStyle: React.CSSProperties = { minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }
   const toolbarButtonStyle: React.CSSProperties = { display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, border: '1px solid #e5e7eb', background: '#fff', borderRadius: 7, padding: '0 12px', minHeight: 38, fontSize: 12, color: '#374151', cursor: 'pointer', fontFamily: font, whiteSpace: 'nowrap', flexShrink: 0 }
-  const viewToggleButtonStyle = (active: boolean): React.CSSProperties => ({ display: 'grid', placeItems: 'center', width: 34, height: 34, border: 'none', borderRadius: 7, background: active ? '#dcfce7' : 'transparent', color: active ? '#15803d' : '#475569', cursor: 'pointer', flexShrink: 0 })
+  const viewToggleButtonStyle = (active: boolean): React.CSSProperties => ({ display: 'grid', placeItems: 'center', width: 34, height: 34, border: 'none', borderRadius: 7, background: active ? '#dcfce7' : 'transparent', color: active ? '#15803d' : '#000000', cursor: 'pointer', flexShrink: 0 })
+  const headerActionButtonStyle: React.CSSProperties = { display: 'flex', alignItems: 'center', gap: 6, border: '1px solid #e5e7eb', background: '#fff', borderRadius: 8, padding: '7px 14px', fontSize: 13, fontWeight: 500, color: '#374151', cursor: 'pointer', fontFamily: font }
 
   // â”€â”€â”€ Render â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   return (
@@ -610,7 +660,7 @@ export default function EmployeesPage() {
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', paddingTop: 20, marginBottom: 18, flexWrap: 'wrap', gap: 10 }}>
         <div>
           <h1 style={{ margin: 0, color: '#0f172a', fontSize: 28, fontWeight: 900 }}>Employees</h1>
-          <p style={{ margin: '6px 0 0', color: '#475569', fontSize: 14 }}>Manage employee records, profiles, roles, and work information across your organization.</p>
+          <p style={{ margin: '6px 0 0', color: '#000000', fontSize: 14 }}>Manage employee records, profiles, roles, and work information across your organization.</p>
         </div>
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', justifyContent: 'flex-end', rowGap: 8 }}>
           <input
@@ -620,6 +670,7 @@ export default function EmployeesPage() {
             onChange={event => void importEmployees(event.target.files?.[0])}
             style={{ display: 'none' }}
           />
+          <AnalyticsToggleButton open={analytics.open} onToggle={analytics.toggle} panelId={analytics.panelId} style={headerActionButtonStyle} />
           <button
             type="button"
             onClick={() => importInputRef.current?.click()}
@@ -663,35 +714,37 @@ export default function EmployeesPage() {
       )}
 
       {/* KPI cards */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, minmax(0, 1fr))', gap: 10, marginBottom: 16 }}>
-        {[
-          { label: 'Total Employees',       value: kpis.total,    sub: `${kpis.newHires} this month`,            subColor: '#22c55e', iconBg: '#dcfce7', iconColor: '#22c55e', Icon: Users },
-          { label: 'Active Employees',      value: kpis.active,   sub: `${kpis.total > 0 ? Math.round(kpis.active/kpis.total*100) : 0}% of total`, subColor: '#22c55e', iconBg: '#dbeafe', iconColor: '#3b82f6', Icon: UserPlus },
-          { label: 'On Leave',              value: kpis.onLeave,  sub: `${kpis.total > 0 ? Math.round(kpis.onLeave/kpis.total*100) : 0}% of total`, subColor: '#6b7280', iconBg: '#ffedd5', iconColor: '#f97316', Icon: UserMinus },
-          { label: 'New Hires (This Month)',value: kpis.newHires, sub: kpis.newHires ? `+${kpis.newHires} this month` : '0 this month', subColor: '#22c55e', iconBg: '#ede9fe', iconColor: '#8b5cf6', Icon: UserPlus },
-          { label: 'Exits (This Month)',    value: kpis.exits,    sub: kpis.exits ? `-${kpis.exits} this month` : '0 this month',       subColor: '#ef4444', iconBg: '#fee2e2', iconColor: '#ef4444', Icon: UserMinus },
-        ].map(k => {
-          const KIcon = k.Icon
-          return (
-            <div key={k.label} style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: 12, padding: '14px 16px', boxShadow: '0 1px 4px rgba(0,0,0,0.05)', display: 'flex', gap: 12, alignItems: 'flex-start' }}>
-              <div style={{ width: 40, height: 40, borderRadius: 10, background: k.iconBg, display: 'grid', placeItems: 'center', flexShrink: 0 }}>
-                <KIcon size={18} color={k.iconColor} />
+      <CollapsibleAnalytics open={analytics.open} id={analytics.panelId}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, minmax(0, 1fr))', gap: 10, marginBottom: 16 }}>
+          {[
+            { label: 'Total Employees',       value: kpis.total,    sub: `${kpis.newHires} this month`,            subColor: '#22c55e', iconBg: '#dcfce7', iconColor: '#22c55e', Icon: Users },
+            { label: 'Active Employees',      value: kpis.active,   sub: `${kpis.total > 0 ? Math.round(kpis.active/kpis.total*100) : 0}% of total`, subColor: '#22c55e', iconBg: '#dbeafe', iconColor: '#3b82f6', Icon: UserPlus },
+            { label: 'On Leave',              value: kpis.onLeave,  sub: `${kpis.total > 0 ? Math.round(kpis.onLeave/kpis.total*100) : 0}% of total`, subColor: '#000000', iconBg: '#ffedd5', iconColor: '#f97316', Icon: UserMinus },
+            { label: 'New Hires (This Month)',value: kpis.newHires, sub: kpis.newHires ? `+${kpis.newHires} this month` : '0 this month', subColor: '#22c55e', iconBg: '#ede9fe', iconColor: '#8b5cf6', Icon: UserPlus },
+            { label: 'Exits (This Month)',    value: kpis.exits,    sub: kpis.exits ? `-${kpis.exits} this month` : '0 this month',       subColor: '#ef4444', iconBg: '#fee2e2', iconColor: '#ef4444', Icon: UserMinus },
+          ].map(k => {
+            const KIcon = k.Icon
+            return (
+              <div key={k.label} style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: 12, padding: '14px 16px', boxShadow: '0 1px 4px rgba(0,0,0,0.05)', display: 'flex', gap: 12, alignItems: 'flex-start' }}>
+                <div style={{ width: 40, height: 40, borderRadius: 10, background: k.iconBg, display: 'grid', placeItems: 'center', flexShrink: 0 }}>
+                  <KIcon size={18} color={k.iconColor} />
+                </div>
+                <div style={{ minWidth: 0 }}>
+                  <div style={{ fontSize: 11, color: '#000000', fontWeight: 500, marginBottom: 2 }}>{k.label}</div>
+                  <div style={{ fontSize: 22, fontWeight: 700, color: '#111827', letterSpacing: '-0.5px' }}>{k.value}</div>
+                  <div style={{ fontSize: 11, color: k.subColor, marginTop: 2 }}>{k.sub}</div>
+                </div>
               </div>
-              <div style={{ minWidth: 0 }}>
-                <div style={{ fontSize: 11, color: '#6b7280', fontWeight: 500, marginBottom: 2 }}>{k.label}</div>
-                <div style={{ fontSize: 22, fontWeight: 700, color: '#111827', letterSpacing: '-0.5px' }}>{k.value}</div>
-                <div style={{ fontSize: 11, color: k.subColor, marginTop: 2 }}>{k.sub}</div>
-              </div>
-            </div>
-          )
-        })}
-      </div>
+            )
+          })}
+        </div>
+      </CollapsibleAnalytics>
 
       {/* Filters */}
       <div style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: 12, padding: '14px 16px', marginBottom: 12, display: 'flex', gap: 10, alignItems: 'stretch', flexWrap: 'wrap' }}>
         {/* Search */}
         <div style={{ position: 'relative', flex: '1 1 360px', minWidth: 280 }}>
-          <Search size={14} color="#9ca3af" style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)' }} />
+          <Search size={14} color="#000000" style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)' }} />
           <input value={search} onChange={e => { setSearch(e.target.value); setPage(1) }} placeholder="Search by name, employee ID, email..." style={{ ...inputStyle, paddingLeft: 32 }} />
         </div>
         {/* Department */}
@@ -745,7 +798,7 @@ export default function EmployeesPage() {
               {columnsOpen && (
                 <div style={{ ...dropMenuStyle, left: 'auto', right: 0, width: 220, padding: 8 }}>
                   {EMPLOYEE_COLUMNS.map(column => (
-                    <label key={column.key} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 10px', borderRadius: 8, fontSize: 13, color: column.locked ? '#94a3b8' : '#334155', cursor: column.locked ? 'not-allowed' : 'pointer', fontFamily: font }}>
+                    <label key={column.key} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 10px', borderRadius: 8, fontSize: 13, color: column.locked ? '#000000' : '#334155', cursor: column.locked ? 'not-allowed' : 'pointer', fontFamily: font }}>
                       <input
                         type="checkbox"
                         checked={visibleColumns.has(column.key)}
@@ -764,7 +817,7 @@ export default function EmployeesPage() {
             <button type="button" onClick={exportEmployees} style={toolbarButtonStyle}>
               <Download size={13} /> Export
             </button>
-            <span style={{ fontSize: 12, color: '#9ca3af', flexShrink: 0 }}>Sort:</span>
+            <span style={{ fontSize: 12, color: '#000000', flexShrink: 0 }}>Sort:</span>
             <div style={{ position: 'relative' }}>
               <button onClick={() => setSortOpen(v => !v)} style={{ ...toolbarButtonStyle, justifyContent: 'space-between', minWidth: 126 }}>
                 {sortLabel} <ChevronDown size={11} />
@@ -789,7 +842,7 @@ export default function EmployeesPage() {
                     <input type="checkbox" checked={allChecked} ref={el => { if (el) el.indeterminate = someChecked && !allChecked }} onChange={toggleAll} style={{ cursor: 'pointer' }} />
                   </th>
                   {visibleEmployeeColumns.map(column => (
-                    <th key={column.key} style={{ padding: '10px 12px', textAlign: column.key === 'actions' ? 'right' : 'left', fontSize: 11, fontWeight: 600, color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '0.04em', whiteSpace: 'nowrap' }}>{column.label}</th>
+                    <th key={column.key} style={{ padding: '10px 12px', textAlign: column.key === 'actions' ? 'right' : 'left', fontSize: 11, fontWeight: 600, color: '#000000', textTransform: 'uppercase', letterSpacing: '0.04em', whiteSpace: 'nowrap' }}>{column.label}</th>
                   ))}
                 </tr>
               </thead>
@@ -797,8 +850,8 @@ export default function EmployeesPage() {
                 {paginated.length === 0 ? (
                   <tr><td colSpan={visibleEmployeeColumns.length + 1} style={{ padding: '48px 20px', textAlign: 'center' }}>
                     <Users size={36} color="#d1d5db" style={{ marginBottom: 12 }} />
-                    <div style={{ fontSize: 14, fontWeight: 500, color: '#6b7280', marginBottom: 8 }}>No employees found</div>
-                    <div style={{ fontSize: 13, color: '#9ca3af', marginBottom: 16 }}>
+                    <div style={{ fontSize: 14, fontWeight: 500, color: '#000000', marginBottom: 8 }}>No employees found</div>
+                    <div style={{ fontSize: 13, color: '#000000', marginBottom: 16 }}>
                       {search || deptFilter !== 'All Departments' ? 'Try adjusting your filters.' : 'Get started by adding your first employee.'}
                     </div>
                     {!search && deptFilter === 'All Departments' && (
@@ -826,8 +879,8 @@ export default function EmployeesPage() {
         ) : (
           <div style={{ padding: 16, display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: 12 }}>
             {paginated.length === 0 ? (
-              <div style={{ gridColumn: '1 / -1', border: '1px dashed #cbd5e1', borderRadius: 14, padding: '42px 20px', textAlign: 'center', color: '#64748b' }}>
-                <Users size={36} color="#cbd5e1" style={{ marginBottom: 12 }} />
+              <div style={{ gridColumn: '1 / -1', border: '1px dashed #cbd5e1', borderRadius: 14, padding: '42px 20px', textAlign: 'center', color: '#000000' }}>
+                <Users size={36} color="#000000" style={{ marginBottom: 12 }} />
                 <div style={{ fontSize: 14, fontWeight: 800, color: '#334155', marginBottom: 6 }}>No employees found</div>
                 <div style={{ fontSize: 13 }}>Try adjusting your search or filters.</div>
               </div>
@@ -843,10 +896,10 @@ export default function EmployeesPage() {
                       {renderEmployeeAvatar(emp, 44)}
                       <div style={{ minWidth: 0 }}>
                         <div style={{ fontSize: 14, fontWeight: 800, color: '#0f172a', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{fullName(emp)}</div>
-                        <div style={{ fontSize: 12, color: '#64748b', marginTop: 2 }}>{emp.employeeId} · {emp.jobTitle || 'No position'}</div>
+                        <div style={{ fontSize: 12, color: '#000000', marginTop: 2 }}>{emp.employeeId} · {emp.jobTitle || 'No position'}</div>
                       </div>
                     </Link>
-                    <button onClick={event => toggleActionMenu(emp.id, event)} style={{ border: '1px solid #e5e7eb', background: '#fff', cursor: 'pointer', width: 34, height: 34, borderRadius: 9, color: '#64748b', display: 'grid', placeItems: 'center', flexShrink: 0 }} aria-label={`Open actions for ${fullName(emp)}`}>
+                    <button onClick={event => toggleActionMenu(emp.id, event)} style={{ border: '1px solid #e5e7eb', background: '#fff', cursor: 'pointer', width: 34, height: 34, borderRadius: 9, color: '#000000', display: 'grid', placeItems: 'center', flexShrink: 0 }} aria-label={`Open actions for ${fullName(emp)}`}>
                       <MoreHorizontal size={16} />
                     </button>
                     {renderActionsMenu(emp)}
@@ -855,7 +908,7 @@ export default function EmployeesPage() {
                     <span style={{ fontSize: 11, fontWeight: 700, padding: '4px 9px', borderRadius: 999, background: sb.bg, color: sb.text }}>{emp.employmentStatus}</span>
                     <span style={{ fontSize: 11, fontWeight: 700, padding: '4px 9px', borderRadius: 999, background: dc.bg, color: dc.text }}>{emp.department || 'No department'}</span>
                   </div>
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginTop: 14, fontSize: 12, color: '#475569' }}>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginTop: 14, fontSize: 12, color: '#000000' }}>
                     <div><strong style={{ color: '#0f172a' }}>Team</strong><br />{emp.team || '-'}</div>
                     <div><strong style={{ color: '#0f172a' }}>Phone</strong><br />{emp.phone || '-'}</div>
                     <div style={{ minWidth: 0 }}><strong style={{ color: '#0f172a' }}>Email</strong><br /><span style={{ display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{emp.email || '-'}</span></div>
@@ -873,7 +926,7 @@ export default function EmployeesPage() {
 
         {/* Pagination */}
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 16px', borderTop: '1px solid #f3f4f6', flexWrap: 'wrap', gap: 8 }}>
-          <span style={{ fontSize: 12, color: '#6b7280' }}>
+          <span style={{ fontSize: 12, color: '#000000' }}>
             Showing {filtered.length === 0 ? 0 : (page - 1) * pageSize + 1} to {Math.min(page * pageSize, filtered.length)} of {filtered.length} results
           </span>
           <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
@@ -890,7 +943,7 @@ export default function EmployeesPage() {
                 </button>
               )
             })}
-            {totalPages > 5 && <span style={{ fontSize: 13, color: '#9ca3af' }}>...</span>}
+            {totalPages > 5 && <span style={{ fontSize: 13, color: '#000000' }}>...</span>}
             {totalPages > 5 && (
               <button onClick={() => setPage(totalPages)} style={{ width: 30, height: 30, border: '1px solid #e5e7eb', background: page === totalPages ? '#22c55e' : '#fff', borderRadius: 7, cursor: 'pointer', fontSize: 13, fontWeight: page === totalPages ? 700 : 400, color: page === totalPages ? '#fff' : '#374151' }}>
                 {totalPages}
@@ -900,7 +953,7 @@ export default function EmployeesPage() {
               <ChevronRight size={14} />
             </button>
           </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, color: '#6b7280' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, color: '#000000' }}>
             <span>Rows per page</span>
             <div style={{ position: 'relative' }}>
               <button onClick={() => setPsOpen(v => !v)} style={{ display: 'flex', alignItems: 'center', gap: 4, border: '1px solid #e5e7eb', background: '#fff', borderRadius: 7, padding: '4px 10px', fontSize: 12, color: '#374151', cursor: 'pointer' }}>
@@ -933,7 +986,7 @@ export default function EmployeesPage() {
             style={{ width: 'min(440px, 100%)', background: '#fff', borderRadius: 14, boxShadow: '0 24px 60px rgba(15,23,42,0.2)', padding: 22, fontFamily: font }}
           >
             <h2 id="exit-prompt-title" style={{ margin: 0, color: '#0f172a', fontSize: 18, fontWeight: 800 }}>Mark as ex-employee</h2>
-            <p style={{ margin: '6px 0 18px', color: '#475569', fontSize: 13 }}>
+            <p style={{ margin: '6px 0 18px', color: '#000000', fontSize: 13 }}>
               <strong style={{ color: '#0f172a' }}>{[exitPrompt.employee.firstName, exitPrompt.employee.middleName, exitPrompt.employee.lastName].filter(Boolean).join(' ')}</strong>
               {' '}will move to Ex Employees. Pick a reason so HR has a record of why they left.
             </p>
@@ -966,7 +1019,7 @@ export default function EmployeesPage() {
               })}
             </div>
 
-            <label style={{ display: 'block', color: '#0f172a', fontSize: 12, fontWeight: 700, marginBottom: 6 }}>Notes <span style={{ color: '#94a3b8', fontWeight: 500 }}>(optional)</span></label>
+            <label style={{ display: 'block', color: '#0f172a', fontSize: 12, fontWeight: 700, marginBottom: 6 }}>Notes <span style={{ color: '#000000', fontWeight: 500 }}>(optional)</span></label>
             <textarea
               value={exitPrompt.notes}
               onChange={event => setExitPrompt(prev => prev ? { ...prev, notes: event.target.value } : prev)}

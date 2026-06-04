@@ -3,6 +3,8 @@
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { type KeyboardEvent, type MouseEvent, useEffect, useMemo, useRef, useState } from 'react'
+import { AnalyticsToggleButton, CollapsibleAnalytics, useAnalyticsDisclosure } from '@/components/AnalyticsDisclosure'
+import { createHrRecord, deleteHrRecord, listHrRecords } from '@/lib/hrms/client'
 import {
   CalendarDays,
   Download,
@@ -58,6 +60,8 @@ type HRDocument = {
   folderId?: string
   shared?: boolean
   deletedAt?: string
+  createdAt?: string
+  updatedAt?: string
 }
 
 type HRFolder = {
@@ -95,6 +99,18 @@ function loadStored<T>(key: string, fallback: T): T {
 
 function saveStored<T>(key: string, value: T) {
   if (typeof window !== 'undefined') window.localStorage.setItem(key, JSON.stringify(value))
+}
+
+// Merge server + local documents by id, keeping whichever was touched last.
+function mergeDocsById(rows: HRDocument[]) {
+  const map = new Map<string, HRDocument>()
+  for (const row of rows) {
+    if (!row?.id) continue
+    const stamp = (doc: HRDocument) => new Date(doc.updatedAt || doc.uploadedAt || doc.createdAt || 0).getTime()
+    const existing = map.get(row.id)
+    if (!existing || stamp(row) >= stamp(existing)) map.set(row.id, row)
+  }
+  return Array.from(map.values())
 }
 
 function parseStoredAccount(value: string | null): StoredAccount {
@@ -146,7 +162,7 @@ function typeTone(type: string) {
   if (normalized.includes('pdf')) return { bg: '#fee2e2', text: '#dc2626' }
   if (normalized.includes('xls') || normalized.includes('excel')) return { bg: '#dcfce7', text: '#15803d' }
   if (normalized.includes('doc') || normalized.includes('word')) return { bg: '#dbeafe', text: '#1d4ed8' }
-  return { bg: '#f1f5f9', text: '#475569' }
+  return { bg: '#f1f5f9', text: '#000000' }
 }
 
 export default function HrDocumentsPage() {
@@ -168,21 +184,41 @@ export default function HrDocumentsPage() {
   const [isDraggingFiles, setIsDraggingFiles] = useState(false)
   const [uploadError, setUploadError] = useState('')
   const [account, setAccount] = useState<StoredAccount>({})
+  const analytics = useAnalyticsDisclosure('wiseflow:analytics:hr-documents')
 
   useEffect(() => {
-    const load = () => {
-      const storedDocs = loadStored<HRDocument[]>(documentsKey, [])
-      setDocuments(storedDocs.filter(doc => Boolean(documentAssetUrl(doc) || doc.objectKey) && !doc.deletedAt))
+    let cancelled = false
+    const load = async () => {
       setDeletedDocuments(loadStored<HRDocument[]>(deletedDocumentsKey, []))
       setFolders(loadStored<HRFolder[]>(foldersKey, []))
       setAccount({
         ...parseStoredAccount(window.localStorage.getItem(sessionKey)),
         ...parseStoredAccount(window.localStorage.getItem(accountKey)),
       })
+      const local = loadStored<HRDocument[]>(documentsKey, [])
+      let base = local
+      try {
+        const server = await listHrRecords<HRDocument>('documents', { 'x-hr-role': 'HR' })
+        base = mergeDocsById([...server, ...local])
+        if (!cancelled && JSON.stringify(base) !== JSON.stringify(local)) saveStored(documentsKey, base)
+      } catch {
+        base = local
+      }
+      if (cancelled) return
+      setDocuments(base.filter(doc => Boolean(documentAssetUrl(doc) || doc.objectKey) && !doc.deletedAt))
     }
     load()
     window.addEventListener('storage', load)
-    return () => window.removeEventListener('storage', load)
+    window.addEventListener('focus', load)
+    window.addEventListener('wiseflow:hr-data-changed', load)
+    const timer = window.setInterval(load, 4000)
+    return () => {
+      cancelled = true
+      window.removeEventListener('storage', load)
+      window.removeEventListener('focus', load)
+      window.removeEventListener('wiseflow:hr-data-changed', load)
+      window.clearInterval(timer)
+    }
   }, [])
 
   const currentUserName = account.fullName || account.name || ''
@@ -295,6 +331,9 @@ export default function HrDocumentsPage() {
       const updated = [...next, ...storedDocs]
       saveStored(documentsKey, updated)
       setDocuments(updated.filter(doc => Boolean(documentAssetUrl(doc) || doc.objectKey) && !doc.deletedAt))
+      // Persist uploaded docs to the shared HR store so they appear cross-device.
+      void Promise.allSettled(next.map(doc => createHrRecord<HRDocument>('documents', doc as unknown as Record<string, unknown>)))
+        .then(() => window.dispatchEvent(new Event('wiseflow:hr-data-changed')))
     }
     if (fileInputRef.current) fileInputRef.current.value = ''
     if (folderFileInputRef.current) folderFileInputRef.current.value = ''
@@ -364,6 +403,9 @@ export default function HrDocumentsPage() {
     setDeletedDocuments(trashed)
     saveStored(documentsKey, loadStored<HRDocument[]>(documentsKey, []).filter(item => item.id !== doc.id))
     saveStored(deletedDocumentsKey, trashed)
+    void deleteHrRecord('documents', doc.id)
+      .then(() => window.dispatchEvent(new Event('wiseflow:hr-data-changed')))
+      .catch(() => undefined)
   }
 
   function restoreDocument(doc: HRDocument) {
@@ -374,6 +416,9 @@ export default function HrDocumentsPage() {
     setDeletedDocuments(trash)
     saveStored(documentsKey, [restored, ...loadStored<HRDocument[]>(documentsKey, [])])
     saveStored(deletedDocumentsKey, trash)
+    void createHrRecord<HRDocument>('documents', restored as unknown as Record<string, unknown>)
+      .then(() => window.dispatchEvent(new Event('wiseflow:hr-data-changed')))
+      .catch(() => undefined)
   }
 
   function deleteForever(id: string) {
@@ -409,6 +454,7 @@ export default function HrDocumentsPage() {
         <div className="documents-toolbar" style={toolbarStyle}>
           <input ref={fileInputRef} type="file" multiple hidden onChange={event => uploadDocuments(event.target.files)} />
           <input ref={folderFileInputRef} type="file" multiple hidden onChange={event => uploadDocuments(event.target.files, selectedFolder)} />
+          <AnalyticsToggleButton open={analytics.open} onToggle={analytics.toggle} panelId={analytics.panelId} style={secondaryButtonStyle} />
           <button style={secondaryButtonStyle} onClick={() => fileInputRef.current?.click()}><Upload size={15} /> Upload Document</button>
           <button style={primaryButtonStyle} onClick={() => setFolderModalOpen(true)}><Plus size={15} /> New Folder</button>
         </div>
@@ -416,13 +462,15 @@ export default function HrDocumentsPage() {
 
       {uploadError && <div style={errorStyle}>{uploadError}</div>}
 
-      <div className="documents-metrics" style={metricGridStyle}>
-        <Metric icon={FileText} label="Total Documents" value={documents.length} sub="Uploaded files" color="#16a34a" bg="#dcfce7" />
-        <Metric icon={Folder} label="Folders" value={folders.length} sub="Created folders" color="#2563eb" bg="#dbeafe" />
-        <Metric icon={Users} label="Shared Documents" value={sharedWithMeDocuments.length} sub="Shared with you" color="#7c3aed" bg="#ede9fe" />
-        <Metric icon={File} label="Storage Used" value={formatFileSize(storageUsed)} sub="Object storage metadata" color="#d97706" bg="#fef3c7" />
-        <Metric icon={Trash2} label="Trash" value={deletedDocuments.length} sub={deletedDocuments.length ? 'Empty trash' : 'Deleted documents'} color="#ca8a04" bg="#fef9c3" />
-      </div>
+      <CollapsibleAnalytics open={analytics.open} id={analytics.panelId}>
+        <div className="documents-metrics" style={metricGridStyle}>
+          <Metric icon={FileText} label="Total Documents" value={documents.length} sub="Uploaded files" color="#16a34a" bg="#dcfce7" />
+          <Metric icon={Folder} label="Folders" value={folders.length} sub="Created folders" color="#2563eb" bg="#dbeafe" />
+          <Metric icon={Users} label="Shared Documents" value={sharedWithMeDocuments.length} sub="Shared with you" color="#7c3aed" bg="#ede9fe" />
+          <Metric icon={File} label="Storage Used" value={formatFileSize(storageUsed)} sub="Object storage metadata" color="#d97706" bg="#fef3c7" />
+          <Metric icon={Trash2} label="Trash" value={deletedDocuments.length} sub={deletedDocuments.length ? 'Empty trash' : 'Deleted documents'} color="#ca8a04" bg="#fef9c3" />
+        </div>
+      </CollapsibleAnalytics>
 
       <div className="documents-drive" style={driveWorkspaceStyle}>
         <aside className="documents-drive-rail" style={driveRailStyle} aria-label="Document library sections">
@@ -477,7 +525,7 @@ export default function HrDocumentsPage() {
 
               {isDraggingFiles && (
                 <div style={dropZoneStyle(Boolean(selectedFolder), isDraggingFiles)}>
-                  <Upload size={24} color={selectedFolder ? '#16a34a' : '#94a3b8'} />
+                  <Upload size={24} color={selectedFolder ? '#16a34a' : '#000000'} />
                   <strong>{selectedFolder ? 'Drop files to upload' : 'No folder selected'}</strong>
                   <span>{selectedFolder ? 'You can also use the Upload Files button.' : 'Select or create a folder before uploading files.'}</span>
                 </div>
@@ -505,7 +553,7 @@ export default function HrDocumentsPage() {
                                 <DocumentThumb doc={doc} />
                                 <span>
                                   <strong style={{ display: 'block', color: '#0f172a' }}>{doc.name}</strong>
-                                  <small style={{ color: '#64748b' }}>{doc.mimeType || 'Document'}</small>
+                                  <small style={{ color: '#000000' }}>{doc.mimeType || 'Document'}</small>
                                 </span>
                               </div>
                             </Td>
@@ -527,7 +575,7 @@ export default function HrDocumentsPage() {
                   </div>
                   {filteredDocuments.length === 0 && (
                     <div style={emptyStateStyle}>
-                      <FileText size={34} color="#94a3b8" />
+                      <FileText size={34} color="#000000" />
                       <strong>This folder is empty.</strong>
                       <span>Drag and drop files here or upload manually.</span>
                     </div>
@@ -557,7 +605,7 @@ export default function HrDocumentsPage() {
               <Trash2 size={20} color="#d97706" />
               <span>
                 <strong style={{ display: 'block', color: '#0f172a' }}>Items in trash are deleted permanently when you choose Delete forever.</strong>
-                <small style={{ color: '#64748b' }}>You can restore documents before permanent deletion.</small>
+                <small style={{ color: '#000000' }}>You can restore documents before permanent deletion.</small>
               </span>
             </div>
             <button style={dangerButtonStyle} onClick={emptyTrash}>Empty Trash</button>
@@ -599,7 +647,7 @@ export default function HrDocumentsPage() {
                         <DocumentThumb doc={doc} />
                         <span>
                           <strong style={{ display: 'block', color: '#0f172a' }}>{doc.name}</strong>
-                          <small style={{ color: '#64748b' }}>{doc.mimeType || 'Document'}</small>
+                          <small style={{ color: '#000000' }}>{doc.mimeType || 'Document'}</small>
                         </span>
                       </div>
                     </Td>
@@ -652,7 +700,7 @@ export default function HrDocumentsPage() {
                 <div style={documentPreviewStyle(doc)}>
                   {!isImageDocument(doc) && <DocumentIcon type={documentType(doc)} large />}
                 </div>
-                <span style={{ color: '#64748b', fontSize: 12 }}>{doc.size || '-'} - {formatDate(doc.uploadedAt)}</span>
+                <span style={{ color: '#000000', fontSize: 12 }}>{doc.size || '-'} - {formatDate(doc.uploadedAt)}</span>
                 <div style={{ display: 'flex', gap: 8 }} onClick={event => event.stopPropagation()}>
                   <IconLink href={`/hr/documents/${encodeURIComponent(doc.id)}`} icon={Eye} label={`View ${doc.name}`} />
                   <IconButton onClick={() => downloadDocument(doc)} icon={Download} />
@@ -665,7 +713,7 @@ export default function HrDocumentsPage() {
 
         {filteredDocuments.length === 0 && (
           <div style={emptyStateStyle}>
-            <FileText size={34} color="#94a3b8" />
+            <FileText size={34} color="#000000" />
             <strong>{emptyStateCopy(activeTab).title}</strong>
             <span>{emptyStateCopy(activeTab).text}</span>
           </div>
@@ -680,7 +728,7 @@ export default function HrDocumentsPage() {
         <div style={modalOverlayStyle} role="dialog" aria-modal="true" aria-label="Create new folder">
           <div style={modalCardStyle}>
             <h2 style={{ margin: 0, fontSize: 18, color: '#0f172a' }}>New Folder</h2>
-            <p style={{ margin: '6px 0 16px', fontSize: 13, color: '#64748b' }}>Create a folder to organize uploaded HR documents.</p>
+            <p style={{ margin: '6px 0 16px', fontSize: 13, color: '#000000' }}>Create a folder to organize uploaded HR documents.</p>
             <label style={fieldStyle}>
               <span style={labelStyle}>Folder name</span>
               <input value={folderName} onChange={event => setFolderName(event.target.value)} placeholder="Enter folder name" style={inputBoxStyle} />
@@ -707,7 +755,7 @@ function emptyStateCopy(tab: DocumentTab) {
 function SearchBox({ value, onChange, placeholder, compact }: { value: string; onChange: (value: string) => void; placeholder: string; compact?: boolean }) {
   return (
     <label style={{ ...searchBoxStyle, minWidth: compact ? 'min(320px, 100%)' : 'min(360px, 100%)', flex: compact ? '1 1 280px' : '1 1 360px' }}>
-      <Search size={15} color="#94a3b8" />
+      <Search size={15} color="#000000" />
       <input value={value} onChange={event => onChange(event.target.value)} placeholder={placeholder} style={plainInputStyle} />
     </label>
   )
@@ -726,7 +774,7 @@ function Metric({ icon: Icon, label, value, sub, color, bg }: { icon: typeof Fil
     <article style={metricCardStyle}>
       <span style={{ ...metricIconStyle, background: bg }}><Icon size={24} color={color} /></span>
       <span>
-        <small style={{ color: '#475569', fontSize: 12 }}>{label}</small>
+        <small style={{ color: '#000000', fontSize: 12 }}>{label}</small>
         <strong style={{ display: 'block', marginTop: 6, fontSize: 22, color: '#0f172a' }}>{value}</strong>
         <small style={{ display: 'block', marginTop: 8, color: '#16a34a', fontSize: 12 }}>{sub}</small>
       </span>
@@ -794,7 +842,7 @@ function Td({ children }: { children: React.ReactNode }) {
 
 const documentsCss = `
 .hr-module-page { max-width: 100%; overflow-x: hidden; }
-.documents-drive-rail nav button strong { justify-self: end; min-width: 24px; text-align: right; font-size: 11px; color: #64748b; }
+.documents-drive-rail nav button strong { justify-self: end; min-width: 24px; text-align: right; font-size: 11px; color: #000000; }
 .documents-drive-rail button, .documents-toolbar button, .documents-filterbar button, .documents-filterbar select { min-height: 44px; }
 .documents-drive-main table { background: #fff; }
 .documents-drive-main tbody tr:hover { background: #f8fafc; }
@@ -836,7 +884,7 @@ const documentsCss = `
 
 const pageHeaderStyle = { display: 'flex', justifyContent: 'space-between', gap: 16, alignItems: 'flex-start', flexWrap: 'wrap' as const, marginBottom: 18 }
 const pageTitleStyle = { margin: 0, color: '#0f172a', fontSize: 28, fontWeight: 900 }
-const pageSubtitleStyle = { margin: '6px 0 0', color: '#475569', fontSize: 14 }
+const pageSubtitleStyle = { margin: '6px 0 0', color: '#000000', fontSize: 14 }
 const toolbarStyle = { display: 'flex', gap: 10, flexWrap: 'wrap' as const }
 const metricGridStyle = { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(210px, 1fr))', gap: 0, background: '#fff', border: '1px solid #e5e7eb', borderRadius: 12, boxShadow: '0 8px 24px rgba(15,23,42,0.04)', marginBottom: 20, overflow: 'hidden' }
 const metricCardStyle = { minHeight: 110, padding: 18, display: 'flex', alignItems: 'center', gap: 16, borderRight: '1px solid #f1f5f9' }
@@ -845,21 +893,21 @@ const driveWorkspaceStyle = { display: 'grid', gridTemplateColumns: '248px minma
 const driveRailStyle = { position: 'sticky' as const, top: 86, background: '#fff', border: '1px solid #e5e7eb', borderRadius: 16, padding: 14, boxShadow: '0 10px 28px rgba(15,23,42,0.05)', display: 'grid', gap: 14 }
 const driveNavStyle = { display: 'grid', gap: 4 }
 const driveNavItemStyle = (active: boolean) => ({ minHeight: 42, border: '0', borderRadius: 999, background: active ? '#e9f8ef' : 'transparent', color: active ? '#0f5132' : '#334155', display: 'grid', gridTemplateColumns: '22px minmax(0, 1fr) auto', gap: 10, alignItems: 'center', padding: '0 12px', textAlign: 'left' as const, cursor: 'pointer', fontFamily: font, fontSize: 13, fontWeight: active ? 900 : 750 })
-const storagePanelStyle = { borderTop: '1px solid #eef2f7', paddingTop: 14, display: 'grid', gap: 7, color: '#64748b', fontSize: 12 }
+const storagePanelStyle = { borderTop: '1px solid #eef2f7', paddingTop: 14, display: 'grid', gap: 7, color: '#000000', fontSize: 12 }
 const storageBarTrackStyle = { height: 7, borderRadius: 999, background: '#e2e8f0', overflow: 'hidden' }
 const storageBarFillStyle = { display: 'block', height: '100%', borderRadius: 999, background: '#16a34a' }
 const driveMainStyle = { minWidth: 0, display: 'grid', gap: 14 }
 const driveContentHeaderStyle = { background: '#fff', border: '1px solid #e5e7eb', borderRadius: 16, padding: '16px 18px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 16, flexWrap: 'wrap' as const, boxShadow: '0 10px 28px rgba(15,23,42,0.04)' }
 const driveTitleStyle = { margin: 0, color: '#0f172a', fontSize: 20, fontWeight: 950 }
-const driveHintStyle = { margin: '5px 0 0', color: '#64748b', fontSize: 13 }
+const driveHintStyle = { margin: '5px 0 0', color: '#000000', fontSize: 13 }
 const driveHeaderActionsStyle = { display: 'flex', gap: 10, flexWrap: 'wrap' as const }
 const cardStyle = { background: '#fff', border: '1px solid #e5e7eb', borderRadius: 16, boxShadow: '0 8px 24px rgba(15,23,42,0.04)', overflow: 'hidden' }
 const folderWorkspaceStyle = { display: 'grid', gridTemplateColumns: 'minmax(0, 1fr)', gap: 18, padding: 18 }
 const folderContentStyle = { border: '1px solid #e5e7eb', borderRadius: 12, padding: 16, minWidth: 0 }
 const folderPanelHeaderStyle = { display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'flex-start', flexWrap: 'wrap' as const }
 const sectionTitleStyle = { margin: 0, color: '#0f172a', fontSize: 16, fontWeight: 900 }
-const sectionHintStyle = { margin: '5px 0 0', color: '#64748b', fontSize: 13 }
-const dropZoneStyle = (enabled: boolean, active: boolean) => ({ minHeight: 138, border: `1.5px dashed ${active ? '#16a34a' : enabled ? '#86efac' : '#cbd5e1'}`, borderRadius: 12, background: active ? '#ecfdf5' : enabled ? '#f7fee7' : '#f8fafc', display: 'grid', placeItems: 'center', gap: 6, padding: 18, color: enabled ? '#166534' : '#64748b', textAlign: 'center' as const, fontSize: 13 })
+const sectionHintStyle = { margin: '5px 0 0', color: '#000000', fontSize: 13 }
+const dropZoneStyle = (enabled: boolean, active: boolean) => ({ minHeight: 138, border: `1.5px dashed ${active ? '#16a34a' : enabled ? '#86efac' : '#cbd5e1'}`, borderRadius: 12, background: active ? '#ecfdf5' : enabled ? '#f7fee7' : '#f8fafc', display: 'grid', placeItems: 'center', gap: 6, padding: 18, color: enabled ? '#166534' : '#000000', textAlign: 'center' as const, fontSize: 13 })
 const filterBarStyle = { padding: 18, display: 'flex', gap: 12, alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap' as const, borderBottom: '1px solid #f1f5f9' }
 const trashNoticeStyle = { margin: '0 0 0', padding: '14px 18px', background: '#fffbeb', borderBottom: '1px solid #fde68a', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 14, flexWrap: 'wrap' as const }
 const searchBoxStyle = { minHeight: 40, border: '1px solid #e5e7eb', borderRadius: 8, background: '#fff', padding: '0 12px', display: 'flex', alignItems: 'center', gap: 8, color: '#0f172a', fontSize: 13, fontFamily: font }
@@ -868,9 +916,9 @@ const selectStyle = { minHeight: 40, minWidth: 150, border: '1px solid #e5e7eb',
 const primaryButtonStyle = { minHeight: 40, border: 'none', borderRadius: 8, background: '#16a34a', color: '#fff', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 8, padding: '0 16px', fontSize: 13, fontWeight: 900, cursor: 'pointer', fontFamily: font }
 const secondaryButtonStyle = { minHeight: 40, border: '1px solid #e5e7eb', borderRadius: 8, background: '#fff', color: '#0f172a', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 8, padding: '0 14px', fontSize: 13, fontWeight: 800, cursor: 'pointer', fontFamily: font }
 const viewToggleStyle = { display: 'flex', border: '1px solid #e5e7eb', borderRadius: 8, overflow: 'hidden' }
-const viewButtonStyle = (active: boolean) => ({ width: 38, height: 38, border: 'none', borderRight: '1px solid #e5e7eb', background: active ? '#dcfce7' : '#fff', color: active ? '#16a34a' : '#64748b', display: 'grid', placeItems: 'center', cursor: 'pointer' })
+const viewButtonStyle = (active: boolean) => ({ width: 38, height: 38, border: 'none', borderRight: '1px solid #e5e7eb', background: active ? '#dcfce7' : '#fff', color: active ? '#16a34a' : '#000000', display: 'grid', placeItems: 'center', cursor: 'pointer' })
 const tableStyle = { width: '100%', borderCollapse: 'collapse' as const, minWidth: 1120 }
-const thStyle = { textAlign: 'left' as const, padding: '13px 18px', color: '#475569', fontSize: 11, fontWeight: 900, background: '#fbfdff', whiteSpace: 'nowrap' as const }
+const thStyle = { textAlign: 'left' as const, padding: '13px 18px', color: '#000000', fontSize: 11, fontWeight: 900, background: '#fbfdff', whiteSpace: 'nowrap' as const }
 const tdStyle = { padding: '13px 18px', borderTop: '1px solid #f1f5f9', color: '#0f172a', fontSize: 12, verticalAlign: 'middle' as const }
 const trStyle = { background: '#fff' }
 const clickableTrStyle = { ...trStyle, cursor: 'pointer' }
@@ -879,7 +927,7 @@ const iconButtonStyle = { width: 34, height: 34, border: '1px solid #e5e7eb', bo
 const iconLinkStyle = { ...iconButtonStyle, textDecoration: 'none' }
 const smallButtonStyle = { minHeight: 32, border: '1px solid #bbf7d0', borderRadius: 7, background: '#fff', color: '#15803d', padding: '0 10px', fontSize: 12, fontWeight: 800, cursor: 'pointer', fontFamily: font }
 const dangerButtonStyle = { minHeight: 32, border: '1px solid #fecaca', borderRadius: 7, background: '#fff', color: '#dc2626', padding: '0 10px', fontSize: 12, fontWeight: 800, cursor: 'pointer', fontFamily: font }
-const emptyStateStyle = { padding: '54px 18px', display: 'grid', placeItems: 'center', gap: 8, color: '#64748b', fontSize: 13, textAlign: 'center' as const }
+const emptyStateStyle = { padding: '54px 18px', display: 'grid', placeItems: 'center', gap: 8, color: '#000000', fontSize: 13, textAlign: 'center' as const }
 const documentThumbStyle = (doc: HRDocument) => ({ width: 42, height: 42, borderRadius: 10, backgroundColor: '#f1f5f9', backgroundImage: `url("${documentAssetUrl(doc)}")`, backgroundSize: 'cover', backgroundPosition: 'center', overflow: 'hidden', display: 'block', flexShrink: 0, border: '1px solid #e5e7eb' })
 const gridStyle = { padding: 18, display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))', gap: 16 }
 const documentCardStyle = { border: '1px solid #e5e7eb', borderRadius: 12, padding: 8, display: 'grid', gap: 8, background: '#eef2f7', overflow: 'hidden' }
@@ -892,6 +940,6 @@ const errorStyle = { marginBottom: 14, border: '1px solid #fecaca', background: 
 const modalOverlayStyle = { position: 'fixed' as const, inset: 0, zIndex: 90, background: 'rgba(15,23,42,0.45)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 18 }
 const modalCardStyle = { width: 'min(480px, 100%)', background: '#fff', borderRadius: 12, border: '1px solid #e5e7eb', boxShadow: '0 24px 70px rgba(15,23,42,0.22)', padding: 20 }
 const fieldStyle = { display: 'grid', gap: 7 }
-const labelStyle = { color: '#475569', fontSize: 12, fontWeight: 800 }
+const labelStyle = { color: '#000000', fontSize: 12, fontWeight: 800 }
 const inputBoxStyle = { minHeight: 40, border: '1px solid #e5e7eb', borderRadius: 8, padding: '0 12px', fontSize: 13, fontFamily: font }
 const modalFooterStyle = { marginTop: 18, display: 'flex', justifyContent: 'flex-end', gap: 10 }

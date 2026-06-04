@@ -10,6 +10,7 @@ import {
   Wallet, Zap,
 } from 'lucide-react'
 import { Cell, Pie, PieChart, ResponsiveContainer } from 'recharts'
+import { AnalyticsToggleButton, CollapsibleAnalytics, useAnalyticsDisclosure } from '@/components/AnalyticsDisclosure'
 import { listHrRecords } from '@/lib/hrms/client'
 import { loadLeaveRequests } from '@/app/hr/leave-requests/leaveData'
 
@@ -147,7 +148,7 @@ function leaveTypeBadge(type: string): { bg: string; text: string } {
     case 'emergency leave':return { bg: '#ffedd5', text: '#c2410c' }
     case 'maternity leave':return { bg: '#fce7f3', text: '#be185d' }
     case 'paternity leave':return { bg: '#ede9fe', text: '#7c3aed' }
-    default:               return { bg: '#f3f4f6', text: '#6b7280' }
+    default:               return { bg: '#f3f4f6', text: '#000000' }
   }
 }
 
@@ -174,6 +175,7 @@ export default function HROverview() {
   const payRef    = useRef<HTMLDivElement>(null)
   const [attOpen, setAttOpen] = useState(false)
   const [payOpen, setPayOpen] = useState(false)
+  const analytics = useAnalyticsDisclosure('wiseflow:analytics:hr-overview')
 
   useEffect(() => {
     let cancelled = false
@@ -323,9 +325,10 @@ export default function HROverview() {
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 20, paddingTop: 20, flexWrap: 'wrap', gap: 12 }}>
         <div>
           <h1 style={{ margin: 0, color: '#0f172a', fontSize: 28, fontWeight: 900 }}>HR Overview</h1>
-          <p style={{ margin: '6px 0 0', color: '#475569', fontSize: 14 }}>Monitor your people, approvals, attendance, payroll, and HR activity in one place.</p>
+          <p style={{ margin: '6px 0 0', color: '#000000', fontSize: 14 }}>Monitor your people, approvals, attendance, payroll, and HR activity in one place.</p>
         </div>
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+          <AnalyticsToggleButton open={analytics.open} onToggle={analytics.toggle} panelId={analytics.panelId} style={{ display: 'flex', alignItems: 'center', gap: 6, border: '1px solid #e5e7eb', background: '#fff', borderRadius: 8, padding: '7px 14px', fontSize: 13, fontWeight: 500, color: '#374151', cursor: 'pointer', fontFamily: font }} />
           <Link href="/hr/employees/new" style={{ textDecoration: 'none' }}>
             <button style={{ display: 'flex', alignItems: 'center', gap: 6, border: '1px solid #e5e7eb', background: '#fff', borderRadius: 8, padding: '7px 14px', fontSize: 13, fontWeight: 500, color: '#374151', cursor: 'pointer' }}>
               <UserPlus size={14} /> Add Employee
@@ -359,30 +362,32 @@ export default function HROverview() {
       </div>
 
       {/* KPI cards */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(6, minmax(0, 1fr))', gap: 10, marginBottom: 18 }}>
-        {[
-          { label: 'Total Employees',    value: kpis.total,   sub: `+${kpis.newThisMonth} this month`,      subColor: '#22c55e', icon: Users,     iconBg: '#dcfce7', iconColor: '#22c55e' },
-          { label: 'Active Employees',   value: kpis.active,  sub: `+${kpis.newThisMonth} this month`,      subColor: '#22c55e', icon: UserCheck, iconBg: '#dbeafe', iconColor: '#3b82f6' },
-          { label: 'Employees on Leave', value: kpis.onLeave, sub: `${kpis.leaveToday} today`,            subColor: '#f59e0b', icon: LogOut,    iconBg: '#ffedd5', iconColor: '#f97316' },
-          { label: 'Pending Approvals',  value: kpis.pending, sub: `${kpis.pending} leave + other`,       subColor: '#f59e0b', icon: Clock,     iconBg: '#ede9fe', iconColor: '#8b5cf6' },
-          { label: 'Payroll This Month', value: money(kpis.payroll), sub: new Date().toLocaleDateString('en-US', { month: 'long', year: 'numeric' }), subColor: '#22c55e', icon: Wallet, iconBg: '#d1fae5', iconColor: '#10b981', isMoney: true },
-          { label: 'Attendance Rate',    value: `${kpis.attRate}%`, sub: '+3.2% vs last month',             subColor: '#22c55e', icon: Zap,       iconBg: '#fee2e2', iconColor: '#ef4444', isText: true },
-        ].map(kpi => {
-          const KIcon = kpi.icon
-          return (
-            <div key={kpi.label} style={{ ...cardStyle, padding: '14px 16px' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 8 }}>
-                <div style={{ fontSize: 12, color: '#6b7280', fontWeight: 500 }}>{kpi.label}</div>
-                <div style={{ width: 32, height: 32, borderRadius: 8, background: kpi.iconBg, display: 'grid', placeItems: 'center', flexShrink: 0 }}>
-                  <KIcon size={15} color={kpi.iconColor} />
+      <CollapsibleAnalytics open={analytics.open} id={analytics.panelId}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(6, minmax(0, 1fr))', gap: 10, marginBottom: 18 }}>
+          {[
+            { label: 'Total Employees',    value: kpis.total,   sub: `+${kpis.newThisMonth} this month`,      subColor: '#22c55e', icon: Users,     iconBg: '#dcfce7', iconColor: '#22c55e' },
+            { label: 'Active Employees',   value: kpis.active,  sub: `+${kpis.newThisMonth} this month`,      subColor: '#22c55e', icon: UserCheck, iconBg: '#dbeafe', iconColor: '#3b82f6' },
+            { label: 'Employees on Leave', value: kpis.onLeave, sub: `${kpis.leaveToday} today`,            subColor: '#f59e0b', icon: LogOut,    iconBg: '#ffedd5', iconColor: '#f97316' },
+            { label: 'Pending Approvals',  value: kpis.pending, sub: `${kpis.pending} leave + other`,       subColor: '#f59e0b', icon: Clock,     iconBg: '#ede9fe', iconColor: '#8b5cf6' },
+            { label: 'Payroll This Month', value: money(kpis.payroll), sub: new Date().toLocaleDateString('en-US', { month: 'long', year: 'numeric' }), subColor: '#22c55e', icon: Wallet, iconBg: '#d1fae5', iconColor: '#10b981', isMoney: true },
+            { label: 'Attendance Rate',    value: `${kpis.attRate}%`, sub: '+3.2% vs last month',             subColor: '#22c55e', icon: Zap,       iconBg: '#fee2e2', iconColor: '#ef4444', isText: true },
+          ].map(kpi => {
+            const KIcon = kpi.icon
+            return (
+              <div key={kpi.label} style={{ ...cardStyle, padding: '14px 16px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 8 }}>
+                  <div style={{ fontSize: 12, color: '#000000', fontWeight: 500 }}>{kpi.label}</div>
+                  <div style={{ width: 32, height: 32, borderRadius: 8, background: kpi.iconBg, display: 'grid', placeItems: 'center', flexShrink: 0 }}>
+                    <KIcon size={15} color={kpi.iconColor} />
+                  </div>
                 </div>
+                <div style={{ fontSize: 22, fontWeight: 700, color: '#111827', letterSpacing: '-0.5px', marginBottom: 4 }}>{kpi.value}</div>
+                <div style={{ fontSize: 12, color: kpi.subColor }}>{kpi.sub}</div>
               </div>
-              <div style={{ fontSize: 22, fontWeight: 700, color: '#111827', letterSpacing: '-0.5px', marginBottom: 4 }}>{kpi.value}</div>
-              <div style={{ fontSize: 12, color: kpi.subColor }}>{kpi.sub}</div>
-            </div>
-          )
-        })}
-      </div>
+            )
+          })}
+        </div>
+      </CollapsibleAnalytics>
 
       {/* Middle row: Leave Requests | Attendance | Payroll */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 14, marginBottom: 14 }}>
@@ -394,7 +399,7 @@ export default function HROverview() {
             <Link href="/hr/leave-requests" style={{ fontSize: 12, color: '#22c55e', fontWeight: 500, textDecoration: 'none' }}>View all</Link>
           </div>
           {pendingLeaves.length === 0 ? (
-            <div style={{ textAlign: 'center', padding: '20px 0', color: '#9ca3af', fontSize: 13 }}>No pending requests</div>
+            <div style={{ textAlign: 'center', padding: '20px 0', color: '#000000', fontSize: 13 }}>No pending requests</div>
           ) : (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
               {pendingLeaves.map(l => {
@@ -406,14 +411,14 @@ export default function HROverview() {
                     <EmployeeAvatar employee={employee} name={employeeName} />
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <div style={{ fontSize: 13, fontWeight: 500, color: '#111827' }}>{employeeName}</div>
-                      <div style={{ fontSize: 11, color: '#9ca3af' }}>{l.jobTitle || 'Employee'}</div>
+                      <div style={{ fontSize: 11, color: '#000000' }}>{l.jobTitle || 'Employee'}</div>
                     </div>
                     <div style={{ textAlign: 'right', flexShrink: 0 }}>
                       <div style={{ marginBottom: 2 }}>
                         <span style={{ fontSize: 10, fontWeight: 600, padding: '2px 8px', borderRadius: 99, background: ltb.bg, color: ltb.text }}>{l.leaveType}</span>
                       </div>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                        <span style={{ fontSize: 11, color: '#9ca3af' }}>{new Date(l.startDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</span>
+                        <span style={{ fontSize: 11, color: '#000000' }}>{new Date(l.startDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</span>
                         <span style={{ fontSize: 10, fontWeight: 600, padding: '2px 8px', borderRadius: 99, background: '#fef3c7', color: '#d97706' }}>Pending</span>
                       </div>
                     </div>
@@ -422,7 +427,7 @@ export default function HROverview() {
               })}
             </div>
           )}
-          <Link href="/hr/leave-requests" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 4, fontSize: 12, color: '#6b7280', fontWeight: 500, textDecoration: 'none', marginTop: 16, padding: '8px 0', borderTop: '1px solid #f3f4f6' }}>
+          <Link href="/hr/leave-requests" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 4, fontSize: 12, color: '#000000', fontWeight: 500, textDecoration: 'none', marginTop: 16, padding: '8px 0', borderTop: '1px solid #f3f4f6' }}>
             View all requests <ChevronRight size={13} />
           </Link>
         </div>
@@ -458,7 +463,7 @@ export default function HROverview() {
               <div style={{ position: 'absolute', inset: 0, display: 'grid', placeItems: 'center', textAlign: 'center' }}>
                 <div>
                   <div style={{ fontSize: 15, fontWeight: 700, color: '#111827' }}>{kpis.attRate}%</div>
-                  <div style={{ fontSize: 9, color: '#9ca3af', fontWeight: 500 }}>Attendance</div>
+                  <div style={{ fontSize: 9, color: '#000000', fontWeight: 500 }}>Attendance</div>
                 </div>
               </div>
             </div>
@@ -473,12 +478,12 @@ export default function HROverview() {
                   <span style={{ width: 7, height: 7, borderRadius: '50%', background: row.color, flexShrink: 0 }} />
                   <span style={{ flex: 1, color: '#374151' }}>{row.label}</span>
                   <span style={{ fontWeight: 600, color: '#111827' }}>{row.count}</span>
-                  <span style={{ color: '#9ca3af', minWidth: 36, textAlign: 'right' }}>({row.pct}%)</span>
+                  <span style={{ color: '#000000', minWidth: 36, textAlign: 'right' }}>({row.pct}%)</span>
                 </div>
               ))}
             </div>
           </div>
-          <Link href="/hr/attendance" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 4, fontSize: 12, color: '#6b7280', fontWeight: 500, textDecoration: 'none', marginTop: 14, padding: '8px 0', borderTop: '1px solid #f3f4f6' }}>
+          <Link href="/hr/attendance" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 4, fontSize: 12, color: '#000000', fontWeight: 500, textDecoration: 'none', marginTop: 14, padding: '8px 0', borderTop: '1px solid #f3f4f6' }}>
             View attendance report <ChevronRight size={13} />
           </Link>
         </div>
@@ -509,12 +514,12 @@ export default function HROverview() {
               { label: 'Net Payroll',       value: money(paySummary.net),        color: '#22c55e', bold: true },
             ].map(row => (
               <div key={row.label} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '6px 0', borderBottom: '1px solid #f3f4f6' }}>
-                <span style={{ fontSize: 13, color: '#6b7280' }}>{row.label}</span>
+                <span style={{ fontSize: 13, color: '#000000' }}>{row.label}</span>
                 <span style={{ fontSize: 14, fontWeight: row.bold ? 700 : 500, color: row.color }}>{row.value}</span>
               </div>
             ))}
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 4 }}>
-              <span style={{ fontSize: 13, color: '#6b7280' }}>Paid Employees</span>
+              <span style={{ fontSize: 13, color: '#000000' }}>Paid Employees</span>
               <span style={{ fontSize: 13, fontWeight: 600, color: '#111827' }}>
                 {paySummary.paid} / {paySummary.total_count}
                 <span style={{ fontSize: 12, color: '#22c55e', marginLeft: 6 }}>
@@ -523,7 +528,7 @@ export default function HROverview() {
               </span>
             </div>
           </div>
-          <Link href="/hr/payroll" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 4, fontSize: 12, color: '#6b7280', fontWeight: 500, textDecoration: 'none', marginTop: 14, padding: '8px 0', borderTop: '1px solid #f3f4f6' }}>
+          <Link href="/hr/payroll" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 4, fontSize: 12, color: '#000000', fontWeight: 500, textDecoration: 'none', marginTop: 14, padding: '8px 0', borderTop: '1px solid #f3f4f6' }}>
             Go to Payroll <ChevronRight size={13} />
           </Link>
         </div>
@@ -541,7 +546,7 @@ export default function HROverview() {
           {newEmployees.length === 0 ? (
             <div style={{ textAlign: 'center', padding: '20px 0' }}>
               <Users size={28} color="#d1d5db" style={{ marginBottom: 8 }} />
-              <div style={{ fontSize: 13, color: '#6b7280', marginBottom: 4 }}>No new employees this month</div>
+              <div style={{ fontSize: 13, color: '#000000', marginBottom: 4 }}>No new employees this month</div>
               <Link href="/hr/employees/new" style={{ fontSize: 12, color: '#22c55e', fontWeight: 500, textDecoration: 'none' }}>Add Employee -&gt;</Link>
             </div>
           ) : newEmployees.map(e => (
@@ -549,15 +554,15 @@ export default function HROverview() {
               <EmployeeAvatar employee={e} />
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ fontSize: 13, fontWeight: 500, color: '#111827' }}>{fullName(e)}</div>
-                <div style={{ fontSize: 11, color: '#9ca3af' }}>{e.jobTitle}</div>
+                <div style={{ fontSize: 11, color: '#000000' }}>{e.jobTitle}</div>
               </div>
               <div style={{ width: 82, flexShrink: 0, textAlign: 'right' }}>
-                <div style={{ fontSize: 11, color: '#6b7280', lineHeight: 1.25 }}>Joined {new Date(e.dateOfJoining).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</div>
+                <div style={{ fontSize: 11, color: '#000000', lineHeight: 1.25 }}>Joined {new Date(e.dateOfJoining).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</div>
                 <span style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', marginTop: 4, minWidth: 44, fontSize: 10, fontWeight: 700, padding: '2px 8px', borderRadius: 99, background: '#d1fae5', color: '#059669' }}>New</span>
               </div>
             </div>
           ))}
-          <Link href="/hr/employees" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 4, fontSize: 12, color: '#6b7280', fontWeight: 500, textDecoration: 'none', marginTop: 4, padding: '8px 0', borderTop: '1px solid #f3f4f6' }}>
+          <Link href="/hr/employees" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 4, fontSize: 12, color: '#000000', fontWeight: 500, textDecoration: 'none', marginTop: 4, padding: '8px 0', borderTop: '1px solid #f3f4f6' }}>
             View all employees <ChevronRight size={13} />
           </Link>
         </div>
@@ -571,7 +576,7 @@ export default function HROverview() {
           {birthdays.length === 0 ? (
             <div style={{ textAlign: 'center', padding: '20px 0' }}>
               <PartyPopper size={28} color="#d1d5db" style={{ marginBottom: 8 }} />
-              <div style={{ fontSize: 13, color: '#6b7280' }}>No upcoming birthdays</div>
+              <div style={{ fontSize: 13, color: '#000000' }}>No upcoming birthdays</div>
             </div>
           ) : birthdays.map(e => (
             <div key={e.id} style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
@@ -583,7 +588,7 @@ export default function HROverview() {
                 <div style={{ fontSize: 12, color: '#374151', fontWeight: 500 }}>
                   {e.nextBday.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
                 </div>
-                <div style={{ fontSize: 11, color: '#9ca3af' }}>{e.age} years old</div>
+                <div style={{ fontSize: 11, color: '#000000' }}>{e.age} years old</div>
               </div>
             </div>
           ))}
@@ -601,7 +606,7 @@ export default function HROverview() {
           {announcements.length === 0 ? (
             <div style={{ textAlign: 'center', padding: '20px 0' }}>
               <Megaphone size={28} color="#d1d5db" style={{ marginBottom: 8 }} />
-              <div style={{ fontSize: 13, color: '#6b7280' }}>No announcements yet</div>
+              <div style={{ fontSize: 13, color: '#000000' }}>No announcements yet</div>
             </div>
           ) : announcements.slice(0, 3).map(a => {
             const cfg = announcementIcon(a.icon)
@@ -613,13 +618,13 @@ export default function HROverview() {
                 </div>
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ fontSize: 13, fontWeight: 600, color: '#111827', marginBottom: 2 }}>{a.title}</div>
-                  <div style={{ fontSize: 11, color: '#6b7280', lineHeight: 1.4 }}>{a.body}</div>
-                  <div style={{ fontSize: 10, color: '#9ca3af', marginTop: 3 }}>{new Date(a.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</div>
+                  <div style={{ fontSize: 11, color: '#000000', lineHeight: 1.4 }}>{a.body}</div>
+                  <div style={{ fontSize: 10, color: '#000000', marginTop: 3 }}>{new Date(a.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</div>
                 </div>
               </div>
             )
           })}
-          <Link href="/hr/documents" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 4, fontSize: 12, color: '#6b7280', fontWeight: 500, textDecoration: 'none', marginTop: 4, padding: '8px 0', borderTop: '1px solid #f3f4f6' }}>
+          <Link href="/hr/documents" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 4, fontSize: 12, color: '#000000', fontWeight: 500, textDecoration: 'none', marginTop: 4, padding: '8px 0', borderTop: '1px solid #f3f4f6' }}>
             View all announcements <ChevronRight size={13} />
           </Link>
         </div>
@@ -632,7 +637,7 @@ export default function HROverview() {
           <Link href="/hr/reports" style={{ fontSize: 12, color: '#22c55e', fontWeight: 500, textDecoration: 'none' }}>View all</Link>
         </div>
         {recentActivity.length === 0 ? (
-          <div style={{ textAlign: 'center', padding: '16px 0', color: '#9ca3af', fontSize: 13 }}>No recent activity. Add employees or manage leave requests to see activity here.</div>
+          <div style={{ textAlign: 'center', padding: '16px 0', color: '#000000', fontSize: 13 }}>No recent activity. Add employees or manage leave requests to see activity here.</div>
         ) : (
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: 14 }}>
             {recentActivity.map((a, i) => {
@@ -647,8 +652,8 @@ export default function HROverview() {
                   </div>
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ fontSize: 12, fontWeight: 600, color: '#111827', marginBottom: 2 }}>{a.title}</div>
-                    <div style={{ fontSize: 11, color: '#6b7280' }}>{a.desc}</div>
-                    <div style={{ fontSize: 10, color: '#9ca3af', marginTop: 4 }}>{a.time}</div>
+                    <div style={{ fontSize: 11, color: '#000000' }}>{a.desc}</div>
+                    <div style={{ fontSize: 10, color: '#000000', marginTop: 4 }}>{a.time}</div>
                   </div>
                 </div>
               )

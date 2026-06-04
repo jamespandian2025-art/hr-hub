@@ -51,9 +51,9 @@ export const HR_NAV_ITEMS: HrNavItem[] = [
     icon: ClipboardCheck,
   },
   {
-    label: 'Approvals',
+    label: 'Leave Approvals',
     href: '/hr/approvals',
-    description: 'Pending HR approvals',
+    description: 'Time-off requests awaiting HR',
     icon: CheckCircle2,
   },
   {

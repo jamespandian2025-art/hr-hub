@@ -16,6 +16,7 @@ import {
   Trash2,
   X,
 } from 'lucide-react'
+import { AnalyticsToggleButton, CollapsibleAnalytics, useAnalyticsDisclosure } from '@/components/AnalyticsDisclosure'
 import {
   createAccountingTransaction,
   deleteAccountingTransaction,
@@ -86,7 +87,7 @@ function CategoryPill({ value }: { value: string }) {
     'Office Supplies': { bg: '#f3e8ff', color: '#7c3aed' },
     Payroll: { bg: '#ccfbf1', color: '#0f766e' },
     Utilities: { bg: '#dbeafe', color: '#2563eb' },
-    Transfer: { bg: '#f1f5f9', color: '#475569' },
+    Transfer: { bg: '#f1f5f9', color: '#000000' },
     'Internet & Phone': { bg: '#f3e8ff', color: '#7c3aed' },
     'Other Income': { bg: '#dcfce7', color: '#15803d' },
     'Credit Card': { bg: '#fef3c7', color: '#d97706' },
@@ -111,6 +112,7 @@ export default function TransactionsPage() {
   const [activeMenu, setActiveMenu] = useState<TransactionMenuState | null>(null)
   const [notice, setNotice] = useState('')
   const [showCreate, setShowCreate] = useState(false)
+  const analytics = useAnalyticsDisclosure('wiseflow:analytics:accounting-transactions')
   const [form, setForm] = useState({
     date: new Date().toISOString().slice(0, 10),
     description: '',
@@ -357,29 +359,32 @@ export default function TransactionsPage() {
         </div>
         <div className="tx-header-actions">
           <label className="tx-search">
-            <Search size={16} color="#64748b" />
+            <Search size={16} color="#000000" />
             <input value={headerSearch} onChange={event => { setHeaderSearch(event.target.value); setCurrentPage(1) }} placeholder="Search transactions, accounts, reference..." />
           </label>
+          <AnalyticsToggleButton open={analytics.open} onToggle={analytics.toggle} panelId={analytics.panelId} className="tx-toolbar-button" />
           <button type="button" className="tx-primary-button" onClick={openCreate}><Plus size={14} /> New Transaction</button>
           <button type="button" className="tx-toolbar-button" onClick={exportCsv}>Export <Download size={14} /></button>
         </div>
       </div>
 
-      <section className="tx-metrics">
-        {metrics.map(metric => {
-          const Icon = metric.icon
-          return (
-            <div key={metric.title} className="tx-card tx-metric-card">
-              <span className="tx-metric-icon" style={{ background: `${metric.tone}12`, color: metric.tone }}><Icon size={23} /></span>
-              <span>
-                <span className="tx-card-label">{metric.title}</span>
-                <strong className="tx-card-value">{metric.value}</strong>
-                <small className="tx-card-detail" style={{ color: metric.up === false ? '#ef4444' : metric.up ? '#16a34a' : '#d97706' }}>{metric.up === false ? 'Down ' : metric.up ? 'Up ' : ''}{metric.detail}</small>
-              </span>
-            </div>
-          )
-        })}
-      </section>
+      <CollapsibleAnalytics open={analytics.open} id={analytics.panelId}>
+        <section className="tx-metrics">
+          {metrics.map(metric => {
+            const Icon = metric.icon
+            return (
+              <div key={metric.title} className="tx-card tx-metric-card">
+                <span className="tx-metric-icon" style={{ background: `${metric.tone}12`, color: metric.tone }}><Icon size={23} /></span>
+                <span>
+                  <span className="tx-card-label">{metric.title}</span>
+                  <strong className="tx-card-value">{metric.value}</strong>
+                  <small className="tx-card-detail" style={{ color: metric.up === false ? '#ef4444' : metric.up ? '#16a34a' : '#d97706' }}>{metric.up === false ? 'Down ' : metric.up ? 'Up ' : ''}{metric.detail}</small>
+                </span>
+              </div>
+            )
+          })}
+        </section>
+      </CollapsibleAnalytics>
 
       <section className="tx-account-select">
         <strong>Accounts</strong>
@@ -402,7 +407,7 @@ export default function TransactionsPage() {
 
       <section className="tx-table-card">
         <div className="tx-filterbar">
-          <label className="tx-filter-search"><Search size={15} color="#64748b" /><input value={tableSearch} onChange={event => { setTableSearch(event.target.value); setCurrentPage(1) }} placeholder="Search transactions..." /></label>
+          <label className="tx-filter-search"><Search size={15} color="#000000" /><input value={tableSearch} onChange={event => { setTableSearch(event.target.value); setCurrentPage(1) }} placeholder="Search transactions..." /></label>
           <SelectButton label="Transaction type" value={typeFilter} onChange={value => { setTypeFilter(value); setCurrentPage(1) }} options={['All Types', 'Deposit', 'Withdrawal', 'Transfer']} />
           <SelectButton label="Transaction status" value={statusFilter} onChange={value => { setStatusFilter(value); setCurrentPage(1) }} options={['All Status', 'Reconciled', 'Unreconciled']} />
           <SelectButton label="Transaction account" value={accountFilter} onChange={value => { setAccountFilter(value); setCurrentPage(1) }} options={['All Accounts', ...accounts]} />
@@ -451,7 +456,7 @@ export default function TransactionsPage() {
               ))}
               {!filteredTotal && (
                 <tr>
-                  <td colSpan={12} style={{ padding: 28, textAlign: 'center', color: '#64748b', fontWeight: 800 }}>
+                  <td colSpan={12} style={{ padding: 28, textAlign: 'center', color: '#000000', fontWeight: 800 }}>
                     {transactions.length ? 'No transactions match the selected filters.' : 'No transactions yet. Paid invoices, paid bills, expenses, payroll, and ledger imports will appear here.'}
                   </td>
                 </tr>
@@ -568,7 +573,7 @@ const transactionsCss = `
 .tx-card { min-height: 100px; padding: 18px; }
 .tx-metric-card { display: flex; align-items: center; }
 .tx-metric-icon { width: 54px; height: 54px; border-radius: 9px; display: grid; place-items: center; margin-right: 16px; flex: 0 0 auto; }
-.tx-card-label { display: block; color: #475569; font-size: 12px; font-weight: 850; }
+.tx-card-label { display: block; color: #000000; font-size: 12px; font-weight: 850; }
 .tx-card-value { display: block; color: #0f172a; font-size: 23px; margin-top: 8px; white-space: nowrap; }
 .tx-card-detail { display: block; font-size: 11.5px; font-weight: 900; margin-top: 8px; }
 .tx-account-select { width: min(360px, 100%); min-height: 58px; display: grid; grid-template-columns: 82px minmax(0, 1fr); align-items: center; gap: 12px; padding: 10px 14px; margin-bottom: 24px; }
@@ -577,7 +582,7 @@ const transactionsCss = `
 .tx-tabs { display: flex; gap: 30px; border-bottom: 1px solid #e8edf4; padding-left: 14px; overflow-x: auto; }
 .tx-tabs button { border: 0; border-bottom: 2px solid transparent; background: transparent; color: #0f172a; min-height: 48px; padding: 0; font-size: 12.5px; font-weight: 900; cursor: pointer; white-space: nowrap; display: inline-flex; align-items: center; gap: 7px; }
 .tx-tabs button.is-active { color: #16a34a; border-bottom-color: #16a34a; }
-.tx-tabs span { min-width: 21px; min-height: 21px; border-radius: 999px; background: #f1f5f9; color: #475569; display: grid; place-items: center; font-size: 11px; }
+.tx-tabs span { min-width: 21px; min-height: 21px; border-radius: 999px; background: #f1f5f9; color: #000000; display: grid; place-items: center; font-size: 11px; }
 .tx-tabs button.is-active span { background: #dcfce7; color: #15803d; }
 .tx-table-card { border-top-left-radius: 0; border-top-right-radius: 0; padding: 18px; }
 .tx-filterbar { display: grid; grid-template-columns: minmax(220px, 1fr) repeat(4, minmax(140px, auto)); gap: 14px; align-items: center; margin-bottom: 18px; }
@@ -585,10 +590,10 @@ const transactionsCss = `
 .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
 .tx-table-wrap { overflow-x: auto; border: 1px solid #eef2f7; border-radius: 8px; }
 .tx-table { width: 100%; min-width: 1220px; border-collapse: collapse; }
-.tx-table th { text-align: left; padding: 12px 14px; color: #64748b; font-size: 11px; text-transform: uppercase; font-weight: 900; background: #f8fafc; }
+.tx-table th { text-align: left; padding: 12px 14px; color: #000000; font-size: 11px; text-transform: uppercase; font-weight: 900; background: #f8fafc; }
 .tx-table td { padding: 14px; font-size: 13px; color: #334155; vertical-align: middle; border-top: 1px solid #eef2f7; }
 .tx-table td strong { display: block; color: #0f172a; }
-.tx-table td small { display: block; color: #64748b; margin-top: 3px; }
+.tx-table td small { display: block; color: #000000; margin-top: 3px; }
 .tx-money-in { color: #16a34a !important; font-weight: 950; }
 .tx-money-out { color: #ef4444 !important; font-weight: 950; }
 .tx-pill, .tx-status { display: inline-flex; min-height: 24px; align-items: center; border-radius: 6px; padding: 0 9px; font-size: 11.5px; font-weight: 900; white-space: nowrap; }
@@ -604,7 +609,7 @@ const transactionsCss = `
 .tx-create-sheet { width: min(520px, 100%); height: 100%; background: #fff; box-shadow: -24px 0 80px rgba(15,23,42,.22); display: grid; grid-template-rows: auto 1fr auto; }
 .tx-create-head { padding: 22px 24px; border-bottom: 1px solid #e8edf4; display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }
 .tx-create-head h2 { margin: 0; font-size: 22px; }
-.tx-create-head p { margin: 6px 0 0; color: #64748b; font-size: 13px; }
+.tx-create-head p { margin: 6px 0 0; color: #000000; font-size: 13px; }
 .tx-create-head button { width: 36px; height: 36px; border: 1px solid #e8edf4; border-radius: 8px; background: #fff; display: grid; place-items: center; cursor: pointer; }
 .tx-create-grid { padding: 22px 24px; display: grid; grid-template-columns: 1fr 1fr; gap: 14px; overflow: auto; align-content: start; }
 .tx-create-grid label { display: grid; gap: 7px; min-width: 0; }
@@ -621,7 +626,7 @@ const transactionsCss = `
 .tx-pagination button { min-width: 34px; height: 32px; border-radius: 7px; border: 1px solid #e8edf4; background: #fff; color: #0f172a; font-weight: 900; cursor: pointer; }
 .tx-pagination button.is-active { background: #16a34a; border-color: #16a34a; color: #fff; }
 .tx-pagination button:disabled { opacity: .45; cursor: not-allowed; }
-.tx-ellipsis { min-width: 22px; text-align: center; color: #64748b; font-weight: 900; }
+.tx-ellipsis { min-width: 22px; text-align: center; color: #000000; font-weight: 900; }
 .tx-page-size { min-height: 32px; border-radius: 7px; border: 1px solid #e8edf4; background: #fff; color: #0f172a; display: flex; align-items: center; gap: 8px; padding: 0 10px; width: auto; }
 .tx-page-size select { appearance: none; border: 0; outline: 0; background: transparent; color: #0f172a; font: inherit; font-weight: 900; cursor: pointer; }
 .accounting-theme-dark .tx-page,
@@ -656,7 +661,7 @@ html[data-theme='dark'] .tx-page .tx-table td { background: #101010 !important; 
   .tx-table thead { display: none; }
   .tx-table tr { border: 1px solid #eef2f7; border-radius: 8px; margin-bottom: 12px; background: #fff; overflow: hidden; }
   .tx-table td { border-top: 0; display: grid; grid-template-columns: 112px minmax(0, 1fr); gap: 10px; padding: 10px 12px; font-size: 12.5px; }
-  .tx-table td::before { content: attr(data-label); color: #64748b; font-size: 11px; font-weight: 900; text-transform: uppercase; }
+  .tx-table td::before { content: attr(data-label); color: #000000; font-size: 11px; font-weight: 900; text-transform: uppercase; }
   .tx-pagination > div { justify-content: flex-start; }
   .tx-create-sheet { height: min(92dvh, 720px); align-self: end; border-radius: 18px 18px 0 0; }
   .tx-create-grid { grid-template-columns: 1fr; padding: 18px; }

@@ -19,6 +19,7 @@ import {
   X,
   XCircle,
 } from 'lucide-react'
+import { AnalyticsToggleButton, CollapsibleAnalytics, useAnalyticsDisclosure } from '@/components/AnalyticsDisclosure'
 import { companyChangeEvent, companyScopedKey, getActiveCompany } from '@/lib/tenant/company'
 import { syncProcurementReceiptToWarehouse } from '@/lib/warehouse/store'
 
@@ -138,6 +139,7 @@ export default function ReceivingPage() {
   const [form, setForm] = useState<ReceiptForm>(emptyForm)
   const [items, setItems] = useState<ReceiptItem[]>([])
   const [attachments, setAttachments] = useState<AttachmentRecord[]>([])
+  const analytics = useAnalyticsDisclosure('wiseflow:analytics:procurement-receiving')
   const attachmentRef = useRef<HTMLInputElement | null>(null)
 
   useEffect(() => {
@@ -413,6 +415,7 @@ export default function ReceivingPage() {
           </div>
         </div>
         <div className="receiving-actions">
+          <AnalyticsToggleButton open={analytics.open} onToggle={analytics.toggle} panelId={analytics.panelId} className="receiving-secondary" />
           <button type="button" className="receiving-secondary" onClick={exportCsv}><Download size={16} /> Export</button>
           <button type="button" className="receiving-primary" onClick={() => setShowCreate(true)}><Plus size={16} /> New Receiving <ChevronDown size={14} /></button>
           <button type="button" className="receiving-icon-button" aria-label="Toggle receiving filters" aria-expanded={showFilters} onClick={() => setShowFilters(value => !value)}><ChevronDown size={16} /></button>
@@ -421,12 +424,14 @@ export default function ReceivingPage() {
 
       <section className="receiving-grid-shell">
         <div className="receiving-left">
-          <section className="receiving-stats" aria-label="Receiving metrics">
-            <KpiCard title="Total Receipts" value={String(stats.total)} helper="This month" icon={Box} tone="green" />
-            <KpiCard title="Total Received Value" value={formatCurrency(stats.receivedValue)} helper="This month" icon={FileText} tone="green" />
-            <KpiCard title="Pending Receipts" value={String(stats.pending)} helper="This month" icon={Clock3} tone="blue" />
-            <KpiCard title="Overdue Receipts" value={String(stats.overdue)} helper="This month" icon={XCircle} tone="orange" />
-          </section>
+          <CollapsibleAnalytics open={analytics.open} id={analytics.panelId}>
+            <section className="receiving-stats" aria-label="Receiving metrics">
+              <KpiCard title="Total Receipts" value={String(stats.total)} helper="This month" icon={Box} tone="green" />
+              <KpiCard title="Total Received Value" value={formatCurrency(stats.receivedValue)} helper="This month" icon={FileText} tone="green" />
+              <KpiCard title="Pending Receipts" value={String(stats.pending)} helper="This month" icon={Clock3} tone="blue" />
+              <KpiCard title="Overdue Receipts" value={String(stats.overdue)} helper="This month" icon={XCircle} tone="orange" />
+            </section>
+          </CollapsibleAnalytics>
 
           <section className="receiving-workspace">
             <div className="receiving-tabs" aria-label="Receiving status tabs">
@@ -1154,7 +1159,7 @@ const receivingCss = `
   display: flex;
   align-items: center;
   gap: 8px;
-  color: #64748b;
+  color: #000000;
   font-size: 12px;
   margin-bottom: 10px;
 }
@@ -1185,7 +1190,7 @@ const receivingCss = `
 }
 .receiving-title-row p {
   margin: 8px 0 0;
-  color: #64748b;
+  color: #000000;
   font-size: 14px;
 }
 .receiving-actions {
@@ -1283,7 +1288,7 @@ const receivingCss = `
 .receiving-kpi-icon.orange { background: #ffedd5; color: #f97316; }
 .receiving-kpi span:not(.receiving-kpi-icon) {
   display: block;
-  color: #64748b;
+  color: #000000;
   font-size: 12px;
   font-weight: 800;
 }
@@ -1296,7 +1301,7 @@ const receivingCss = `
 .receiving-kpi small {
   display: block;
   margin-top: 8px;
-  color: #64748b;
+  color: #000000;
   font-size: 12px;
 }
 .receiving-workspace {
@@ -1326,7 +1331,7 @@ const receivingCss = `
   border-color: #16a34a;
 }
 .receiving-tabs span {
-  color: #64748b;
+  color: #000000;
   margin-left: 6px;
   font-size: 12px;
 }
@@ -1350,7 +1355,7 @@ const receivingCss = `
   align-items: center;
   gap: 10px;
   padding: 0 13px;
-  color: #64748b;
+  color: #000000;
   background: #fff;
 }
 .receiving-search input,
@@ -1419,7 +1424,7 @@ const receivingCss = `
 }
 .receiving-table th {
   background: #f8fafc;
-  color: #475569;
+  color: #000000;
   text-transform: uppercase;
   font-size: 10px;
   letter-spacing: .02em;
@@ -1452,7 +1457,7 @@ const receivingCss = `
 .receiving-badge.blue { background: #dbeafe; color: #2563eb; }
 .receiving-badge.orange { background: #ffedd5; color: #f97316; }
 .receiving-badge.red { background: #fee2e2; color: #ef4444; }
-.receiving-badge.gray { background: #f1f5f9; color: #475569; }
+.receiving-badge.gray { background: #f1f5f9; color: #000000; }
 .receiving-row-actions {
   position: relative;
 }
@@ -1511,7 +1516,7 @@ const receivingCss = `
 }
 .receiving-card p,
 .receiving-card small {
-  color: #64748b;
+  color: #000000;
   font-size: 12px;
 }
 .receiving-progress {
@@ -1581,7 +1586,7 @@ const receivingCss = `
   font-size: 19px;
 }
 .receiving-empty p {
-  color: #64748b;
+  color: #000000;
   font-size: 13px;
 }
 .receiving-side-card,
@@ -1595,7 +1600,7 @@ const receivingCss = `
   font-size: 15px;
 }
 .receiving-side-card p {
-  color: #64748b;
+  color: #000000;
   font-size: 13px;
 }
 .receiving-summary-line,
@@ -1608,7 +1613,7 @@ const receivingCss = `
   font-size: 12px;
 }
 .receiving-summary-line span {
-  color: #64748b;
+  color: #000000;
 }
 .receiving-total-line {
   margin: 8px -16px -16px;
@@ -1636,7 +1641,7 @@ const receivingCss = `
 }
 .receiving-related-link small {
   display: block;
-  color: #64748b;
+  color: #000000;
   font-size: 11px;
 }
 .receiving-detail-head {
@@ -1651,7 +1656,7 @@ const receivingCss = `
   cursor: pointer;
 }
 .receiving-detail-head p {
-  color: #64748b;
+  color: #000000;
   font-size: 12px;
 }
 .receiving-detail-tabs {
@@ -1691,7 +1696,7 @@ const receivingCss = `
 }
 .receiving-detail-item small,
 .receiving-detail-item span {
-  color: #64748b;
+  color: #000000;
 }
 .receiving-detail-actions {
   gap: 10px;
@@ -1755,7 +1760,7 @@ const receivingCss = `
 }
 .receiving-card-title p {
   margin: 5px 0 0;
-  color: #64748b;
+  color: #000000;
   font-size: 12px;
 }
 .receiving-form-grid {
@@ -1795,7 +1800,7 @@ const receivingCss = `
   resize: vertical;
 }
 .receiving-form-grid small {
-  color: #64748b;
+  color: #000000;
   font-size: 11px;
 }
 .receiving-items-wrap {
@@ -1817,7 +1822,7 @@ const receivingCss = `
 }
 .receiving-items-table th {
   background: #f8fafc;
-  color: #64748b;
+  color: #000000;
   text-transform: uppercase;
 }
 .receiving-empty-box {
@@ -1828,7 +1833,7 @@ const receivingCss = `
   gap: 6px;
   border: 1px dashed #cbd5e1;
   border-radius: 13px;
-  color: #64748b;
+  color: #000000;
   padding: 20px;
 }
 .receiving-empty-box strong {
@@ -1843,7 +1848,7 @@ const receivingCss = `
   border: 1px dashed #cbd5e1;
   border-radius: 13px;
   padding: 18px;
-  color: #64748b;
+  color: #000000;
   cursor: pointer;
 }
 .receiving-dropzone strong {
@@ -1975,7 +1980,7 @@ const receivingCss = `
     content: attr(data-label);
     display: inline-block;
     min-width: 118px;
-    color: #64748b;
+    color: #000000;
     font-size: 11px;
     font-weight: 900;
   }

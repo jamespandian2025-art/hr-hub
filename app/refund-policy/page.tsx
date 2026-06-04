@@ -13,18 +13,18 @@ export default function RefundPolicyPage() {
     <LegalPage
       eyebrow="Billing"
       title="Refund and Cancellation Policy"
-      intro="This policy explains how WiseFlow handles trials, manual beta billing, cancellations, and refund requests."
+      intro="This policy explains how WiseFlow handles trials, manual billing, cancellations, and refund requests."
       updated={updated}
       summary={[
-        'Closed beta billing may be handled manually.',
+        'Guided trial billing may be handled manually.',
         'Customers can cancel renewal before the next billing period.',
         'Refunds are reviewed case by case unless a written agreement says otherwise.',
       ]}
       sections={[
         {
-          title: 'Trial and beta period',
+          title: 'Trial period',
           body: [
-            'WiseFlow may offer a free trial or closed beta access so customers can test the platform before committing to paid service. During beta, online checkout may be unavailable and billing may be handled manually.',
+            'WiseFlow may offer a free trial or guided access so customers can test the platform before committing to paid service. During trial access, online checkout may be unavailable and billing may be handled manually.',
             'Trial access may be limited, extended, or ended if the workspace is inactive, misused, or requires production configuration before real data can be safely used.',
           ],
         },
@@ -58,4 +58,3 @@ export default function RefundPolicyPage() {
     />
   )
 }
-

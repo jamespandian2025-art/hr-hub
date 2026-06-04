@@ -102,7 +102,7 @@ const labelStyle = {
 
 const helpTextStyle = {
   fontSize: '12px',
-  color: '#6b7280',
+  color: '#000000',
   lineHeight: 1.45,
 }
 
@@ -559,7 +559,7 @@ export default function WarehouseDetailPage() {
         </Link>
         <div style={{ marginTop: '28px', background: '#fff', border: '1px solid #e5e7eb', borderRadius: '16px', padding: '44px', textAlign: 'center' }}>
           <div style={{ fontSize: '22px', fontWeight: 600, color: '#111827', marginBottom: '8px' }}>Warehouse not found</div>
-          <div style={{ fontSize: '14px', color: '#6b7280' }}>Create a warehouse first, then open it from the inventory page.</div>
+          <div style={{ fontSize: '14px', color: '#000000' }}>Create a warehouse first, then open it from the inventory page.</div>
         </div>
       </div>
     )
@@ -583,7 +583,7 @@ export default function WarehouseDetailPage() {
           </div>
           <div>
             <div style={{ fontSize: '24px', fontWeight: 600, color: '#111827', marginBottom: '6px' }}>{warehouse.name}</div>
-            <div style={{ fontSize: '13px', color: '#9ca3af', display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+            <div style={{ fontSize: '13px', color: '#000000', display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
               <span style={{ color: '#6c63ff', fontWeight: 600 }}>Resources</span>
               <span>/</span>
               <span style={{ color: '#6c63ff', fontWeight: 600 }}>Inventory</span>
@@ -609,9 +609,9 @@ export default function WarehouseDetailPage() {
           ['Warehouse Manager', warehouse.manager, warehouse.location],
         ].map(([label, value, detail]) => (
           <div key={label} style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: '12px', padding: '18px' }}>
-            <div style={{ fontSize: '12px', color: '#6b7280', fontWeight: 600, marginBottom: '8px' }}>{label}</div>
+            <div style={{ fontSize: '12px', color: '#000000', fontWeight: 600, marginBottom: '8px' }}>{label}</div>
             <div style={{ fontSize: '20px', color: '#111827', fontWeight: 600, wordBreak: 'break-word' }}>{value}</div>
-            <div style={{ fontSize: '12px', color: '#9ca3af', fontWeight: 600, marginTop: '5px' }}>{detail}</div>
+            <div style={{ fontSize: '12px', color: '#000000', fontWeight: 600, marginTop: '5px' }}>{detail}</div>
           </div>
         ))}
       </div>
@@ -634,7 +634,7 @@ export default function WarehouseDetailPage() {
                 border: 'none',
                 borderBottom: activeTab === tab ? '2px solid #111827' : '2px solid transparent',
                 background: 'transparent',
-                color: activeTab === tab ? '#111827' : '#6b7280',
+                color: activeTab === tab ? '#111827' : '#000000',
                 fontSize: '13px',
                 fontWeight: activeTab === tab ? 800 : 600,
                 cursor: 'pointer',
@@ -642,7 +642,7 @@ export default function WarehouseDetailPage() {
               }}
             >
               {tab}
-              <span style={{ fontSize: '11px', padding: '1px 7px', borderRadius: '99px', background: activeTab === tab ? '#111827' : '#f3f4f6', color: activeTab === tab ? '#fff' : '#6b7280' }}>
+              <span style={{ fontSize: '11px', padding: '1px 7px', borderRadius: '99px', background: activeTab === tab ? '#111827' : '#f3f4f6', color: activeTab === tab ? '#fff' : '#000000' }}>
                 {tab === 'Inventory' ? items.length : tab === 'Purchase Orders' ? purchases.length : transfers.length}
               </span>
             </button>
@@ -651,7 +651,7 @@ export default function WarehouseDetailPage() {
 
         <div style={{ display: 'flex', gap: '12px', padding: '16px 24px', borderBottom: '1px solid #f3f4f6', flexWrap: 'wrap' }}>
           <div style={{ flex: 1, minWidth: '220px', display: 'flex', alignItems: 'center', gap: '8px', padding: '8px 14px', border: '1px solid #e5e7eb', borderRadius: '8px', background: '#fafafa' }}>
-            <span style={{ color: '#9ca3af' }}>Search</span>
+            <span style={{ color: '#000000' }}>Search</span>
             <input
               value={search}
               onChange={event => setSearch(event.target.value)}
@@ -679,7 +679,7 @@ export default function WarehouseDetailPage() {
                   <tr key={item.id} style={{ borderTop: '1px solid #f3f4f6' }}>
                     <td style={{ padding: '15px 16px' }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '11px' }}>
-                        <div style={{ width: '42px', height: '42px', borderRadius: '10px', background: '#f3f4f6', border: '1px solid #e5e7eb', overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#6b7280', fontSize: '14px', fontWeight: 600, flex: '0 0 auto' }}>
+                        <div style={{ width: '42px', height: '42px', borderRadius: '10px', background: '#f3f4f6', border: '1px solid #e5e7eb', overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#000000', fontSize: '14px', fontWeight: 600, flex: '0 0 auto' }}>
                           {item.photoUrl ? <Image src={item.photoUrl} alt={item.name} width={42} height={42} unoptimized style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : item.name.trim().charAt(0).toUpperCase() || 'I'}
                         </div>
                         <div style={{ fontSize: '13px', fontWeight: 600, color: '#111827' }}>{item.name}</div>
@@ -795,7 +795,7 @@ export default function WarehouseDetailPage() {
                 <label style={fieldGroupStyle}>
                   <span style={labelStyle}>Item photo</span>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '14px', flexWrap: 'wrap' }}>
-                    <div style={{ width: '78px', height: '78px', borderRadius: '14px', background: '#f3f4f6', border: '1px solid #e5e7eb', overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#6b7280', fontSize: '22px', fontWeight: 600 }}>
+                    <div style={{ width: '78px', height: '78px', borderRadius: '14px', background: '#f3f4f6', border: '1px solid #e5e7eb', overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#000000', fontSize: '22px', fontWeight: 600 }}>
                       {itemPhotoUrl ? <Image src={itemPhotoUrl} alt="Inventory item preview" width={78} height={78} unoptimized style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : itemName.trim().charAt(0).toUpperCase() || 'I'}
                     </div>
                     <div style={{ display: 'grid', gap: '8px' }}>
@@ -1007,7 +1007,7 @@ function TableWrap({ children }: { children: React.ReactNode }) {
 
 function Head({ children }: { children: React.ReactNode }) {
   return (
-    <th style={{ padding: '12px 16px', textAlign: 'left', fontSize: '12px', fontWeight: 600, color: '#6b7280', textTransform: 'uppercase' }}>{children}</th>
+    <th style={{ padding: '12px 16px', textAlign: 'left', fontSize: '12px', fontWeight: 600, color: '#000000', textTransform: 'uppercase' }}>{children}</th>
   )
 }
 
@@ -1019,7 +1019,7 @@ function Cell({ children, strong, color }: { children: React.ReactNode; strong?:
 
 function EmptyState({ text }: { text: string }) {
   return (
-    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '70px 24px', color: '#9ca3af', fontSize: '14px', fontWeight: 600, textAlign: 'center' }}>
+    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '70px 24px', color: '#000000', fontSize: '14px', fontWeight: 600, textAlign: 'center' }}>
       {text}
     </div>
   )
@@ -1068,7 +1068,7 @@ function MenuCell({
               key={action.label}
               onClick={action.onClick}
               disabled={action.disabled}
-              style={{ display: 'block', width: '100%', padding: '11px 14px', border: 'none', borderBottom: '1px solid #f3f4f6', background: '#fff', color: action.disabled ? '#9ca3af' : action.danger ? '#ef4444' : '#374151', textAlign: 'left', fontSize: '13px', fontWeight: 600, cursor: action.disabled ? 'not-allowed' : 'pointer' }}
+              style={{ display: 'block', width: '100%', padding: '11px 14px', border: 'none', borderBottom: '1px solid #f3f4f6', background: '#fff', color: action.disabled ? '#000000' : action.danger ? '#ef4444' : '#374151', textAlign: 'left', fontSize: '13px', fontWeight: 600, cursor: action.disabled ? 'not-allowed' : 'pointer' }}
             >
               {action.label}
             </button>

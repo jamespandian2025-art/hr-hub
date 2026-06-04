@@ -19,6 +19,7 @@ import {
   TrendingUp,
   Users,
 } from 'lucide-react'
+import { AnalyticsToggleButton, CollapsibleAnalytics, useAnalyticsDisclosure } from '@/components/AnalyticsDisclosure'
 
 type PerformanceGoal = {
   id: string
@@ -162,6 +163,7 @@ export default function HRPerformancePage() {
   const [goals, setGoals] = useState<PerformanceGoal[]>([])
   const [reviews, setReviews] = useState<PerformanceReview[]>([])
   const [feedback, setFeedback] = useState<PerformanceFeedback[]>([])
+  const analytics = useAnalyticsDisclosure('wiseflow:analytics:hr-performance')
 
   useEffect(() => {
     const load = () => {
@@ -352,9 +354,10 @@ export default function HRPerformancePage() {
         </div>
         <div style={toolbarStyle}>
           <label style={searchBoxStyle}>
-            <Search size={15} color="#94a3b8" />
+            <Search size={15} color="#000000" />
             <input value={query} onChange={event => setQuery(event.target.value)} placeholder="Search performance records..." style={plainInputStyle} />
           </label>
+          <AnalyticsToggleButton open={analytics.open} onToggle={analytics.toggle} panelId={analytics.panelId} style={secondaryButtonStyle} />
           <button style={secondaryButtonStyle} onClick={exportPerformanceReport}><Download size={15} /> Export Report</button>
           <select style={selectStyle} value={exportPeriod} onChange={event => setExportPeriod(event.target.value as typeof exportPeriod)} aria-label="Performance period">
             <option>Weekly</option>
@@ -381,44 +384,46 @@ export default function HRPerformancePage() {
         ))}
       </div>
 
-      <div style={metricGridStyle}>
-        {activeTab === 'goals' ? (
-          <>
-            <Metric icon={Target} label="Overall OKR Progress" value={`${stats.goalsOnTrack}%`} sub="Real OKRs only" color="#16a34a" bg="#dcfce7" />
-            <Metric icon={Flag} label="Total OKRs" value={goals.length} sub="Active OKRs" color="#2563eb" bg="#dbeafe" />
-            <Metric icon={Target} label="On Track" value={goals.filter(goal => goal.status === 'On Track').length} sub="No trend yet" color="#7c3aed" bg="#ede9fe" />
-            <Metric icon={CalendarDays} label="At Risk" value={goals.filter(goal => goal.status === 'At Risk').length} sub="No trend yet" color="#ea580c" bg="#ffedd5" />
-            <Metric icon={AlertTriangle} label="Behind" value={goals.filter(goal => goal.status === 'Behind').length} sub="No trend yet" color="#dc2626" bg="#fee2e2" />
-            <Metric icon={Users} label="Completion Rate" value={goals.length ? `${Math.round((stats.completedGoals / goals.length) * 100)}%` : '0%'} sub="Avg. completion" color="#0891b2" bg="#cffafe" />
-          </>
-        ) : activeTab === 'reviews' ? (
-          <>
-            <Metric icon={Target} label="Total Reviews" value={reviews.length} sub="Real reviews only" color="#16a34a" bg="#dcfce7" />
-            <Metric icon={Target} label="Completed Reviews" value={reviews.filter(review => review.status === 'Completed').length} sub="No trend yet" color="#2563eb" bg="#dbeafe" />
-            <Metric icon={CalendarDays} label="In Progress Reviews" value={reviews.filter(review => review.status === 'In Progress').length} sub="No trend yet" color="#7c3aed" bg="#ede9fe" />
-            <Metric icon={CalendarDays} label="Pending Reviews" value={reviews.filter(review => review.status === 'Pending').length} sub="Requires review action" color="#ea580c" bg="#ffedd5" />
-            <Metric icon={Star} label="Average Rating" value={averageReviewRating(reviews)} sub="From scored reviews" color="#16a34a" bg="#dcfce7" />
-          </>
-        ) : activeTab === 'insights' ? (
-          <>
-            <Metric icon={TrendingUp} label="Overall Performance Score" value={`${formatScore(stats.averageScore)} /100`} sub="From real scores" color="#16a34a" bg="#dcfce7" />
-            <Metric icon={Users} label="High Performers" value={reviews.filter(review => Number(review.score || 0) >= 90).length} sub="Real reviews only" color="#2563eb" bg="#dbeafe" />
-            <Metric icon={Target} label="Performance Improvement" value="-" sub="Needs trend history" color="#7c3aed" bg="#ede9fe" />
-            <Metric icon={AlertTriangle} label="At Risk Employees" value={stats.employeesAtRisk} sub="From real risk signals" color="#ea580c" bg="#ffedd5" />
-            <Metric icon={Users} label="Engagement Score" value="-" sub="No engagement records" color="#0891b2" bg="#cffafe" />
-          </>
-        ) : (
-          <>
-            <Metric icon={Users} label="Average Performance Score" value={`${formatScore(stats.averageScore)} /100`} sub="No trend yet" color="#16a34a" bg="#dcfce7" />
-            <Metric icon={Star} label="Top Performers" value={stats.topPerformers} sub="Real reviews only" color="#2563eb" bg="#dbeafe" />
-            <Metric icon={activeTab === 'employees' ? TrendingUp : Flag} label={activeTab === 'employees' ? 'Employees Improving' : 'Goals On Track'} value={activeTab === 'employees' ? 0 : `${stats.goalsOnTrack}%`} sub={activeTab === 'employees' ? 'No trend records yet' : `${stats.completedGoals} completed goals`} color="#7c3aed" bg="#ede9fe" />
-            <Metric icon={AlertTriangle} label="Employees at Risk" value={stats.employeesAtRisk} sub="No risk records" color="#dc2626" bg="#fee2e2" />
-            <Metric icon={CalendarDays} label="Pending Reviews" value={stats.pendingReviews} sub="Requires review data" color="#ea580c" bg="#ffedd5" />
-            {activeTab !== 'employees' && <Metric icon={Award} label="Best Employee" value={bestEmployee?.employeeName || '-'} sub={bestEmployee?.score === null || !bestEmployee ? 'No score in range' : `${formatScore(bestEmployee.score)} /100`} color="#0891b2" bg="#cffafe" />}
-            {activeTab !== 'employees' && <Metric icon={AlertTriangle} label="Needs Attention" value={lowestEmployee?.employeeName || '-'} sub={lowestEmployee?.score === null || !lowestEmployee ? 'No score in range' : `${formatScore(lowestEmployee.score)} /100`} color="#dc2626" bg="#fee2e2" />}
-          </>
-        )}
-      </div>
+      <CollapsibleAnalytics open={analytics.open} id={analytics.panelId}>
+        <div style={metricGridStyle}>
+          {activeTab === 'goals' ? (
+            <>
+              <Metric icon={Target} label="Overall OKR Progress" value={`${stats.goalsOnTrack}%`} sub="Real OKRs only" color="#16a34a" bg="#dcfce7" />
+              <Metric icon={Flag} label="Total OKRs" value={goals.length} sub="Active OKRs" color="#2563eb" bg="#dbeafe" />
+              <Metric icon={Target} label="On Track" value={goals.filter(goal => goal.status === 'On Track').length} sub="No trend yet" color="#7c3aed" bg="#ede9fe" />
+              <Metric icon={CalendarDays} label="At Risk" value={goals.filter(goal => goal.status === 'At Risk').length} sub="No trend yet" color="#ea580c" bg="#ffedd5" />
+              <Metric icon={AlertTriangle} label="Behind" value={goals.filter(goal => goal.status === 'Behind').length} sub="No trend yet" color="#dc2626" bg="#fee2e2" />
+              <Metric icon={Users} label="Completion Rate" value={goals.length ? `${Math.round((stats.completedGoals / goals.length) * 100)}%` : '0%'} sub="Avg. completion" color="#0891b2" bg="#cffafe" />
+            </>
+          ) : activeTab === 'reviews' ? (
+            <>
+              <Metric icon={Target} label="Total Reviews" value={reviews.length} sub="Real reviews only" color="#16a34a" bg="#dcfce7" />
+              <Metric icon={Target} label="Completed Reviews" value={reviews.filter(review => review.status === 'Completed').length} sub="No trend yet" color="#2563eb" bg="#dbeafe" />
+              <Metric icon={CalendarDays} label="In Progress Reviews" value={reviews.filter(review => review.status === 'In Progress').length} sub="No trend yet" color="#7c3aed" bg="#ede9fe" />
+              <Metric icon={CalendarDays} label="Pending Reviews" value={reviews.filter(review => review.status === 'Pending').length} sub="Requires review action" color="#ea580c" bg="#ffedd5" />
+              <Metric icon={Star} label="Average Rating" value={averageReviewRating(reviews)} sub="From scored reviews" color="#16a34a" bg="#dcfce7" />
+            </>
+          ) : activeTab === 'insights' ? (
+            <>
+              <Metric icon={TrendingUp} label="Overall Performance Score" value={`${formatScore(stats.averageScore)} /100`} sub="From real scores" color="#16a34a" bg="#dcfce7" />
+              <Metric icon={Users} label="High Performers" value={reviews.filter(review => Number(review.score || 0) >= 90).length} sub="Real reviews only" color="#2563eb" bg="#dbeafe" />
+              <Metric icon={Target} label="Performance Improvement" value="-" sub="Needs trend history" color="#7c3aed" bg="#ede9fe" />
+              <Metric icon={AlertTriangle} label="At Risk Employees" value={stats.employeesAtRisk} sub="From real risk signals" color="#ea580c" bg="#ffedd5" />
+              <Metric icon={Users} label="Engagement Score" value="-" sub="No engagement records" color="#0891b2" bg="#cffafe" />
+            </>
+          ) : (
+            <>
+              <Metric icon={Users} label="Average Performance Score" value={`${formatScore(stats.averageScore)} /100`} sub="No trend yet" color="#16a34a" bg="#dcfce7" />
+              <Metric icon={Star} label="Top Performers" value={stats.topPerformers} sub="Real reviews only" color="#2563eb" bg="#dbeafe" />
+              <Metric icon={activeTab === 'employees' ? TrendingUp : Flag} label={activeTab === 'employees' ? 'Employees Improving' : 'Goals On Track'} value={activeTab === 'employees' ? 0 : `${stats.goalsOnTrack}%`} sub={activeTab === 'employees' ? 'No trend records yet' : `${stats.completedGoals} completed goals`} color="#7c3aed" bg="#ede9fe" />
+              <Metric icon={AlertTriangle} label="Employees at Risk" value={stats.employeesAtRisk} sub="No risk records" color="#dc2626" bg="#fee2e2" />
+              <Metric icon={CalendarDays} label="Pending Reviews" value={stats.pendingReviews} sub="Requires review data" color="#ea580c" bg="#ffedd5" />
+              {activeTab !== 'employees' && <Metric icon={Award} label="Best Employee" value={bestEmployee?.employeeName || '-'} sub={bestEmployee?.score === null || !bestEmployee ? 'No score in range' : `${formatScore(bestEmployee.score)} /100`} color="#0891b2" bg="#cffafe" />}
+              {activeTab !== 'employees' && <Metric icon={AlertTriangle} label="Needs Attention" value={lowestEmployee?.employeeName || '-'} sub={lowestEmployee?.score === null || !lowestEmployee ? 'No score in range' : `${formatScore(lowestEmployee.score)} /100`} color="#dc2626" bg="#fee2e2" />}
+            </>
+          )}
+        </div>
+      </CollapsibleAnalytics>
 
       <div style={filterBarStyle}>
         {activeTab === 'employees' ? (
@@ -654,7 +659,7 @@ function GoalsOkrsView({ goals, allGoals }: { goals: PerformanceGoal[]; allGoals
           <div style={okrHeaderStyle}>
             <span>
               <h2 style={panelTitleStyle}>Goals & OKRs Overview</h2>
-              <small style={{ color: '#64748b' }}>{goals.length ? `${goals.length} real OKRs shown` : 'No real OKRs yet'}</small>
+              <small style={{ color: '#000000' }}>{goals.length ? `${goals.length} real OKRs shown` : 'No real OKRs yet'}</small>
             </span>
             <button style={primaryButtonStyle} disabled>Create OKR</button>
           </div>
@@ -781,7 +786,7 @@ function ReviewsView({ reviews, allReviews }: { reviews: PerformanceReview[]; al
           <div style={okrHeaderStyle}>
             <span>
               <h2 style={panelTitleStyle}>Reviews Overview</h2>
-              <small style={{ color: '#64748b' }}>{reviews.length ? `${reviews.length} real reviews shown` : 'No real reviews yet'}</small>
+              <small style={{ color: '#000000' }}>{reviews.length ? `${reviews.length} real reviews shown` : 'No real reviews yet'}</small>
             </span>
             <span style={actionGroupStyle}>
               <button style={secondaryButtonStyle} disabled>Bulk Actions</button>
@@ -1025,9 +1030,9 @@ function Metric({ icon: Icon, label, value, sub, color, bg }: { icon: typeof Use
     <article style={metricCardStyle}>
       <span style={{ ...metricIconStyle, background: bg }}><Icon size={22} color={color} /></span>
       <span>
-        <small style={{ color: '#475569', fontSize: 12 }}>{label}</small>
+        <small style={{ color: '#000000', fontSize: 12 }}>{label}</small>
         <strong style={{ display: 'block', marginTop: 6, fontSize: 22, color: '#0f172a' }}>{value}</strong>
-        <small style={{ display: 'block', marginTop: 8, color: '#64748b', fontSize: 12 }}>{sub}</small>
+        <small style={{ display: 'block', marginTop: 8, color: '#000000', fontSize: 12 }}>{sub}</small>
       </span>
     </article>
   )
@@ -1038,7 +1043,7 @@ function Panel({ title, icon: Icon, children }: { title: string; icon: typeof Ba
     <section style={panelStyle}>
       <div style={panelHeaderStyle}>
         <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
-          <Icon size={16} color="#64748b" />
+          <Icon size={16} color="#000000" />
           <h2 style={panelTitleStyle}>{title}</h2>
         </span>
       </div>
@@ -1050,7 +1055,7 @@ function Panel({ title, icon: Icon, children }: { title: string; icon: typeof Ba
 function EmptyPanel({ title, text, icon: Icon }: { title: string; text: string; icon: typeof BarChart3 }) {
   return (
     <div style={emptyPanelStyle}>
-      <Icon size={32} color="#94a3b8" />
+      <Icon size={32} color="#000000" />
       <strong>{title}</strong>
       <span>{text}</span>
     </div>
@@ -1124,16 +1129,16 @@ function StatusPill({ status }: { status: string }) {
     ? { background: '#fee2e2', color: '#dc2626' }
     : normalized.includes('completed') || normalized.includes('excellent')
       ? { background: '#dcfce7', color: '#16a34a' }
-      : { background: '#f1f5f9', color: '#475569' }
+      : { background: '#f1f5f9', color: '#000000' }
   return <span style={{ ...statusPillStyle, ...style }}>{status}</span>
 }
 
 const pageHeaderStyle = { display: 'flex', justifyContent: 'space-between', gap: 16, alignItems: 'flex-start', flexWrap: 'wrap' as const, marginBottom: 18 }
 const pageTitleStyle = { margin: 0, color: '#0f172a', fontSize: 28, fontWeight: 900 }
-const pageSubtitleStyle = { margin: '6px 0 0', color: '#475569', fontSize: 14 }
+const pageSubtitleStyle = { margin: '6px 0 0', color: '#000000', fontSize: 14 }
 const toolbarStyle = { display: 'flex', gap: 10, flexWrap: 'wrap' as const, alignItems: 'center' }
 const periodBarStyle = { marginBottom: 16, padding: 14, background: '#fff', border: '1px solid #e5e7eb', borderRadius: 12, display: 'flex', gap: 12, alignItems: 'end', flexWrap: 'wrap' as const, boxShadow: '0 8px 24px rgba(15,23,42,0.04)' }
-const monthFieldStyle = { display: 'grid', gap: 5, color: '#64748b', fontSize: 11, fontWeight: 800 }
+const monthFieldStyle = { display: 'grid', gap: 5, color: '#000000', fontSize: 11, fontWeight: 800 }
 const monthInputStyle = { minHeight: 40, border: '1px solid #e5e7eb', borderRadius: 8, background: '#fff', color: '#0f172a', padding: '0 12px', fontSize: 13, fontFamily: font }
 const tabsStyle = { display: 'flex', gap: 26, borderBottom: '1px solid #e5e7eb', overflowX: 'auto' as const, marginBottom: 18 }
 const tabStyle = (active: boolean) => ({ border: 'none', background: 'transparent', padding: '13px 0', borderBottom: active ? '2px solid #111827' : '2px solid transparent', color: active ? '#111827' : '#334155', fontSize: 13, fontWeight: 800, cursor: 'pointer', fontFamily: font, whiteSpace: 'nowrap' as const })
@@ -1145,9 +1150,9 @@ const metricGridStyle = { display: 'grid', gridTemplateColumns: 'repeat(auto-fit
 const metricCardStyle = { minHeight: 126, padding: 18, background: '#fff', border: '1px solid #e5e7eb', borderRadius: 12, boxShadow: '0 8px 24px rgba(15,23,42,0.04)', display: 'flex', alignItems: 'center', gap: 16 }
 const metricIconStyle = { width: 54, height: 54, borderRadius: 14, display: 'grid', placeItems: 'center', flexShrink: 0 }
 const filterBarStyle = { marginBottom: 18, padding: 14, background: '#fff', border: '1px solid #e5e7eb', borderRadius: 12, display: 'flex', gap: 12, alignItems: 'end', flexWrap: 'wrap' as const, boxShadow: '0 8px 24px rgba(15,23,42,0.04)' }
-const selectFieldStyle = { display: 'grid', gap: 5, color: '#64748b', fontSize: 11, fontWeight: 800 }
+const selectFieldStyle = { display: 'grid', gap: 5, color: '#000000', fontSize: 11, fontWeight: 800 }
 const viewToggleStyle = { marginLeft: 'auto', display: 'flex', border: '1px solid #e5e7eb', borderRadius: 8, overflow: 'hidden' }
-const viewButtonStyle = (active: boolean) => ({ width: 38, height: 38, border: 'none', borderRight: '1px solid #e5e7eb', background: active ? '#dcfce7' : '#fff', color: active ? '#16a34a' : '#64748b', display: 'grid', placeItems: 'center', cursor: 'pointer' })
+const viewButtonStyle = (active: boolean) => ({ width: 38, height: 38, border: 'none', borderRight: '1px solid #e5e7eb', background: active ? '#dcfce7' : '#fff', color: active ? '#16a34a' : '#000000', display: 'grid', placeItems: 'center', cursor: 'pointer' })
 const dashboardGridStyle = { display: 'grid', gridTemplateColumns: 'repeat(3, minmax(260px, 1fr))', gap: 14 }
 const employeePerformanceGridStyle = { display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) 300px', gap: 14, alignItems: 'start' }
 const employeeTableCardStyle = { minHeight: 520, background: '#fff', border: '1px solid #e5e7eb', borderRadius: 12, boxShadow: '0 8px 24px rgba(15,23,42,0.04)', overflow: 'hidden' }
@@ -1161,12 +1166,12 @@ const sidePanelStackStyle = { display: 'grid', gap: 14 }
 const panelStyle = { minHeight: 290, background: '#fff', border: '1px solid #e5e7eb', borderRadius: 12, boxShadow: '0 8px 24px rgba(15,23,42,0.04)', overflow: 'hidden' }
 const panelHeaderStyle = { padding: '15px 16px', borderBottom: '1px solid #f1f5f9' }
 const panelTitleStyle = { margin: 0, color: '#0f172a', fontSize: 14, fontWeight: 900 }
-const emptyPanelStyle = { minHeight: 220, display: 'grid', placeItems: 'center', alignContent: 'center', gap: 8, padding: 20, color: '#64748b', fontSize: 13, textAlign: 'center' as const }
+const emptyPanelStyle = { minHeight: 220, display: 'grid', placeItems: 'center', alignContent: 'center', gap: 8, padding: 20, color: '#000000', fontSize: 13, textAlign: 'center' as const }
 const insightStripStyle = { marginTop: 18, display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: 0, background: '#fff', border: '1px solid #e5e7eb', borderRadius: 12, overflow: 'hidden', boxShadow: '0 8px 24px rgba(15,23,42,0.04)' }
 const employeeInsightStripStyle = { ...insightStripStyle, marginTop: 14 }
 const insightStyle = { padding: 18, borderRight: '1px solid #f1f5f9', display: 'flex', gap: 12, alignItems: 'flex-start', color: '#0f172a', fontSize: 13 }
 const tableStyle = { width: '100%', borderCollapse: 'collapse' as const, minWidth: 520 }
-const thStyle = { textAlign: 'left' as const, padding: '12px 16px', color: '#475569', fontSize: 11, fontWeight: 900, background: '#fbfdff' }
+const thStyle = { textAlign: 'left' as const, padding: '12px 16px', color: '#000000', fontSize: 11, fontWeight: 900, background: '#fbfdff' }
 const tdStyle = { padding: '12px 16px', borderTop: '1px solid #f1f5f9', color: '#0f172a', fontSize: 12 }
 const scoreGaugeStyle = { width: 42, height: 42, borderRadius: 999, border: '3px solid', display: 'inline-grid', placeItems: 'center', fontSize: 11, fontWeight: 900 }
 const progressWrapStyle = { display: 'inline-flex', alignItems: 'center', gap: 8, minWidth: 110 }
@@ -1174,7 +1179,7 @@ const progressTrackStyle = { width: 74, height: 6, borderRadius: 999, background
 const progressFillStyle = { height: '100%', borderRadius: 999, background: '#16a34a', display: 'block' }
 const statusPillStyle = { display: 'inline-flex', alignItems: 'center', minHeight: 22, padding: '0 8px', borderRadius: 999, fontSize: 11, fontWeight: 900 }
 const actionGroupStyle = { display: 'inline-flex', gap: 6 }
-const iconButtonStyle = { width: 30, height: 30, border: '1px solid #e5e7eb', borderRadius: 8, background: '#fff', color: '#475569', display: 'inline-grid', placeItems: 'center', cursor: 'pointer' }
+const iconButtonStyle = { width: 30, height: 30, border: '1px solid #e5e7eb', borderRadius: 8, background: '#fff', color: '#000000', display: 'inline-grid', placeItems: 'center', cursor: 'pointer' }
 const compactListStyle = { display: 'grid', gap: 0, padding: 14 }
 const compactListRowStyle = { display: 'grid', gridTemplateColumns: '24px 1fr auto', gap: 8, alignItems: 'center', padding: '8px 0', borderBottom: '1px solid #f1f5f9', color: '#0f172a', fontSize: 12 }
 const okrSummaryStyle = { display: 'grid', placeItems: 'center', gap: 14, padding: 18, minHeight: 220 }

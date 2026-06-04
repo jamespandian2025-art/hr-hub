@@ -10,6 +10,7 @@ import { useEffect, useState } from 'react'
 import { usePathname, useRouter } from 'next/navigation'
 import AIAssistant from './AIAssistant'
 import ClientMonitoring from './ClientMonitoring'
+import VoiceCommand from './VoiceCommand'
 import Header from './Header'
 import Sidebar from './Sidebar'
 
@@ -55,6 +56,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
     || pathname === '/platform-solutions'
     || pathname === '/industries'
     || pathname === '/resource-center'
+    || pathname.startsWith('/rfq-response')
   const isAuthPage = pathname === '/login' || pathname === '/account-recovery' || pathname === '/signup' || pathname === '/onboarding' || pathname === '/choose-account' || pathname === '/employee/login'
   const isClientPortal = pathname.startsWith('/client-portal')
   const isHrWorkspace = pathname === '/hr' || pathname.startsWith('/hr/')
@@ -72,10 +74,8 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   const isWarehouseWorkspace = pathname === '/warehouse' || pathname.startsWith('/warehouse/')
   const isWorkflowsWorkspace = pathname === '/workflows' || pathname.startsWith('/workflows/')
   const isDatasetsWorkspace = pathname === '/datasets' || pathname.startsWith('/datasets/')
+  const isAccountWorkspace = pathname === '/account' || pathname.startsWith('/account/')
   const isWorkspacePage =
-    pathname === '/tasks' ||
-    pathname.startsWith('/tasks/') ||
-    pathname === '/to-do' ||
     pathname === '/project-management' ||
     pathname.startsWith('/project-management/')
   const isApplicationsPage = false
@@ -150,8 +150,14 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
 
   if (isPublicPage) return <>{children}</>
   if (isAuthPage) return <>{children}</>
-  if (!authChecked) return null
-  const assistant = <><ClientMonitoring /><AIAssistant /></>
+  if (!authChecked) {
+    return (
+      <div className="app-auth-loading" role="status" aria-live="polite">
+        <span>Loading WiseFlow...</span>
+      </div>
+    )
+  }
+  const assistant = <><ClientMonitoring /><AIAssistant /><VoiceCommand /></>
   if (isClientPortal) return <><main className="client-portal-shell">{children}</main>{assistant}</>
   if (isHrWorkspace) return <>{children}{assistant}</>
   if (isEmployeePortal) return <>{children}{assistant}</>
@@ -160,6 +166,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   if (isWarehouseWorkspace) return <>{children}{assistant}</>
   if (isWorkflowsWorkspace) return <>{children}{assistant}</>
   if (isDatasetsWorkspace) return <>{children}{assistant}</>
+  if (isAccountWorkspace) return <>{children}</>
   if (pathname === '/accounting' || pathname.startsWith('/accounting/')) return <>{children}{assistant}</>
 
   const sidebarWidth = sidebarCollapsed ? 60 : 252

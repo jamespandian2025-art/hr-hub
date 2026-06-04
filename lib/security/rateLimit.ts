@@ -1,3 +1,5 @@
+import 'server-only'
+
 import { createHash } from 'node:crypto'
 import { mkdir, readFile, rename, writeFile } from 'node:fs/promises'
 import path from 'node:path'
@@ -107,13 +109,54 @@ function fileKey(scope: string, identifier: string) {
 async function readFileStore() {
   try {
     const raw = await readFile(storeFile, 'utf8')
-    const parsed = JSON.parse(raw)
-    return Array.isArray(parsed) ? parsed as StoredRateLimit[] : []
+    try {
+      const parsed = JSON.parse(raw)
+      return Array.isArray(parsed) ? parsed as StoredRateLimit[] : []
+    } catch {
+      const salvaged = salvageLeadingJsonArray<StoredRateLimit>(raw)
+      if (salvaged) return salvaged
+      throw new Error('Stored rate limit file is corrupted and could not be recovered.')
+    }
   } catch (error) {
     const code = typeof error === 'object' && error && 'code' in error ? String(error.code) : ''
     if (code === 'ENOENT') return []
     throw error
   }
+}
+
+function salvageLeadingJsonArray<T>(raw: string): T[] | null {
+  let depth = 0
+  let inStr = false
+  let esc = false
+  let start = -1
+  for (let index = 0; index < raw.length; index += 1) {
+    const char = raw[index]
+    if (inStr) {
+      if (esc) esc = false
+      else if (char === '\\') esc = true
+      else if (char === '"') inStr = false
+      continue
+    }
+    if (char === '"') {
+      inStr = true
+      continue
+    }
+    if (char === '[') {
+      if (depth === 0 && start < 0) start = index
+      depth += 1
+    } else if (char === ']') {
+      depth -= 1
+      if (depth === 0 && start >= 0) {
+        try {
+          const parsed = JSON.parse(raw.slice(start, index + 1))
+          return Array.isArray(parsed) ? parsed as T[] : null
+        } catch {
+          return null
+        }
+      }
+    }
+  }
+  return null
 }
 
 async function writeFileStore(records: StoredRateLimit[]) {

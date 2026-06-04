@@ -2,11 +2,13 @@
 
 import Link from 'next/link'
 import { useParams } from 'next/navigation'
-import { BriefcaseBusiness, CalendarDays, CircleDollarSign, Copy, FileText, Globe2, Mail, MapPin, MoreHorizontal, Pencil, Phone, StickyNote, UserRound, UsersRound } from 'lucide-react'
+import { Activity, ArrowLeft, BriefcaseBusiness, CalendarDays, ChevronDown, CircleDollarSign, Clock3, Copy, FileText, Globe2, Mail, MapPin, MoreHorizontal, Pencil, Phone, Plus, ReceiptText, UserPlus, UserRound, UsersRound } from 'lucide-react'
 import type { FormEvent, ReactNode } from 'react'
 import { useEffect, useMemo, useState } from 'react'
-import { ClientRecord, findClient, formatPeso, getInitials, saveClient } from '../clientData'
+import { ClientRecord, findClient, formatPeso, getInitials, saveClient, type ClientActivity } from '../clientData'
 import { type AccountingInvoice, isOverdue, loadAccountingData, money, subscribeAccountingData } from '@/lib/accounting/data'
+import { loadProjectManagementState } from '@/lib/project-management/service'
+import type { ProjectRecord } from '@/lib/project-management/types'
 
 const font = 'var(--font-body)'
 const green = '#16a34a'
@@ -22,8 +24,12 @@ export default function ClientDetailPage() {
   const [moreOpen, setMoreOpen] = useState(false)
   const [editing, setEditing] = useState(false)
   const [saving, setSaving] = useState(false)
-  const [editForm, setEditForm] = useState({ name: '', email: '', phone: '', website: '', billingAddress: '' })
+  const [editForm, setEditForm] = useState({ name: '', email: '', phone: '', website: '', clientManager: '', billingAddress: '' })
+  const [loggingActivity, setLoggingActivity] = useState(false)
+  const [activitySaving, setActivitySaving] = useState(false)
+  const [activityForm, setActivityForm] = useState({ title: '', description: '', tone: 'green' as ClientActivity['tone'] })
   const [invoices, setInvoices] = useState<AccountingInvoice[]>([])
+  const [projects, setProjects] = useState<ProjectRecord[]>([])
 
   useEffect(() => {
     let mounted = true
@@ -37,6 +43,7 @@ export default function ClientDetailPage() {
           email: result.client.email,
           phone: result.client.phone,
           website: result.client.website,
+          clientManager: result.client.accountManager,
           billingAddress: result.client.billingAddress,
         })
       }
@@ -52,6 +59,24 @@ export default function ClientDetailPage() {
     const load = () => setInvoices(loadAccountingData().invoices)
     load()
     return subscribeAccountingData(load)
+  }, [])
+
+  useEffect(() => {
+    const loadProjects = () => {
+      try {
+        setProjects(loadProjectManagementState().projects)
+      } catch {
+        setProjects([])
+      }
+    }
+
+    loadProjects()
+    window.addEventListener('storage', loadProjects)
+    window.addEventListener('wiseflow-project-management-refresh', loadProjects)
+    return () => {
+      window.removeEventListener('storage', loadProjects)
+      window.removeEventListener('wiseflow-project-management-refresh', loadProjects)
+    }
   }, [])
 
   const updateEditField = (field: keyof typeof editForm, value: string) => {
@@ -70,6 +95,7 @@ export default function ClientDetailPage() {
       phone: editForm.phone.trim() || client.phone,
       website: editForm.website.trim(),
       company: editForm.website.trim().replace(/^https?:\/\//, '') || client.company,
+      accountManager: editForm.clientManager.trim() || client.accountManager,
       billingAddress: editForm.billingAddress.trim() || client.billingAddress,
     }
 
@@ -82,12 +108,54 @@ export default function ClientDetailPage() {
     }
   }
 
+  const openActivityLogger = () => {
+    if (!client) return
+    setActivityForm({
+      title: 'Follow-up logged',
+      description: `Logged a client touchpoint for ${client.name}.`,
+      tone: 'green',
+    })
+    setLoggingActivity(true)
+  }
+
+  const handleSaveActivity = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault()
+    if (!client || activitySaving) return
+
+    setActivitySaving(true)
+    const now = new Date()
+    const activityDate = now.toLocaleDateString('en-US', { month: 'short', day: '2-digit', year: 'numeric' })
+    const activity: ClientActivity = {
+      id: `act-${Date.now()}`,
+      title: activityForm.title.trim() || 'Client activity logged',
+      description: activityForm.description.trim() || `Logged a client touchpoint for ${client.name}.`,
+      date: activityDate,
+      time: now.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }),
+      tone: activityForm.tone,
+    }
+    const updatedClient: ClientRecord = {
+      ...client,
+      lastContact: activityDate,
+      activities: [activity, ...client.activities],
+    }
+
+    try {
+      const result = await saveClient(updatedClient)
+      setClient(result.client)
+      setLoggingActivity(false)
+    } finally {
+      setActivitySaving(false)
+    }
+  }
+
   const clientFinancials = useMemo(() => client ? buildClientFinancials(client, invoices) : emptyClientInvoiceSummary(), [client, invoices])
+  const financialDisplay = useMemo(() => client ? buildFinancialDisplay(client, clientFinancials) : emptyFinancialDisplay(), [client, clientFinancials])
+  const clientProjects = useMemo(() => client ? projects.filter(project => projectBelongsToClient(project, client)) : [], [client, projects])
 
   if (loading) {
     return (
       <div style={{ fontFamily: font, display: 'grid', placeItems: 'center', minHeight: 420 }}>
-        <div style={{ color: '#64748b', fontSize: 14, fontWeight: 800 }}>Loading client...</div>
+        <div style={{ color: '#000000', fontSize: 14, fontWeight: 800 }}>Loading client...</div>
       </div>
     )
   }
@@ -96,70 +164,81 @@ export default function ClientDetailPage() {
     return (
       <div style={{ fontFamily: font, display: 'grid', placeItems: 'center', minHeight: 420 }}>
         <div style={{ textAlign: 'center' }}>
-          <div style={{ color: '#cbd5e1', marginBottom: 14 }}><UsersRound size={52} /></div>
+          <div style={{ color: '#000000', marginBottom: 14 }}><UsersRound size={52} /></div>
           <h1 style={{ margin: 0, color: '#0f172a', fontSize: 22, fontWeight: 900 }}>Client not found</h1>
-          <p style={{ color: '#64748b', fontSize: 14 }}>The selected client may have been removed.</p>
+          <p style={{ color: '#000000', fontSize: 14 }}>The selected client may have been removed.</p>
           <Link href="/people/clients" style={primaryLink}>Back to Client Database</Link>
         </div>
       </div>
     )
   }
 
+  const projectCreateHref = clientCreateHref('/project-management/projects', client, {
+    projectName: `${client.name} Project`,
+    address: client.billingAddress,
+  })
+  const invoiceCreateHref = clientCreateHref('/accounting/invoices', client, {
+    billTo: clientBillingBlock(client),
+  })
+  const contactCreateHref = clientCreateHref('/people/contacts', client, {
+    company: client.name,
+  })
+
   return (
-    <div className="client-detail-page" style={{ fontFamily: font, display: 'grid', gap: 20 }}>
+    <div className="client-detail-page client-command-center" style={{ fontFamily: font }}>
       <style>{clientDetailCss}</style>
       <div className="client-mobile-bar">
-        <Link href="/people/clients" aria-label="Back to clients">‹</Link>
-        <span>Client Details</span>
+        <Link href="/people/clients" aria-label="Back to clients">&lt;</Link>
+        <span>{client.name}</span>
         <StatusBadge status={client.status} />
       </div>
-      <div className="client-page-header" style={pageHeader}>
-        <div>
-          <div className="client-breadcrumb" style={breadcrumb}>Home / Client Database / {client.name}</div>
-        </div>
+      <div className="client-crumb-row">
+        <Link href="/people/clients" className="client-back-list-button"><ArrowLeft size={14} /> Back to Client List</Link>
+        <nav className="client-crumbs" aria-label="Breadcrumb">
+          <Link href="/people/clients">Client Database</Link>
+          <span>/</span>
+          <strong>{client.name}</strong>
+        </nav>
       </div>
-
       <section className="client-hero-card" style={heroCard}>
-        <div className="client-actions client-hero-actions" style={{ display: 'flex', gap: 10 }}>
-          <button type="button" style={secondaryButton} onClick={() => setEditing(true)}><Pencil size={16} /> Edit Client</button>
-          <div className="client-more-wrap" style={{ position: 'relative' }}>
-            <button type="button" aria-expanded={moreOpen} style={secondaryButton} onClick={() => setMoreOpen(open => !open)}><MoreHorizontal size={16} /> More</button>
-            {moreOpen ? (
-              <div className="client-detail-action-menu" style={actionMenu}>
-                <a href={`mailto:${client.email}`} style={actionMenuItem} onClick={() => setMoreOpen(false)}><Mail size={14} /> Email client</a>
-                <button type="button" style={actionMenuItem} onClick={() => { copyToClipboard(client.email); setMoreOpen(false) }}><Copy size={14} /> Copy email</button>
-                <button type="button" style={actionMenuItem} onClick={() => { copyToClipboard(`${window.location.origin}/people/clients/${client.id}`); setMoreOpen(false) }}><Copy size={14} /> Copy profile link</button>
-                <Link href="/people/clients" style={actionMenuItem} onClick={() => setMoreOpen(false)}><UsersRound size={14} /> Client Database</Link>
-              </div>
-            ) : null}
-          </div>
-        </div>
-        <div className="client-hero-main" style={clientHero}>
-          <span className="client-hero-avatar" style={heroAvatar(client.photo)}>{!client.photo && getInitials(client.name)}</span>
-          <div className="client-hero-copy">
-            <div className="client-title-row" style={{ display: 'grid', justifyItems: 'start', gap: 8 }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
+        <div className="client-hero-topline">
+          <div className="client-hero-main" style={clientHero}>
+            <span className="client-hero-avatar" style={heroAvatar(client.photo)}>{!client.photo && getInitials(client.name)}</span>
+            <div className="client-hero-copy">
+              <div className="client-title-row">
                 <h1 className="client-name" style={h1}>{client.name}</h1>
                 <StatusBadge status={client.status} />
+                <span className="client-type-badge">{client.clientType || client.companyType || 'Commercial'}</span>
+              </div>
+              <div className="client-contact-grid" style={contactGrid}>
+                <InfoPill icon={Mail} text={client.email} href={`mailto:${client.email}`} copyValue={client.email} />
+                <InfoPill icon={Phone} text={client.phone} href={`tel:${phoneHref(client.phone)}`} copyValue={client.phone} />
+                <InfoPill icon={Globe2} text={client.website || client.company} href={websiteHref(client.website || client.company)} copyValue={client.website || client.company} external />
+                <InfoPill icon={MapPin} text={client.billingAddress} href={mapsHref(client.billingAddress)} copyValue={client.billingAddress} external />
               </div>
             </div>
-            <p className="client-subtitle" style={subtitle}>{client.industry} Solutions & Services</p>
-            <div className="client-contact-grid" style={contactGrid}>
-              <InfoPill icon={Mail} text={client.email} href={`mailto:${client.email}`} copyValue={client.email} />
-              <InfoPill icon={Phone} text={client.phone} href={`tel:${phoneHref(client.phone)}`} copyValue={client.phone} />
-              <InfoPill icon={Globe2} text={client.website || client.company} href={websiteHref(client.website || client.company)} copyValue={client.website || client.company} external />
-              <InfoPill icon={MapPin} text={client.billingAddress} href={mapsHref(client.billingAddress)} copyValue={client.billingAddress} external />
+          </div>
+
+          <div className="client-actions client-hero-actions">
+            <Link href={projectCreateHref} className="client-action-button is-primary"><Plus size={16} /> Project</Link>
+            <Link href={invoiceCreateHref} className="client-action-button"><Plus size={16} /> Invoice</Link>
+            <Link href={contactCreateHref} className="client-action-button"><Plus size={16} /> Contact</Link>
+            <button type="button" className="client-action-button" onClick={openActivityLogger}><Activity size={16} /> Log Activity</button>
+            <div className="client-more-wrap" style={{ position: 'relative' }}>
+              <button type="button" aria-expanded={moreOpen} className="client-action-button" onClick={() => setMoreOpen(open => !open)}><MoreHorizontal size={16} /> More</button>
+              {moreOpen ? (
+                <div className="client-detail-action-menu" style={actionMenu}>
+                  <button type="button" className="client-action-menu-item" style={actionMenuItem} onClick={() => { setEditing(true); setMoreOpen(false) }}><Pencil size={14} /> <span>Edit client</span></button>
+                  <a href={`mailto:${client.email}`} className="client-action-menu-item" style={actionMenuItem} onClick={() => setMoreOpen(false)}><Mail size={14} /> <span>Email client</span></a>
+                  <button type="button" className="client-action-menu-item" style={actionMenuItem} onClick={() => { copyToClipboard(client.email); setMoreOpen(false) }}><Copy size={14} /> <span>Copy email</span></button>
+                  <button type="button" className="client-action-menu-item" style={actionMenuItem} onClick={() => { copyToClipboard(`${window.location.origin}/people/clients/${client.id}`); setMoreOpen(false) }}><Copy size={14} /> <span>Copy profile link</span></button>
+                  <Link href="/people/clients" className="client-action-menu-item" style={actionMenuItem} onClick={() => setMoreOpen(false)}><UsersRound size={14} /> <span>Client Database</span></Link>
+                </div>
+              ) : null}
             </div>
           </div>
         </div>
-        <div className="client-metrics-area">
-          <div className="client-metric-strip" style={metricStrip}>
-            <Metric icon={BriefcaseBusiness} label="Total Projects" value={client.totalProjects.toString()} sub={`Active: ${client.activeProjects}`} />
-            <Metric icon={CircleDollarSign} label="Total Revenue" value={formatPeso(clientFinancials.totalBilled)} sub="Lifetime Value" />
-            <Metric icon={CircleDollarSign} label="Outstanding" value={formatPeso(clientFinancials.outstanding)} sub={`${clientFinancials.unpaidCount} invoices`} tone="#f97316" />
-            <Metric icon={CalendarDays} label="Client Since" value={formatDate(client.createdAt)} sub={clientAge(client.createdAt)} tone="#2563eb" />
-          </div>
-        </div>
+
       </section>
 
       <nav className="client-tabs" style={tabsWrap}>
@@ -183,9 +262,21 @@ export default function ClientDetailPage() {
         ))}
       </nav>
 
-      {activeTab === 'Overview' ? <OverviewTab client={client} invoiceSummary={clientFinancials} /> : null}
-      {activeTab === 'Invoices' ? <ClientInvoicesTab client={client} invoiceSummary={clientFinancials} /> : null}
-      {activeTab !== 'Overview' && activeTab !== 'Invoices' ? <EmptyTab tab={activeTab} client={client} /> : null}
+      {activeTab === 'Overview' ? (
+        <OverviewTab
+          client={client}
+          invoiceSummary={clientFinancials}
+          financialDisplay={financialDisplay}
+          projects={clientProjects}
+          onLogActivity={openActivityLogger}
+          onViewActivities={() => setActiveTab('Activities')}
+        />
+      ) : null}
+      {activeTab === 'Projects' ? <ClientProjectsTab client={client} projects={clientProjects} projectCreateHref={projectCreateHref} /> : null}
+      {activeTab === 'Invoices' ? <ClientInvoicesTab invoiceSummary={clientFinancials} financialDisplay={financialDisplay} invoiceCreateHref={invoiceCreateHref} /> : null}
+      {activeTab === 'Activities' ? <ClientActivitiesTab client={client} onLogActivity={openActivityLogger} /> : null}
+      {activeTab === 'Contacts' ? <ClientContactsTab client={client} contactCreateHref={contactCreateHref} /> : null}
+      {activeTab !== 'Overview' && activeTab !== 'Projects' && activeTab !== 'Invoices' && activeTab !== 'Activities' && activeTab !== 'Contacts' ? <EmptyTab tab={activeTab} client={client} /> : null}
 
       {editing ? (
         <div className="client-edit-backdrop" style={modalBackdrop}>
@@ -202,6 +293,7 @@ export default function ClientDetailPage() {
               <EditField label="Email" value={editForm.email} onChange={value => updateEditField('email', value)} type="email" />
               <EditField label="Phone" value={editForm.phone} onChange={value => updateEditField('phone', value)} />
               <EditField label="Website" value={editForm.website} onChange={value => updateEditField('website', value)} />
+              <EditField label="Client Manager" value={editForm.clientManager} onChange={value => updateEditField('clientManager', value)} />
               <label style={{ ...modalField, gridColumn: '1 / -1' }}>
                 <span>Billing Address</span>
                 <input value={editForm.billingAddress} onChange={event => updateEditField('billingAddress', event.target.value)} style={modalInput} />
@@ -210,6 +302,40 @@ export default function ClientDetailPage() {
             <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10 }}>
               <button type="button" style={secondaryButton} onClick={() => setEditing(false)}>Cancel</button>
               <button type="submit" style={primaryButton} disabled={saving}>{saving ? 'Saving...' : 'Save Changes'}</button>
+            </div>
+          </form>
+        </div>
+      ) : null}
+
+      {loggingActivity ? (
+        <div className="client-edit-backdrop" style={modalBackdrop}>
+          <form className="client-edit-dialog" onSubmit={handleSaveActivity} style={modalCard}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', gap: 16, alignItems: 'flex-start' }}>
+              <div>
+                <h2 style={{ margin: 0, fontSize: 18, fontWeight: 600, color: 'var(--foreground)' }}>Log Activity</h2>
+                <p style={{ margin: '8px 0 0', color: 'var(--muted-foreground)', fontSize: 13 }}>Capture a client touchpoint for the activity timeline.</p>
+              </div>
+              <button type="button" style={iconCloseButton} onClick={() => setLoggingActivity(false)}>Close</button>
+            </div>
+            <div style={{ display: 'grid', gap: 14 }}>
+              <EditField label="Activity Title" value={activityForm.title} onChange={value => setActivityForm(current => ({ ...current, title: value }))} />
+              <label style={{ ...modalField, gridColumn: '1 / -1' }}>
+                <span>Description</span>
+                <textarea value={activityForm.description} onChange={event => setActivityForm(current => ({ ...current, description: event.target.value }))} style={{ ...modalInput, minHeight: 96, paddingTop: 10, resize: 'vertical' }} />
+              </label>
+              <label style={modalField}>
+                <span>Activity Type</span>
+                <select value={activityForm.tone} onChange={event => setActivityForm(current => ({ ...current, tone: event.target.value as ClientActivity['tone'] }))} style={modalInput}>
+                  <option value="green">Follow-up / Success</option>
+                  <option value="blue">Call / Meeting</option>
+                  <option value="orange">Payment / Invoice</option>
+                  <option value="purple">Contract / Note</option>
+                </select>
+              </label>
+            </div>
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10 }}>
+              <button type="button" style={secondaryButton} onClick={() => setLoggingActivity(false)}>Cancel</button>
+              <button type="submit" style={primaryButton} disabled={activitySaving}>{activitySaving ? 'Saving...' : 'Save Activity'}</button>
             </div>
           </form>
         </div>
@@ -237,6 +363,36 @@ type ClientInvoiceSummary = {
   overdueCount: number
 }
 
+type ClientFinancialDisplay = {
+  total: number
+  paid: number
+  outstanding: number
+  invoiceCount: number
+  paidCount: number
+  unpaidCount: number
+  overdueCount: number
+  sourceLabel: string
+}
+
+type ClientProjectCard = {
+  id: string
+  name: string
+  description: string
+  progress: number
+  budget: number
+  dueDate: string
+  tone: 'green' | 'blue' | 'purple'
+}
+
+type DashboardActivity = {
+  id: string
+  title: string
+  description: string
+  date: string
+  time: string
+  tone: 'green' | 'blue' | 'purple' | 'orange'
+}
+
 function emptyClientInvoiceSummary(): ClientInvoiceSummary {
   return {
     invoices: [],
@@ -246,6 +402,45 @@ function emptyClientInvoiceSummary(): ClientInvoiceSummary {
     paidCount: 0,
     unpaidCount: 0,
     overdueCount: 0,
+  }
+}
+
+function emptyFinancialDisplay(): ClientFinancialDisplay {
+  return {
+    total: 0,
+    paid: 0,
+    outstanding: 0,
+    invoiceCount: 0,
+    paidCount: 0,
+    unpaidCount: 0,
+    overdueCount: 0,
+    sourceLabel: 'No revenue yet',
+  }
+}
+
+function buildFinancialDisplay(client: ClientRecord, invoiceSummary: ClientInvoiceSummary): ClientFinancialDisplay {
+  if (invoiceSummary.invoices.length) {
+    return {
+      total: invoiceSummary.totalBilled,
+      paid: invoiceSummary.totalPaid,
+      outstanding: invoiceSummary.outstanding,
+      invoiceCount: invoiceSummary.invoices.length,
+      paidCount: invoiceSummary.paidCount,
+      unpaidCount: invoiceSummary.unpaidCount,
+      overdueCount: invoiceSummary.overdueCount,
+      sourceLabel: 'From linked invoices',
+    }
+  }
+
+  return {
+    total: client.totalRevenue,
+    paid: client.paidRevenue,
+    outstanding: client.outstandingRevenue,
+    invoiceCount: client.invoices.total,
+    paidCount: client.invoices.paid,
+    unpaidCount: client.invoices.unpaid,
+    overdueCount: client.invoices.overdue,
+    sourceLabel: client.totalRevenue ? 'From client profile' : 'No revenue yet',
   }
 }
 
@@ -293,127 +488,413 @@ function isResidentialClient(client: ClientRecord) {
   return client.clientType === 'Residential' || client.industry === 'Residential'
 }
 
-function OverviewTab({ client, invoiceSummary }: { client: ClientRecord; invoiceSummary: ClientInvoiceSummary }) {
-  const isResidential = isResidentialClient(client)
+function projectBelongsToClient(project: ProjectRecord, client: ClientRecord) {
+  const projectClientId = normalizeMatch(project.clientId)
+  return Boolean(
+    projectClientId &&
+    (
+      projectClientId === normalizeMatch(client.id) ||
+      projectClientId === normalizeMatch(client.name) ||
+      projectClientId === normalizeMatch(client.company)
+    )
+  )
+}
+
+function isActiveProject(project: ProjectRecord) {
+  const status = project.status.toLowerCase()
+  return !project.archivedAt && status !== 'completed' && status !== 'cancelled'
+}
+
+function buildClientProjectCards(client: ClientRecord, projects: ProjectRecord[]): ClientProjectCard[] {
+  const activeProjects = projects
+    .filter(project => isActiveProject(project))
+    .sort((a, b) => new Date(`${a.dueDate}T00:00:00`).getTime() - new Date(`${b.dueDate}T00:00:00`).getTime())
+    .slice(0, 3)
+
+  if (activeProjects.length) {
+    return activeProjects.map((project, index) => ({
+      id: project.id,
+      name: project.name,
+      description: project.projectType || project.department || project.status,
+      progress: Math.round(project.progress || 0),
+      budget: project.budget || 0,
+      dueDate: formatDate(project.dueDate),
+      tone: index === 0 ? 'green' : index === 1 ? 'blue' : 'purple',
+    }))
+  }
+
+  if (!client.activeProjects) return []
+
+  const fallbackNames = isResidentialClient(client)
+    ? ['Property scope planning', 'Site coordination', 'Client handover prep']
+    : [`${client.industry || 'Client'} implementation`, 'Account delivery plan', 'Commercial follow-through']
+  const totalBudget = client.totalRevenue || client.outstandingRevenue || client.paidRevenue
+
+  return Array.from({ length: Math.min(client.activeProjects, 3) }, (_, index) => ({
+    id: `${client.id}-portfolio-${index}`,
+    name: fallbackNames[index] || `Active project ${index + 1}`,
+    description: 'Summary from client profile',
+    progress: [72, 48, 24][index] || 35,
+    budget: totalBudget ? Math.round(totalBudget / Math.max(client.activeProjects, 1)) : 0,
+    dueDate: formatDate(addMonthsFromToday(index + 1)),
+    tone: index === 0 ? 'green' : index === 1 ? 'blue' : 'purple',
+  }))
+}
+
+function buildDashboardActivities(client: ClientRecord, invoiceSummary: ClientInvoiceSummary): DashboardActivity[] {
+  if (client.activities.length) {
+    return client.activities.slice(0, 5).map(activity => ({
+      id: activity.id,
+      title: activity.title,
+      description: activity.description,
+      date: activity.date,
+      time: activity.time,
+      tone: activity.tone,
+    }))
+  }
+
+  return invoiceSummary.invoices.slice(0, 4).map(invoice => ({
+    id: invoice.id,
+    title: `${invoice.number} ${invoice.balanceDue > 0 ? 'sent' : 'paid'}`,
+    description: invoice.balanceDue > 0
+      ? `Balance due ${money(invoice.balanceDue, invoice.currency || 'PHP')}`
+      : `Paid ${money(invoice.paid, invoice.currency || 'PHP')}`,
+    date: formatDate(invoice.issueDate),
+    time: invoice.balanceDue > 0 ? 'Open' : 'Paid',
+    tone: invoice.balanceDue > 0 ? 'orange' : 'green',
+  }))
+}
+
+function activityIconFor(title: string) {
+  const lowered = title.toLowerCase()
+  if (lowered.includes('call') || lowered.includes('phone')) return Phone
+  if (lowered.includes('invoice') || lowered.includes('payment')) return ReceiptText
+  if (lowered.includes('contact')) return UserPlus
+  if (lowered.includes('contract') || lowered.includes('signed')) return FileText
+  return Activity
+}
+
+function OverviewTab({
+  client,
+  invoiceSummary,
+  financialDisplay,
+  projects,
+  onLogActivity,
+  onViewActivities,
+}: {
+  client: ClientRecord
+  invoiceSummary: ClientInvoiceSummary
+  financialDisplay: ClientFinancialDisplay
+  projects: ProjectRecord[]
+  onLogActivity: () => void
+  onViewActivities: () => void
+}) {
+  const activities = buildDashboardActivities(client, invoiceSummary)
+  const activeProjectCount = projects.length
+    ? projects.filter(project => isActiveProject(project)).length
+    : client.activeProjects
+  const primaryContact = client.contacts.find(contact => contact.primary) || client.contacts[0]
 
   return (
-    <div className="client-overview-grid" style={overviewGrid}>
-      <Panel title={`About ${client.name}`} footer="Show more" className="client-panel-about">
-        <p style={bodyText}>{client.description}</p>
-        <DetailsList
-          rows={isResidential ? [
-            ['Client Type', 'Residential'],
-            ['Property Type', client.companyType],
-            ['Project Category', client.industry],
-            ['Property Address', client.billingAddress],
-            ['Account Manager', client.accountManager],
-          ] : [
-            ['Client Type', 'Commercial'],
-            ['Industry', client.industry],
-            ['Company Size', client.companySize],
-            ['Company Type', client.companyType],
-            ['Annual Revenue', client.annualRevenue],
-            ['Tax ID / VAT', client.taxId],
-            ['Billing Address', client.billingAddress],
-          ]}
-        />
-      </Panel>
-
-      <Panel title="Key Contacts" footer="View all contacts" className="client-panel-contacts">
-        {client.contacts.length ? (
-          <div style={{ display: 'grid', gap: 18 }}>
-            {client.contacts.slice(0, 3).map(contact => (
-              <div key={contact.id} style={contactRow}>
-                <span style={smallAvatar('#e0f2fe', '#0369a1')}>{getInitials(contact.name)}</span>
-                <div style={{ minWidth: 0 }}>
-                  <div style={{ fontWeight: 900, color: '#0f172a' }}>{contact.name} {contact.primary ? <span style={primaryBadge}>Primary</span> : null}</div>
-                  <div style={muted}>{contact.role}</div>
-                  <div style={contactMeta}><Mail size={13} /> {contact.email}</div>
-                  <div style={contactMeta}><Phone size={13} /> {contact.phone}</div>
-                </div>
-                <MoreHorizontal size={18} color="#64748b" style={{ marginLeft: 'auto' }} />
+    <div className="client-command-dashboard">
+      <div className="client-overview-layout">
+        <CommandCard
+          title="Recent Activity"
+          className="client-activity-card"
+          action={<button type="button" className="client-card-action" onClick={onViewActivities}>View all</button>}
+        >
+          {activities.length ? (
+            <>
+              <div className="client-activity-timeline">
+                {activities.map(activity => {
+                  const Icon = activityIconFor(activity.title)
+                  return (
+                    <article key={activity.id} className="client-timeline-item">
+                      <time className="client-timeline-date">{activity.date}</time>
+                      <span className={`client-timeline-dot tone-${activity.tone}`} />
+                      <span className={`client-timeline-icon tone-${activity.tone}`}><Icon size={16} /></span>
+                      <div className="client-timeline-copy">
+                        <strong>{activity.title}</strong>
+                        <p>{activity.description}</p>
+                      </div>
+                      <span className="client-timeline-time">{activity.time}</span>
+                    </article>
+                  )
+                })}
               </div>
-            ))}
-          </div>
-        ) : <EmptyMessage text="No contacts added yet." />}
-      </Panel>
+              <button type="button" className="client-card-link" onClick={onViewActivities}>View all activities</button>
+            </>
+          ) : (
+            <FriendlyEmptyState
+              icon={Activity}
+              title="No activities yet"
+              description="Log calls, payments, meetings, and decisions so the team has a shared history."
+              actionLabel="Log Activity"
+              onAction={onLogActivity}
+            />
+          )}
+        </CommandCard>
 
-      <Panel title="Recent Activities" footer="View all" className="client-panel-activity">
-        {client.activities.length ? (
-          <div style={{ display: 'grid', gap: 18 }}>
-            {client.activities.map(activity => (
-              <div key={activity.id} style={activityRow}>
-                <span style={activityIcon(activity.tone)}><FileText size={15} /></span>
-                <div>
-                  <div style={{ fontWeight: 900, color: '#0f172a' }}>{activity.title}</div>
-                  <div style={muted}>{activity.description}</div>
-                </div>
-                <div style={{ marginLeft: 'auto', textAlign: 'right', color: '#64748b', fontSize: 12 }}>
-                  <div>{activity.date}</div>
-                  <div>{activity.time}</div>
-                </div>
-              </div>
-            ))}
+        <CommandCard title="Client Summary" className="client-summary-card">
+          <div className="client-snapshot-list">
+            <SnapshotItem icon={CalendarDays} label="Client Since" value={`${formatDate(client.createdAt)} (${clientAge(client.createdAt)})`} />
+            <SnapshotItem icon={Clock3} label="Last Contact" value={client.lastContact || '-'} />
+            <SnapshotItem icon={CalendarDays} label="Next Follow-up" value={nextFollowUpDate(client.lastContact || client.createdAt)} />
+            <SnapshotItem icon={BriefcaseBusiness} label="Open Projects" value={activeProjectCount.toString()} />
+            <SnapshotItem icon={ReceiptText} label="Outstanding Balance" value={formatDashboardMoney(financialDisplay.outstanding)} />
+            <SnapshotItem icon={UserRound} label="Primary Contact" value={primaryContact?.name || 'No primary contact'} />
+            <SnapshotItem icon={UsersRound} label="Account Manager / Owner" value={client.accountManager || 'Unassigned'} />
           </div>
-        ) : <EmptyMessage text="No activities yet." />}
-      </Panel>
+        </CommandCard>
+      </div>
 
-      <Panel title="Project Summary" footer="View all projects" className="client-panel-projects">
-        <div style={{ display: 'flex', gap: 28, alignItems: 'center', flexWrap: 'wrap' }}>
-          <div style={donut(client)}>
-            <span style={donutCenter}>{client.totalProjects}<small>Total Projects</small></span>
-          </div>
-          <div style={{ display: 'grid', gap: 12, flex: 1 }}>
-            <Legend color={green} label="In Progress" value={`${client.activeProjects} (${percent(client.activeProjects, client.totalProjects)}%)`} />
-            <Legend color="#2563eb" label="Completed" value={`${client.completedProjects} (${percent(client.completedProjects, client.totalProjects)}%)`} />
-            <Legend color="#f59e0b" label="On Hold" value={`${client.onHoldProjects} (${percent(client.onHoldProjects, client.totalProjects)}%)`} />
-          </div>
-        </div>
-      </Panel>
-
-      <Panel title="Invoice Summary" footer="View all invoices" className="client-panel-invoices">
-        <div className="client-invoice-boxes" style={invoiceBoxes}>
-          <MiniMetric value={invoiceSummary.invoices.length} label="Total Invoices" />
-          <MiniMetric value={invoiceSummary.paidCount} label="Paid" tone={green} />
-          <MiniMetric value={invoiceSummary.unpaidCount} label="Unpaid" />
-          <MiniMetric value={invoiceSummary.overdueCount} label="Overdue" tone="#ef4444" />
-        </div>
-        <DetailsList
-          rows={[
-            ['Total Billed', formatPeso(invoiceSummary.totalBilled)],
-            ['Total Paid', formatPeso(invoiceSummary.totalPaid)],
-            ['Outstanding', formatPeso(invoiceSummary.outstanding)],
-          ]}
-        />
-      </Panel>
-
-      <Panel title="Relationship Snapshot" className="client-panel-snapshot">
-        <div className="client-snapshot-list">
-          <SnapshotItem icon={UserRound} label="Account Manager" value={client.accountManager || '-'} />
-          <SnapshotItem icon={CalendarDays} label="Last Contact" value={client.lastContact || '-'} />
-          <SnapshotItem icon={CircleDollarSign} label="Payment Terms" value={client.paymentTerms || '-'} />
-          <SnapshotItem icon={FileText} label="Default Currency" value={client.defaultCurrency || '-'} />
-        </div>
-        {client.tags.length ? <div className="client-tags">{client.tags.map(tag => <span key={tag}>{tag}</span>)}</div> : null}
-      </Panel>
-
-      <Panel title="Notes" footer="Add note" className="client-panel-notes">
-        {client.notes.length ? (
-          <div style={{ display: 'grid', gap: 16 }}>
-            {client.notes.map(note => (
-              <div key={note.id} style={noteRow}>
-                <StickyNote size={18} color="#7c3aed" />
-                <div>
-                  <div style={{ fontWeight: 900, color: '#0f172a' }}>{note.title}</div>
-                  <div style={muted}>{note.body}</div>
-                  <div style={{ ...muted, marginTop: 6 }}>{note.date} by {note.author}</div>
-                </div>
-              </div>
-            ))}
-          </div>
-        ) : <EmptyMessage text="No notes added yet." />}
-      </Panel>
+      <AnalyticsDisclosure client={client} financialDisplay={financialDisplay} projects={projects} />
+      <CompanyInformation client={client} />
     </div>
+  )
+}
+
+function CommandCard({ title, children, action, className = '' }: { title: string; children: ReactNode; action?: ReactNode; className?: string }) {
+  return (
+    <section className={`client-command-card ${className}`.trim()}>
+      <div className="client-card-header">
+        <h2>{title}</h2>
+        {action ? <div className="client-card-header-action">{action}</div> : null}
+      </div>
+      <div className="client-card-body">{children}</div>
+    </section>
+  )
+}
+
+function KpiCard({ icon: Icon, label, value, sub, tone = green }: { icon: typeof UsersRound; label: string; value: string; sub: string; tone?: string }) {
+  return (
+    <article className="client-kpi-card">
+      <span className="client-kpi-icon" style={{ color: tone, background: `${tone}16` }}><Icon size={20} /></span>
+      <div>
+        <small>{label}</small>
+        <strong>{value}</strong>
+        <span>{sub}</span>
+      </div>
+    </article>
+  )
+}
+
+function AnalyticsDisclosure({ client, financialDisplay, projects }: { client: ClientRecord; financialDisplay: ClientFinancialDisplay; projects: ProjectRecord[] }) {
+  const [open, setOpen] = useState(false)
+  const activeProjectCount = projects.length
+    ? projects.filter(project => isActiveProject(project)).length
+    : client.activeProjects
+  const projectMetricCount = projects.length || client.totalProjects
+  const primaryContactCount = client.contacts.filter(contact => contact.primary).length
+
+  return (
+    <section className={`client-analytics-disclosure ${open ? 'is-open' : ''}`}>
+      <button type="button" className="client-disclosure-toggle" aria-expanded={open} onClick={() => setOpen(current => !current)}>
+        <span><CircleDollarSign size={16} /> Analytics</span>
+        <strong>{open ? 'Hide Analytics' : 'Show Analytics'}</strong>
+        <ChevronDown size={16} />
+      </button>
+      {open ? (
+        <div className="client-analytics-body">
+          <div className="client-metric-strip" style={metricStrip}>
+            <KpiCard icon={BriefcaseBusiness} label="Projects" value={projectMetricCount.toString()} sub={`${activeProjectCount} in progress`} />
+            <KpiCard icon={CircleDollarSign} label="Revenue YTD" value={formatDashboardMoney(financialDisplay.total)} sub={financialDisplay.sourceLabel} />
+            <KpiCard icon={ReceiptText} label="Outstanding" value={formatDashboardMoney(financialDisplay.outstanding)} sub={`${financialDisplay.unpaidCount} open invoice${financialDisplay.unpaidCount === 1 ? '' : 's'}`} tone="#f59e0b" />
+            <KpiCard icon={UsersRound} label="Contacts" value={client.contacts.length.toString()} sub={`${primaryContactCount} primary contact${primaryContactCount === 1 ? '' : 's'}`} tone="#2563eb" />
+            <KpiCard icon={CalendarDays} label="Client Since" value={formatDate(client.createdAt)} sub={clientAge(client.createdAt)} tone="#7c3aed" />
+          </div>
+        </div>
+      ) : null}
+    </section>
+  )
+}
+
+function FriendlyEmptyState({ icon: Icon, title, description, actionLabel, href, onAction }: { icon: typeof UsersRound; title: string; description: string; actionLabel: string; href?: string; onAction?: () => void }) {
+  const action = (
+    <>
+      <Plus size={15} />
+      {actionLabel}
+    </>
+  )
+
+  return (
+    <div className="client-friendly-empty">
+      <span><Icon size={22} /></span>
+      <strong>{title}</strong>
+      <p>{description}</p>
+      {href ? <Link href={href}>{action}</Link> : <button type="button" onClick={onAction}>{action}</button>}
+    </div>
+  )
+}
+
+function ProgressBar({ value }: { value: number }) {
+  return (
+    <span className="client-progress" aria-label={`${value}% complete`}>
+      <i style={{ width: `${Math.max(0, Math.min(value, 100))}%` }} />
+    </span>
+  )
+}
+
+function FinancialMetric({ label, value, sub, tone }: { label: string; value: string; sub: string; tone: 'success' | 'warning' | 'danger' }) {
+  return (
+    <div className={`client-financial-metric tone-${tone}`}>
+      <small>{label}</small>
+      <strong>{value}</strong>
+      <span>{sub}</span>
+    </div>
+  )
+}
+
+function ClientProjectsTab({ client, projects, projectCreateHref }: { client: ClientRecord; projects: ProjectRecord[]; projectCreateHref: string }) {
+  return (
+    <div className="client-tab-stack">
+      <ActiveProjectsCard client={client} projects={projects} projectCreateHref={projectCreateHref} />
+    </div>
+  )
+}
+
+function ActiveProjectsCard({ client, projects, projectCreateHref }: { client: ClientRecord; projects: ProjectRecord[]; projectCreateHref: string }) {
+  const projectCards = buildClientProjectCards(client, projects)
+
+  return (
+    <CommandCard title="Active Projects" action={<Link href="/project-management/projects" className="client-card-action">View all</Link>}>
+      {projectCards.length ? (
+        <div className="client-project-list">
+          {projectCards.map(project => (
+            <article key={project.id} className="client-project-row">
+              <span className={`client-project-icon tone-${project.tone}`}><BriefcaseBusiness size={16} /></span>
+              <div className="client-project-main">
+                <strong>{project.name}</strong>
+                <small>{project.description}</small>
+                <ProgressBar value={project.progress} />
+              </div>
+              <div className="client-project-meta">
+                <span><small>Budget</small><strong>{formatDashboardMoney(project.budget)}</strong></span>
+                <span><small>Due</small><strong>{project.dueDate}</strong></span>
+                <b>{project.progress}%</b>
+              </div>
+            </article>
+          ))}
+        </div>
+      ) : (
+        <FriendlyEmptyState
+          icon={BriefcaseBusiness}
+          title="No active projects"
+          description="Create a project to track scope, budget, due dates, and delivery progress for this client."
+          actionLabel="Add Project"
+          href={projectCreateHref}
+        />
+      )}
+      {projectCards.length ? <Link href="/project-management/projects" className="client-card-link">View all projects</Link> : null}
+    </CommandCard>
+  )
+}
+
+function FinancialOverviewCard({ financialDisplay, invoiceCreateHref }: { financialDisplay: ClientFinancialDisplay; invoiceCreateHref: string }) {
+  const paidPercent = financialDisplay.total ? Math.round((financialDisplay.paid / financialDisplay.total) * 100) : 0
+  const hasFinancialActivity = Boolean(financialDisplay.invoiceCount || financialDisplay.total || financialDisplay.outstanding)
+
+  return (
+    <CommandCard title="Financial Overview" action={<Link href={invoiceCreateHref} className="client-card-action"><Plus size={15} /> New invoice</Link>}>
+      <div className="client-financial-overview">
+        <div className="client-financial-metrics">
+          <FinancialMetric label="Revenue" value={formatDashboardMoney(financialDisplay.total)} sub={financialDisplay.sourceLabel} tone="success" />
+          <FinancialMetric label="Paid" value={formatDashboardMoney(financialDisplay.paid)} sub={`${Math.max(paidPercent, 0)}% collected`} tone="success" />
+          <FinancialMetric label="Outstanding" value={formatDashboardMoney(financialDisplay.outstanding)} sub={`${financialDisplay.unpaidCount} open invoice${financialDisplay.unpaidCount === 1 ? '' : 's'}`} tone={financialDisplay.overdueCount ? 'danger' : 'warning'} />
+        </div>
+        <div className={hasFinancialActivity ? 'client-financial-status' : 'client-financial-status is-empty'}>
+          <span><ReceiptText size={18} /></span>
+          <div>
+            <strong>{hasFinancialActivity ? `${paidPercent}% collected` : 'No invoice activity yet'}</strong>
+            <p>{hasFinancialActivity ? "Track collection progress against this client's issued invoices." : 'Create an invoice to start tracking revenue, payments, and open balances.'}</p>
+          </div>
+        </div>
+        {hasFinancialActivity ? (
+          <>
+            <div className="client-collection-bar" aria-label={`${paidPercent}% collected`}>
+              <i style={{ width: `${Math.max(0, Math.min(paidPercent, 100))}%` }} />
+            </div>
+            <div className="client-financial-split">
+              <span><small>Paid</small><strong>{formatDashboardMoney(financialDisplay.paid)}</strong></span>
+              <span><small>Outstanding</small><strong>{formatDashboardMoney(financialDisplay.outstanding)}</strong></span>
+            </div>
+          </>
+        ) : null}
+      </div>
+      <div className="client-invoice-total">
+        <span>
+          <small>Total invoices</small>
+          <strong>{financialDisplay.invoiceCount}</strong>
+        </span>
+        <Link href="/accounting/invoices" className="client-card-action">Open register</Link>
+      </div>
+    </CommandCard>
+  )
+}
+
+function ClientContactsTab({ client, contactCreateHref }: { client: ClientRecord; contactCreateHref: string }) {
+  return (
+    <div className="client-tab-stack">
+      <CommandCard title="Key Contacts" action={client.contacts.length ? <Link href="/people/contacts" className="client-card-action">View all</Link> : null}>
+        {client.contacts.length ? (
+          <div className="client-contact-list">
+            {client.contacts.slice(0, 4).map(contact => (
+              <article key={contact.id} className="client-contact-row">
+                <span className="client-contact-avatar">{contact.avatar || getInitials(contact.name)}</span>
+                <div className="client-contact-copy">
+                  <strong>{contact.name} {contact.primary ? <span className="client-primary-badge">Primary</span> : null}</strong>
+                  <small>{contact.role || 'Client contact'}</small>
+                </div>
+                <div className="client-contact-methods">
+                  <span>{contact.email}</span>
+                  <span>{contact.phone}</span>
+                </div>
+                <div className="client-contact-actions">
+                  <a href={`mailto:${contact.email}`} aria-label={`Email ${contact.name}`}><Mail size={16} /></a>
+                  <a href={`tel:${phoneHref(contact.phone)}`} aria-label={`Call ${contact.name}`}><Phone size={16} /></a>
+                </div>
+              </article>
+            ))}
+          </div>
+        ) : (
+          <FriendlyEmptyState
+            icon={UserPlus}
+            title="No contacts yet"
+            description="Add a primary contact so your team knows who to reach."
+            actionLabel="Add Contact"
+            href={contactCreateHref}
+          />
+        )}
+        {client.contacts.length ? <Link href="/people/contacts" className="client-card-link with-icon"><UserPlus size={15} /> Add contact</Link> : null}
+      </CommandCard>
+    </div>
+  )
+}
+
+function CompanyInformation({ client }: { client: ClientRecord }) {
+  const rows: [string, string][] = [
+    ['Client Type', client.clientType || 'Commercial'],
+    ['Industry', client.industry],
+    ['Company Type', client.companyType],
+    ['Company Size', client.companySize],
+    ['Annual Revenue', client.annualRevenue],
+    ['Tax ID / VAT', client.taxId],
+    ['Billing Address', client.billingAddress],
+    ['Default Currency', client.defaultCurrency],
+    ['Payment Terms', client.paymentTerms],
+    ['Tags', client.tags.join(', ') || '-'],
+  ]
+
+  return (
+    <details className="client-company-info">
+      <summary>
+        <span><FileText size={16} /> Company Information</span>
+        <ChevronDown size={16} />
+      </summary>
+      <div>
+        <DetailsList rows={rows} />
+      </div>
+    </details>
   )
 }
 
@@ -421,61 +902,122 @@ function EmptyTab({ tab, client }: { tab: string; client: ClientRecord }) {
   return (
     <section style={{ ...panel, minHeight: 280, display: 'grid', placeItems: 'center', textAlign: 'center' }}>
       <div>
-        <div style={{ color: '#cbd5e1', marginBottom: 14 }}><FileText size={48} /></div>
+        <div style={{ color: '#000000', marginBottom: 14 }}><FileText size={48} /></div>
         <h2 style={{ margin: 0, color: '#0f172a', fontSize: 18, fontWeight: 900 }}>No {tab.toLowerCase()} yet</h2>
-        <p style={{ color: '#64748b', fontSize: 14, margin: '8px 0 0' }}>{client.name} does not have {tab.toLowerCase()} records yet.</p>
+        <p style={{ color: '#000000', fontSize: 14, margin: '8px 0 0' }}>{client.name} does not have {tab.toLowerCase()} records yet.</p>
       </div>
     </section>
   )
 }
 
-function ClientInvoicesTab({ client, invoiceSummary }: { client: ClientRecord; invoiceSummary: ClientInvoiceSummary }) {
-  if (!invoiceSummary.invoices.length) {
-    return <EmptyTab tab="Invoices" client={client} />
+function ClientActivitiesTab({ client, onLogActivity }: { client: ClientRecord; onLogActivity: () => void }) {
+  if (!client.activities.length) {
+    return (
+      <section style={panel}>
+        <FriendlyEmptyState
+          icon={Activity}
+          title="No activities yet"
+          description="Log calls, payments, meetings, and decisions so the team has a shared history."
+          actionLabel="Log Activity"
+          onAction={onLogActivity}
+        />
+      </section>
+    )
   }
 
   return (
-    <section className="client-invoices-tab" style={panel}>
-      <div className="client-invoices-summary">
-        <MiniMetric value={invoiceSummary.invoices.length} label="Total Invoices" />
-        <MiniMetric value={invoiceSummary.paidCount} label="Paid" tone={green} />
-        <MiniMetric value={invoiceSummary.unpaidCount} label="Unpaid" tone="#f97316" />
-        <MiniMetric value={invoiceSummary.overdueCount} label="Overdue" tone="#ef4444" />
+    <section style={panel}>
+      <div className="client-card-header">
+        <h2>All Activities</h2>
+        <button type="button" className="client-card-action" onClick={onLogActivity}><Plus size={15} /> Log Activity</button>
       </div>
-      <div className="client-invoices-total-row">
-        <DetailStat label="Total billed" value={formatPeso(invoiceSummary.totalBilled)} />
-        <DetailStat label="Total paid" value={formatPeso(invoiceSummary.totalPaid)} />
-        <DetailStat label="Outstanding" value={formatPeso(invoiceSummary.outstanding)} tone="#f97316" />
-      </div>
-      <div className="client-invoices-table-wrap">
-        <table className="client-invoices-table">
-          <thead>
-            <tr>
-              {['Invoice', 'Issue Date', 'Due Date', 'Amount', 'Paid', 'Balance', 'Status'].map(header => <th key={header}>{header}</th>)}
-            </tr>
-          </thead>
-          <tbody>
-            {invoiceSummary.invoices.map(invoice => {
-              const status = invoiceDisplayStatus(invoice)
-              return (
-                <tr key={invoice.id}>
-                  <td data-label="Invoice">
-                    <strong>{invoice.number}</strong>
-                    <small>{invoice.purchaseOrder ? `PO: ${invoice.purchaseOrder}` : invoice.email || 'No billing email'}</small>
-                  </td>
-                  <td data-label="Issue Date">{formatDate(invoice.issueDate)}</td>
-                  <td data-label="Due Date">{formatDate(invoice.dueDate)}</td>
-                  <td data-label="Amount">{money(invoice.amount, invoice.currency || 'PHP')}</td>
-                  <td data-label="Paid">{money(invoice.paid, invoice.currency || 'PHP')}</td>
-                  <td data-label="Balance">{money(invoice.balanceDue, invoice.currency || 'PHP')}</td>
-                  <td data-label="Status"><InvoiceStatusBadge status={status} /></td>
-                </tr>
-              )
-            })}
-          </tbody>
-        </table>
+      <div className="client-activity-timeline">
+        {client.activities.map(activity => {
+          const Icon = activityIconFor(activity.title)
+          return (
+            <article key={activity.id} className="client-timeline-item">
+              <time className="client-timeline-date">{activity.date}</time>
+              <span className={`client-timeline-dot tone-${activity.tone}`} />
+              <span className={`client-timeline-icon tone-${activity.tone}`}><Icon size={16} /></span>
+              <div className="client-timeline-copy">
+                <strong>{activity.title}</strong>
+                <p>{activity.description}</p>
+              </div>
+              <span className="client-timeline-time">{activity.time}</span>
+            </article>
+          )
+        })}
       </div>
     </section>
+  )
+}
+
+function ClientInvoicesTab({
+  invoiceSummary,
+  financialDisplay,
+  invoiceCreateHref,
+}: {
+  invoiceSummary: ClientInvoiceSummary
+  financialDisplay: ClientFinancialDisplay
+  invoiceCreateHref: string
+}) {
+  return (
+    <div className="client-tab-stack client-invoices-tab">
+      <FinancialOverviewCard financialDisplay={financialDisplay} invoiceCreateHref={invoiceCreateHref} />
+      <CommandCard title="Invoices">
+        {invoiceSummary.invoices.length ? (
+          <>
+            <div className="client-invoices-summary">
+              <MiniMetric value={invoiceSummary.invoices.length} label="Total Invoices" />
+              <MiniMetric value={invoiceSummary.paidCount} label="Paid" tone={green} />
+              <MiniMetric value={invoiceSummary.unpaidCount} label="Unpaid" tone="#f97316" />
+              <MiniMetric value={invoiceSummary.overdueCount} label="Overdue" tone="#ef4444" />
+            </div>
+            <div className="client-invoices-total-row">
+              <DetailStat label="Total billed" value={formatPeso(invoiceSummary.totalBilled)} />
+              <DetailStat label="Total paid" value={formatPeso(invoiceSummary.totalPaid)} />
+              <DetailStat label="Outstanding" value={formatPeso(invoiceSummary.outstanding)} tone="#f97316" />
+            </div>
+            <div className="client-invoices-table-wrap">
+              <table className="client-invoices-table">
+                <thead>
+                  <tr>
+                    {['Invoice', 'Issue Date', 'Due Date', 'Amount', 'Paid', 'Balance', 'Status'].map(header => <th key={header}>{header}</th>)}
+                  </tr>
+                </thead>
+                <tbody>
+                  {invoiceSummary.invoices.map(invoice => {
+                    const status = invoiceDisplayStatus(invoice)
+                    return (
+                      <tr key={invoice.id}>
+                        <td data-label="Invoice">
+                          <strong>{invoice.number}</strong>
+                          <small>{invoice.purchaseOrder ? `PO: ${invoice.purchaseOrder}` : invoice.email || 'No billing email'}</small>
+                        </td>
+                        <td data-label="Issue Date">{formatDate(invoice.issueDate)}</td>
+                        <td data-label="Due Date">{formatDate(invoice.dueDate)}</td>
+                        <td data-label="Amount">{money(invoice.amount, invoice.currency || 'PHP')}</td>
+                        <td data-label="Paid">{money(invoice.paid, invoice.currency || 'PHP')}</td>
+                        <td data-label="Balance">{money(invoice.balanceDue, invoice.currency || 'PHP')}</td>
+                        <td data-label="Status"><InvoiceStatusBadge status={status} /></td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </>
+        ) : (
+          <FriendlyEmptyState
+            icon={ReceiptText}
+            title="No invoices yet"
+            description="Create an invoice to track billed revenue, payments, and open balances for this client."
+            actionLabel="New Invoice"
+            href={invoiceCreateHref}
+          />
+        )}
+      </CommandCard>
+    </div>
   )
 }
 
@@ -496,19 +1038,9 @@ function InvoiceStatusBadge({ status }: { status: string }) {
       ? { bg: '#fee2e2', color: '#dc2626' }
       : normalized === 'sent'
         ? { bg: '#dbeafe', color: '#2563eb' }
-        : { bg: '#f1f5f9', color: '#475569' }
+        : { bg: '#f1f5f9', color: '#000000' }
 
   return <span className="client-invoice-status" style={{ background: tone.bg, color: tone.color }}>{status}</span>
-}
-
-function Panel({ title, children, footer, className = '' }: { title: string; children: ReactNode; footer?: string; className?: string }) {
-  return (
-    <section className={`client-panel ${className}`.trim()} style={panel}>
-      <h2 style={panelTitle}>{title}</h2>
-      <div className="client-panel-body" style={{ display: 'grid', gap: 18 }}>{children}</div>
-      {footer ? <button style={footerLink}>{footer}</button> : null}
-    </section>
-  )
 }
 
 function DetailsList({ rows }: { rows: [string, string][] }) {
@@ -524,24 +1056,11 @@ function DetailsList({ rows }: { rows: [string, string][] }) {
   )
 }
 
-function Metric({ icon: Icon, label, value, sub, tone = green }: { icon: typeof UsersRound; label: string; value: string; sub: string; tone?: string }) {
-  return (
-    <div className="client-metric-card" style={metricCard}>
-      <span style={metricIcon(tone)}><Icon size={19} /></span>
-      <div>
-        <div style={muted}>{label}</div>
-        <div style={{ color: '#0f172a', fontSize: 18, fontWeight: 900, marginTop: 4 }}>{value}</div>
-        <div style={{ color: '#64748b', fontSize: 12, marginTop: 5 }}>{sub}</div>
-      </div>
-    </div>
-  )
-}
-
 function InfoPill({ icon: Icon, text, href, copyValue, external }: { icon: typeof Mail; text: string; href: string; copyValue: string; external?: boolean }) {
   return (
     <div className="client-info-pill" style={infoPill}>
       <a className="client-info-pill-link" href={href} target={external ? '_blank' : undefined} rel={external ? 'noreferrer' : undefined} style={infoPillLink}>
-        <span style={tinyIcon}><Icon size={15} /></span>
+        <span style={tinyIcon}><Icon size={17} strokeWidth={1.9} /></span>
         <span>{text}</span>
       </a>
       <button type="button" className="client-info-copy" aria-label={`Copy ${text}`} onClick={() => copyToClipboard(copyValue)} style={copyButton}>
@@ -564,20 +1083,6 @@ function MiniMetric({ value, label, tone = '#2563eb' }: { value: number; label: 
   )
 }
 
-function Legend({ color, label, value }: { color: string; label: string; value: string }) {
-  return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-      <span style={{ width: 9, height: 9, borderRadius: 999, background: color }} />
-      <span style={{ color: '#0f172a', fontSize: 13, fontWeight: 800 }}>{label}</span>
-      <span style={{ color: '#64748b', fontSize: 13, marginLeft: 'auto' }}>{value}</span>
-    </div>
-  )
-}
-
-function EmptyMessage({ text }: { text: string }) {
-  return <div className="client-empty-message" style={{ padding: '30px 0', color: '#64748b', fontSize: 13, fontWeight: 700, textAlign: 'center' }}>{text}</div>
-}
-
 function SnapshotItem({ icon: Icon, label, value }: { icon: typeof UserRound; label: string; value: string }) {
   return (
     <div className="client-snapshot-item">
@@ -596,13 +1101,50 @@ function formatDate(value: string) {
   return date.toLocaleDateString('en-US', { month: 'short', day: '2-digit', year: 'numeric' })
 }
 
+function formatDateObject(date: Date) {
+  return date.toLocaleDateString('en-US', { month: 'short', day: '2-digit', year: 'numeric' })
+}
+
+function addMonthsFromToday(months: number) {
+  const date = new Date()
+  date.setMonth(date.getMonth() + months)
+  return date.toISOString().slice(0, 10)
+}
+
+function nextFollowUpDate(value: string) {
+  const parsed = looseDate(value)
+  const next = parsed || new Date()
+  next.setDate(next.getDate() + 7)
+  return formatDateObject(next)
+}
+
+function looseDate(value: string) {
+  const lowered = value.trim().toLowerCase()
+  if (!lowered) return null
+  if (lowered === 'today') return new Date()
+  if (lowered === 'yesterday') {
+    const date = new Date()
+    date.setDate(date.getDate() - 1)
+    return date
+  }
+
+  const parsed = new Date(value)
+  return Number.isNaN(parsed.getTime()) ? null : parsed
+}
+
+function formatDashboardMoney(value: number) {
+  return formatPeso(value)
+}
+
 function clientAge(value: string) {
   const date = new Date(value)
   if (Number.isNaN(date.getTime())) return '-'
   const months = Math.max(1, Math.round((Date.now() - date.getTime()) / 1000 / 60 / 60 / 24 / 30))
-  if (months < 12) return `${months} months`
+  if (months < 12) return `${months} month${months === 1 ? '' : 's'}`
   const years = Math.floor(months / 12)
-  return `${years} year${years > 1 ? 's' : ''}, ${months % 12} months`
+  const remainingMonths = months % 12
+  const yearLabel = `${years} year${years === 1 ? '' : 's'}`
+  return remainingMonths ? `${yearLabel}, ${remainingMonths} month${remainingMonths === 1 ? '' : 's'}` : yearLabel
 }
 
 function websiteHref(value: string) {
@@ -618,6 +1160,32 @@ function phoneHref(value: string) {
 function mapsHref(value: string) {
   const query = encodeURIComponent(value.trim())
   return query ? `https://www.google.com/maps/search/?api=1&query=${query}` : '#'
+}
+
+function clientCreateHref(path: string, client: ClientRecord, extra: Record<string, string> = {}) {
+  const params = new URLSearchParams()
+  params.set('new', '1')
+  params.set('clientId', client.id)
+  params.set('clientName', client.name)
+  if (client.company) params.set('company', client.company)
+  if (client.email) params.set('email', client.email)
+  if (client.phone) params.set('phone', client.phone)
+  if (client.billingAddress) params.set('address', client.billingAddress)
+  Object.entries(extra).forEach(([key, value]) => {
+    const trimmed = value.trim()
+    if (trimmed) params.set(key, trimmed)
+  })
+  return `${path}?${params.toString()}`
+}
+
+function clientBillingBlock(client: ClientRecord) {
+  return [
+    client.name,
+    client.email ? `Email: ${client.email}` : '',
+    client.phone ? `Phone: ${client.phone}` : '',
+    client.taxId && client.taxId !== '-' ? `Tax ID: ${client.taxId}` : '',
+    client.billingAddress ? `Address: ${client.billingAddress}` : '',
+  ].filter(Boolean).join('\n')
 }
 
 async function copyToClipboard(value: string) {
@@ -638,15 +1206,10 @@ async function copyToClipboard(value: string) {
   }
 }
 
-function percent(value: number, total: number) {
-  if (!total) return 0
-  return Math.round((value / total) * 100)
-}
-
 const clientDetailCss = `
 .client-detail-page {
   --client-ink: #0f172a;
-  --client-muted: #64748b;
+  --client-muted: #000000;
   --client-border: #dfe7ee;
   --client-soft: #f8fafc;
   padding-bottom: 42px;
@@ -873,7 +1436,7 @@ const clientDetailCss = `
 }
 
 .client-invoices-detail-stat span {
-  color: #64748b;
+  color: #000000;
   font-size: 12px;
   font-weight: 850;
 }
@@ -896,7 +1459,7 @@ const clientDetailCss = `
 .client-invoices-table th {
   text-align: left;
   padding: 12px 14px;
-  color: #64748b;
+  color: #000000;
   font-size: 11px;
   font-weight: 950;
 }
@@ -918,7 +1481,7 @@ const clientDetailCss = `
 
 .client-invoices-table td small {
   display: block;
-  color: #64748b;
+  color: #000000;
   font-size: 12px;
   font-weight: 750;
   margin-top: 4px;
@@ -944,9 +1507,6 @@ html[data-theme='dark'] .client-detail-page {
 }
 
 html[data-theme='dark'] .client-detail-page,
-html[data-theme='dark'] .client-detail-page .client-page-header,
-html[data-theme='dark'] .client-detail-page .client-page-header *,
-html[data-theme='dark'] .client-detail-page .client-breadcrumb,
 html[data-theme='dark'] .client-detail-page .client-overview-grid {
   background: transparent !important;
   background-color: transparent !important;
@@ -968,7 +1528,6 @@ html[data-theme='dark'] .client-detail-page [style*='color:rgb(15,23,42)'] {
 html[data-theme='dark'] .client-detail-page p,
 html[data-theme='dark'] .client-detail-page small,
 html[data-theme='dark'] .client-detail-page dt,
-html[data-theme='dark'] .client-detail-page .client-breadcrumb,
 html[data-theme='dark'] .client-detail-page .client-info-pill,
 html[data-theme='dark'] .client-detail-page .client-empty-message,
 html[data-theme='dark'] .client-detail-page [style*='color: #008b4a'],
@@ -1055,8 +1614,7 @@ html[data-theme='dark'] .client-detail-page [style*='background:rgb(248,250,252)
 html[data-theme='dark'] .client-detail-page [style*='background: rgb(251, 253, 255)'],
 html[data-theme='dark'] .client-detail-page [style*='background:rgb(251,253,255)'],
 html[data-theme='dark'] .client-detail-page [style*='background: rgb(226, 232, 240)'],
-html[data-theme='dark'] .client-detail-page [style*='background:rgb(226,232,240)'],
-html[data-theme='dark'] .client-detail-page [style*='background: conic-gradient'] {
+html[data-theme='dark'] .client-detail-page [style*='background:rgb(226,232,240)'] {
   background: var(--secondary) !important;
   border-color: var(--border) !important;
   color: var(--foreground) !important;
@@ -1113,13 +1671,17 @@ html[data-theme='dark'] .client-detail-page .client-tabs .client-tab-button {
   background: transparent !important;
   background-color: transparent !important;
   background-image: none !important;
+  border: 0 !important;
+  border-radius: 0 !important;
   box-shadow: none !important;
-  border-bottom-color: transparent !important;
 }
 
 html[data-theme='dark'] .client-detail-page .client-tabs .client-tab-button.is-active {
   color: var(--foreground) !important;
-  border-bottom-color: var(--foreground) !important;
+}
+
+html[data-theme='dark'] .client-detail-page .client-tabs .client-tab-button.is-active::after {
+  background: var(--foreground) !important;
 }
 
 html[data-theme='dark'] .client-detail-page .client-tabs .client-tab-button:hover,
@@ -1127,9 +1689,14 @@ html[data-theme='dark'] .client-detail-page .client-tabs .client-tab-button:focu
   background: transparent !important;
   background-color: transparent !important;
   background-image: none !important;
+  border-radius: 0 !important;
   box-shadow: none !important;
   color: var(--foreground) !important;
-  border-bottom-color: var(--foreground) !important;
+}
+
+html[data-theme='dark'] .client-detail-page .client-tabs .client-tab-button:hover::after,
+html[data-theme='dark'] .client-detail-page .client-tabs .client-tab-button:focus-visible::after {
+  background: var(--foreground) !important;
 }
 
 html[data-theme='dark'] .client-detail-page .client-tabs {
@@ -1267,10 +1834,6 @@ html[data-theme='dark'] .client-detail-page [style*='background:rgba(124,58,237'
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
-  }
-
-  .client-page-header {
-    display: none !important;
   }
 
   .client-hero-card,
@@ -1439,7 +2002,7 @@ html[data-theme='dark'] .client-detail-page [style*='background:rgba(124,58,237'
 
   .client-invoices-table td::before {
     content: attr(data-label);
-    color: #64748b;
+    color: #000000;
     font-size: 11px;
     font-weight: 950;
     text-transform: uppercase;
@@ -1460,12 +2023,1323 @@ html[data-theme='dark'] .client-detail-page [style*='background:rgba(124,58,237'
     font-size: 14px !important;
   }
 }
+
+.client-command-center {
+  --client-bg: #f8fafc;
+  --client-card: #ffffff;
+  --client-border: #e5e7eb;
+  --client-text: #000000;
+  --client-muted: #000000;
+  --client-teal: #0f8f8c;
+  --client-success: #16a34a;
+  --client-warning: #f59e0b;
+  --client-danger: #dc2626;
+  display: grid !important;
+  gap: 8px !important;
+  color: var(--client-text);
+}
+
+.main-content:has(> .client-command-center) {
+  background: var(--client-bg) !important;
+}
+
+.client-command-center .client-crumb-row {
+  align-items: center;
+  background: transparent !important;
+  border: 0 !important;
+  box-shadow: none !important;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin: 0;
+  min-height: 30px;
+  padding: 0 !important;
+}
+
+.client-command-center .client-back-list-button {
+  align-items: center;
+  background: #ffffff;
+  border: 1px solid #dbe3ef;
+  border-radius: 8px;
+  color: #0f172a;
+  display: inline-flex;
+  font-size: 13px;
+  font-weight: 700;
+  gap: 7px;
+  min-height: 30px;
+  padding: 0 10px;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.client-command-center .client-crumbs {
+  align-items: center;
+  background: transparent !important;
+  border: 0 !important;
+  box-shadow: none !important;
+  color: #334155;
+  display: inline-flex;
+  font-size: 13px;
+  font-weight: 500;
+  gap: 8px;
+  line-height: 18px;
+  margin: 0;
+  min-height: 18px;
+  padding: 0 !important;
+  width: max-content;
+}
+
+.client-command-center .client-crumbs a {
+  color: inherit;
+  text-decoration: none;
+}
+
+.client-command-center .client-crumbs span {
+  color: #000000;
+}
+
+.client-command-center .client-crumbs strong {
+  color: inherit;
+  font-size: inherit;
+  font-weight: 500;
+}
+
+.client-command-center .client-hero-card {
+  display: grid !important;
+  grid-template-columns: 1fr !important;
+  gap: 10px !important;
+  padding: 14px !important;
+  background: var(--client-card) !important;
+  border: 1px solid var(--client-border) !important;
+  border-radius: 8px !important;
+  box-shadow: 0 8px 22px rgba(15, 23, 42, 0.04) !important;
+}
+
+.client-hero-topline {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: start;
+}
+
+.client-command-center .client-hero-main {
+  grid-template-columns: 64px minmax(0, 1fr) !important;
+  gap: 14px !important;
+}
+
+.client-command-center .client-hero-avatar {
+  width: 62px !important;
+  height: 62px !important;
+  border-radius: 8px !important;
+  font-size: 24px !important;
+  background: #ede9fe !important;
+  color: #7c3aed !important;
+}
+
+.client-command-center .client-title-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  min-width: 0;
+}
+
+.client-command-center .client-name {
+  color: var(--client-text) !important;
+  font-size: 26px !important;
+  line-height: 1.14 !important;
+  font-weight: 700 !important;
+}
+
+.client-command-center .client-subtitle {
+  color: #334155 !important;
+  font-size: 14px !important;
+  font-weight: 500 !important;
+  margin: 4px 0 0 !important;
+}
+
+.client-command-center .client-status-badge,
+.client-type-badge {
+  display: inline-flex;
+  align-items: center;
+  min-height: 24px;
+  border-radius: 999px;
+  padding: 3px 9px;
+  font-size: 12px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.client-type-badge {
+  background: #f1f5f9;
+  color: #334155;
+}
+
+.client-command-center .client-contact-grid {
+  grid-template-columns: repeat(4, minmax(0, 1fr)) !important;
+  gap: 10px !important;
+  max-width: none !important;
+  margin-top: 8px !important;
+}
+
+.client-command-center .client-info-pill {
+  min-height: 28px !important;
+  border: 0 !important;
+  background: transparent !important;
+  color: #334155 !important;
+}
+
+.client-command-center .client-info-pill-link {
+  gap: 9px !important;
+}
+
+.client-command-center .client-info-pill-link > span:first-child {
+  width: 18px !important;
+  height: 18px !important;
+  border-radius: 0 !important;
+  background: transparent !important;
+  color: #334155 !important;
+}
+
+.client-command-center .client-info-pill-link svg {
+  stroke: currentColor;
+}
+
+.client-command-center .client-info-pill-link > span:last-child {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.client-command-center .client-info-copy {
+  display: none !important;
+}
+
+.client-command-center .client-hero-actions {
+  position: static !important;
+  display: flex !important;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px !important;
+  flex-wrap: wrap;
+  width: auto !important;
+}
+
+.client-action-button {
+  min-height: 36px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 0 13px;
+  border: 1px solid var(--client-border);
+  border-radius: 8px;
+  background: #fff;
+  color: var(--client-text);
+  text-decoration: none;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.client-action-button.is-primary {
+  background: var(--client-teal);
+  border-color: var(--client-teal);
+  color: #fff;
+  box-shadow: 0 10px 18px rgba(15, 143, 140, 0.18);
+}
+
+.client-command-center .client-detail-action-menu {
+  justify-items: stretch !important;
+  min-width: 190px !important;
+}
+
+.client-command-center .client-detail-action-menu .client-action-menu-item {
+  align-items: center !important;
+  display: grid !important;
+  gap: 10px !important;
+  grid-template-columns: 18px minmax(0, 1fr) !important;
+  justify-content: start !important;
+  justify-items: start !important;
+  line-height: 1.2 !important;
+  padding: 0 12px !important;
+  text-align: left !important;
+  width: 100% !important;
+}
+
+.client-command-center .client-detail-action-menu .client-action-menu-item svg {
+  display: block;
+  justify-self: center;
+}
+
+.client-command-center .client-detail-action-menu .client-action-menu-item span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.client-command-center .client-metrics-area {
+  padding-top: 0 !important;
+}
+
+.client-command-center .client-metric-strip {
+  display: grid !important;
+  grid-template-columns: repeat(5, minmax(0, 1fr)) !important;
+  gap: 0 !important;
+  border: 1px solid var(--client-border);
+  border-radius: 8px;
+  overflow: hidden;
+  background: #fff;
+}
+
+.client-kpi-card {
+  min-height: 64px;
+  display: grid;
+  grid-template-columns: 34px minmax(0, 1fr);
+  gap: 8px;
+  align-items: center;
+  padding: 8px 12px;
+  border-right: 1px solid var(--client-border);
+}
+
+.client-kpi-card:last-child {
+  border-right: 0;
+}
+
+.client-kpi-icon {
+  width: 32px;
+  height: 32px;
+  border-radius: 999px;
+  display: grid;
+  place-items: center;
+}
+
+.client-kpi-card small {
+  display: block;
+  color: var(--client-muted);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.client-kpi-card strong {
+  display: block;
+  margin-top: 3px;
+  color: var(--client-text);
+  font-size: 18px;
+  line-height: 1.1;
+  font-weight: 750;
+  overflow-wrap: anywhere;
+}
+
+.client-kpi-card span:not(.client-kpi-icon) {
+  display: block;
+  margin-top: 4px;
+  color: var(--client-muted);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.client-command-center .client-tabs {
+  gap: 32px !important;
+  margin-top: 0;
+  border-bottom: 1px solid var(--client-border) !important;
+}
+
+.client-command-center .client-tabs .client-tab-button {
+  background: transparent !important;
+  border: 0 !important;
+  border-radius: 0 !important;
+  box-shadow: none !important;
+  min-height: 42px !important;
+  padding: 0 0 8px !important;
+  color: #000000 !important;
+  font-size: 14px !important;
+  line-height: 20px !important;
+  font-weight: 400 !important;
+  letter-spacing: 0 !important;
+  position: relative;
+}
+
+.client-command-center .client-tabs .client-tab-button.is-active,
+.client-command-center .client-tabs .client-tab-button:hover,
+.client-command-center .client-tabs .client-tab-button:focus-visible {
+  background: transparent !important;
+  border-radius: 0 !important;
+  box-shadow: none !important;
+  color: #000000 !important;
+  font-weight: 500 !important;
+}
+
+.client-command-center .client-tabs .client-tab-button::after {
+  background: transparent;
+  bottom: -1px;
+  content: "";
+  height: 2px;
+  left: 0;
+  position: absolute;
+  right: 0;
+}
+
+.client-command-center .client-tabs .client-tab-button.is-active::after,
+.client-command-center .client-tabs .client-tab-button:hover::after,
+.client-command-center .client-tabs .client-tab-button:focus-visible::after {
+  background: #000000;
+}
+
+.client-command-dashboard {
+  display: grid;
+  gap: 8px;
+}
+
+.client-overview-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(300px, 380px);
+  gap: 8px;
+  align-items: start;
+}
+
+.client-tab-stack {
+  display: grid;
+  gap: 8px;
+}
+
+.client-analytics-disclosure {
+  min-width: 0;
+  background: #fff;
+  border: 1px solid var(--client-border);
+  border-radius: 8px;
+  box-shadow: 0 8px 22px rgba(15, 23, 42, 0.035);
+  overflow: hidden;
+}
+
+.client-disclosure-toggle {
+  width: 100%;
+  min-height: 44px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  gap: 10px;
+  align-items: center;
+  border: 0;
+  background: #fff;
+  color: var(--client-text);
+  cursor: pointer;
+  padding: 0 14px;
+  text-align: left;
+}
+
+.client-disclosure-toggle span {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  min-width: 0;
+  font-size: 14px;
+  font-weight: 800;
+}
+
+.client-disclosure-toggle strong {
+  color: var(--client-teal);
+  font-size: 13px;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.client-analytics-disclosure.is-open .client-disclosure-toggle svg:last-child {
+  transform: rotate(180deg);
+}
+
+.client-analytics-body {
+  padding: 0 14px 14px;
+  border-top: 1px solid #eef2f7;
+}
+
+.client-analytics-body .client-metric-strip {
+  margin-top: 14px;
+}
+
+.client-command-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(360px, 0.9fr);
+  gap: 8px;
+  align-items: stretch;
+}
+
+.client-lower-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.05fr) minmax(0, 0.95fr) minmax(340px, 1fr);
+  gap: 8px;
+}
+
+.client-command-card {
+  min-width: 0;
+  background: #fff;
+  border: 1px solid var(--client-border);
+  border-radius: 8px;
+  box-shadow: 0 8px 22px rgba(15, 23, 42, 0.035);
+  padding: 14px;
+}
+
+.client-card-header {
+  min-height: 24px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+
+.client-card-header h2 {
+  margin: 0 !important;
+  color: var(--client-text) !important;
+  font-size: 16px !important;
+  line-height: 1.25 !important;
+  font-weight: 750 !important;
+}
+
+.client-card-body {
+  display: grid;
+  gap: 10px;
+}
+
+.client-filter-button,
+.client-period-button,
+.client-card-action,
+.client-card-link {
+  border: 0;
+  background: transparent;
+  color: var(--client-teal);
+  font-size: 13px;
+  font-weight: 750;
+  text-decoration: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  cursor: pointer;
+}
+
+.client-filter-button,
+.client-period-button {
+  color: var(--client-text);
+}
+
+.client-card-link {
+  justify-self: center;
+}
+
+.client-card-link.with-icon {
+  justify-self: start;
+}
+
+.client-activity-timeline {
+  display: grid;
+  gap: 0;
+}
+
+.client-timeline-item {
+  display: grid;
+  grid-template-columns: 72px 12px 34px minmax(0, 1fr) auto;
+  gap: 9px;
+  align-items: start;
+  min-height: 44px;
+  position: relative;
+}
+
+.client-timeline-item:not(:last-child)::after {
+  content: "";
+  position: absolute;
+  left: 78px;
+  top: 18px;
+  bottom: -10px;
+  width: 1px;
+  background: #e2e8f0;
+}
+
+.client-timeline-date {
+  color: var(--client-text);
+  font-size: 12px;
+  line-height: 1.3;
+  font-weight: 700;
+}
+
+.client-timeline-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 999px;
+  margin-top: 8px;
+  z-index: 1;
+  background: var(--client-teal);
+}
+
+.client-timeline-icon {
+  width: 30px;
+  height: 30px;
+  border-radius: 999px;
+  display: grid;
+  place-items: center;
+  background: #ecfdf5;
+  color: var(--client-success);
+}
+
+.tone-green { color: var(--client-success); }
+.tone-blue { color: #2563eb; }
+.tone-purple { color: #7c3aed; }
+.tone-orange { color: var(--client-warning); }
+.client-timeline-icon.tone-blue { background: #dbeafe; }
+.client-timeline-icon.tone-purple { background: #f3e8ff; }
+.client-timeline-icon.tone-orange { background: #ffedd5; }
+.client-timeline-dot.tone-blue { background: #2563eb; }
+.client-timeline-dot.tone-purple { background: #7c3aed; }
+.client-timeline-dot.tone-orange { background: var(--client-warning); }
+
+.client-timeline-copy strong {
+  display: block;
+  color: var(--client-text);
+  font-size: 13px;
+  font-weight: 750;
+}
+
+.client-timeline-copy p {
+  margin: 3px 0 0;
+  color: var(--client-muted);
+  font-size: 13px;
+  line-height: 1.35;
+}
+
+.client-timeline-time {
+  color: #334155;
+  font-size: 12px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.client-relationship-layout {
+  display: grid;
+  grid-template-columns: minmax(220px, 0.9fr) minmax(0, 1.1fr);
+  gap: 14px;
+  align-items: center;
+}
+
+.client-health-block {
+  display: grid;
+  justify-items: center;
+  gap: 6px;
+  padding: 8px 18px 8px 8px;
+  border-right: 1px solid var(--client-border);
+}
+
+.client-health-gauge {
+  width: 196px;
+  height: 176px;
+  position: relative;
+  display: grid;
+  place-items: center;
+}
+
+.client-health-gauge svg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+}
+
+.client-health-track,
+.client-health-progress {
+  fill: none;
+  stroke-linecap: round;
+  stroke-width: 12;
+}
+
+.client-health-track {
+  stroke: #dfe7ed;
+}
+
+.client-health-progress {
+  stroke: #56c86d;
+}
+
+.client-health-copy {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  justify-items: center;
+  align-content: center;
+  transform: translateY(10px);
+}
+
+.client-health-copy strong {
+  color: #0f8f8c;
+  font-size: 34px;
+  line-height: 1;
+  font-weight: 800;
+  letter-spacing: 0;
+}
+
+.client-health-copy span {
+  margin-top: 9px;
+  color: #0f8f8c;
+  font-size: 14px;
+  line-height: 1.1;
+  font-weight: 800;
+}
+
+.client-health-copy small,
+.client-snapshot-item small {
+  color: var(--client-muted);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.client-snapshot-list {
+  display: grid;
+  gap: 0 !important;
+}
+
+.client-snapshot-item {
+  display: grid;
+  grid-template-columns: 34px minmax(0, 1fr);
+  gap: 9px;
+  align-items: center;
+  padding: 7px 0;
+  border: 0 !important;
+  border-bottom: 1px solid #eef2f7 !important;
+  border-radius: 0 !important;
+  background: transparent !important;
+}
+
+.client-snapshot-item:last-child {
+  border-bottom: 0 !important;
+}
+
+.client-snapshot-item > span {
+  width: 30px !important;
+  height: 30px !important;
+  border-radius: 999px !important;
+  display: grid;
+  place-items: center;
+  background: #ecfeff !important;
+  color: var(--client-teal) !important;
+}
+
+.client-snapshot-item strong {
+  display: block;
+  margin-top: 2px;
+  color: var(--client-text);
+  font-size: 13px;
+  font-weight: 750;
+  overflow-wrap: anywhere;
+}
+
+.client-insight-banner {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 34px;
+  padding: 8px 10px;
+  border: 1px solid #cbe8df;
+  border-radius: 8px;
+  background: #f0fdfa;
+  color: #0f766e;
+  font-size: 13px;
+  font-weight: 650;
+}
+
+.client-project-list,
+.client-contact-list {
+  display: grid;
+  gap: 8px;
+}
+
+.client-financial-metrics {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.client-project-row {
+  display: grid;
+  grid-template-columns: 34px minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: center;
+  padding: 9px;
+  border: 1px solid #eef2f7;
+  border-radius: 8px;
+}
+
+.client-project-icon {
+  width: 30px;
+  height: 30px;
+  border-radius: 8px;
+  display: grid;
+  place-items: center;
+  background: #ecfdf5;
+}
+
+.client-project-icon.tone-blue { background: #dbeafe; }
+.client-project-icon.tone-purple { background: #f3e8ff; }
+
+.client-project-main strong,
+.client-contact-copy strong {
+  display: block;
+  color: var(--client-text);
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.client-project-main small,
+.client-contact-copy small {
+  display: block;
+  margin-top: 3px;
+  color: var(--client-muted);
+  font-size: 12px;
+  font-weight: 650;
+}
+
+.client-progress {
+  display: block;
+  height: 7px;
+  margin-top: 7px;
+  border-radius: 999px;
+  background: #e2e8f0;
+  overflow: hidden;
+}
+
+.client-progress i {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--client-teal);
+}
+
+.client-project-meta {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(74px, auto)) 40px;
+  gap: 10px;
+  align-items: center;
+  text-align: left;
+}
+
+.client-project-meta small {
+  display: block;
+  color: var(--client-muted);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.client-project-meta strong,
+.client-project-meta b {
+  display: block;
+  color: var(--client-text);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.client-financial-overview {
+  display: grid;
+  gap: 10px;
+  grid-template-columns: 1fr;
+  align-items: stretch;
+}
+
+.client-financial-metric {
+  background: #f8fafc;
+  border: 1px solid #eef2f7;
+  border-radius: 8px;
+  display: grid;
+  gap: 4px;
+  align-content: start;
+  min-height: 0;
+  padding: 10px;
+}
+
+.client-financial-metric small {
+  color: var(--client-muted);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.client-financial-metric strong {
+  color: var(--client-text);
+  font-size: 16px;
+  font-weight: 800;
+  overflow-wrap: anywhere;
+}
+
+.client-financial-metric span {
+  color: var(--client-success);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.client-financial-metric.tone-warning span { color: var(--client-warning); }
+.client-financial-metric.tone-danger span { color: var(--client-danger); }
+
+.client-financial-status {
+  align-items: center;
+  background: #f8fafc;
+  border: 1px solid #eef2f7;
+  border-radius: 8px;
+  display: grid;
+  gap: 10px;
+  grid-template-columns: 38px minmax(0, 1fr);
+  min-height: 76px;
+  padding: 10px;
+}
+
+.client-financial-status > span {
+  align-items: center;
+  background: #ecfdf5;
+  border-radius: 999px;
+  color: var(--client-teal);
+  display: inline-flex;
+  height: 34px;
+  justify-content: center;
+  width: 34px;
+}
+
+.client-financial-status.is-empty {
+  border-style: dashed;
+}
+
+.client-financial-status strong {
+  color: var(--client-text);
+  display: block;
+  font-size: 14px;
+  font-weight: 800;
+  line-height: 1.25;
+}
+
+.client-financial-status p {
+  color: var(--client-muted);
+  font-size: 12px;
+  line-height: 1.4;
+  margin: 3px 0 0;
+}
+
+.client-collection-bar {
+  background: #e2e8f0;
+  border-radius: 999px;
+  height: 10px;
+  overflow: hidden;
+}
+
+.client-collection-bar i {
+  background: linear-gradient(90deg, #0f8f8c, #16a34a);
+  border-radius: inherit;
+  display: block;
+  height: 100%;
+  min-width: 0;
+}
+
+.client-financial-split {
+  display: grid;
+  gap: 8px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.client-financial-split span {
+  background: #f8fafc;
+  border: 1px solid #eef2f7;
+  border-radius: 8px;
+  display: grid;
+  gap: 3px;
+  padding: 9px 10px;
+}
+
+.client-financial-split small {
+  color: var(--client-muted);
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.client-financial-split strong {
+  color: var(--client-text);
+  font-size: 13px;
+  font-weight: 850;
+  overflow-wrap: anywhere;
+}
+
+.client-invoice-total {
+  align-items: center;
+  display: flex;
+  gap: 12px;
+  justify-content: space-between;
+  border-top: 1px solid #eef2f7;
+  padding-top: 10px;
+  color: var(--client-muted);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.client-invoice-total > span {
+  display: grid;
+  gap: 2px;
+}
+
+.client-invoice-total small {
+  color: var(--client-muted);
+  font-size: 11px;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.client-invoice-total strong {
+  color: var(--client-text);
+  font-size: 20px;
+}
+
+.client-contact-row {
+  display: grid;
+  grid-template-columns: 36px minmax(0, 1fr) minmax(150px, auto) 56px;
+  gap: 10px;
+  align-items: center;
+  padding: 7px 0;
+}
+
+.client-contact-avatar {
+  width: 34px;
+  height: 34px;
+  border-radius: 999px;
+  display: grid;
+  place-items: center;
+  background: #ecfdf5;
+  color: #0f766e;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.client-primary-badge {
+  display: inline-flex;
+  margin-left: 6px;
+  padding: 2px 7px;
+  border-radius: 999px;
+  background: #dcfce7;
+  color: var(--client-success);
+  font-size: 10px;
+  font-weight: 800;
+  vertical-align: middle;
+}
+
+.client-contact-methods {
+  display: grid;
+  gap: 3px;
+  color: #334155;
+  font-size: 12px;
+  font-weight: 650;
+}
+
+.client-contact-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.client-contact-actions a {
+  width: 28px;
+  height: 28px;
+  display: grid;
+  place-items: center;
+  color: #334155;
+  text-decoration: none;
+}
+
+.client-friendly-empty {
+  min-height: 122px;
+  display: grid;
+  place-items: center;
+  align-content: center;
+  gap: 7px;
+  padding: 16px;
+  border: 1px dashed #cbd5e1;
+  border-radius: 8px;
+  background: #f8fafc;
+  text-align: center;
+}
+
+.client-friendly-empty > span {
+  width: 38px;
+  height: 38px;
+  display: grid;
+  place-items: center;
+  border-radius: 999px;
+  background: #ecfdf5;
+  color: var(--client-teal);
+}
+
+.client-friendly-empty strong {
+  color: var(--client-text);
+  font-size: 15px;
+  font-weight: 800;
+}
+
+.client-friendly-empty p {
+  max-width: 320px;
+  margin: 0;
+  color: var(--client-muted);
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.client-friendly-empty a,
+.client-friendly-empty button {
+  min-height: 36px;
+  margin-top: 4px;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  border: 1px solid var(--client-teal);
+  border-radius: 8px;
+  background: var(--client-teal);
+  color: #fff;
+  padding: 0 13px;
+  text-decoration: none;
+  font-size: 13px;
+  font-weight: 750;
+  cursor: pointer;
+}
+
+.client-company-info {
+  border: 1px solid var(--client-border);
+  border-radius: 8px;
+  background: #fff;
+  box-shadow: 0 8px 22px rgba(15, 23, 42, 0.035);
+  overflow: hidden;
+}
+
+.client-company-info summary {
+  min-height: 42px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: center;
+  padding: 0 14px;
+  cursor: pointer;
+  list-style: none;
+}
+
+.client-company-info summary::-webkit-details-marker {
+  display: none;
+}
+
+.client-company-info summary > span {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  color: var(--client-text);
+  font-size: 14px;
+  font-weight: 800;
+}
+
+.client-company-info summary small {
+  color: var(--client-muted);
+  font-size: 13px;
+  font-weight: 650;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.client-company-info[open] summary svg:last-child {
+  transform: rotate(180deg);
+}
+
+.client-company-info > div {
+  display: grid;
+  gap: 12px;
+  padding: 14px;
+  border-top: 1px solid #eef2f7;
+}
+
+.client-company-info .client-details-list {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0 24px !important;
+}
+
+.client-company-info .client-details-list > div {
+  grid-template-columns: minmax(130px, 0.7fr) minmax(0, 1fr) !important;
+  gap: 14px !important;
+}
+
+.client-company-info .client-details-list dd {
+  text-align: right;
+}
+
+html[data-theme='dark'] .client-detail-page .client-analytics-disclosure,
+html[data-theme='dark'] .client-detail-page .client-company-info {
+  background: var(--card) !important;
+  border-color: var(--border) !important;
+  box-shadow: none !important;
+}
+
+html[data-theme='dark'] .client-detail-page .client-disclosure-toggle {
+  background: var(--card) !important;
+  color: var(--foreground) !important;
+}
+
+html[data-theme='dark'] .client-detail-page .client-analytics-body,
+html[data-theme='dark'] .client-detail-page .client-company-info > div {
+  border-color: var(--border) !important;
+}
+
+@media (max-width: 1280px) {
+  .client-command-grid,
+  .client-lower-grid {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .client-lower-grid .client-command-card:last-child {
+    grid-column: 1 / -1;
+  }
+
+  .client-command-center .client-contact-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  }
+}
+
+@media (max-width: 900px) {
+  .client-hero-topline,
+  .client-overview-layout,
+  .client-command-grid,
+  .client-lower-grid,
+  .client-relationship-layout,
+  .client-financial-overview {
+    grid-template-columns: 1fr;
+  }
+
+  .client-command-center .client-hero-actions {
+    justify-content: flex-start;
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    padding-bottom: 4px;
+    scrollbar-width: none;
+  }
+
+  .client-command-center .client-hero-actions::-webkit-scrollbar {
+    display: none;
+  }
+
+  .client-command-center .client-metric-strip {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  }
+
+  .client-kpi-card {
+    border-right: 1px solid var(--client-border);
+    border-bottom: 1px solid var(--client-border);
+  }
+
+  .client-kpi-card:nth-child(2n) {
+    border-right: 0;
+  }
+
+  .client-kpi-card:last-child {
+    grid-column: 1 / -1;
+    border-bottom: 0;
+  }
+
+  .client-health-block {
+    border-right: 0;
+    border-bottom: 1px solid var(--client-border);
+    padding: 4px 0 18px;
+  }
+
+  .client-contact-row,
+  .client-project-row {
+    grid-template-columns: 40px minmax(0, 1fr);
+  }
+
+  .client-contact-methods,
+  .client-contact-actions,
+  .client-project-meta {
+    grid-column: 2;
+  }
+
+  .client-project-meta {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .client-company-info .client-details-list {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 560px) {
+  .client-command-center {
+    margin: 0 -4px;
+  }
+
+  .client-command-center .client-crumb-row {
+    display: none;
+  }
+
+  .client-command-center .client-hero-card,
+  .client-command-card,
+  .client-company-info {
+    border-radius: 8px !important;
+  }
+
+  .client-command-center .client-hero-card {
+    padding: 16px !important;
+  }
+
+  .client-command-center .client-hero-main {
+    grid-template-columns: 58px minmax(0, 1fr) !important;
+    gap: 12px !important;
+  }
+
+  .client-command-center .client-hero-avatar {
+    width: 56px !important;
+    height: 56px !important;
+    font-size: 22px !important;
+  }
+
+  .client-command-center .client-name {
+    font-size: 24px !important;
+  }
+
+  .client-command-center .client-contact-grid,
+  .client-command-center .client-metric-strip {
+    grid-template-columns: 1fr !important;
+  }
+
+  .client-kpi-card,
+  .client-kpi-card:nth-child(2n),
+  .client-kpi-card:last-child {
+    grid-column: auto;
+    border-right: 0;
+    border-bottom: 1px solid var(--client-border);
+  }
+
+  .client-kpi-card:last-child {
+    border-bottom: 0;
+  }
+
+  .client-timeline-item {
+    grid-template-columns: 36px minmax(0, 1fr) auto;
+  }
+
+  .client-timeline-date,
+  .client-timeline-dot,
+  .client-timeline-item::after {
+    display: none;
+  }
+
+  .client-project-meta {
+    grid-template-columns: 1fr;
+  }
+
+  .client-company-info summary {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+
+  .client-company-info summary small {
+    grid-column: 1 / -1;
+    white-space: normal;
+  }
+}
 `
 
-const pageHeader = { display: 'flex', justifyContent: 'space-between', gap: 20, alignItems: 'flex-start', flexWrap: 'wrap' as const }
-const breadcrumb = { fontSize: 13, color: '#008b4a', fontWeight: 500 }
 const h1 = { margin: 0, color: '#020617', fontSize: 31, lineHeight: '37px', fontWeight: 600, letterSpacing: 0 }
-const subtitle = { margin: '8px 0 0', color: '#475569', fontSize: 14, fontWeight: 600 }
 const primaryLink = { display: 'inline-flex', alignItems: 'center', height: 40, padding: '0 16px', borderRadius: 8, background: green, color: '#fff', textDecoration: 'none', fontSize: 13, fontWeight: 600 }
 const secondaryButton = { display: 'inline-flex', alignItems: 'center', gap: 8, height: 40, padding: '0 14px', borderRadius: 8, border: '1px solid #dbe3ea', background: '#fff', color: '#0f172a', fontSize: 13, fontWeight: 600, cursor: 'pointer' }
 const primaryButton = { display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 8, height: 40, padding: '0 16px', borderRadius: 8, border: '1px solid var(--foreground)', background: 'var(--foreground)', color: 'var(--background)', fontSize: 13, fontWeight: 600, cursor: 'pointer' }
@@ -1495,49 +3369,13 @@ const heroAvatar = (photo?: string) => ({
   overflow: 'hidden',
 })
 const contactGrid = { display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 12, marginTop: 28, maxWidth: 610 }
-const infoPill = { minHeight: 52, display: 'flex', alignItems: 'center', gap: 8, color: '#475569', fontSize: 13, fontWeight: 700, minWidth: 0, padding: '0 8px 0 14px', border: '1px solid #eef2f7', borderRadius: 8, background: '#fbfdff' }
+const infoPill = { minHeight: 52, display: 'flex', alignItems: 'center', gap: 8, color: '#000000', fontSize: 13, fontWeight: 700, minWidth: 0, padding: '0 8px 0 14px', border: '1px solid #eef2f7', borderRadius: 8, background: '#fbfdff' }
 const infoPillLink = { display: 'flex', alignItems: 'center', gap: 12, minWidth: 0, color: 'inherit', textDecoration: 'none' }
 const copyButton = { width: 30, height: 30, display: 'grid', placeItems: 'center', border: '1px solid transparent', borderRadius: 7, background: 'transparent', color: 'var(--muted-foreground)', cursor: 'pointer', padding: 0 }
-const tinyIcon = { width: 28, height: 28, borderRadius: 8, background: '#f1f5f9', color: '#64748b', display: 'grid', placeItems: 'center', flex: '0 0 auto' }
+const tinyIcon = { width: 18, height: 18, borderRadius: 0, background: 'transparent', color: '#334155', display: 'grid', placeItems: 'center', flex: '0 0 auto' }
 const metricStrip = { display: 'grid', gridTemplateColumns: 'repeat(4, minmax(140px, 1fr))', gap: 8, alignItems: 'stretch' }
-const metricCard = { display: 'grid', gridTemplateRows: '38px auto', gap: 10, alignContent: 'start', padding: '18px 14px 12px', border: '1px solid #e2e8f0', borderRadius: 8, minWidth: 0 }
-const metricIcon = (color: string) => ({ width: 38, height: 38, borderRadius: 8, background: `${color}16`, color, display: 'grid', placeItems: 'center', flex: '0 0 auto' })
 const tabsWrap = { display: 'flex', gap: 32, borderBottom: '1px solid #dbe3ea', overflowX: 'auto' as const }
-const tabButton = (active: boolean) => ({ display: 'inline-flex', alignItems: 'center', gap: 7, padding: '0 0 14px', border: 'none', borderBottom: `2px solid ${active ? 'var(--foreground)' : 'transparent'}`, background: 'transparent', color: active ? 'var(--foreground)' : '#0f172a', fontSize: 13, fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap' as const })
-const overviewGrid = { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 18 }
+const tabButton = (active: boolean) => ({ display: 'inline-flex', alignItems: 'center', gap: 7, padding: '0 0 14px', border: 'none', borderRadius: 0, boxShadow: 'none', background: 'transparent', color: active ? 'var(--foreground)' : '#0f172a', fontSize: 13, fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap' as const })
 const panel = { background: '#fff', border: '1px solid #dfe7ee', borderRadius: 8, padding: 22, boxShadow: '0 10px 24px rgba(15,23,42,.04)' }
-const panelTitle = { margin: '0 0 18px', color: '#0f172a', fontSize: 16, fontWeight: 600 }
-const bodyText = { color: '#334155', fontSize: 13, lineHeight: 1.65, margin: 0 }
-const muted = { color: '#64748b', fontSize: 13, fontWeight: 600 }
-const footerLink = { justifySelf: 'start', marginTop: 18, border: 'none', background: 'transparent', padding: 0, color: '#0f8a4b', fontSize: 13, fontWeight: 600, cursor: 'pointer' }
-const contactRow = { display: 'grid', gridTemplateColumns: '42px minmax(0, 1fr) 20px', gap: 12, alignItems: 'start' }
-const contactMeta = { display: 'flex', alignItems: 'center', gap: 6, color: '#64748b', fontSize: 12, fontWeight: 600, marginTop: 5 }
-const primaryBadge = { marginLeft: 8, padding: '3px 8px', borderRadius: 999, background: '#dcfce7', color: '#15803d', fontSize: 11, fontWeight: 900 }
-const activityRow = { display: 'grid', gridTemplateColumns: '34px minmax(0, 1fr) auto', gap: 12, alignItems: 'start' }
-const noteRow = { display: 'grid', gridTemplateColumns: '28px minmax(0, 1fr)', gap: 10 }
-const invoiceBoxes = { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(110px, 1fr))', gap: 10 }
+const muted = { color: '#000000', fontSize: 13, fontWeight: 600 }
 const miniMetric = { minHeight: 74, border: '1px solid #dbe3ea', borderRadius: 10, display: 'grid', placeItems: 'center', textAlign: 'center' as const, padding: 10 }
-const smallAvatar = (background: string, color: string) => ({ width: 38, height: 38, borderRadius: 999, background, color, display: 'grid', placeItems: 'center', fontSize: 12, fontWeight: 900 })
-const donutCenter = { width: 92, height: 92, borderRadius: '50%', background: '#fff', display: 'grid', placeItems: 'center', color: '#0f172a', fontSize: 24, fontWeight: 900, textAlign: 'center' as const, boxShadow: 'inset 0 0 0 1px #e2e8f0' }
-
-const activityIcon = (tone: string) => {
-  const colors: Record<string, string> = { green, blue: '#2563eb', purple: '#7c3aed', orange: '#f97316' }
-  const color = colors[tone] || green
-  return { width: 34, height: 34, borderRadius: 10, background: `${color}16`, color, display: 'grid', placeItems: 'center' }
-}
-
-const donut = (client: ClientRecord) => {
-  const active = percent(client.activeProjects, client.totalProjects)
-  const completed = percent(client.completedProjects, client.totalProjects)
-  return {
-    width: 136,
-    height: 136,
-    borderRadius: '50%',
-    background: client.totalProjects
-      ? `conic-gradient(${green} 0 ${active}%, #2563eb ${active}% ${active + completed}%, #f59e0b ${active + completed}% 100%)`
-      : '#e2e8f0',
-    display: 'grid',
-    placeItems: 'center',
-    flex: '0 0 auto',
-  }
-}

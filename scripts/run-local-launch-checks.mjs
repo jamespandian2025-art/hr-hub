@@ -17,10 +17,12 @@ function sleep(ms) {
 function runCheck({ script, label }) {
   return new Promise((resolve, reject) => {
     console.log(`\n=== ${label} (${script}) ===`)
-    const child = spawn(`npm run ${script}`, {
+    const command = process.platform === 'win32' ? 'cmd.exe' : 'npm'
+    const args = process.platform === 'win32' ? ['/d', '/s', '/c', 'npm', 'run', script] : ['run', script]
+    const child = spawn(command, args, {
       cwd: process.cwd(),
       stdio: 'inherit',
-      shell: true,
+      shell: false,
     })
     child.on('error', reject)
     child.on('close', code => {

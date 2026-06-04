@@ -53,7 +53,7 @@ const labelStyle = {
 
 const helpTextStyle = {
   fontSize: '12px',
-  color: '#6b7280',
+  color: '#000000',
   lineHeight: 1.45,
 }
 
@@ -309,7 +309,7 @@ export default function SupplierDetailPage() {
         <Link href="/resources/suppliers" style={{ color: '#6c63ff', fontSize: '14px', fontWeight: 600, textDecoration: 'none' }}>Back to suppliers</Link>
         <div style={{ marginTop: '28px', background: '#fff', border: '1px solid #e5e7eb', borderRadius: '16px', padding: '44px', textAlign: 'center' }}>
           <div style={{ fontSize: '22px', fontWeight: 600, color: '#111827', marginBottom: '8px' }}>Supplier not found</div>
-          <div style={{ fontSize: '14px', color: '#6b7280' }}>Create the supplier first, then add available supplies.</div>
+          <div style={{ fontSize: '14px', color: '#000000' }}>Create the supplier first, then add available supplies.</div>
         </div>
       </div>
     )
@@ -320,7 +320,7 @@ export default function SupplierDetailPage() {
       <div style={{ fontFamily: font }}>
         <button onClick={closeForm} style={{ border: 'none', background: 'transparent', color: '#374151', fontSize: '14px', fontWeight: 600, cursor: 'pointer', marginBottom: '20px', padding: 0 }}>Back</button>
         <div style={{ fontSize: '24px', fontWeight: 600, color: '#111827', marginBottom: '6px' }}>{editingSupplyId ? 'Edit Supply' : 'Add Supply'}</div>
-        <div style={{ fontSize: '13px', color: '#9ca3af', marginBottom: '28px', display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+        <div style={{ fontSize: '13px', color: '#000000', marginBottom: '28px', display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
           <span style={{ color: '#6c63ff', fontWeight: 600 }}>Resources</span>
           <span>/</span>
           <span style={{ color: '#6c63ff', fontWeight: 600 }}>Suppliers</span>
@@ -331,7 +331,7 @@ export default function SupplierDetailPage() {
         <div style={{ display: 'grid', gridTemplateColumns: 'minmax(220px, 260px) minmax(0, 1fr)', gap: '32px' }}>
           <div>
             <div style={{ fontSize: '15px', fontWeight: 600, color: '#111827', marginBottom: '8px' }}>Available Supply</div>
-            <div style={{ fontSize: '13px', color: '#6b7280', lineHeight: 1.6 }}>
+            <div style={{ fontSize: '13px', color: '#000000', lineHeight: 1.6 }}>
               List the items this supplier can provide. These appear in inventory purchase orders after selecting the supplier.
             </div>
           </div>
@@ -387,7 +387,7 @@ export default function SupplierDetailPage() {
         <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px', marginTop: '28px' }}>
           <button onClick={closeForm} style={{ ...buttonStyle, background: '#fff', border: '1px solid #e5e7eb', color: '#374151' }}>Cancel</button>
           {!editingSupplyId && (
-            <button onClick={() => saveSupply(true)} disabled={!name.trim()} style={{ ...buttonStyle, background: name.trim() ? '#fff' : '#f3f4f6', border: '1px solid #e5e7eb', color: name.trim() ? '#111827' : '#9ca3af', cursor: name.trim() ? 'pointer' : 'not-allowed' }}>
+            <button onClick={() => saveSupply(true)} disabled={!name.trim()} style={{ ...buttonStyle, background: name.trim() ? '#fff' : '#f3f4f6', border: '1px solid #e5e7eb', color: name.trim() ? '#111827' : '#000000', cursor: name.trim() ? 'pointer' : 'not-allowed' }}>
               Create & Add Another
             </button>
           )}
@@ -406,7 +406,7 @@ export default function SupplierDetailPage() {
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '16px', flexWrap: 'wrap' }}>
         <div>
           <div style={{ fontSize: '24px', fontWeight: 600, color: '#111827', marginBottom: '6px' }}>{supplier.name}</div>
-          <div style={{ fontSize: '13px', color: '#9ca3af', display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+          <div style={{ fontSize: '13px', color: '#000000', display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
             <span style={{ color: '#6c63ff', fontWeight: 600 }}>Resources</span>
             <span>/</span>
             <span style={{ color: '#6c63ff', fontWeight: 600 }}>Suppliers</span>
@@ -429,9 +429,9 @@ export default function SupplierDetailPage() {
           ['Email', supplier.email, 'Supplier communication'],
         ].map(([label, value, detail]) => (
           <div key={label} style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: '12px', padding: '18px' }}>
-            <div style={{ fontSize: '12px', color: '#6b7280', fontWeight: 600, marginBottom: '8px' }}>{label}</div>
+            <div style={{ fontSize: '12px', color: '#000000', fontWeight: 600, marginBottom: '8px' }}>{label}</div>
             <div style={{ fontSize: '18px', color: '#111827', fontWeight: 600, wordBreak: 'break-word' }}>{value}</div>
-            <div style={{ fontSize: '12px', color: '#9ca3af', fontWeight: 600, marginTop: '5px' }}>{detail}</div>
+            <div style={{ fontSize: '12px', color: '#000000', fontWeight: 600, marginTop: '5px' }}>{detail}</div>
           </div>
         ))}
       </div>
@@ -439,14 +439,14 @@ export default function SupplierDetailPage() {
       <div style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: '16px', overflow: 'hidden' }}>
         <div style={{ padding: '16px 24px', borderBottom: '1px solid #f3f4f6', display: 'grid', gap: '10px' }}>
           <input value={search} onChange={event => setSearch(event.target.value)} placeholder="Search supply name, SKU, or type..." style={{ width: '100%', maxWidth: '520px', padding: '10px 14px', border: '1px solid #e5e7eb', borderRadius: '8px', outline: 'none', fontSize: '13px', color: '#374151' }} />
-          <div style={{ fontSize: '12px', color: '#6b7280', fontWeight: 600 }}>
+          <div style={{ fontSize: '12px', color: '#000000', fontWeight: 600 }}>
             CSV columns: name, sku, itemType, unit, cost, availableQty
           </div>
           {importMessage && <div style={{ fontSize: '12px', color: '#059669', fontWeight: 600 }}>{importMessage}</div>}
         </div>
 
         {filtered.length === 0 ? (
-          <div style={{ padding: '70px 24px', textAlign: 'center', color: '#9ca3af', fontSize: '14px', fontWeight: 600 }}>
+          <div style={{ padding: '70px 24px', textAlign: 'center', color: '#000000', fontSize: '14px', fontWeight: 600 }}>
             No supplies yet. Add items this supplier can provide.
           </div>
         ) : (
@@ -455,7 +455,7 @@ export default function SupplierDetailPage() {
               <thead>
                 <tr style={{ background: '#fafafa' }}>
                   {['Supply', 'SKU', 'Type', 'Unit', 'Unit Cost', 'Available', ''].map(header => (
-                    <th key={header} style={{ padding: '12px 16px', textAlign: 'left', fontSize: '12px', fontWeight: 600, color: '#6b7280', textTransform: 'uppercase' }}>{header}</th>
+                    <th key={header} style={{ padding: '12px 16px', textAlign: 'left', fontSize: '12px', fontWeight: 600, color: '#000000', textTransform: 'uppercase' }}>{header}</th>
                   ))}
                 </tr>
               </thead>

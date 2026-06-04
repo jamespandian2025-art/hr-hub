@@ -6,17 +6,33 @@ import {
   CalendarDays, CheckCircle2, Download, Filter, MoreVertical,
   Search, XCircle, Clock, Trash2,
 } from 'lucide-react'
+import { AnalyticsToggleButton, CollapsibleAnalytics, useAnalyticsDisclosure } from '@/components/AnalyticsDisclosure'
 import {
   approvalState, buildRows, dateSpan, decideLeaveRequest, downloadCsv, employeeKey, formatDateTime,
   formatDay, initials, leaveRequestKey, leaveTypeTone, loadStored,
   loadLeaveRequests, normalizeStatus, saveStored, statusTone, todayInput,
   type Employee, type LeaveRequest, type LeaveRow, type LeaveStatus,
 } from '../leave-requests/leaveData'
+import { deleteHrRecord, listHrRecords, updateHrRecord } from '@/lib/hrms/client'
 
 const font = "var(--font-body)"
 const statusTabs: Array<LeaveStatus | 'All'> = ['Pending', 'Approved', 'Rejected', 'Cancelled', 'All']
 const deletedApprovalsKey = 'flowsys-hr-deleted-approvals'
 type FloatingMenuPosition = { top: number; left: number }
+
+// Merge server + local leave requests by id, keeping whichever was updated last.
+// This is what lets a portal cancellation (server) supersede a stale local copy
+// instead of being reverted by it.
+function mergeLeaveByUpdated(rows: LeaveRequest[]) {
+  const map = new Map<string, LeaveRequest>()
+  for (const row of rows) {
+    if (!row?.id) continue
+    const stamp = (request: LeaveRequest) => new Date(request.updatedAt || request.createdAt || 0).getTime()
+    const existing = map.get(row.id)
+    if (!existing || stamp(row) >= stamp(existing)) map.set(row.id, row)
+  }
+  return Array.from(map.values())
+}
 
 export default function HrApprovalsPage() {
   const router = useRouter()
@@ -28,16 +44,33 @@ export default function HrApprovalsPage() {
   const [query, setQuery] = useState('')
   const [menuId, setMenuId] = useState<string | null>(null)
   const [menuPosition, setMenuPosition] = useState<FloatingMenuPosition>({ top: 0, left: 0 })
+  const analytics = useAnalyticsDisclosure('wiseflow:analytics:hr-approvals')
   const menuRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
-    const load = () => {
+    let cancelled = false
+    const load = async () => {
       setEmployees(loadStored<Employee[]>(employeeKey, []))
-      setRequests(loadLeaveRequests())
+      const local = loadLeaveRequests()
+      try {
+        const server = await listHrRecords<LeaveRequest>('leave-requests', { 'x-hr-role': 'HR' })
+        if (!cancelled) setRequests(mergeLeaveByUpdated([...server, ...local]))
+      } catch {
+        if (!cancelled) setRequests(local)
+      }
     }
     load()
     window.addEventListener('storage', load)
-    return () => window.removeEventListener('storage', load)
+    window.addEventListener('focus', load)
+    window.addEventListener('wiseflow:hr-data-changed', load)
+    const timer = window.setInterval(load, 2500)
+    return () => {
+      cancelled = true
+      window.removeEventListener('storage', load)
+      window.removeEventListener('focus', load)
+      window.removeEventListener('wiseflow:hr-data-changed', load)
+      window.clearInterval(timer)
+    }
   }, [])
 
   useEffect(() => {
@@ -89,6 +122,14 @@ export default function HrApprovalsPage() {
     })
     persist(next)
     setMenuId(null)
+    // Sync the HR decision to the shared store so the employee's portal sees it
+    // (previously it was local-only and a stale server copy would override it).
+    const changed = next.find(request => request.id === row.id)
+    if (changed) {
+      void updateHrRecord<LeaveRequest>('leave-requests', changed.id, changed as unknown as Record<string, unknown>)
+        .then(() => window.dispatchEvent(new Event('wiseflow:hr-data-changed')))
+        .catch(() => undefined)
+    }
   }
 
   function deleteApproval(row: LeaveRow) {
@@ -98,6 +139,9 @@ export default function HrApprovalsPage() {
     saveStored(deletedApprovalsKey, [{ ...request, deletedAt: new Date().toISOString() }, ...deleted.filter(item => item.id !== request.id)])
     persist(requests.filter(item => item.id !== request.id))
     setMenuId(null)
+    void deleteHrRecord('leave-requests', request.id)
+      .then(() => window.dispatchEvent(new Event('wiseflow:hr-data-changed')))
+      .catch(() => undefined)
   }
 
   function exportRows() {
@@ -112,24 +156,27 @@ export default function HrApprovalsPage() {
       <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 16, marginBottom: 18 }}>
         <div>
           <h1 style={{ margin: 0, color: '#0f172a', fontSize: 28, fontWeight: 900 }}>Approvals</h1>
-          <p style={{ margin: '6px 0 0', color: '#475569', fontSize: 14 }}>Review and take action on employee requests that need approval.</p>
+          <p style={{ margin: '6px 0 0', color: '#000000', fontSize: 14 }}>Review and take action on employee requests that need approval.</p>
         </div>
         <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
           <label style={{ ...inputStyle, minWidth: 320, display: 'flex', alignItems: 'center', gap: 8 }}>
-            <Search size={15} color="#94a3b8" />
+            <Search size={15} color="#000000" />
             <input value={query} onChange={event => setQuery(event.target.value)} placeholder="Search by employee or request ID..." style={{ border: 'none', outline: 'none', background: 'transparent', width: '100%', font: 'inherit' }} />
           </label>
+          <AnalyticsToggleButton open={analytics.open} onToggle={analytics.toggle} panelId={analytics.panelId} style={secondaryButtonStyle} />
           <button onClick={() => { setDepartmentFilter('All'); setTypeFilter('All'); setStatusFilter('Pending'); setQuery('') }} style={secondaryButtonStyle}><Filter size={15} /> Filters</button>
           <button onClick={() => router.push('/hr/approvals/deleted')} style={{ ...secondaryButtonStyle, color: '#dc2626' }}><Trash2 size={15} /> Deleted Approvals</button>
         </div>
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: 16, marginBottom: 18 }}>
-        <StatCard icon={Clock} label="Pending Approvals" value={stats.pending} sub="Waiting for HR" color="#f59e0b" bg="#fef3c7" />
-        <StatCard icon={CheckCircle2} label="Approved Today" value={stats.approvedToday} sub="Requests" color="#16a34a" bg="#dcfce7" />
-        <StatCard icon={XCircle} label="Rejected Today" value={stats.rejectedToday} sub="Requests" color="#dc2626" bg="#fee2e2" />
-        <StatCard icon={CalendarDays} label="Total This Month" value={stats.totalThisMonth} sub="Requests" color="#64748b" bg="#f3f4f6" />
-      </div>
+      <CollapsibleAnalytics open={analytics.open} id={analytics.panelId}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: 16, marginBottom: 18 }}>
+          <StatCard icon={Clock} label="Pending Approvals" value={stats.pending} sub="Waiting for HR" color="#f59e0b" bg="#fef3c7" />
+          <StatCard icon={CheckCircle2} label="Approved Today" value={stats.approvedToday} sub="Requests" color="#16a34a" bg="#dcfce7" />
+          <StatCard icon={XCircle} label="Rejected Today" value={stats.rejectedToday} sub="Requests" color="#dc2626" bg="#fee2e2" />
+          <StatCard icon={CalendarDays} label="Total This Month" value={stats.totalThisMonth} sub="Requests" color="#000000" bg="#f3f4f6" />
+        </div>
+      </CollapsibleAnalytics>
 
       <div style={{ ...cardStyle, padding: 0 }}>
         <div style={{ display: 'flex', gap: 30, borderBottom: '1px solid #e5e7eb', padding: '0 18px' }}>
@@ -172,9 +219,9 @@ export default function HrApprovalsPage() {
               {filteredRows.map(row => <ApprovalRow key={row.id} row={row} menuId={menuId} setMenuId={setMenuId} menuPosition={menuPosition} setMenuPosition={setMenuPosition} menuRef={menuRef} onStatus={updateStatus} onDelete={deleteApproval} onOpen={() => router.push(`/hr/approvals/${encodeURIComponent(row.id)}`)} />)}
             </tbody>
           </table>
-          {filteredRows.length === 0 && <div style={{ padding: 38, textAlign: 'center', color: '#94a3b8', fontSize: 13 }}>No approvals found.</div>}
+          {filteredRows.length === 0 && <div style={{ padding: 38, textAlign: 'center', color: '#000000', fontSize: 13 }}>No approvals found.</div>}
         </div>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: 18, color: '#64748b', fontSize: 12 }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: 18, color: '#000000', fontSize: 12 }}>
           <span>Showing {filteredRows.length ? 1 : 0} to {filteredRows.length} of {rows.length} requests</span>
           <span style={{ color: '#16a34a', fontWeight: 800 }}>Page 1</span>
         </div>
@@ -208,24 +255,24 @@ function ApprovalRow({ row, menuId, setMenuId, menuPosition, setMenuPosition, me
       <td style={tdStyle}>
         <button onClick={onOpen} style={{ border: 'none', background: 'transparent', display: 'flex', alignItems: 'center', gap: 10, padding: 0, cursor: 'pointer', textAlign: 'left', fontFamily: font }}>
           <Avatar row={row} />
-          <span><strong style={{ display: 'block', color: '#0f172a', fontSize: 12 }}>{row.employeeName}</strong><small style={{ color: '#64748b' }}>{row.jobTitle}</small></span>
+          <span><strong style={{ display: 'block', color: '#0f172a', fontSize: 12 }}>{row.employeeName}</strong><small style={{ color: '#000000' }}>{row.jobTitle}</small></span>
         </button>
       </td>
       <td style={tdStyle}>{row.department}</td>
       <td style={tdStyle}><span style={{ ...pillStyle, background: typeTone.bg, color: typeTone.text }}>{row.leaveType}</span></td>
       <td style={tdStyle}>{row.days} Day{row.days === 1 ? '' : 's'}</td>
-      <td style={tdStyle}><div>{dateSpan(row)}</div><small style={{ color: '#64748b' }}>{formatDay(row.startDate)} - {formatDay(row.endDate)}</small></td>
+      <td style={tdStyle}><div>{dateSpan(row)}</div><small style={{ color: '#000000' }}>{formatDay(row.startDate)} - {formatDay(row.endDate)}</small></td>
       <td style={tdStyle}>{row.reason || '-'}</td>
       <td style={tdStyle}>{formatDateTime(row.createdAt)}</td>
       <td style={tdStyle}><span style={{ ...pillStyle, background: st.bg, color: st.text }}>{normalizeStatus(row.status)}</span></td>
       <td style={tdStyle}>
-        <span style={{ ...pillStyle, background: approval.canHrDecide ? '#dcfce7' : '#f3f4f6', color: approval.canHrDecide ? '#15803d' : '#475569' }}>{approval.label}</span>
+        <span style={{ ...pillStyle, background: approval.canHrDecide ? '#dcfce7' : '#f3f4f6', color: approval.canHrDecide ? '#15803d' : '#000000' }}>{approval.label}</span>
       </td>
       <td style={{ ...tdStyle, textAlign: 'right', position: 'relative' }}>
         <div style={{ display: 'inline-flex', gap: 8, alignItems: 'center' }}>
           {isPending && approval.canHrDecide && <button onClick={() => onStatus(row, 'Approved')} style={approveButtonStyle}>Approve</button>}
           {isPending && approval.canHrDecide && <button onClick={() => onStatus(row, 'Rejected')} style={rejectButtonStyle}>Reject</button>}
-          {isPending && !approval.canHrDecide && <span style={{ color: '#64748b', fontSize: 12, fontWeight: 800 }}>Waiting HR</span>}
+          {isPending && !approval.canHrDecide && <span style={{ color: '#000000', fontSize: 12, fontWeight: 800 }}>Waiting HR</span>}
           <button onClick={toggleMenu} style={secondaryIconButtonStyle}><MoreVertical size={15} /></button>
         </div>
         {menuId === row.id && (
@@ -247,12 +294,12 @@ function Avatar({ row }: { row: LeaveRow }) {
 }
 
 function StatCard({ icon: Icon, label, value, sub, color, bg }: { icon: React.ComponentType<{ size?: number; color?: string }>; label: string; value: number; sub: string; color: string; bg: string }) {
-  return <div style={{ ...cardStyle, display: 'flex', alignItems: 'center', gap: 18 }}><span style={{ width: 58, height: 58, borderRadius: '50%', background: bg, display: 'grid', placeItems: 'center' }}><Icon size={25} color={color} /></span><span><div style={{ color: '#475569', fontSize: 12 }}>{label}</div><strong style={{ display: 'block', color: '#0f172a', fontSize: 24, marginTop: 6 }}>{value}</strong><div style={{ color: '#64748b', fontSize: 12, marginTop: 8 }}>{sub}</div></span></div>
+  return <div style={{ ...cardStyle, display: 'flex', alignItems: 'center', gap: 18 }}><span style={{ width: 58, height: 58, borderRadius: '50%', background: bg, display: 'grid', placeItems: 'center' }}><Icon size={25} color={color} /></span><span><div style={{ color: '#000000', fontSize: 12 }}>{label}</div><strong style={{ display: 'block', color: '#0f172a', fontSize: 24, marginTop: 6 }}>{value}</strong><div style={{ color: '#000000', fontSize: 12, marginTop: 8 }}>{sub}</div></span></div>
 }
 
 const cardStyle = { background: '#fff', border: '1px solid #e5e7eb', borderRadius: 12, boxShadow: '0 8px 24px rgba(15,23,42,0.04)', padding: 18 } as const
 const inputStyle = { width: '100%', minHeight: 40, border: '1px solid #e5e7eb', borderRadius: 8, background: '#fff', color: '#0f172a', padding: '0 12px', fontSize: 12, fontFamily: font } as const
-const thStyle = { padding: '13px 16px', textAlign: 'left' as const, color: '#475569', fontSize: 11, fontWeight: 800, background: '#fbfdff', whiteSpace: 'nowrap' as const }
+const thStyle = { padding: '13px 16px', textAlign: 'left' as const, color: '#000000', fontSize: 11, fontWeight: 800, background: '#fbfdff', whiteSpace: 'nowrap' as const }
 const tdStyle = { padding: '13px 16px', fontSize: 12, color: '#0f172a', verticalAlign: 'middle' as const }
 const pillStyle = { display: 'inline-flex', alignItems: 'center', borderRadius: 999, padding: '3px 8px', fontSize: 11, fontWeight: 800 } as const
 const secondaryButtonStyle = { minHeight: 40, border: '1px solid #e5e7eb', borderRadius: 8, background: '#fff', color: '#0f172a', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 8, padding: '0 15px', fontSize: 12, fontWeight: 900, cursor: 'pointer', fontFamily: font } as const

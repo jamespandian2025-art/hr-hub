@@ -1,5 +1,7 @@
+import 'server-only'
+
 import { randomUUID } from 'node:crypto'
-import { mkdir, readFile, rename, writeFile } from 'node:fs/promises'
+import { mkdir, readFile, rename, unlink, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 import { createClient, type SupabaseClient } from '@supabase/supabase-js'
 import { sessionFromRequest } from '@/lib/security/session'
@@ -152,9 +154,28 @@ async function readJsonArray<T>(file: string): Promise<T[]> {
 
 async function writeJsonArray<T>(file: string, value: T[]) {
   await ensureDataDir()
-  const temp = `${file}.${process.pid}.${Date.now()}.tmp`
+  // randomUUID keeps the temp name unique even when two writes land in the same
+  // millisecond within one process, so concurrent writers never share a temp.
+  const temp = `${file}.${process.pid}.${Date.now()}.${randomUUID()}.tmp`
   await writeFile(temp, `${JSON.stringify(value, null, 2)}\n`, 'utf8')
-  await rename(temp, file)
+  // Atomically swap the temp over the target. On Windows, rename across an
+  // existing file can transiently fail (EPERM/EEXIST) when another handle —
+  // antivirus, a concurrent reader, or an overlapping write — briefly holds the
+  // target. Retry with a short backoff, then unlink the temp so a permanent
+  // failure can't leak a stray .tmp file. The atomic guarantee is preserved:
+  // either rename succeeds and replaces the target, or the target is untouched.
+  let lastError: unknown
+  for (let attempt = 0; attempt < 5; attempt++) {
+    try {
+      await rename(temp, file)
+      return
+    } catch (error) {
+      lastError = error
+      await new Promise(resolve => { setTimeout(resolve, 25 * (attempt + 1)) })
+    }
+  }
+  await unlink(temp).catch(() => {})
+  throw lastError
 }
 
 function cleanRecord(record: HrRecord) {
@@ -249,6 +270,19 @@ async function writeStoreRecords(collection: HrCollection, records: HrRecord[], 
     const retained = existing.filter(record => record.companyId !== companyId && record.company_id !== companyId)
     await writeJsonArray(collectionFile(collection), [...records, ...retained])
     return
+  }
+
+  let deleteQuery = supabase
+    .from('hr_records')
+    .delete()
+    .eq('collection', collection)
+  deleteQuery = companyId
+    ? deleteQuery.eq('company_id', companyId)
+    : deleteQuery.is('company_id', null)
+
+  const { error: deleteError } = await deleteQuery
+  if (deleteError) {
+    throw Object.assign(new Error(`Could not replace HR records in Supabase: ${deleteError.message}`), { status: 500 })
   }
 
   if (records.length === 0) return
@@ -379,6 +413,28 @@ function assertPayrollWorkflow(collection: HrCollection, action: HrAction, input
   }
 }
 
+// Employees may PATCH their own leave request only to cancel it while it is still
+// pending. Ownership is already enforced by recordVisibleToActor; this guard caps
+// what an employee can change so they cannot approve their own leave or edit a
+// request that has already been decided.
+function assertLeaveSelfCancel(collection: HrCollection, action: HrAction, before: HrRecord, input: Record<string, unknown>, actor: HrActor) {
+  if (collection !== 'leave-requests' || action !== 'update') return
+  if (roleBucket(actor.role) !== 'employee') return
+  const requestedStatus = typeof input.status === 'string' ? input.status : ''
+  if (requestedStatus !== 'Cancelled') {
+    throw Object.assign(new Error('You can only cancel your own leave request.'), { status: 403 })
+  }
+  const currentStatus = typeof before.status === 'string' ? before.status : ''
+  if (!['Pending', 'Draft'].includes(currentStatus)) {
+    throw Object.assign(new Error('Only a pending leave request can be cancelled.'), { status: 409 })
+  }
+  const allowed = new Set(['status', 'updatedAt', 'approvalStep', 'hrApprovalStatus', 'managerApprovalStatus'])
+  const disallowed = Object.keys(input).filter(key => !allowed.has(key) && input[key] !== before[key])
+  if (disallowed.length) {
+    throw Object.assign(new Error('A cancellation can only change the request status.'), { status: 403 })
+  }
+}
+
 function recordEmployeeKeys(record: HrRecord) {
   return [
     record.employeeId,
@@ -467,6 +523,7 @@ export async function updateRecord(collection: HrCollection, id: string, input: 
   if (!recordVisibleToActor(collection, before, actor)) {
     throw Object.assign(new Error('You can only update records you are allowed to access.'), { status: 403 })
   }
+  assertLeaveSelfCancel(collection, 'update', before, input, actor)
   const validatedInput = validateRecordInput(collection, input, true)
   const after: HrRecord = {
     ...before,

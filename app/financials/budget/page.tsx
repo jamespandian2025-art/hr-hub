@@ -196,7 +196,7 @@ export default function BudgetPage() {
           ? Back
         </div>
         <div style={{ fontSize: '24px', fontWeight: 600, color: '#111827', marginBottom: '6px' }}>Create Budget</div>
-        <div style={{ fontSize: '13px', color: '#9ca3af', marginBottom: '32px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+        <div style={{ fontSize: '13px', color: '#000000', marginBottom: '32px', display: 'flex', alignItems: 'center', gap: '6px' }}>
           <span style={{ color: '#6c63ff', fontWeight: 500 }}>Financials</span><span>•</span>
           <span style={{ color: '#6c63ff', fontWeight: 500 }}>Budget</span><span>•</span>
           <span>Create</span>
@@ -205,7 +205,7 @@ export default function BudgetPage() {
         <div style={{ display: 'grid', gridTemplateColumns: '260px 1fr', gap: '40px' }}>
           <div>
             <div style={{ fontSize: '15px', fontWeight: 600, color: '#111827', marginBottom: '6px' }}>Project</div>
-            <div style={{ fontSize: '13px', color: '#6b7280' }}>Select associated project</div>
+            <div style={{ fontSize: '13px', color: '#000000' }}>Select associated project</div>
           </div>
           <div style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: '12px', padding: '20px' }}>
             <select value={project} onChange={e => setProject(e.target.value)}
@@ -218,7 +218,7 @@ export default function BudgetPage() {
               ))}
             </select>
             {projects.length === 0 && (
-              <div style={{ fontSize: '12px', color: '#6b7280', marginTop: '8px', fontWeight: 600 }}>
+              <div style={{ fontSize: '12px', color: '#000000', marginTop: '8px', fontWeight: 600 }}>
                 Create a project first from the Projects page, then it will appear here.
               </div>
             )}
@@ -226,19 +226,19 @@ export default function BudgetPage() {
 
           <div>
             <div style={{ fontSize: '15px', fontWeight: 600, color: '#111827', marginBottom: '6px' }}>Budget Details</div>
-            <div style={{ fontSize: '13px', color: '#6b7280' }}>Name, status, description and attachments...</div>
+            <div style={{ fontSize: '13px', color: '#000000' }}>Name, status, description and attachments...</div>
           </div>
           <div style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: '12px', padding: '20px', display: 'flex', flexDirection: 'column', gap: '14px' }}>
             <input placeholder="Name" value={name} onChange={e => setName(e.target.value)}
               style={{ width: '100%', padding: '10px 14px', border: '1px solid #e5e7eb', borderRadius: '8px', fontFamily: font, fontSize: '13px', color: '#374151', outline: 'none' }} />
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px' }}>
               <div>
-                <div style={{ fontSize: '12px', color: '#6b7280', fontWeight: 500, marginBottom: '6px' }}>Date</div>
+                <div style={{ fontSize: '12px', color: '#000000', fontWeight: 500, marginBottom: '6px' }}>Date</div>
                 <input type="date" value={date} onChange={e => setDate(e.target.value)}
                   style={{ width: '100%', padding: '10px 14px', border: '1px solid #e5e7eb', borderRadius: '8px', fontFamily: font, fontSize: '13px', color: '#374151', outline: 'none' }} />
               </div>
               <div>
-                <div style={{ fontSize: '12px', color: '#6b7280', fontWeight: 500, marginBottom: '6px' }}>Status</div>
+                <div style={{ fontSize: '12px', color: '#000000', fontWeight: 500, marginBottom: '6px' }}>Status</div>
                 <select value={status} onChange={e => setStatus(e.target.value)}
                   style={{ width: '100%', padding: '10px 14px', border: '1px solid #e5e7eb', borderRadius: '8px', fontFamily: font, fontSize: '13px', color: '#374151', outline: 'none', background: '#fff' }}>
                   <option>Pending</option><option>Approved</option><option>Rejected</option>
@@ -251,7 +251,7 @@ export default function BudgetPage() {
 
           <div>
             <div style={{ fontSize: '15px', fontWeight: 600, color: '#111827', marginBottom: '6px' }}>Budget Composition</div>
-            <div style={{ fontSize: '13px', color: '#6b7280' }}>Name and amount...</div>
+            <div style={{ fontSize: '13px', color: '#000000' }}>Name and amount...</div>
           </div>
           <div style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: '12px', padding: '20px' }}>
             {budgetItems.map(item => (
@@ -262,7 +262,7 @@ export default function BudgetPage() {
                   <input placeholder="Remarks" value={item.remarks} onChange={e => updateBudgetItem(item.id, 'remarks', e.target.value)}
                     style={{ padding: '10px 14px', border: '1px solid #e5e7eb', borderRadius: '8px', fontFamily: font, fontSize: '13px', color: '#374151', outline: 'none' }} />
                   <div>
-                    <div style={{ fontSize: '11px', color: '#6b7280', fontWeight: 500, marginBottom: '4px' }}>Amount</div>
+                    <div style={{ fontSize: '11px', color: '#000000', fontWeight: 500, marginBottom: '4px' }}>Amount</div>
                     <input type="number" placeholder="0" value={item.amount} onChange={e => updateBudgetItem(item.id, 'amount', Number(e.target.value))}
                       style={{ width: '100%', padding: '10px 14px', border: '1px solid #e5e7eb', borderRadius: '8px', fontFamily: font, fontSize: '13px', color: '#374151', outline: 'none' }} />
                   </div>
@@ -286,14 +286,14 @@ export default function BudgetPage() {
 
           <div>
             <div style={{ fontSize: '15px', fontWeight: 600, color: '#111827', marginBottom: '6px' }}>Attachments</div>
-            <div style={{ fontSize: '13px', color: '#6b7280' }}>Images, files and file format...</div>
+            <div style={{ fontSize: '13px', color: '#000000' }}>Images, files and file format...</div>
           </div>
           <div style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: '12px', padding: '20px' }}>
             <div style={{ fontSize: '13px', fontWeight: 600, color: '#374151', marginBottom: '12px' }}>Attachments</div>
             <div style={{ border: '2px dashed #e5e7eb', borderRadius: '12px', padding: '40px 20px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '12px', background: '#fafafa', cursor: 'pointer' }}>
               <div style={{ fontSize: '40px' }}>??</div>
               <div style={{ fontSize: '14px', fontWeight: 600, color: '#111827' }}>Drop or Select file</div>
-              <div style={{ fontSize: '13px', color: '#6b7280' }}>
+              <div style={{ fontSize: '13px', color: '#000000' }}>
                 Drop files here or click <span style={{ color: '#6c63ff', fontWeight: 600 }}>browse</span> thorough your machine
               </div>
             </div>
@@ -309,12 +309,12 @@ export default function BudgetPage() {
         {showImportModal && (
           <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}>
             <div style={{ background: '#fff', borderRadius: '16px', padding: '32px', width: '500px', position: 'relative' }}>
-              <div onClick={() => setShowImportModal(false)} style={{ position: 'absolute', top: '16px', right: '20px', fontSize: '20px', cursor: 'pointer', color: '#9ca3af' }}>?</div>
+              <div onClick={() => setShowImportModal(false)} style={{ position: 'absolute', top: '16px', right: '20px', fontSize: '20px', cursor: 'pointer', color: '#000000' }}>?</div>
               <div style={{ fontSize: '18px', fontWeight: 600, color: '#111827', marginBottom: '20px' }}>Import Budget</div>
               <div style={{ border: '1px solid #f3f4f6', borderRadius: '12px', padding: '40px 20px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '12px', background: '#fafafa', cursor: 'pointer', marginBottom: '24px' }}>
                 <div style={{ fontSize: '48px' }}>??</div>
                 <div style={{ fontSize: '15px', fontWeight: 600, color: '#111827' }}>Select PDF or CSV file</div>
-                <div style={{ fontSize: '13px', color: '#6b7280' }}>Drop files here or click <span style={{ color: '#6c63ff', fontWeight: 600 }}>browse</span> thorough your machine</div>
+                <div style={{ fontSize: '13px', color: '#000000' }}>Drop files here or click <span style={{ color: '#6c63ff', fontWeight: 600 }}>browse</span> thorough your machine</div>
               </div>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <span style={{ fontSize: '13px', color: '#6c63ff', fontWeight: 600, cursor: 'pointer' }}>Download Budget template</span>
@@ -341,7 +341,7 @@ export default function BudgetPage() {
         </div>
       </div>
 
-      <div style={{ fontSize: '13px', color: '#9ca3af', marginBottom: '16px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+      <div style={{ fontSize: '13px', color: '#000000', marginBottom: '16px', display: 'flex', alignItems: 'center', gap: '6px' }}>
         <span style={{ color: '#6c63ff', fontWeight: 500 }}>Financials</span><span>•</span><span>Budget</span><span>•</span><span>List</span>
       </div>
 
@@ -356,11 +356,11 @@ export default function BudgetPage() {
             <div key={tab} onClick={() => setActiveTab(tab)} style={{
               display: 'flex', alignItems: 'center', gap: '6px', padding: '14px 16px', cursor: 'pointer',
               fontSize: '13px', fontWeight: activeTab === tab ? 700 : 500,
-              color: activeTab === tab ? '#111827' : '#6b7280',
+              color: activeTab === tab ? '#111827' : '#000000',
               borderBottom: activeTab === tab ? '2px solid #111827' : '2px solid transparent', marginBottom: '-1.5px',
             }}>
               {tab}
-              <span style={{ fontSize: '11px', padding: '1px 7px', borderRadius: '20px', background: activeTab === tab ? '#111827' : '#f3f4f6', color: activeTab === tab ? '#fff' : '#6b7280', fontWeight: 600 }}>
+              <span style={{ fontSize: '11px', padding: '1px 7px', borderRadius: '20px', background: activeTab === tab ? '#111827' : '#f3f4f6', color: activeTab === tab ? '#fff' : '#000000', fontWeight: 600 }}>
                 {tabCounts(tab)}
               </span>
             </div>
@@ -370,7 +370,7 @@ export default function BudgetPage() {
         {/* Summary Section */}
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1.5fr', borderBottom: '1px solid #f3f4f6' }}>
           <div style={{ padding: '24px', borderRight: '1px solid #f3f4f6' }}>
-            <div style={{ fontSize: '13px', color: '#6b7280', fontWeight: 500, marginBottom: '8px' }}>Total Budget</div>
+            <div style={{ fontSize: '13px', color: '#000000', fontWeight: 500, marginBottom: '8px' }}>Total Budget</div>
             <div style={{ fontSize: '26px', fontWeight: 600, color: '#111827', marginBottom: '4px' }}>
               PHP {totalAmount.toLocaleString('en-PH')}.00
             </div>
@@ -379,7 +379,7 @@ export default function BudgetPage() {
             </div>
           </div>
           <div style={{ padding: '24px', borderRight: '1px solid #f3f4f6' }}>
-            <div style={{ fontSize: '13px', color: '#6b7280', fontWeight: 500, marginBottom: '8px' }}>Approved Budget</div>
+            <div style={{ fontSize: '13px', color: '#000000', fontWeight: 500, marginBottom: '8px' }}>Approved Budget</div>
             <div style={{ fontSize: '26px', fontWeight: 600, color: '#111827', marginBottom: '4px' }}>
               PHP {approvedAmount.toLocaleString('en-PH')}.00
             </div>
@@ -399,7 +399,7 @@ export default function BudgetPage() {
                 </ResponsiveContainer>
               </ClientChart>
               <div style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%,-50%)', textAlign: 'center' }}>
-                <div style={{ fontSize: '9px', color: '#6b7280', fontWeight: 600, textTransform: 'uppercase' }}>Total</div>
+                <div style={{ fontSize: '9px', color: '#000000', fontWeight: 600, textTransform: 'uppercase' }}>Total</div>
                 <div style={{ fontSize: '10px', fontWeight: 600, color: '#111827' }}>PHP {(totalAmount / 1000000).toFixed(2)}M</div>
               </div>
             </div>
@@ -428,7 +428,7 @@ export default function BudgetPage() {
         {/* Filter Bar */}
         <div style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '16px 24px', borderBottom: '1px solid #f3f4f6' }}>
           <div style={{ flex: 1, display: 'flex', alignItems: 'center', gap: '8px', padding: '8px 14px', border: '1px solid #e5e7eb', borderRadius: '8px', background: '#fafafa' }}>
-            <span style={{ color: '#9ca3af' }}>??</span>
+            <span style={{ color: '#000000' }}>??</span>
             <input type="text" placeholder="Search..." value={search} onChange={e => setSearch(e.target.value)}
               style={{ border: 'none', background: 'transparent', fontFamily: font, fontSize: '13px', color: '#374151', outline: 'none', flex: 1 }} />
           </div>
@@ -444,7 +444,7 @@ export default function BudgetPage() {
         {filtered.length === 0 ? (
           <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '60px', gap: '12px' }}>
             <div style={{ fontSize: '40px', opacity: 0.2 }}>??</div>
-            <div style={{ fontSize: '14px', fontWeight: 600, color: '#9ca3af' }}>No budgets yet — click + Budget to create one</div>
+            <div style={{ fontSize: '14px', fontWeight: 600, color: '#000000' }}>No budgets yet — click + Budget to create one</div>
           </div>
         ) : (
           <div style={{ overflowX: 'auto' }}>
@@ -453,7 +453,7 @@ export default function BudgetPage() {
                 <tr style={{ background: '#fafafa' }}>
                   <th style={{ padding: '12px 24px', width: '40px', textAlign: 'left' }}><input type="checkbox" /></th>
                   {['Name', 'Project', 'Date', 'Total', 'Status', ''].map(h => (
-                    <th key={h} style={{ padding: '12px 16px', textAlign: 'left', fontSize: '12px', fontWeight: 600, color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.5px' }}>{h}</th>
+                    <th key={h} style={{ padding: '12px 16px', textAlign: 'left', fontSize: '12px', fontWeight: 600, color: '#000000', textTransform: 'uppercase', letterSpacing: '0.5px' }}>{h}</th>
                   ))}
                 </tr>
               </thead>
@@ -463,10 +463,10 @@ export default function BudgetPage() {
                     <td style={{ padding: '16px 24px' }}><input type="checkbox" checked={selected.includes(budget.id)} onChange={() => toggleSelect(budget.id)} /></td>
                     <td style={{ padding: '16px' }}>
                       <div style={{ fontSize: '13px', fontWeight: 600, color: '#111827' }}>{budget.name}</div>
-                      {budget.description && <div style={{ fontSize: '12px', color: '#9ca3af', marginTop: '2px' }}>{budget.description.slice(0, 40)}{budget.description.length > 40 ? '...' : ''}</div>}
+                      {budget.description && <div style={{ fontSize: '12px', color: '#000000', marginTop: '2px' }}>{budget.description.slice(0, 40)}{budget.description.length > 40 ? '...' : ''}</div>}
                     </td>
                     <td style={{ padding: '16px', fontSize: '13px', color: '#374151', fontWeight: 500 }}>{budget.project}</td>
-                    <td style={{ padding: '16px', fontSize: '13px', color: '#6b7280' }}>{budget.date}</td>
+                    <td style={{ padding: '16px', fontSize: '13px', color: '#000000' }}>{budget.date}</td>
                     <td style={{ padding: '16px', fontSize: '13px', fontWeight: 600, color: '#111827' }}>PHP {budget.total.toLocaleString('en-PH')}.00</td>
                     <td style={{ padding: '16px' }}>
                       <span style={{ fontSize: '11px', fontWeight: 600, padding: '4px 10px', borderRadius: '20px', background: statusStyle[budget.status]?.bg, color: statusStyle[budget.status]?.color }}>
@@ -475,7 +475,7 @@ export default function BudgetPage() {
                     </td>
                     <td style={{ padding: '16px', position: 'relative' }}>
                       <div onClick={e => { e.stopPropagation(); setOpenMenu(openMenu === budget.id ? null : budget.id) }}
-                        style={{ color: '#9ca3af', cursor: 'pointer', fontSize: '18px', fontWeight: 600, padding: '4px 8px', display: 'inline-block' }}>?</div>
+                        style={{ color: '#000000', cursor: 'pointer', fontSize: '18px', fontWeight: 600, padding: '4px 8px', display: 'inline-block' }}>?</div>
                       {openMenu === budget.id && (
                         <div style={{ position: 'absolute', right: '40px', top: '8px', background: '#fff', border: '1px solid #e5e7eb', borderRadius: '10px', boxShadow: '0 4px 20px rgba(0,0,0,0.1)', zIndex: 100, minWidth: '140px', overflow: 'hidden' }}>
                           <div onClick={() => setOpenMenu(null)}
@@ -516,8 +516,8 @@ export default function BudgetPage() {
           </div>
           <div style={{ fontSize: '13px', color: '#374151', fontWeight: 500 }}>1–{filtered.length} of {filtered.length}</div>
           <div style={{ display: 'flex', gap: '4px' }}>
-            <button style={{ padding: '6px 10px', border: '1px solid #e5e7eb', borderRadius: '6px', background: '#fafafa', cursor: 'pointer', color: '#9ca3af' }}>‹</button>
-            <button style={{ padding: '6px 10px', border: '1px solid #e5e7eb', borderRadius: '6px', background: '#fafafa', cursor: 'pointer', color: '#9ca3af' }}>›</button>
+            <button style={{ padding: '6px 10px', border: '1px solid #e5e7eb', borderRadius: '6px', background: '#fafafa', cursor: 'pointer', color: '#000000' }}>‹</button>
+            <button style={{ padding: '6px 10px', border: '1px solid #e5e7eb', borderRadius: '6px', background: '#fafafa', cursor: 'pointer', color: '#000000' }}>›</button>
           </div>
         </div>
       </div>
@@ -526,12 +526,12 @@ export default function BudgetPage() {
       {showImportModal && (
         <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}>
           <div style={{ background: '#fff', borderRadius: '16px', padding: '32px', width: '500px', position: 'relative' }}>
-            <div onClick={() => setShowImportModal(false)} style={{ position: 'absolute', top: '16px', right: '20px', fontSize: '20px', cursor: 'pointer', color: '#9ca3af' }}>?</div>
+            <div onClick={() => setShowImportModal(false)} style={{ position: 'absolute', top: '16px', right: '20px', fontSize: '20px', cursor: 'pointer', color: '#000000' }}>?</div>
             <div style={{ fontSize: '18px', fontWeight: 600, color: '#111827', marginBottom: '20px' }}>Import Budget</div>
             <div style={{ border: '1px solid #f3f4f6', borderRadius: '12px', padding: '40px 20px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '12px', background: '#fafafa', cursor: 'pointer', marginBottom: '24px' }}>
               <div style={{ fontSize: '48px' }}>??</div>
               <div style={{ fontSize: '15px', fontWeight: 600, color: '#111827' }}>Select PDF or CSV file</div>
-              <div style={{ fontSize: '13px', color: '#6b7280' }}>Drop files here or click <span style={{ color: '#6c63ff', fontWeight: 600 }}>browse</span> thorough your machine</div>
+              <div style={{ fontSize: '13px', color: '#000000' }}>Drop files here or click <span style={{ color: '#6c63ff', fontWeight: 600 }}>browse</span> thorough your machine</div>
             </div>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <span style={{ fontSize: '13px', color: '#6c63ff', fontWeight: 600, cursor: 'pointer' }}>Download Budget template</span>

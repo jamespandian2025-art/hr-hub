@@ -224,7 +224,7 @@ export default function EmployeeProfileRightRail({
       <section style={sectionStyle}>
         <div style={sectionHeaderStyle}>
           <div>
-            <h3 style={sectionTitleStyle}>Now online <span style={{ color: '#94a3b8', fontWeight: 600 }}>({online.length})</span></h3>
+            <h3 style={sectionTitleStyle}>Now online <span style={{ color: '#000000', fontWeight: 600 }}>({online.length})</span></h3>
             <p style={sectionSubtitleStyle}>{teamHint ? `Active in ${teamHint}` : 'Active in your workspace'}</p>
           </div>
         </div>
@@ -263,7 +263,7 @@ export default function EmployeeProfileRightRail({
         </div>
         {feed.length === 0 ? (
           <div style={emptyStyle}>
-            <Send size={20} color="#cbd5e1" style={{ marginBottom: 8 }} />
+            <Send size={20} color="#000000" style={{ marginBottom: 8 }} />
             <div>Activity will appear here as your team uses HR.</div>
           </div>
         ) : (
@@ -318,7 +318,7 @@ const sectionHeaderStyle = {
 }
 
 const sectionTitleStyle = { margin: 0, fontSize: 13, fontWeight: 800, color: '#0f172a' }
-const sectionSubtitleStyle = { margin: '3px 0 0', fontSize: 11, fontWeight: 500, color: '#64748b' }
+const sectionSubtitleStyle = { margin: '3px 0 0', fontSize: 11, fontWeight: 500, color: '#000000' }
 
 const refreshButtonStyle = {
   width: 28,
@@ -326,7 +326,7 @@ const refreshButtonStyle = {
   border: '1px solid #e2e8f0',
   background: '#fff',
   borderRadius: 8,
-  color: '#475569',
+  color: '#000000',
   display: 'grid',
   placeItems: 'center' as const,
   cursor: 'pointer',
@@ -335,7 +335,7 @@ const refreshButtonStyle = {
 const emptyStyle = {
   padding: '14px 4px',
   textAlign: 'center' as const,
-  color: '#94a3b8',
+  color: '#000000',
   fontSize: 12,
   fontWeight: 500,
 }
@@ -363,7 +363,7 @@ const avatarStyle = (photo?: string) => ({
 })
 
 const onlineNameStyle = { display: 'block', color: '#0f172a', fontSize: 12, fontWeight: 700, overflow: 'hidden' as const, textOverflow: 'ellipsis' as const, whiteSpace: 'nowrap' as const }
-const onlineRoleStyle = { display: 'block', marginTop: 1, color: '#64748b', fontSize: 11, fontWeight: 500, overflow: 'hidden' as const, textOverflow: 'ellipsis' as const, whiteSpace: 'nowrap' as const }
+const onlineRoleStyle = { display: 'block', marginTop: 1, color: '#000000', fontSize: 11, fontWeight: 500, overflow: 'hidden' as const, textOverflow: 'ellipsis' as const, whiteSpace: 'nowrap' as const }
 const onlineDotStyle = { width: 9, height: 9, borderRadius: '50%', background: '#22c55e', border: '2px solid #fff', boxShadow: '0 0 0 1px #bbf7d0' }
 
 const feedListStyle = { listStyle: 'none', padding: 0, margin: 0, display: 'grid', gap: 4 }
@@ -387,5 +387,5 @@ const feedIconStyle = {
 }
 
 const feedTitleStyle = { display: 'block', color: '#0f172a', fontSize: 12, fontWeight: 700, overflow: 'hidden' as const, textOverflow: 'ellipsis' as const, whiteSpace: 'nowrap' as const }
-const feedSubtitleStyle = { display: 'block', marginTop: 2, color: '#64748b', fontSize: 11, fontWeight: 500, overflow: 'hidden' as const, textOverflow: 'ellipsis' as const, whiteSpace: 'nowrap' as const }
-const feedTimeStyle = { color: '#94a3b8', fontSize: 11, fontWeight: 500, whiteSpace: 'nowrap' as const }
+const feedSubtitleStyle = { display: 'block', marginTop: 2, color: '#000000', fontSize: 11, fontWeight: 500, overflow: 'hidden' as const, textOverflow: 'ellipsis' as const, whiteSpace: 'nowrap' as const }
+const feedTimeStyle = { color: '#000000', fontSize: 11, fontWeight: 500, whiteSpace: 'nowrap' as const }

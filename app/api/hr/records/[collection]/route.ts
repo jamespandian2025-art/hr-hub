@@ -8,7 +8,7 @@ import {
   listVisibleRecords,
 } from '@/lib/hrms/serverStore'
 import { requireCsrf } from '@/lib/security/requestGuards'
-import { assertCompanyAccess, companyIdFromRequest } from '@/lib/tenant/serverStore'
+import { assertCompanyAccess, resolveCompanyId } from '@/lib/tenant/serverStore'
 import { enforceRateLimit, rateLimitPolicies } from '@/lib/security/rateLimit'
 
 export const runtime = 'nodejs'
@@ -24,7 +24,7 @@ export async function GET(request: Request, context: RouteContext) {
     const collection = assertCollection(collectionParam)
     const actor = await actorFromRequest(request)
     assertPermission(actor, collection, 'read')
-    const companyId = companyIdFromRequest(request)
+    const companyId = await resolveCompanyId(request)
     await assertCompanyAccess({ userId: actor.id || '', email: actor.email, role: actor.role }, companyId)
     const records = await listVisibleRecords(collection, actor, companyId)
     return Response.json({ ok: true, records })
@@ -40,7 +40,7 @@ export async function POST(request: Request, context: RouteContext) {
     const collection = assertCollection(collectionParam)
     const actor = await actorFromRequest(request)
     assertPermission(actor, collection, 'create')
-    const companyId = companyIdFromRequest(request)
+    const companyId = await resolveCompanyId(request)
     await assertCompanyAccess({ userId: actor.id || '', email: actor.email, role: actor.role }, companyId)
     await enforceRateLimit(request, rateLimitPolicies.hrMutation, actor.id, actor.email, companyId, collection, 'post')
     const payload = await request.json()

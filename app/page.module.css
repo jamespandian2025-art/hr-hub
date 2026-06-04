@@ -73,7 +73,7 @@
 
 .navLinks a,
 .textButton {
-  color: #475569;
+  color: #000000;
   font-size: 14px;
   font-weight: 800;
   text-decoration: none;
@@ -184,7 +184,7 @@
 .solutionMenuRail span,
 .allSolutionsLink em,
 .detailHeader p {
-  color: #64748b;
+  color: #000000;
   font-size: 13px;
   font-style: normal;
   line-height: 1.35;
@@ -294,7 +294,7 @@
   display: flex;
   align-items: center;
   gap: 8px;
-  color: #64748b;
+  color: #000000;
   font-size: 12px;
   text-transform: uppercase;
 }
@@ -569,7 +569,7 @@
 
 .sideRail span {
   border-radius: 8px;
-  color: #94a3b8;
+  color: #000000;
   font-size: 12px;
   font-weight: 800;
   padding: 10px;
@@ -643,7 +643,7 @@
 .kpiRow span {
   display: block;
   margin-top: 6px;
-  color: #94a3b8;
+  color: #000000;
   font-size: 12px;
   font-weight: 800;
 }
@@ -751,7 +751,7 @@
 }
 
 .mobilePanel span {
-  color: #475569;
+  color: #000000;
   font-size: 13px;
   font-weight: 900;
 }
@@ -801,7 +801,7 @@
 
 .logoBand > span {
   display: block;
-  color: #64748b;
+  color: #000000;
   font-size: 13px;
   font-weight: 900;
   text-transform: uppercase;
@@ -848,7 +848,7 @@
 .statsBand span {
   display: block;
   margin-top: 10px;
-  color: #64748b;
+  color: #000000;
   font-weight: 900;
 }
 
@@ -886,7 +886,7 @@
 .sectionIntro p,
 .ctaSection p {
   margin-top: 16px;
-  color: #64748b;
+  color: #000000;
   font-size: 18px;
   line-height: 1.65;
 }
@@ -932,7 +932,7 @@
 .solutionCard p,
 .planCard p {
   margin-top: 12px;
-  color: #64748b;
+  color: #000000;
   line-height: 1.6;
 }
 
@@ -952,7 +952,7 @@
   border: 1px solid #cbd5e1;
   border-radius: 999px;
   background: #ffffff;
-  color: #475569;
+  color: #000000;
   font-size: 14px;
   font-weight: 900;
   padding: 10px 16px;
@@ -1047,7 +1047,7 @@
 
 .price span,
 .planCard small {
-  color: #64748b;
+  color: #000000;
   font-weight: 900;
 }
 
@@ -1105,7 +1105,7 @@
 
 .ctaSection p {
   max-width: 720px;
-  color: #cbd5e1;
+  color: #000000;
 }
 
 .ctaSection .primaryButton {
@@ -1120,7 +1120,7 @@
   justify-content: space-between;
   gap: 18px;
   border-top: 1px solid #e2e8f0;
-  color: #64748b;
+  color: #000000;
   padding: 28px 0 34px;
 }
 
@@ -1147,7 +1147,7 @@
 }
 
 .footer a {
-  color: #475569;
+  color: #000000;
   font-size: 13px;
   font-weight: 900;
   text-decoration: none;
@@ -1205,7 +1205,7 @@
 .marketingHero p {
   max-width: 720px;
   margin-top: 20px;
-  color: #64748b;
+  color: #000000;
   font-size: 19px;
   line-height: 1.65;
 }
@@ -1230,7 +1230,7 @@
 .marketingHeroCard span {
   display: block;
   margin-top: 10px;
-  color: #cbd5e1;
+  color: #000000;
   font-weight: 800;
 }
 
@@ -1256,7 +1256,7 @@
 .legalHero p {
   max-width: 760px;
   margin-top: 18px;
-  color: #64748b;
+  color: #000000;
   font-size: 18px;
   line-height: 1.65;
 }
@@ -1278,7 +1278,7 @@
 .legalSummary span {
   display: block;
   margin-top: 8px;
-  color: #64748b;
+  color: #000000;
   font-size: 13px;
   font-weight: 800;
 }
@@ -1319,7 +1319,7 @@
 }
 
 .legalMeta span {
-  color: #64748b;
+  color: #000000;
   font-size: 13px;
   line-height: 1.5;
 }
@@ -1353,7 +1353,7 @@
 
 .legalContent p {
   margin-top: 12px;
-  color: #475569;
+  color: #000000;
   line-height: 1.72;
 }
 
@@ -1379,7 +1379,7 @@
 
 .marketingCard p {
   margin-top: 12px;
-  color: #64748b;
+  color: #000000;
   line-height: 1.62;
 }
 

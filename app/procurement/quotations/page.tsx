@@ -19,6 +19,7 @@ import {
   X,
   XCircle,
 } from 'lucide-react'
+import { AnalyticsToggleButton, CollapsibleAnalytics, useAnalyticsDisclosure } from '@/components/AnalyticsDisclosure'
 import { companyChangeEvent, companyScopedKey, getActiveCompany } from '@/lib/tenant/company'
 
 const font = 'var(--font-body)'
@@ -135,6 +136,7 @@ export default function ProcurementQuotationsPage() {
   const [selectedId, setSelectedId] = useState('')
   const [openActionId, setOpenActionId] = useState('')
   const [form, setForm] = useState<QuoteForm>(emptyForm)
+  const analytics = useAnalyticsDisclosure('wiseflow:analytics:procurement-quotations')
 
   useEffect(() => {
     const load = () => {
@@ -415,6 +417,7 @@ export default function ProcurementQuotationsPage() {
           </div>
         </div>
         <div className="quotes-actions">
+          <AnalyticsToggleButton open={analytics.open} onToggle={analytics.toggle} panelId={analytics.panelId} className="quotes-secondary-button" />
           <button type="button" className="quotes-secondary-button" onClick={() => setViewMode(viewMode === 'table' ? 'cards' : 'table')}>
             <Grid3X3 size={16} /> Views <ChevronDown size={14} />
           </button>
@@ -430,13 +433,15 @@ export default function ProcurementQuotationsPage() {
         </div>
       </section>
 
-      <section className="quotes-kpis" aria-label="Quotation metrics">
-        <KpiCard title="Total Quotes" value={String(stats.total)} helper="Supplier responses" icon={FileCheck2} tone="green" />
-        <KpiCard title="Under Review" value={String(stats.review)} helper="Evaluation queue" icon={Clock3} tone="orange" />
-        <KpiCard title="Accepted Value" value={formatCurrency(stats.acceptedValue)} helper={`${stats.accepted} accepted`} icon={CheckCircle2} tone="blue" />
-        <KpiCard title="Potential Savings" value={formatCurrency(stats.potentialSavings)} helper={stats.bestTotal ? `Best review quote ${formatCurrency(stats.bestTotal)}` : 'Needs comparable quotes'} icon={TrendingDown} tone="purple" />
-        <KpiCard title="Expiring Soon" value={String(stats.expiring)} helper="Valid for 7 days or less" icon={AlertTriangle} tone="red" />
-      </section>
+      <CollapsibleAnalytics open={analytics.open} id={analytics.panelId}>
+        <section className="quotes-kpis" aria-label="Quotation metrics">
+          <KpiCard title="Total Quotes" value={String(stats.total)} helper="Supplier responses" icon={FileCheck2} tone="green" />
+          <KpiCard title="Under Review" value={String(stats.review)} helper="Evaluation queue" icon={Clock3} tone="orange" />
+          <KpiCard title="Accepted Value" value={formatCurrency(stats.acceptedValue)} helper={`${stats.accepted} accepted`} icon={CheckCircle2} tone="blue" />
+          <KpiCard title="Potential Savings" value={formatCurrency(stats.potentialSavings)} helper={stats.bestTotal ? `Best review quote ${formatCurrency(stats.bestTotal)}` : 'Needs comparable quotes'} icon={TrendingDown} tone="purple" />
+          <KpiCard title="Expiring Soon" value={String(stats.expiring)} helper="Valid for 7 days or less" icon={AlertTriangle} tone="red" />
+        </section>
+      </CollapsibleAnalytics>
 
       <section className="quotes-tabs" aria-label="Quotation status tabs">
         {tabs.map(tab => (
@@ -1028,7 +1033,7 @@ const quotesCss = `
 .quotes-breadcrumb {
   display: flex;
   gap: 8px;
-  color: #64748b;
+  color: #000000;
   font-size: 12px;
   font-weight: 800;
   margin-bottom: 13px;
@@ -1057,13 +1062,13 @@ const quotesCss = `
   letter-spacing: 0;
 }
 .quotes-title-row h1 svg {
-  color: #94a3b8;
+  color: #000000;
 }
 .quotes-title-row p,
 .quotes-card-title p,
 .quotes-muted {
   margin: 7px 0 0;
-  color: #64748b;
+  color: #000000;
   font-size: 13px;
   line-height: 1.45;
 }
@@ -1155,7 +1160,7 @@ const quotesCss = `
 .quotes-kpi-icon.red { background: #fee2e2; color: #ef4444; }
 .quotes-kpi span:not(.quotes-kpi-icon) {
   display: block;
-  color: #64748b;
+  color: #000000;
   font-size: 12px;
   font-weight: 800;
 }
@@ -1168,7 +1173,7 @@ const quotesCss = `
 .quotes-kpi small {
   display: block;
   margin-top: 8px;
-  color: #64748b;
+  color: #000000;
   font-size: 12px;
 }
 .quotes-tabs {
@@ -1194,7 +1199,7 @@ const quotesCss = `
   border-color: #16a34a;
 }
 .quotes-tabs span {
-  color: #64748b;
+  color: #000000;
   margin-left: 6px;
   font-size: 12px;
 }
@@ -1230,7 +1235,7 @@ const quotesCss = `
   align-items: center;
   gap: 10px;
   padding: 0 13px;
-  color: #64748b;
+  color: #000000;
   background: #fff;
 }
 .quotes-search input,
@@ -1293,7 +1298,7 @@ const quotesCss = `
 }
 .quotes-table th {
   background: #f8fafc;
-  color: #475569;
+  color: #000000;
   text-transform: uppercase;
   font-size: 10px;
   letter-spacing: 0;
@@ -1304,7 +1309,7 @@ const quotesCss = `
 }
 .quotes-table td small {
   display: block;
-  color: #64748b;
+  color: #000000;
   margin-top: 4px;
   max-width: 210px;
 }
@@ -1329,7 +1334,7 @@ const quotesCss = `
 .quotes-score.orange { background: #ffedd5; color: #f97316; }
 .quotes-badge.red { background: #fee2e2; color: #ef4444; }
 .quotes-badge.gray,
-.quotes-score.gray { background: #f1f5f9; color: #475569; }
+.quotes-score.gray { background: #f1f5f9; color: #000000; }
 .quotes-row-actions {
   position: relative;
 }
@@ -1386,7 +1391,7 @@ const quotesCss = `
 }
 .quotes-card small,
 .quotes-card p {
-  color: #64748b;
+  color: #000000;
   font-size: 12px;
 }
 .quotes-empty,
@@ -1405,7 +1410,7 @@ const quotesCss = `
   place-items: center;
   margin-bottom: 18px;
   background: #eff6ff;
-  color: #64748b;
+  color: #000000;
 }
 .quotes-empty h2 {
   margin: 0;
@@ -1413,7 +1418,7 @@ const quotesCss = `
 }
 .quotes-empty p {
   max-width: 390px;
-  color: #64748b;
+  color: #000000;
   font-size: 13px;
   line-height: 1.55;
 }
@@ -1422,7 +1427,7 @@ const quotesCss = `
   gap: 7px;
 }
 .quotes-inline-empty span {
-  color: #64748b;
+  color: #000000;
   font-size: 13px;
 }
 .quotes-inline-empty button {
@@ -1452,7 +1457,7 @@ const quotesCss = `
 }
 .quotes-selected-total span,
 .quotes-selected-total small {
-  color: #64748b;
+  color: #000000;
   font-size: 12px;
 }
 .quotes-selected-total strong {
@@ -1467,7 +1472,7 @@ const quotesCss = `
   font-size: 12px;
 }
 .quotes-detail-row span {
-  color: #64748b;
+  color: #000000;
 }
 .quotes-side-actions {
   gap: 10px;
@@ -1512,7 +1517,7 @@ const quotesCss = `
 .quotes-compare-list small {
   display: block;
   margin-top: 3px;
-  color: #64748b;
+  color: #000000;
   font-size: 11px;
 }
 .quotes-compare-list b {
@@ -1527,7 +1532,7 @@ const quotesCss = `
 }
 .quotes-metric-block span,
 .quotes-metric-block small {
-  color: #64748b;
+  color: #000000;
   font-size: 12px;
 }
 .quotes-metric-block strong {
@@ -1573,7 +1578,7 @@ const quotesCss = `
 }
 .quotes-drawer-head p {
   margin: 8px 0 0;
-  color: #64748b;
+  color: #000000;
   font-size: 13px;
 }
 .quotes-form-layout {
@@ -1654,7 +1659,7 @@ const quotesCss = `
   backdrop-filter: blur(10px);
 }
 .quotes-create-footer span {
-  color: #64748b;
+  color: #000000;
   font-size: 12px;
 }
 .quotes-create-footer > div {
@@ -1735,7 +1740,7 @@ const quotesCss = `
     content: attr(data-label);
     display: inline-block;
     min-width: 118px;
-    color: #64748b;
+    color: #000000;
     font-size: 11px;
     font-weight: 900;
   }

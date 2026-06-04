@@ -71,7 +71,7 @@ export default function ProfileDropdown() {
 
         <div style={{
           fontSize: '13px',
-          color: '#6b7280'
+          color: '#000000'
         }}>
           livewiseofficial@gmail.com
         </div>
@@ -81,7 +81,7 @@ export default function ProfileDropdown() {
       <div style={{ padding: '16px 20px' }}>
         <div style={{
           fontSize: '12px',
-          color: '#9ca3af',
+          color: '#000000',
           marginBottom: '10px'
         }}>
           Switch Settings
@@ -123,7 +123,7 @@ export default function ProfileDropdown() {
                 </div>
                 <div style={{
                   fontSize: '11px',
-                  color: '#9ca3af'
+                  color: '#000000'
                 }}>
                   {company.type}
                 </div>

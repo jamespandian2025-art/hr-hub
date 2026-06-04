@@ -14,6 +14,7 @@ import {
   Sparkles,
   X,
 } from 'lucide-react'
+import { AnalyticsToggleButton, CollapsibleAnalytics, useAnalyticsDisclosure } from '@/components/AnalyticsDisclosure'
 
 type HrReport = {
   id: string
@@ -172,6 +173,7 @@ export default function HrReportsPage() {
   const [query, setQuery] = useState('')
   const [notice, setNotice] = useState('')
   const [isCreateReportOpen, setIsCreateReportOpen] = useState(false)
+  const analytics = useAnalyticsDisclosure('wiseflow:analytics:hr-reports')
   const [newReport, setNewReport] = useState({
     name: '',
     category: 'Custom',
@@ -498,20 +500,23 @@ export default function HrReportsPage() {
         </div>
         <div className="hr-reports-toolbar" style={toolbarStyle}>
           <label className="hr-reports-search" style={searchBoxStyle}>
-            <Search size={15} color="#94a3b8" />
+            <Search size={15} color="#000000" />
             <input value={query} onChange={event => setQuery(event.target.value)} placeholder="Search reports..." style={plainInputStyle} />
           </label>
+          <AnalyticsToggleButton open={analytics.open} onToggle={analytics.toggle} panelId={analytics.panelId} style={secondaryButtonStyle} />
           <button type="button" style={primaryButtonStyle} onClick={() => setIsCreateReportOpen(true)}><Plus size={15} /> Create Report</button>
         </div>
       </div>
 
-      <div className="hr-reports-metrics" style={metricGridStyle}>
-        <Metric icon={FileBarChart} label={reportAreaLabel ? `Total ${reportAreaLabel} Reports` : 'Total Reports'} value={activeReports.length} sub="Real reports only" color="#16a34a" bg="#dcfce7" />
-        <Metric icon={FileSpreadsheet} label="Generated This Month" value={reportAreaLabel ? activeGeneratedThisMonth : generatedThisMonth} sub="Current month" color="#16a34a" bg="#dcfce7" />
-        <Metric icon={CalendarDays} label="Scheduled Reports" value={activeScheduledReports.length} sub="Real schedules only" color="#7c3aed" bg="#ede9fe" />
-        <Metric icon={Download} label="Exports" value={activeExportsLog.length} sub="Real export history" color="#ea580c" bg="#ffedd5" />
-        <Metric icon={CalendarDays} label="Pending Reports" value={reportAreaLabel ? activePendingReports : pendingReports} sub="Waiting to finish" color="#f59e0b" bg="#fef3c7" />
-      </div>
+      <CollapsibleAnalytics open={analytics.open} id={analytics.panelId}>
+        <div className="hr-reports-metrics" style={metricGridStyle}>
+          <Metric icon={FileBarChart} label={reportAreaLabel ? `Total ${reportAreaLabel} Reports` : 'Total Reports'} value={activeReports.length} sub="Real reports only" color="#16a34a" bg="#dcfce7" />
+          <Metric icon={FileSpreadsheet} label="Generated This Month" value={reportAreaLabel ? activeGeneratedThisMonth : generatedThisMonth} sub="Current month" color="#16a34a" bg="#dcfce7" />
+          <Metric icon={CalendarDays} label="Scheduled Reports" value={activeScheduledReports.length} sub="Real schedules only" color="#7c3aed" bg="#ede9fe" />
+          <Metric icon={Download} label="Exports" value={activeExportsLog.length} sub="Real export history" color="#ea580c" bg="#ffedd5" />
+          <Metric icon={CalendarDays} label="Pending Reports" value={reportAreaLabel ? activePendingReports : pendingReports} sub="Waiting to finish" color="#f59e0b" bg="#fef3c7" />
+        </div>
+      </CollapsibleAnalytics>
 
       <div className="hr-reports-tabs" style={tabsStyle}>
         {['All Reports', 'HR Reports', 'Payroll Reports', 'Attendance Reports', 'Leave Reports', 'Performance Reports', 'Compliance Reports', 'Custom Reports'].map(tab => (
@@ -728,7 +733,7 @@ export default function HrReportsPage() {
             <div style={modalHeaderStyle}>
               <div>
                 <h2 id="create-hr-report-title" style={{ ...sectionTitleStyle, fontSize: 22 }}>Create Report</h2>
-                <p style={{ margin: '6px 0 0', color: '#64748b', fontSize: 13 }}>Build a company report from live HR records.</p>
+                <p style={{ margin: '6px 0 0', color: '#000000', fontSize: 13 }}>Build a company report from live HR records.</p>
               </div>
               <button type="button" style={iconCloseButtonStyle} aria-label="Close create report" onClick={closeCreateReport}>
                 <X size={18} />
@@ -1724,9 +1729,9 @@ function Metric({ icon: Icon, label, value, sub, color, bg }: { icon: typeof Fil
     <article className="hr-report-metric" style={metricCardStyle}>
       <span style={{ ...metricIconStyle, background: bg }}><Icon size={22} color={color} /></span>
       <span>
-        <small style={{ color: '#475569', fontSize: 12 }}>{label}</small>
+        <small style={{ color: '#000000', fontSize: 12 }}>{label}</small>
         <strong style={{ display: 'block', marginTop: 6, fontSize: 22, color: '#0f172a' }}>{value}</strong>
-        <small style={{ display: 'block', marginTop: 8, color: '#64748b', fontSize: 12 }}>{sub}</small>
+        <small style={{ display: 'block', marginTop: 8, color: '#000000', fontSize: 12 }}>{sub}</small>
       </span>
     </article>
   )
@@ -1737,7 +1742,7 @@ function Panel({ title, icon: Icon, children }: { title: string; icon: typeof Fi
     <section style={panelStyle}>
       <div style={sectionHeaderStyle}>
         <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
-          <Icon size={16} color="#64748b" />
+          <Icon size={16} color="#000000" />
           <h2 style={sectionTitleStyle}>{title}</h2>
         </span>
       </div>
@@ -1749,7 +1754,7 @@ function Panel({ title, icon: Icon, children }: { title: string; icon: typeof Fi
 function EmptyPanel({ title, text, icon: Icon }: { title: string; text: string; icon: typeof FileBarChart }) {
   return (
     <div style={emptyPanelStyle}>
-      <Icon size={32} color="#94a3b8" />
+      <Icon size={32} color="#000000" />
       <strong>{title}</strong>
       <span>{text}</span>
     </div>
@@ -1762,7 +1767,7 @@ function StatusPill({ status }: { status: string }) {
     ? { background: '#dcfce7', color: '#16a34a' }
     : normalized.includes('pending') || normalized.includes('progress')
       ? { background: '#fef3c7', color: '#d97706' }
-      : { background: '#f1f5f9', color: '#475569' }
+      : { background: '#f1f5f9', color: '#000000' }
   return <span style={{ ...statusPillStyle, ...style }}>{status}</span>
 }
 
@@ -1795,7 +1800,7 @@ function Td({ children }: { children: React.ReactNode }) {
 
 const pageHeaderStyle = { display: 'flex', justifyContent: 'space-between', gap: 18, alignItems: 'flex-start', flexWrap: 'wrap' as const, marginBottom: 18, padding: 24, border: '1px solid #dbeafe', borderRadius: 18, background: 'linear-gradient(135deg, #ffffff 0%, #f8fbff 56%, #eef7ff 100%)', boxShadow: '0 14px 38px rgba(15,23,42,0.07)' }
 const pageTitleStyle = { margin: 0, color: '#0f172a', fontSize: 32, fontWeight: 900, letterSpacing: 0 }
-const pageSubtitleStyle = { margin: '8px 0 0', color: '#475569', fontSize: 14, maxWidth: 620, lineHeight: 1.55 }
+const pageSubtitleStyle = { margin: '8px 0 0', color: '#000000', fontSize: 14, maxWidth: 620, lineHeight: 1.55 }
 const toolbarStyle = { display: 'flex', gap: 10, flexWrap: 'wrap' as const, alignItems: 'center', justifyContent: 'flex-end' as const }
 const searchBoxStyle = { minHeight: 44, minWidth: 360, border: '1px solid #d8e0eb', borderRadius: 999, background: '#fff', padding: '0 14px', display: 'flex', alignItems: 'center', gap: 8, color: '#0f172a', fontSize: 13, fontFamily: font, boxShadow: '0 8px 22px rgba(15,23,42,0.05)' }
 const plainInputStyle = { border: 'none', outline: 'none', background: 'transparent', width: '100%', font: 'inherit' }
@@ -1809,7 +1814,7 @@ const tabsStyle = { display: 'flex', gap: 6, border: '1px solid #e5eaf0', border
 const tabStyle = (active: boolean) => ({ border: 'none', background: active ? '#e8f5ee' : 'transparent', padding: '10px 13px', borderRadius: 10, color: active ? '#0f7a3b' : '#334155', fontSize: 13, fontWeight: 850, cursor: 'pointer', fontFamily: font, whiteSpace: 'nowrap' as const })
 const filterBarStyle = { marginBottom: 14, padding: 14, background: '#fff', border: '1px solid #e5eaf0', borderRadius: 14, display: 'flex', gap: 12, alignItems: 'end', flexWrap: 'wrap' as const, boxShadow: '0 8px 22px rgba(15,23,42,0.04)' }
 const noticeStyle = { margin: '-4px 0 14px', padding: '11px 14px', border: '1px solid #bbf7d0', borderRadius: 12, background: '#f0fdf4', color: '#15803d', fontSize: 13, fontWeight: 850 }
-const selectFieldStyle = { display: 'grid', gap: 5, color: '#64748b', fontSize: 11, fontWeight: 800 }
+const selectFieldStyle = { display: 'grid', gap: 5, color: '#000000', fontSize: 11, fontWeight: 800 }
 const selectStyle = { minHeight: 40, minWidth: 168, border: '1px solid #d8e0eb', borderRadius: 10, background: '#fff', color: '#0f172a', padding: '0 12px', fontSize: 13, fontFamily: font }
 const reportsGridStyle = { display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) 340px', gap: 14, alignItems: 'start', marginBottom: 14 }
 const mainCardStyle = { minHeight: 520, background: '#fff', border: '1px solid #e5eaf0', borderRadius: 14, boxShadow: '0 8px 24px rgba(15,23,42,0.045)', overflow: 'hidden' }
@@ -1817,13 +1822,13 @@ const sidePanelStackStyle = { display: 'grid', gap: 14 }
 const panelStyle = { minHeight: 240, background: '#fff', border: '1px solid #e5eaf0', borderRadius: 14, boxShadow: '0 8px 24px rgba(15,23,42,0.045)', overflow: 'hidden' }
 const sectionHeaderStyle = { padding: '15px 16px', borderBottom: '1px solid #edf2f7', background: '#fbfdff' }
 const sectionTitleStyle = { margin: 0, color: '#0f172a', fontSize: 14, fontWeight: 900 }
-const emptyPanelStyle = { minHeight: 220, display: 'grid', placeItems: 'center', alignContent: 'center', gap: 8, padding: 20, color: '#64748b', fontSize: 13, textAlign: 'center' as const }
+const emptyPanelStyle = { minHeight: 220, display: 'grid', placeItems: 'center', alignContent: 'center', gap: 8, padding: 20, color: '#000000', fontSize: 13, textAlign: 'center' as const }
 const tableStyle = { width: '100%', borderCollapse: 'collapse' as const, minWidth: 820 }
-const thStyle = { textAlign: 'left' as const, padding: '12px 16px', color: '#475569', fontSize: 11, fontWeight: 900, background: '#f7faff' }
+const thStyle = { textAlign: 'left' as const, padding: '12px 16px', color: '#000000', fontSize: 11, fontWeight: 900, background: '#f7faff' }
 const tdStyle = { padding: '14px 16px', borderTop: '1px solid #eef2f7', color: '#0f172a', fontSize: 12, verticalAlign: 'top' as const }
-const cellSubtextStyle = { display: 'block', marginTop: 3, color: '#64748b', fontSize: 11, fontWeight: 500 }
+const cellSubtextStyle = { display: 'block', marginTop: 3, color: '#000000', fontSize: 11, fontWeight: 500 }
 const actionGroupStyle = { display: 'inline-flex', gap: 6 }
-const iconButtonStyle = { width: 30, height: 30, border: '1px solid #e5e7eb', borderRadius: 8, background: '#fff', color: '#475569', display: 'inline-grid', placeItems: 'center', cursor: 'pointer' }
+const iconButtonStyle = { width: 30, height: 30, border: '1px solid #e5e7eb', borderRadius: 8, background: '#fff', color: '#000000', display: 'inline-grid', placeItems: 'center', cursor: 'pointer' }
 const statusPillStyle = { display: 'inline-flex', alignItems: 'center', minHeight: 22, padding: '0 8px', borderRadius: 999, fontSize: 11, fontWeight: 900 }
 const compactListStyle = { display: 'grid', gap: 0, padding: 14 }
 const compactListRowStyle = { display: 'grid', gridTemplateColumns: '1fr auto', gap: 8, alignItems: 'center', padding: '8px 0', borderBottom: '1px solid #f1f5f9', color: '#0f172a', fontSize: 12 }

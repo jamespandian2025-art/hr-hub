@@ -194,7 +194,7 @@ const rowSources: RowSource[] = [
     keys: ['flowsys-assigned-tasks'],
     module: 'Workflows',
     type: 'Task',
-    href: '/tasks',
+    href: '/workflows/my-jobs',
     titleKeys: ['title', 'name', 'description'],
     subtitleKeys: ['assignee', 'status', 'dueDate', 'source'],
   },

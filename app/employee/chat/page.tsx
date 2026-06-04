@@ -200,7 +200,7 @@ export default function EmployeeChatPage() {
           <span style={chatIconStyle}><MessageCircle size={20} /></span>
           <div>
             <h2 style={{ margin: 0, color: '#0f172a', fontSize: 18 }}>Human Resources</h2>
-            <p style={{ margin: '4px 0 0', color: '#64748b', fontSize: 13 }}>Messages here appear in the HR chat window.</p>
+            <p style={{ margin: '4px 0 0', color: '#000000', fontSize: 13 }}>Messages here appear in the HR chat window.</p>
           </div>
         </header>
 
@@ -240,7 +240,7 @@ const chatPanelStyle = { padding: 0, overflow: 'hidden', minHeight: 560, display
 const chatHeaderStyle = { display: 'flex', alignItems: 'center', gap: 12, padding: 18, borderBottom: '1px solid #e2e8f0', background: '#fff' } as const
 const chatIconStyle = { width: 42, height: 42, borderRadius: 12, background: '#dcfce7', color: '#16a34a', display: 'grid', placeItems: 'center', flexShrink: 0 } as const
 const threadStyle = { padding: 18, display: 'grid', gap: 10, alignContent: 'start', overflowY: 'auto' as const, background: '#f8fafc' }
-const emptyStyle = { minHeight: 280, display: 'grid', placeItems: 'center', alignContent: 'center', gap: 8, color: '#64748b', textAlign: 'center' as const }
+const emptyStyle = { minHeight: 280, display: 'grid', placeItems: 'center', alignContent: 'center', gap: 8, color: '#000000', textAlign: 'center' as const }
 const messageRowStyle = { display: 'flex' }
 const ownBubbleStyle = { maxWidth: 'min(680px, 78%)', borderRadius: '16px 16px 4px 16px', background: '#16a34a', color: '#fff', padding: '10px 12px', fontSize: 13, lineHeight: 1.45 }
 const otherBubbleStyle = { maxWidth: 'min(680px, 78%)', borderRadius: '16px 16px 16px 4px', background: '#fff', color: '#0f172a', border: '1px solid #e2e8f0', padding: '10px 12px', fontSize: 13, lineHeight: 1.45 }

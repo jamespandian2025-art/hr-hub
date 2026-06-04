@@ -5,6 +5,7 @@ import type { FormEvent, ReactNode } from 'react'
 import Link from 'next/link'
 import { notFound, usePathname, useRouter, useSearchParams } from 'next/navigation'
 import { ArrowDownLeft, ArrowUpRight, BookOpenCheck, Download, Plus, Search, X } from 'lucide-react'
+import { AnalyticsToggleButton, CollapsibleAnalytics, useAnalyticsDisclosure } from '@/components/AnalyticsDisclosure'
 import { accountingNavItems } from '@/components/accounting/AccountingShell'
 import { createAccountingBill, createAccountingExpense, emptyAccountingData, formatDate, loadAccountingData, money, subscribeAccountingData } from '@/lib/accounting/data'
 
@@ -21,6 +22,7 @@ export default function AccountingSectionPage({ params }: { params: Promise<{ se
   const [query, setQuery] = useState('')
   const [showBillForm, setShowBillForm] = useState(false)
   const [showExpenseForm, setShowExpenseForm] = useState(false)
+  const analytics = useAnalyticsDisclosure(`wiseflow:analytics:accounting-section:${section}`)
   const [billForm, setBillForm] = useState({
     name: '',
     vendor: '',
@@ -212,6 +214,7 @@ export default function AccountingSectionPage({ params }: { params: Promise<{ se
           </div>
         </div>
         <div className="live-actions">
+          <AnalyticsToggleButton open={analytics.open} onToggle={analytics.toggle} panelId={analytics.panelId} />
           <button type="button" onClick={exportRows}><Download size={15} /> Export</button>
           {section === 'bills' ? (
             <button type="button" className="primary" onClick={() => setShowBillForm(true)}><Plus size={15} /> New Record</button>
@@ -223,11 +226,13 @@ export default function AccountingSectionPage({ params }: { params: Promise<{ se
         </div>
       </header>
 
-      <section className="live-metrics">
-        <Metric title="Records" value={String(rows.length)} detail={data.companyName} icon={<BookOpenCheck size={18} />} />
-        <Metric title={section === 'accounting' ? 'Debits' : 'Open / Expense'} value={money(totalDebit, data.currency)} detail="From live records" icon={<ArrowDownLeft size={18} />} />
-        <Metric title={section === 'accounting' ? 'Credits' : 'Income Offset'} value={money(totalCredit, data.currency)} detail="From live records" icon={<ArrowUpRight size={18} />} />
-      </section>
+      <CollapsibleAnalytics open={analytics.open} id={analytics.panelId}>
+        <section className="live-metrics">
+          <Metric title="Records" value={String(rows.length)} detail={data.companyName} icon={<BookOpenCheck size={18} />} />
+          <Metric title={section === 'accounting' ? 'Debits' : 'Open / Expense'} value={money(totalDebit, data.currency)} detail="From live records" icon={<ArrowDownLeft size={18} />} />
+          <Metric title={section === 'accounting' ? 'Credits' : 'Income Offset'} value={money(totalCredit, data.currency)} detail="From live records" icon={<ArrowUpRight size={18} />} />
+        </section>
+      </CollapsibleAnalytics>
 
       <section className="live-card">
         <div className="live-card-head">
@@ -403,18 +408,18 @@ function Metric({ title, value, detail, icon }: { title: string; value: string; 
 }
 
 const css = `
-.live-accounting-page{min-height:100vh;background:transparent;color:var(--acc-text,#0f172a);padding:28px}
+.live-accounting-page{min-height:100vh;background:transparent;color:var(--acc-text,#000000);padding:28px}
 html[data-theme='light'] .accounting-scroll-content > .live-accounting-page,
 html[data-theme='light'] .live-accounting-page{background:transparent!important;background-color:transparent!important}
 .live-header{display:flex;justify-content:space-between;gap:18px;margin-bottom:18px;background:transparent!important;background-color:transparent!important;border:0!important;box-shadow:none!important}
 .live-title{display:block;min-width:0}
-.crumb{display:flex;gap:8px;color:#64748b;font-size:12px;font-weight:850}.crumb a{color:#64748b;text-decoration:none}.crumb strong{color:#0f172a}
-h1{margin:6px 0 0;font-size:28px;line-height:1.12}p{margin:7px 0 0;color:#64748b;font-size:13px}.live-actions{display:flex;gap:10px;align-items:center}
+.crumb{display:flex;gap:8px;color:#000000;font-size:12px;font-weight:850}.crumb a{color:#000000;text-decoration:none}.crumb strong{color:#0f172a}
+h1{margin:6px 0 0;font-size:28px;line-height:1.12}p{margin:7px 0 0;color:#000000;font-size:13px}.live-actions{display:flex;gap:10px;align-items:center}
 button,.live-actions a{border:1px solid #e8edf4;background:#fff;color:#0f172a;border-radius:8px;min-height:38px;padding:0 12px;font-size:12.5px;font-weight:850;display:inline-flex;align-items:center;gap:8px;text-decoration:none}.live-actions .primary{min-width:132px;justify-content:center;background:#16a34a!important;border-color:#16a34a!important;color:#fff!important;font-weight:950}
 .live-metrics{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px;margin-bottom:16px}.live-card{background:#fff;border:1px solid #e8edf4;border-radius:8px;padding:18px;box-shadow:0 1px 2px rgba(15,23,42,.03)}
-.live-metric{display:flex;gap:12px;align-items:center}.live-metric>span{width:38px;height:38px;border-radius:9px;background:#ecfdf3;color:#16a34a;display:grid;place-items:center}.live-metric small{display:block;color:#64748b;font-size:12px;font-weight:850}.live-metric strong{display:block;margin-top:5px;font-size:22px}.live-metric em{display:block;margin-top:5px;color:#16a34a;font-size:12px;font-style:normal;font-weight:850}
+.live-metric{display:flex;gap:12px;align-items:center}.live-metric>span{width:38px;height:38px;border-radius:9px;background:#ecfdf3;color:#16a34a;display:grid;place-items:center}.live-metric small{display:block;color:#000000;font-size:12px;font-weight:850}.live-metric strong{display:block;margin-top:5px;font-size:22px}.live-metric em{display:block;margin-top:5px;color:#16a34a;font-size:12px;font-style:normal;font-weight:850}
 .live-card-head{display:flex;justify-content:space-between;gap:16px;margin-bottom:14px}.live-card-head h2{margin:0;font-size:16px}.live-card-head label{width:320px;height:38px;border:1px solid #e8edf4;border-radius:8px;background:#f8fafc;display:flex;align-items:center;gap:10px;padding:0 12px}.live-card-head input{border:0;outline:0;background:transparent;flex:1;font-size:12.5px}
-.live-table-wrap{overflow:auto}table{width:100%;border-collapse:collapse;min-width:820px}th{text-align:left;padding:12px 14px;color:#64748b;font-size:11px;text-transform:uppercase}td{border-top:1px solid #eef2f7;padding:14px;color:#334155;font-size:13px}td strong{color:#0f172a}td span{display:inline-flex;border-radius:999px;background:#f1f5f9;color:#475569;padding:5px 9px;font-size:11px;font-weight:900}.empty{text-align:center;color:#64748b;font-weight:800;padding:28px}
+.live-table-wrap{overflow:auto}table{width:100%;border-collapse:collapse;min-width:820px}th{text-align:left;padding:12px 14px;color:#000000;font-size:11px;text-transform:uppercase}td{border-top:1px solid #eef2f7;padding:14px;color:#334155;font-size:13px}td strong{color:#0f172a}td span{display:inline-flex;border-radius:999px;background:#f1f5f9;color:#000000;padding:5px 9px;font-size:11px;font-weight:900}.empty{text-align:center;color:#000000;font-weight:800;padding:28px}
 .live-modal-backdrop{position:fixed;inset:0;z-index:1200;background:rgba(15,23,42,.36);display:flex;justify-content:flex-end}
 .live-bill-sheet{width:min(520px,100%);height:100%;background:#fff;box-shadow:-24px 0 80px rgba(15,23,42,.22);display:flex;flex-direction:column;color:#0f172a}
 .live-sheet-head{padding:22px 24px;border-bottom:1px solid #e8edf4;display:flex;align-items:flex-start;justify-content:space-between;gap:16px}.live-sheet-head h2{margin:0;font-size:22px}.live-sheet-head p{margin-top:6px}.live-sheet-head button{width:36px;height:36px;padding:0;display:grid;place-items:center;flex:0 0 auto}
@@ -431,6 +436,6 @@ html[data-theme='dark'] .live-accounting-page .live-table-wrap{background:#10101
 html[data-theme='dark'] .live-accounting-page th{background:#181818!important;color:#c7c7cf!important;border-color:#333!important}
 .accounting-theme-dark .live-accounting-page td,
 html[data-theme='dark'] .live-accounting-page td{background:#101010!important;color:#fafafa!important;border-color:#333!important}
-@media(max-width:760px){.live-accounting-page{padding:0 18px 18px}.live-header,.live-card-head{display:grid}.live-header{gap:14px}.live-actions{position:sticky;top:0;z-index:45;order:-1;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;width:auto;margin:0 -18px 14px;padding:10px 18px;background:rgba(255,255,255,.96);border-bottom:1px solid #e8edf4;box-shadow:0 8px 18px rgba(15,23,42,.04);backdrop-filter:blur(12px)}.live-actions button,.live-actions a{min-width:0;min-height:40px;justify-content:center;padding:0 8px;border-radius:9px;font-size:12px;white-space:nowrap}.live-actions svg{width:14px;height:14px}.live-title{padding-top:0}.live-metrics{display:grid;grid-template-columns:1fr}.live-card-head label{width:auto;min-height:44px}.live-table-wrap{overflow:visible}table,thead,tbody,tr,td{display:block;width:100%;min-width:0}thead{display:none}tr{border:1px solid #eef2f7;border-radius:8px;margin-bottom:12px;background:#fff;overflow:hidden}td{border-top:0;display:grid;grid-template-columns:105px minmax(0,1fr);gap:10px;padding:10px 12px;align-items:center}td::before{content:attr(data-label);color:#64748b;font-size:11px;font-weight:900;text-transform:uppercase}.empty{display:block!important}.live-modal-backdrop{align-items:flex-end}.live-bill-sheet{height:min(92dvh,720px);border-radius:18px 18px 0 0}.live-form-grid{grid-template-columns:1fr;padding:18px}.live-sheet-head{padding:18px}.live-sheet-actions{padding:12px 18px}}
+@media(max-width:760px){.live-accounting-page{padding:0 18px 18px}.live-header,.live-card-head{display:grid}.live-header{gap:14px}.live-actions{position:sticky;top:0;z-index:45;order:-1;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;width:auto;margin:0 -18px 14px;padding:10px 18px;background:rgba(255,255,255,.96);border-bottom:1px solid #e8edf4;box-shadow:0 8px 18px rgba(15,23,42,.04);backdrop-filter:blur(12px)}.live-actions button,.live-actions a{min-width:0;min-height:40px;justify-content:center;padding:0 8px;border-radius:9px;font-size:12px;white-space:nowrap}.live-actions svg{width:14px;height:14px}.live-title{padding-top:0}.live-metrics{display:grid;grid-template-columns:1fr}.live-card-head label{width:auto;min-height:44px}.live-table-wrap{overflow:visible}table,thead,tbody,tr,td{display:block;width:100%;min-width:0}thead{display:none}tr{border:1px solid #eef2f7;border-radius:8px;margin-bottom:12px;background:#fff;overflow:hidden}td{border-top:0;display:grid;grid-template-columns:105px minmax(0,1fr);gap:10px;padding:10px 12px;align-items:center}td::before{content:attr(data-label);color:#000000;font-size:11px;font-weight:900;text-transform:uppercase}.empty{display:block!important}.live-modal-backdrop{align-items:flex-end}.live-bill-sheet{height:min(92dvh,720px);border-radius:18px 18px 0 0}.live-form-grid{grid-template-columns:1fr;padding:18px}.live-sheet-head{padding:18px}.live-sheet-actions{padding:12px 18px}}
 @media(max-width:360px){.live-actions{grid-template-columns:1fr 1fr}.live-actions .primary{grid-column:1/-1}}
 `

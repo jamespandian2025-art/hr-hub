@@ -13,12 +13,12 @@ export default function TermsPage() {
     <LegalPage
       eyebrow="Terms"
       title="Terms of Service"
-      intro="These terms describe the rules for using WiseFlow during beta, trial, and paid service periods."
+      intro="These terms describe the rules for using WiseFlow during trial, pilot, evaluation, and paid service periods."
       updated={updated}
       summary={[
         'Use WiseFlow only for lawful business operations.',
         'Customers control user access and workspace data.',
-        'Beta features may change as the product is hardened for launch.',
+        'Features may change as the product is improved for launch readiness.',
       ]}
       sections={[
         {
@@ -29,10 +29,10 @@ export default function TermsPage() {
           ],
         },
         {
-          title: 'Beta and trial access',
+          title: 'Trial and evaluation access',
           body: [
-            'During a closed beta, trial, pilot, or evaluation period, some modules may be marked beta, manually supported, or subject to additional review before production use with real customer, employee, payroll, or finance data.',
-            'WiseFlow may update, improve, limit, or disable beta features to protect customers, improve reliability, or complete launch hardening.',
+            'During a trial, pilot, or evaluation period, some modules may be manually supported or subject to additional review before production use with real customer, employee, payroll, or finance data.',
+            'WiseFlow may update, improve, limit, or disable features to protect customers, improve reliability, or complete launch hardening.',
           ],
         },
         {
@@ -66,4 +66,3 @@ export default function TermsPage() {
     />
   )
 }
-

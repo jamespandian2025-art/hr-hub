@@ -148,7 +148,7 @@ export function statusTone(status: string) {
     case 'Late': return { bg: '#fef3c7', text: '#d97706', dot: '#f59e0b' }
     case 'Absent': return { bg: '#fee2e2', text: '#dc2626', dot: '#ef4444' }
     case 'On Leave': return { bg: '#dbeafe', text: '#1d4ed8', dot: '#3b82f6' }
-    default: return { bg: '#f3f4f6', text: '#6b7280', dot: '#9ca3af' }
+    default: return { bg: '#f3f4f6', text: '#000000', dot: '#9ca3af' }
   }
 }
 

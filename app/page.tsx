@@ -25,7 +25,7 @@ const customerLogos = ['Northline', 'ApexBuild', 'FieldCore', 'UrbanGrid', 'Prim
 const stats = [
   { value: '9+', label: 'connected workspaces' },
   { value: '40+', label: 'daily operations covered' },
-  { value: '14', label: 'day beta trial' },
+  { value: '14', label: 'day guided trial' },
   { value: '24/7', label: 'business visibility' },
 ]
 
@@ -83,14 +83,14 @@ const plans = [
     monthly: '$89',
     yearly: '$890 yearly',
     text: 'For smaller teams that need one professional system fast.',
-    features: ['Up to 12 users', 'All core modules', '14-day beta trial', 'Manual billing during beta'],
+    features: ['Up to 12 users', 'All core modules', '14-day guided trial', 'Manual billing available'],
   },
   {
     name: 'Business',
     monthly: '$179',
     yearly: '$1,790 yearly',
     text: 'For growing companies coordinating multiple departments.',
-    features: ['Up to 40 users', 'Advanced approvals', 'Company setup support', 'Manual billing during beta'],
+    features: ['Up to 40 users', 'Advanced approvals', 'Company setup support', 'Manual billing available'],
     featured: true,
   },
   {
@@ -146,7 +146,7 @@ const industryItems = [
 const resourceItems = [
   ['Implementation Guide', 'How to roll out WiseFlow across departments'],
   ['Operations Playbook', 'Best practices for workflows, approvals, and records'],
-  ['Pricing Brief', 'Monthly, yearly, beta trial, and manual billing details'],
+  ['Pricing Brief', 'Monthly, yearly, guided trial, and manual billing details'],
   ['Product Updates', 'Latest improvements across modules and portals'],
   ['Security Notes', 'Permissions, session handling, and audit visibility'],
   ['Help Center', 'Setup guidance for admins and teams'],
@@ -403,7 +403,7 @@ export default function Home() {
               warehouse, projects, datasets, client records, and internal work.
             </p>
             <Link href="/signup" className={styles.inlineCta}>
-              Request beta access
+              Request access
               <ArrowRight size={17} aria-hidden="true" />
             </Link>
           </div>
@@ -426,9 +426,9 @@ export default function Home() {
 
       <section id="pricing" className={styles.pricingSection}>
         <div className={styles.sectionIntro}>
-          <span className={styles.eyebrow}>Closed beta pricing</span>
-          <h2>Monthly, yearly, and a guided 14-day beta trial.</h2>
-          <p>Every plan includes the full system. Online checkout is not active yet, so beta billing is handled manually after setup review.</p>
+          <span className={styles.eyebrow}>Pricing</span>
+          <h2>Monthly, yearly, and a guided 14-day trial.</h2>
+          <p>Every plan includes the full system. Online checkout is not active yet, so billing is handled manually after setup review.</p>
         </div>
         <div className={styles.pricingGrid}>
           {plans.map(plan => (
@@ -450,7 +450,7 @@ export default function Home() {
                 ))}
               </ul>
               <Link href="/signup" className={plan.featured ? styles.primaryButton : styles.planButton}>
-                Request beta access
+                Request access
               </Link>
             </article>
           ))}
@@ -460,14 +460,14 @@ export default function Home() {
       <section id="trial" className={styles.ctaSection}>
         <div>
           <Layers3 size={28} aria-hidden="true" />
-          <h2>Start WiseFlow with guided beta onboarding.</h2>
+          <h2>Start WiseFlow with guided onboarding.</h2>
           <p>
             Give customers two weeks to test the real product, then move them into the monthly
             or annual plan that matches their operation once billing is confirmed.
           </p>
         </div>
         <Link href="/signup" className={styles.primaryButton}>
-          Request beta access
+          Request access
           <ArrowRight size={19} aria-hidden="true" />
         </Link>
       </section>

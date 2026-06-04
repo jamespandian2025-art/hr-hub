@@ -109,8 +109,8 @@ export default function ThemeSwitcher() {
           overflow: 'hidden',
         }}>
           <div style={{ padding: '10px 14px 6px', display: 'flex', alignItems: 'center', gap: 6, borderBottom: '1px solid #f3f4f6' }}>
-            <Palette size={13} color="#6b7280" />
-            <span style={{ fontSize: 11, fontWeight: 600, color: '#6b7280', fontFamily: "var(--font-body)", letterSpacing: '0.04em', textTransform: 'uppercase' }}>Theme</span>
+            <Palette size={13} color="#000000" />
+            <span style={{ fontSize: 11, fontWeight: 600, color: '#000000', fontFamily: "var(--font-body)", letterSpacing: '0.04em', textTransform: 'uppercase' }}>Theme</span>
           </div>
           {THEMES.map(theme => (
             <button

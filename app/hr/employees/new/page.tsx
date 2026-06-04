@@ -258,11 +258,11 @@ function SelectInput({ value, onChange, options, placeholder }: {
   return (
     <div style={{ position: 'relative' }}>
       <select value={value} onChange={e => onChange(e.target.value)}
-        style={{ width: '100%', border: '1px solid #e5e7eb', borderRadius: 8, padding: '8px 32px 8px 12px', fontSize: 13, color: value ? '#111827' : '#9ca3af', background: '#fff', outline: 'none', appearance: 'none', boxSizing: 'border-box', fontFamily: font, cursor: 'pointer' }}>
+        style={{ width: '100%', border: '1px solid #e5e7eb', borderRadius: 8, padding: '8px 32px 8px 12px', fontSize: 13, color: value ? '#111827' : '#000000', background: '#fff', outline: 'none', appearance: 'none', boxSizing: 'border-box', fontFamily: font, cursor: 'pointer' }}>
         {placeholder && <option value="">{placeholder}</option>}
         {options.map(o => <option key={o} value={o}>{o}</option>)}
       </select>
-      <ChevronDown size={13} color="#9ca3af" style={{ position: 'absolute', right: 10, top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none' }} />
+      <ChevronDown size={13} color="#000000" style={{ position: 'absolute', right: 10, top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none' }} />
     </div>
   )
 }
@@ -276,14 +276,14 @@ function MultiSelect({ value, onChange, options, placeholder }: {
   return (
     <div ref={ref} style={{ position: 'relative' }}>
       <div onClick={() => setOpen(v => !v)} style={{ display: 'flex', flexWrap: 'wrap', gap: 4, alignItems: 'center', border: '1px solid #e5e7eb', borderRadius: 8, padding: '6px 32px 6px 10px', minHeight: 38, cursor: 'pointer', background: '#fff', position: 'relative' }}>
-        {value.length === 0 && <span style={{ fontSize: 13, color: '#9ca3af' }}>{placeholder || 'Select...'}</span>}
+        {value.length === 0 && <span style={{ fontSize: 13, color: '#000000' }}>{placeholder || 'Select...'}</span>}
         {value.map(v => (
           <span key={v} style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 12, background: '#dcfce7', color: '#15803d', borderRadius: 99, padding: '2px 8px', fontWeight: 500 }}>
             {v}
             <span onClick={e => { e.stopPropagation(); onChange(value.filter(x => x !== v)) }} style={{ cursor: 'pointer', lineHeight: 1 }}><X size={10} /></span>
           </span>
         ))}
-        <ChevronDown size={13} color="#9ca3af" style={{ position: 'absolute', right: 10, top: '50%', transform: 'translateY(-50%)' }} />
+        <ChevronDown size={13} color="#000000" style={{ position: 'absolute', right: 10, top: '50%', transform: 'translateY(-50%)' }} />
       </div>
       {open && (
         <div style={{ position: 'absolute', top: 'calc(100% + 4px)', left: 0, right: 0, background: '#fff', border: '1px solid #e5e7eb', borderRadius: 10, boxShadow: '0 8px 24px rgba(0,0,0,0.1)', zIndex: 80, overflow: 'hidden', maxHeight: 220, overflowY: 'auto' }}>
@@ -596,7 +596,7 @@ export default function AddEmployeePage() {
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', paddingTop: 20, marginBottom: 20 }}>
         <div>
           <h1 style={{ margin: 0, fontSize: 20, fontWeight: 700, color: '#111827', letterSpacing: '-0.3px' }}>Add New Employee</h1>
-          <p style={{ margin: '4px 0 0', fontSize: 13, color: '#6b7280' }}>Fill in the details below to add a new employee to your organization.</p>
+          <p style={{ margin: '4px 0 0', fontSize: 13, color: '#000000' }}>Fill in the details below to add a new employee to your organization.</p>
         </div>
         <div style={{ display: 'flex', gap: 8 }}>
           <Link href="/hr/employees">
@@ -621,7 +621,7 @@ export default function AddEmployeePage() {
           {/* Photo upload */}
           <div style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: 12, padding: '20px 16px', textAlign: 'center', boxShadow: '0 1px 4px rgba(0,0,0,0.04)' }}>
             <div style={{ fontSize: 13, fontWeight: 600, color: '#374151', marginBottom: 4 }}>Profile Photo</div>
-            <div style={{ fontSize: 11, color: '#9ca3af', marginBottom: 14 }}>Upload a profile photo of the employee.</div>
+            <div style={{ fontSize: 11, color: '#000000', marginBottom: 14 }}>Upload a profile photo of the employee.</div>
             <input
               ref={photoInputRef}
               type="file"
@@ -640,7 +640,7 @@ export default function AddEmployeePage() {
                   style={{ width: '100%', height: '100%', backgroundImage: `url(${photoPreview})`, backgroundSize: 'cover', backgroundPosition: 'center' }}
                 />
               ) : (
-                <Camera size={24} color="#9ca3af" />
+                <Camera size={24} color="#000000" />
               )}
             </div>
             <button type="button" onClick={() => photoInputRef.current?.click()} style={{ border: '1px solid #22c55e', background: '#fff', borderRadius: 8, padding: '6px 14px', fontSize: 12, fontWeight: 500, color: '#22c55e', cursor: 'pointer', width: '100%' }}>
@@ -651,7 +651,7 @@ export default function AddEmployeePage() {
                 Remove photo
               </button>
             )}
-            <div style={{ fontSize: 10, color: '#9ca3af', marginTop: 8 }}>JPG, PNG or WEBP. Max size 2MB.</div>
+            <div style={{ fontSize: 10, color: '#000000', marginTop: 8 }}>JPG, PNG or WEBP. Max size 2MB.</div>
             {photoError && <div style={{ fontSize: 11, color: '#ef4444', marginTop: 6 }}>{photoError}</div>}
           </div>
 
@@ -662,7 +662,7 @@ export default function AddEmployeePage() {
               <div>
                 <FieldLabel required>Employee ID</FieldLabel>
                 <TextInput value={form.employeeId} onChange={v => set('employeeId', v)} placeholder="EMP-0001 (auto)" />
-                <div style={{ fontSize: 10, color: '#9ca3af', marginTop: 4 }}>Unique ID will be auto-generated if left blank.</div>
+                <div style={{ fontSize: 10, color: '#000000', marginTop: 4 }}>Unique ID will be auto-generated if left blank.</div>
               </div>
               <div>
                 <FieldLabel required>Employee Type</FieldLabel>
@@ -671,7 +671,7 @@ export default function AddEmployeePage() {
               <div>
                 <FieldLabel required>Employee Role</FieldLabel>
                 <SelectInput value={form.employeeRole} onChange={v => set('employeeRole', v)} options={EMPLOYEE_ROLES} />
-                <div style={{ fontSize: 10, color: '#9ca3af', marginTop: 4 }}>Role controls portal access and employee permissions.</div>
+                <div style={{ fontSize: 10, color: '#000000', marginTop: 4 }}>Role controls portal access and employee permissions.</div>
               </div>
               <div>
                 <FieldLabel required>Employment Status</FieldLabel>
@@ -708,7 +708,7 @@ export default function AddEmployeePage() {
                     padding: '14px 18px',
                     border: 'none',
                     background: 'transparent',
-                    color: isActive ? '#0f172a' : '#475569',
+                    color: isActive ? '#0f172a' : '#000000',
                     fontSize: 13,
                     fontWeight: isActive ? 700 : 500,
                     cursor: 'pointer',
@@ -879,7 +879,7 @@ export default function AddEmployeePage() {
                     <datalist id="job-title-options">
                       {JOB_TITLES.map(title => <option key={title} value={title} />)}
                     </datalist>
-                    <div style={{ fontSize: 10, color: '#9ca3af', marginTop: 4 }}>You can type a custom position if it is not in the list.</div>
+                    <div style={{ fontSize: 10, color: '#000000', marginTop: 4 }}>You can type a custom position if it is not in the list.</div>
                     {errors.jobTitle && <div style={{ fontSize: 11, color: '#ef4444', marginTop: 3 }}>{errors.jobTitle}</div>}
                   </div>
                   <div>
@@ -888,7 +888,7 @@ export default function AddEmployeePage() {
                     <datalist id="reports-to-options">
                       {reportsToOptions.map(leader => <option key={leader} value={leader} />)}
                     </datalist>
-                    <div style={{ fontSize: 10, color: '#9ca3af', marginTop: 4 }}>
+                    <div style={{ fontSize: 10, color: '#000000', marginTop: 4 }}>
                       You can type a manager manually if they are not in the list.
                     </div>
                   </div>
@@ -992,11 +992,11 @@ export default function AddEmployeePage() {
                   <Upload size={34} color="#22c55e" style={{ marginBottom: 10 }} />
                   <div style={{ fontSize: 14, fontWeight: 700, color: '#166534', marginBottom: 5 }}>Upload employee documents</div>
                   <div style={{ fontSize: 13, color: '#16a34a' }}>Contracts, IDs, certificates, onboarding forms, and payroll files.</div>
-                  <div style={{ fontSize: 11, color: '#6b7280', marginTop: 8 }}>PDF, Word, Excel, images, or text. Max 1MB per file.</div>
+                  <div style={{ fontSize: 11, color: '#000000', marginTop: 8 }}>PDF, Word, Excel, images, or text. Max 1MB per file.</div>
                 </div>
                 {documentError && <div style={{ fontSize: 12, color: '#ef4444', marginBottom: 12 }}>{documentError}</div>}
                 {documents.length === 0 ? (
-                  <div style={{ textAlign: 'center', padding: '18px 0', color: '#9ca3af', fontSize: 13 }}>No documents selected yet.</div>
+                  <div style={{ textAlign: 'center', padding: '18px 0', color: '#000000', fontSize: 13 }}>No documents selected yet.</div>
                 ) : (
                   <div style={{ display: 'grid', gap: 8 }}>
                     {documents.map(doc => (
@@ -1006,7 +1006,7 @@ export default function AddEmployeePage() {
                         </div>
                         <div style={{ flex: 1, minWidth: 0 }}>
                           <div style={{ fontSize: 13, fontWeight: 600, color: '#111827', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{doc.name}</div>
-                          <div style={{ fontSize: 11, color: '#6b7280' }}>{doc.type.toUpperCase()} - {doc.size}</div>
+                          <div style={{ fontSize: 11, color: '#000000' }}>{doc.type.toUpperCase()} - {doc.size}</div>
                         </div>
                         <button type="button" onClick={() => setDocuments(prev => prev.filter(item => item.id !== doc.id))} aria-label={`Remove ${doc.name}`} style={{ width: 30, height: 30, border: 'none', borderRadius: '50%', background: '#fee2e2', color: '#dc2626', display: 'grid', placeItems: 'center', cursor: 'pointer' }}>
                           <Trash2 size={14} />

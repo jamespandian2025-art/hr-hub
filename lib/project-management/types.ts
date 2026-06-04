@@ -189,6 +189,7 @@ export type ProjectActivity = {
 
 export type ProjectManagementState = {
   companyId: string
+  savedAt?: string
   clients: Array<{ id: string; name: string }>
   members: ProjectMember[]
   projects: ProjectRecord[]

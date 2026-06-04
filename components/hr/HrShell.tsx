@@ -372,7 +372,7 @@ export default function HrShell({ children }: { children: React.ReactNode }) {
                     <span className="hr-user-avatar">{accountPhoto ? <span style={{ backgroundImage: `url(${accountPhoto})` }} /> : initials(displayName)}</span>
                     <span style={{ minWidth: 0 }}>
                       <strong style={{ display: 'block', color: '#0f172a', fontSize: 14, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{displayName}</strong>
-                      <small style={{ display: 'block', color: '#64748b', fontSize: 12, marginTop: 2 }}>{company} - {role}</small>
+                      <small style={{ display: 'block', color: '#000000', fontSize: 12, marginTop: 2 }}>{company} - {role}</small>
                     </span>
                   </div>
                   <button type="button" style={quickMenuItemStyle} onClick={() => openHrRoute('/hr/settings')}><Settings size={15} /> HR settings</button>

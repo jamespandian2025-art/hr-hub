@@ -140,7 +140,7 @@ export default function EmployeeAttendancePage() {
 
   return (
     <main style={{ fontFamily: font, padding: '0 20px 36px', minHeight: '100vh' }}>
-      <div style={{ padding: '20px 0 18px', fontSize: 12, color: '#6b7280' }}>HR Hub &nbsp;&gt;&nbsp; <Link href="/hr/attendance" style={{ color: '#6b7280', textDecoration: 'none' }}>Attendance</Link> &nbsp;&gt;&nbsp; {name}</div>
+      <div style={{ padding: '20px 0 18px', fontSize: 12, color: '#000000' }}>HR Hub &nbsp;&gt;&nbsp; <Link href="/hr/attendance" style={{ color: '#000000', textDecoration: 'none' }}>Attendance</Link> &nbsp;&gt;&nbsp; {name}</div>
       {notice && <div style={{ ...card, padding: '10px 14px', marginBottom: 14, color: '#15803d', fontSize: 12, fontWeight: 800 }}>{notice}</div>}
 
       <section style={{ ...card, padding: 24, marginBottom: 16 }}>
@@ -150,7 +150,7 @@ export default function EmployeeAttendancePage() {
             <Avatar name={name} photo={employee.photo} size={112} />
             <div>
               <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 8 }}><h1 style={{ margin: 0, color: '#111827', fontSize: 25 }}>{name}</h1><span style={{ borderRadius: 999, background: '#dcfce7', color: '#15803d', padding: '4px 9px', fontSize: 11, fontWeight: 800 }}>{employee.employmentStatus || 'Active'}</span></div>
-              <p style={{ margin: '8px 0', color: '#6b7280', fontSize: 13 }}>{employee.jobTitle || 'Team member'} Â· {employee.employeeId || employee.id}</p>
+              <p style={{ margin: '8px 0', color: '#000000', fontSize: 13 }}>{employee.jobTitle || 'Team member'} Â· {employee.employeeId || employee.id}</p>
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(180px, auto))', gap: '9px 22px', color: '#374151', fontSize: 12 }}>
                 <span>{employee.department || 'Unassigned'} Department</span><span>{employee.team || 'No team'}</span><span>{employee.workLocation || employee.address || 'No location'}</span><span>{employee.email || 'No email'}</span>
               </div>
@@ -173,7 +173,7 @@ export default function EmployeeAttendancePage() {
             <div style={{ ...inputStyle }}>{monthRangeLabel()}</div>
             <select style={inputStyle}><option>Monthly</option></select>
             <select style={inputStyle}><option>All Status</option>{statuses.map(item => <option key={item}>{item}</option>)}</select>
-            <label style={{ ...inputStyle, display: 'flex', alignItems: 'center', gap: 8 }}><Search size={15} color="#9ca3af" /><input placeholder="Search remarks..." style={{ border: 'none', outline: 'none', width: '100%' }} /></label>
+            <label style={{ ...inputStyle, display: 'flex', alignItems: 'center', gap: 8 }}><Search size={15} color="#000000" /><input placeholder="Search remarks..." style={{ border: 'none', outline: 'none', width: '100%' }} /></label>
           </div>
           {activeTab === 'Attendance' ? <EmployeeAttendanceTable rows={employeeRows} rowMenuId={rowMenuId} setRowMenuId={setRowMenuId} menuPosition={rowMenuPosition} setMenuPosition={setRowMenuPosition} onEdit={openEdit} /> : <SimplePanel title={activeTab} rows={employeeRows} />}
         </section>
@@ -243,7 +243,7 @@ function EmployeeAttendanceTable({ rows, rowMenuId, setRowMenuId, menuPosition, 
   return (
     <div style={{ overflowX: 'auto' }}>
       <table style={{ width: '100%', minWidth: 920, borderCollapse: 'collapse', fontSize: 12 }}>
-        <thead><tr style={{ background: '#f9fafb', color: '#6b7280' }}>{['Date', 'Day', 'Status', 'Check In', 'Check Out', 'Work Hours', 'Break', 'Overtime', 'Remarks', ''].map(header => <th key={header} style={{ textAlign: 'left', padding: '11px 16px' }}>{header}</th>)}</tr></thead>
+        <thead><tr style={{ background: '#f9fafb', color: '#000000' }}>{['Date', 'Day', 'Status', 'Check In', 'Check Out', 'Work Hours', 'Break', 'Overtime', 'Remarks', ''].map(header => <th key={header} style={{ textAlign: 'left', padding: '11px 16px' }}>{header}</th>)}</tr></thead>
         <tbody>{rows.slice(0, 10).map(row => {
           const tone = statusTone(row.status)
           const overtime = Math.max(0, attendanceMinutes(row) - 480)
@@ -263,13 +263,13 @@ function EmployeeAttendanceTable({ rows, rowMenuId, setRowMenuId, menuPosition, 
           )
         })}</tbody>
       </table>
-      <div style={{ padding: '12px 16px', color: '#6b7280', fontSize: 12 }}>Showing {Math.min(rows.length, 10)} of {rows.length} records</div>
+      <div style={{ padding: '12px 16px', color: '#000000', fontSize: 12 }}>Showing {Math.min(rows.length, 10)} of {rows.length} records</div>
     </div>
   )
 }
 
 function SimplePanel({ title, rows }: { title: string; rows: AttendanceRow[] }) {
-  return <div style={{ padding: 24, minHeight: 300 }}><h2 style={{ margin: '0 0 8px', color: '#111827' }}>{title}</h2><p style={{ margin: '0 0 18px', color: '#6b7280', fontSize: 13 }}>This section uses the same attendance records for this employee.</p><div style={{ display: 'grid', gap: 10 }}>{rows.slice(0, 5).map(row => <div key={row.id} style={{ border: '1px solid #f3f4f6', borderRadius: 10, padding: 14, display: 'flex', justifyContent: 'space-between' }}><span>{formatDate(row.date)}</span><strong>{row.status}</strong></div>)}</div></div>
+  return <div style={{ padding: 24, minHeight: 300 }}><h2 style={{ margin: '0 0 8px', color: '#111827' }}>{title}</h2><p style={{ margin: '0 0 18px', color: '#000000', fontSize: 13 }}>This section uses the same attendance records for this employee.</p><div style={{ display: 'grid', gap: 10 }}>{rows.slice(0, 5).map(row => <div key={row.id} style={{ border: '1px solid #f3f4f6', borderRadius: 10, padding: 14, display: 'flex', justifyContent: 'space-between' }}><span>{formatDate(row.date)}</span><strong>{row.status}</strong></div>)}</div></div>
 }
 
 function InfoLine({ label, value }: { label: string; value: string }) {

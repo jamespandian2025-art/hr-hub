@@ -409,7 +409,7 @@ export default function OpportunitiesPage() {
         <div style={{ fontSize: '24px', fontWeight: 600, color: '#111827', marginBottom: '6px' }}>
           {editingId ? 'Edit Opportunity' : 'Create Opportunity'}
         </div>
-        <div style={{ fontSize: '13px', color: '#9ca3af', marginBottom: '28px', display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+        <div style={{ fontSize: '13px', color: '#000000', marginBottom: '28px', display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
           <span style={{ color: '#6c63ff', fontWeight: 600 }}>Opportunities</span>
           <span>/</span>
           <span>{editingId ? 'Edit' : 'New'}</span>
@@ -418,7 +418,7 @@ export default function OpportunitiesPage() {
         <div style={{ display: 'grid', gridTemplateColumns: 'minmax(220px, 260px) minmax(0, 1fr)', gap: '32px' }}>
           <div>
             <div style={{ fontSize: '15px', fontWeight: 600, color: '#111827', marginBottom: '8px' }}>Opportunity Details</div>
-            <div style={{ fontSize: '13px', color: '#6b7280', lineHeight: 1.6 }}>
+            <div style={{ fontSize: '13px', color: '#000000', lineHeight: 1.6 }}>
               Track potential projects before they become awarded work. Awarded items can later be created as projects.
             </div>
           </div>
@@ -454,7 +454,7 @@ export default function OpportunitiesPage() {
                 {addingClient && (
                   <input style={fieldStyle} value={manualClient} onChange={event => setManualClient(event.target.value)} placeholder="New client name" />
                 )}
-                <span style={{ fontSize: '12px', color: '#6b7280', lineHeight: 1.45 }}>New clients added here are saved to the Clients page.</span>
+                <span style={{ fontSize: '12px', color: '#000000', lineHeight: 1.45 }}>New clients added here are saved to the Clients page.</span>
               </label>
               <label style={fieldGroupStyle}>
                 <span style={labelStyle}>Location</span>
@@ -539,7 +539,7 @@ export default function OpportunitiesPage() {
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '16px', flexWrap: 'wrap', marginBottom: '34px' }}>
           <div>
             <div style={{ fontSize: '24px', fontWeight: 600, color: '#111827', marginBottom: '12px' }}>Opportunities</div>
-            <div style={{ fontSize: '13px', color: '#9ca3af', display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+            <div style={{ fontSize: '13px', color: '#000000', display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
               <span style={{ color: '#111827', fontWeight: 600 }}>Opportunities</span>
               <span>•</span>
               <span style={{ color: '#111827', fontWeight: 600 }}>{selectedOpportunity.name}</span>
@@ -559,7 +559,7 @@ export default function OpportunitiesPage() {
 
         <div style={{ display: 'flex', gap: '28px', marginBottom: '34px', overflowX: 'auto' }}>
           {detailTabs.map(tab => (
-            <button key={tab} onClick={() => setDetailTab(tab)} style={{ border: 'none', borderBottom: detailTab === tab ? '2px solid #111827' : '2px solid transparent', background: 'transparent', padding: '12px 2px', color: detailTab === tab ? '#111827' : '#64748b', cursor: 'pointer', fontSize: '14px', fontWeight: 600, display: 'flex', gap: '8px', alignItems: 'center', whiteSpace: 'nowrap' }}>
+            <button key={tab} onClick={() => setDetailTab(tab)} style={{ border: 'none', borderBottom: detailTab === tab ? '2px solid #111827' : '2px solid transparent', background: 'transparent', padding: '12px 2px', color: detailTab === tab ? '#111827' : '#000000', cursor: 'pointer', fontSize: '14px', fontWeight: 600, display: 'flex', gap: '8px', alignItems: 'center', whiteSpace: 'nowrap' }}>
               {tab}
               {tab === 'Scope of Works' && <span style={{ fontSize: '11px', padding: '2px 7px', borderRadius: '8px', background: '#111827', color: '#fff' }}>{opportunityScopes.length}</span>}
             </button>
@@ -570,8 +570,8 @@ export default function OpportunitiesPage() {
           <>
             <div style={panelStyle}>
               <div style={{ display: 'grid', gridTemplateColumns: 'minmax(260px, 1fr) 180px 220px', gap: '24px', alignItems: 'center' }}>
-                <div><div style={panelTitleStyle}>{selectedOpportunity.name}</div><div style={{ fontSize: '13px', color: '#64748b', fontWeight: 600, marginTop: '7px' }}>{selectedOpportunity.location}</div></div>
-                <div><div style={{ fontSize: '12px', color: '#111827', fontWeight: 600, marginBottom: '8px' }}>Planned schedule</div><div style={{ fontSize: '13px', color: '#64748b', fontWeight: 600 }}>{duration(selectedOpportunity)}</div></div>
+                <div><div style={panelTitleStyle}>{selectedOpportunity.name}</div><div style={{ fontSize: '13px', color: '#000000', fontWeight: 600, marginTop: '7px' }}>{selectedOpportunity.location}</div></div>
+                <div><div style={{ fontSize: '12px', color: '#111827', fontWeight: 600, marginBottom: '8px' }}>Planned schedule</div><div style={{ fontSize: '13px', color: '#000000', fontWeight: 600 }}>{duration(selectedOpportunity)}</div></div>
                 <div style={{ borderLeft: '1px solid #e5e7eb', paddingLeft: '24px' }}><div style={{ fontSize: '12px', color: '#111827', fontWeight: 600, marginBottom: '10px' }}>Client</div><div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}><span style={{ width: '36px', height: '36px', borderRadius: '50%', background: '#7c3aed', color: '#fff', display: 'grid', placeItems: 'center', fontSize: '16px', fontWeight: 600 }}>{selectedOpportunity.client.charAt(0).toLowerCase()}</span><span style={{ fontSize: '13px', color: '#374151', fontWeight: 600 }}>{selectedOpportunity.client}</span></div></div>
               </div>
             </div>
@@ -581,7 +581,7 @@ export default function OpportunitiesPage() {
                 <div style={panelTitleStyle}>Financial Chart</div>
                 <div style={{ width: '230px', height: '230px', borderRadius: '50%', margin: '28px auto 20px', background: 'conic-gradient(#22c55e 0% 48%, #f59e0b 48% 78%, #ff5733 78% 100%)', display: 'grid', placeItems: 'center' }}>
                   <div style={{ width: '168px', height: '168px', borderRadius: '50%', background: '#fff', boxShadow: 'inset 0 0 0 10px #f3f4f6', display: 'grid', placeItems: 'center', textAlign: 'center' }}>
-                    <div><div style={{ fontSize: '12px', color: '#64748b', fontWeight: 600 }}>Approved budget</div><div style={{ fontSize: '22px', color: '#111827', fontWeight: 600, marginTop: '8px' }}>{money(selectedOpportunity.approvedBudget)}</div></div>
+                    <div><div style={{ fontSize: '12px', color: '#000000', fontWeight: 600 }}>Approved budget</div><div style={{ fontSize: '22px', color: '#111827', fontWeight: 600, marginTop: '8px' }}>{money(selectedOpportunity.approvedBudget)}</div></div>
                   </div>
                 </div>
                 {[['#22c55e', 'Approved Budget', selectedOpportunity.approvedBudget], ['#f59e0b', 'Quotation', selectedOpportunity.quotation], ['#ff5733', 'Estimated Cost', Math.max(grossMargin, 0)]].map(([color, label, amount]) => (
@@ -592,7 +592,7 @@ export default function OpportunitiesPage() {
               <section style={panelStyle}>
                 <div style={panelTitleStyle}>Estimated cost</div>
                 <div style={{ fontSize: '12px', color: '#374151', fontWeight: 600, margin: '12px 0 24px' }}><span style={{ color: '#ff5733' }}>?</span> Estimated</div>
-                <div style={{ height: '300px', position: 'relative', borderBottom: '1px solid #e5e7eb' }}>{[2, 1.5, 1, 0.5, 0].map(value => <div key={value} style={{ height: '20%', borderTop: value === 2 ? 'none' : '1px dashed #e5e7eb', fontSize: '11px', color: '#94a3b8' }}>{value}</div>)}<div style={{ position: 'absolute', bottom: '-22px', left: '48%', fontSize: '11px', color: '#94a3b8', fontWeight: 600 }}>Material Cost</div></div>
+                <div style={{ height: '300px', position: 'relative', borderBottom: '1px solid #e5e7eb' }}>{[2, 1.5, 1, 0.5, 0].map(value => <div key={value} style={{ height: '20%', borderTop: value === 2 ? 'none' : '1px dashed #e5e7eb', fontSize: '11px', color: '#000000' }}>{value}</div>)}<div style={{ position: 'absolute', bottom: '-22px', left: '48%', fontSize: '11px', color: '#000000', fontWeight: 600 }}>Material Cost</div></div>
               </section>
             </div>
 
@@ -600,12 +600,12 @@ export default function OpportunitiesPage() {
               <section style={panelStyle}>
                 <div style={panelTitleStyle}>Scope of works</div>
                 <div style={{ minHeight: '310px', display: 'grid', placeItems: 'center', textAlign: 'center' }}>
-                  {opportunityScopes.length === 0 ? <div><div style={{ fontSize: '66px', color: '#cbd5e1', marginBottom: '18px' }}>?</div><div style={{ fontSize: '22px', color: '#64748b', fontWeight: 600, marginBottom: '18px' }}>No Scope of Works</div><div style={{ fontSize: '14px', color: '#64748b', marginBottom: '24px' }}>It seems there are no Scope of Works added yet</div><button onClick={() => setDetailTab('Scope of Works')} style={{ ...buttonStyle, background: '#fff', border: '1px solid #e5e7eb', color: '#111827' }}>+ Scope of Work</button></div> : <div style={{ width: '100%', display: 'grid', gap: '10px' }}>{opportunityScopes.slice(0, 3).map(scope => <div key={scope.id} style={{ display: 'flex', justifyContent: 'space-between', gap: '12px', borderBottom: '1px solid #f3f4f6', padding: '12px 0', textAlign: 'left' }}><span style={{ fontSize: '13px', color: '#111827', fontWeight: 600 }}>{scope.title}</span><span style={{ fontSize: '13px', color: '#111827', fontWeight: 600 }}>{money(scope.amount)}</span></div>)}</div>}
+                  {opportunityScopes.length === 0 ? <div><div style={{ fontSize: '66px', color: '#000000', marginBottom: '18px' }}>?</div><div style={{ fontSize: '22px', color: '#000000', fontWeight: 600, marginBottom: '18px' }}>No Scope of Works</div><div style={{ fontSize: '14px', color: '#000000', marginBottom: '24px' }}>It seems there are no Scope of Works added yet</div><button onClick={() => setDetailTab('Scope of Works')} style={{ ...buttonStyle, background: '#fff', border: '1px solid #e5e7eb', color: '#111827' }}>+ Scope of Work</button></div> : <div style={{ width: '100%', display: 'grid', gap: '10px' }}>{opportunityScopes.slice(0, 3).map(scope => <div key={scope.id} style={{ display: 'flex', justifyContent: 'space-between', gap: '12px', borderBottom: '1px solid #f3f4f6', padding: '12px 0', textAlign: 'left' }}><span style={{ fontSize: '13px', color: '#111827', fontWeight: 600 }}>{scope.title}</span><span style={{ fontSize: '13px', color: '#111827', fontWeight: 600 }}>{money(scope.amount)}</span></div>)}</div>}
                 </div>
               </section>
               <section style={panelStyle}>
                 <div style={panelTitleStyle}>Activity logs</div>
-                <div style={{ display: 'grid', gridTemplateColumns: '10px minmax(0, 1fr)', gap: '12px', marginTop: '26px' }}><span style={{ width: '10px', height: '10px', borderRadius: '50%', background: '#22c55e', marginTop: '4px' }} /><div><div style={{ fontSize: '13px', color: '#111827', fontWeight: 600, lineHeight: 1.45 }}>Local User created a new opportunity ({selectedOpportunity.name})</div><div style={{ fontSize: '12px', color: '#94a3b8', marginTop: '6px' }}>{formatDateTime(new Date().toISOString())}</div></div></div>
+                <div style={{ display: 'grid', gridTemplateColumns: '10px minmax(0, 1fr)', gap: '12px', marginTop: '26px' }}><span style={{ width: '10px', height: '10px', borderRadius: '50%', background: '#22c55e', marginTop: '4px' }} /><div><div style={{ fontSize: '13px', color: '#111827', fontWeight: 600, lineHeight: 1.45 }}>Local User created a new opportunity ({selectedOpportunity.name})</div><div style={{ fontSize: '12px', color: '#000000', marginTop: '6px' }}>{formatDateTime(new Date().toISOString())}</div></div></div>
                 <button style={{ border: 'none', background: 'transparent', color: '#111827', fontSize: '13px', fontWeight: 600, marginTop: '22px', cursor: 'pointer' }}>? See more</button>
               </section>
             </div>
@@ -620,7 +620,7 @@ export default function OpportunitiesPage() {
               <button onClick={() => addScope(selectedOpportunity.id)} disabled={!scopeTitle.trim()} style={{ ...buttonStyle, height: '40px', background: scopeTitle.trim() ? '#111827' : '#d1d5db', color: '#fff' }}>+ Scope of Work</button>
             </div>
             <textarea style={{ ...fieldStyle, resize: 'vertical', marginBottom: '18px' }} rows={3} value={scopeDescription} onChange={event => setScopeDescription(event.target.value)} placeholder="Description" />
-            {opportunityScopes.length === 0 ? <div style={{ minHeight: '330px', display: 'grid', placeItems: 'center', textAlign: 'center' }}><div><div style={{ fontSize: '66px', color: '#cbd5e1', marginBottom: '18px' }}>?</div><div style={{ fontSize: '24px', color: '#64748b', fontWeight: 600, marginBottom: '18px' }}>No Scope of Works</div><div style={{ fontSize: '14px', color: '#64748b' }}>It seems there are no Scope of Works added yet</div></div></div> : <div style={{ display: 'grid', gap: '10px' }}>{opportunityScopes.map(scope => <div key={scope.id} style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) auto auto', gap: '12px', alignItems: 'center', border: '1px solid #f3f4f6', borderRadius: '12px', padding: '14px' }}><div><div style={{ fontSize: '14px', color: '#111827', fontWeight: 600 }}>{scope.title}</div><div style={{ fontSize: '12px', color: '#64748b', marginTop: '4px' }}>{scope.description || 'No description'}</div></div><div style={{ fontSize: '13px', color: '#111827', fontWeight: 600 }}>{money(scope.amount)}</div><button onClick={() => deleteScope(scope.id)} style={{ border: 'none', background: '#fff1f2', color: '#e11d48', borderRadius: '8px', padding: '8px 10px', cursor: 'pointer', fontWeight: 600 }}>Delete</button></div>)}</div>}
+            {opportunityScopes.length === 0 ? <div style={{ minHeight: '330px', display: 'grid', placeItems: 'center', textAlign: 'center' }}><div><div style={{ fontSize: '66px', color: '#000000', marginBottom: '18px' }}>?</div><div style={{ fontSize: '24px', color: '#000000', fontWeight: 600, marginBottom: '18px' }}>No Scope of Works</div><div style={{ fontSize: '14px', color: '#000000' }}>It seems there are no Scope of Works added yet</div></div></div> : <div style={{ display: 'grid', gap: '10px' }}>{opportunityScopes.map(scope => <div key={scope.id} style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) auto auto', gap: '12px', alignItems: 'center', border: '1px solid #f3f4f6', borderRadius: '12px', padding: '14px' }}><div><div style={{ fontSize: '14px', color: '#111827', fontWeight: 600 }}>{scope.title}</div><div style={{ fontSize: '12px', color: '#000000', marginTop: '4px' }}>{scope.description || 'No description'}</div></div><div style={{ fontSize: '13px', color: '#111827', fontWeight: 600 }}>{money(scope.amount)}</div><button onClick={() => deleteScope(scope.id)} style={{ border: 'none', background: '#fff1f2', color: '#e11d48', borderRadius: '8px', padding: '8px 10px', cursor: 'pointer', fontWeight: 600 }}>Delete</button></div>)}</div>}
           </section>
         )}
 
@@ -628,13 +628,13 @@ export default function OpportunitiesPage() {
           <section>
             <div style={{ display: 'grid', gridTemplateColumns: '200px minmax(220px, 260px) 1fr auto auto', gap: '10px', alignItems: 'center', marginBottom: '38px' }}>
               <select style={fieldStyle} value={attachmentTagFilter} onChange={event => setAttachmentTagFilter(event.target.value)}><option>All</option><option>General</option></select>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', border: '1px solid #e5e7eb', borderRadius: '8px', padding: '10px 12px', background: '#fff' }}><span style={{ color: '#94a3b8' }}>?</span><input style={{ border: 'none', outline: 'none', flex: 1, fontSize: '13px' }} value={attachmentSearch} onChange={event => setAttachmentSearch(event.target.value)} placeholder="Search..." /></div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', border: '1px solid #e5e7eb', borderRadius: '8px', padding: '10px 12px', background: '#fff' }}><span style={{ color: '#000000' }}>?</span><input style={{ border: 'none', outline: 'none', flex: 1, fontSize: '13px' }} value={attachmentSearch} onChange={event => setAttachmentSearch(event.target.value)} placeholder="Search..." /></div>
               <div />
               <span style={{ fontSize: '14px', color: '#111827', fontWeight: 600 }}>May 06, 2026?</span>
               <span style={{ fontSize: '14px', color: '#111827', fontWeight: 600 }}>All type?</span>
             </div>
             <div style={{ minHeight: '380px', border: '1px dashed #e5e7eb', borderRadius: '14px', background: '#fff', display: 'grid', placeItems: filteredAttachments.length ? 'stretch' : 'center', padding: '20px' }}>
-              {filteredAttachments.length === 0 ? <div style={{ textAlign: 'center', color: '#94a3b8', fontSize: '18px', fontWeight: 600 }}><div style={{ width: '86px', height: '70px', margin: '0 auto 18px', borderRadius: '12px', background: 'linear-gradient(135deg, #e2e8f0, #cbd5e1)', opacity: 0.75 }} />No Data</div> : <div style={{ display: 'grid', gap: '10px' }}>{filteredAttachments.map(attachment => <div key={attachment.id} style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) auto auto', gap: '12px', alignItems: 'center', borderBottom: '1px solid #f3f4f6', padding: '12px' }}><div><div style={{ fontSize: '13px', color: '#111827', fontWeight: 600 }}>{attachment.name}</div><div style={{ fontSize: '12px', color: '#64748b', marginTop: '4px' }}>{fileSize(attachment.size)} - {attachment.tag}</div></div><span style={{ fontSize: '12px', color: '#64748b' }}>{formatDateTime(attachment.addedAt)}</span><button onClick={() => deleteAttachment(attachment.id)} style={{ border: 'none', background: '#fff1f2', color: '#e11d48', borderRadius: '8px', padding: '8px 10px', cursor: 'pointer', fontWeight: 600 }}>Remove</button></div>)}</div>}
+              {filteredAttachments.length === 0 ? <div style={{ textAlign: 'center', color: '#000000', fontSize: '18px', fontWeight: 600 }}><div style={{ width: '86px', height: '70px', margin: '0 auto 18px', borderRadius: '12px', background: 'linear-gradient(135deg, #e2e8f0, #cbd5e1)', opacity: 0.75 }} />No Data</div> : <div style={{ display: 'grid', gap: '10px' }}>{filteredAttachments.map(attachment => <div key={attachment.id} style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) auto auto', gap: '12px', alignItems: 'center', borderBottom: '1px solid #f3f4f6', padding: '12px' }}><div><div style={{ fontSize: '13px', color: '#111827', fontWeight: 600 }}>{attachment.name}</div><div style={{ fontSize: '12px', color: '#000000', marginTop: '4px' }}>{fileSize(attachment.size)} - {attachment.tag}</div></div><span style={{ fontSize: '12px', color: '#000000' }}>{formatDateTime(attachment.addedAt)}</span><button onClick={() => deleteAttachment(attachment.id)} style={{ border: 'none', background: '#fff1f2', color: '#e11d48', borderRadius: '8px', padding: '8px 10px', cursor: 'pointer', fontWeight: 600 }}>Remove</button></div>)}</div>}
             </div>
           </section>
         )}
@@ -647,7 +647,7 @@ export default function OpportunitiesPage() {
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '16px', marginBottom: '8px', flexWrap: 'wrap' }}>
         <div>
           <div style={{ fontSize: '24px', fontWeight: 600, color: '#111827', marginBottom: '6px' }}>Opportunities</div>
-          <div style={{ fontSize: '13px', color: '#9ca3af', display: 'flex', alignItems: 'center', gap: '6px' }}>
+          <div style={{ fontSize: '13px', color: '#000000', display: 'flex', alignItems: 'center', gap: '6px' }}>
             <span style={{ color: '#6c63ff', fontWeight: 600 }}>Opportunities</span>
             <span>/</span>
             <span>List</span>
@@ -664,9 +664,9 @@ export default function OpportunitiesPage() {
           ['Weighted Pipeline', money(analytics.weightedPipeline), 'Quotation x probability'],
         ].map(([label, value, detail]) => (
           <div key={label} style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: '12px', padding: '18px' }}>
-            <div style={{ fontSize: '12px', color: '#6b7280', fontWeight: 600, marginBottom: '8px' }}>{label}</div>
+            <div style={{ fontSize: '12px', color: '#000000', fontWeight: 600, marginBottom: '8px' }}>{label}</div>
             <div style={{ fontSize: '20px', color: '#111827', fontWeight: 600, wordBreak: 'break-word' }}>{value}</div>
-            <div style={{ fontSize: '12px', color: '#9ca3af', fontWeight: 600, marginTop: '5px' }}>{detail}</div>
+            <div style={{ fontSize: '12px', color: '#000000', fontWeight: 600, marginTop: '5px' }}>{detail}</div>
           </div>
         ))}
       </div>
@@ -674,9 +674,9 @@ export default function OpportunitiesPage() {
       <div style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: '16px', overflow: 'hidden' }}>
         <div style={{ display: 'flex', borderBottom: '1.5px solid #f3f4f6', padding: '0 24px', overflowX: 'auto' }}>
           {tabs.map(tab => (
-            <button key={tab} onClick={() => setActiveTab(tab)} style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '14px 16px', cursor: 'pointer', fontSize: '13px', fontWeight: activeTab === tab ? 800 : 600, color: activeTab === tab ? '#111827' : '#6b7280', border: 'none', borderBottom: activeTab === tab ? '2px solid #111827' : '2px solid transparent', background: 'transparent', marginBottom: '-1.5px', whiteSpace: 'nowrap' }}>
+            <button key={tab} onClick={() => setActiveTab(tab)} style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '14px 16px', cursor: 'pointer', fontSize: '13px', fontWeight: activeTab === tab ? 800 : 600, color: activeTab === tab ? '#111827' : '#000000', border: 'none', borderBottom: activeTab === tab ? '2px solid #111827' : '2px solid transparent', background: 'transparent', marginBottom: '-1.5px', whiteSpace: 'nowrap' }}>
               {tab}
-              <span style={{ fontSize: '11px', padding: '1px 7px', borderRadius: '20px', background: activeTab === tab ? '#111827' : '#f3f4f6', color: activeTab === tab ? '#fff' : '#6b7280', fontWeight: 600 }}>{tabCount(tab)}</span>
+              <span style={{ fontSize: '11px', padding: '1px 7px', borderRadius: '20px', background: activeTab === tab ? '#111827' : '#f3f4f6', color: activeTab === tab ? '#fff' : '#000000', fontWeight: 600 }}>{tabCount(tab)}</span>
             </button>
           ))}
         </div>
@@ -687,14 +687,14 @@ export default function OpportunitiesPage() {
             {clientNames.map(clientName => <option key={clientName}>{clientName}</option>)}
           </select>
           <div style={{ flex: 1, minWidth: '220px', display: 'flex', alignItems: 'center', gap: '8px', padding: '8px 14px', border: '1px solid #e5e7eb', borderRadius: '8px', background: '#fafafa' }}>
-            <span style={{ color: '#9ca3af', fontSize: '13px' }}>Search</span>
+            <span style={{ color: '#000000', fontSize: '13px' }}>Search</span>
             <input type="text" placeholder="Search opportunity, client, location, or source..." value={search} onChange={event => setSearch(event.target.value)} style={{ border: 'none', background: 'transparent', fontSize: '13px', color: '#374151', outline: 'none', flex: 1 }} />
           </div>
           <button type="button" onClick={() => { setSearch(''); setClientFilter('All'); setActiveTab('All') }} style={{ ...buttonStyle, background: '#fafafa', border: '1px solid #e5e7eb', color: '#374151' }}>Reset</button>
         </div>
 
         {filtered.length === 0 ? (
-          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '70px 24px', color: '#9ca3af', textAlign: 'center', gap: '12px' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '70px 24px', color: '#000000', textAlign: 'center', gap: '12px' }}>
             <div style={{ fontSize: '15px', fontWeight: 600 }}>No opportunities yet</div>
             <div style={{ fontSize: '13px', fontWeight: 600 }}>Click + Opportunity to create your first real lead.</div>
           </div>
@@ -707,7 +707,7 @@ export default function OpportunitiesPage() {
                     <input type="checkbox" checked={filtered.length > 0 && filtered.every(item => selected.includes(item.id))} onChange={toggleSelectAll} style={{ cursor: 'pointer' }} />
                   </th>
                   {['Opportunity', 'Client', 'Duration', 'Quotation', 'Approved Budget', 'Probability', 'Status', ''].map(header => (
-                    <th key={header} style={{ padding: '12px 16px', textAlign: 'left', fontSize: '12px', fontWeight: 600, color: '#6b7280', textTransform: 'uppercase' }}>{header}</th>
+                    <th key={header} style={{ padding: '12px 16px', textAlign: 'left', fontSize: '12px', fontWeight: 600, color: '#000000', textTransform: 'uppercase' }}>{header}</th>
                   ))}
                 </tr>
               </thead>
@@ -758,7 +758,7 @@ export default function OpportunitiesPage() {
 const cellStyle = {
   padding: '16px',
   fontSize: '13px',
-  color: '#6b7280',
+  color: '#000000',
   fontWeight: 600,
 }
 

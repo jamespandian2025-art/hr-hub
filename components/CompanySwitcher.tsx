@@ -145,7 +145,7 @@ export default function CompanySwitcher({ variant = 'light', compact = false, cl
         >
           <div style={{ padding: '13px 14px', borderBottom: `1px solid ${isDark ? 'rgba(148, 163, 184, .16)' : '#eef2f7'}` }}>
             <strong style={{ display: 'block', fontSize: 13 }}>Switch company</strong>
-            <span style={{ display: 'block', marginTop: 3, color: isDark ? '#94a3b8' : '#64748b', fontSize: 12 }}>{companies.length} workspace{companies.length === 1 ? '' : 's'} available</span>
+            <span style={{ display: 'block', marginTop: 3, color: isDark ? '#000000' : '#000000', fontSize: 12 }}>{companies.length} workspace{companies.length === 1 ? '' : 's'} available</span>
           </div>
           <div style={{ maxHeight: 320, overflowY: 'auto', padding: 6 }}>
             {companies.map(company => {
@@ -175,14 +175,14 @@ export default function CompanySwitcher({ variant = 'light', compact = false, cl
                   <span style={{ width: 32, height: 32, borderRadius: 8, display: 'grid', placeItems: 'center', background: isDark ? '#111827' : '#f1f5f9', color: isDark ? '#e5e7eb' : '#334155', fontSize: 11, fontWeight: 950 }}>{company.name.slice(0, 2).toUpperCase()}</span>
                   <span style={{ minWidth: 0 }}>
                     <strong style={{ display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: 13 }}>{company.name}</strong>
-                    <small style={{ display: 'block', marginTop: 3, color: isDark ? '#94a3b8' : '#64748b', fontSize: 11 }}>{company.type}</small>
+                    <small style={{ display: 'block', marginTop: 3, color: isDark ? '#000000' : '#000000', fontSize: 11 }}>{company.type}</small>
                   </span>
                   {active && <Check size={16} color="#16a34a" />}
                 </button>
               )
             })}
             {companies.length === 0 && (
-              <div style={{ padding: 14, color: isDark ? '#94a3b8' : '#64748b', fontSize: 12 }}>No company workspaces available.</div>
+              <div style={{ padding: 14, color: isDark ? '#000000' : '#000000', fontSize: 12 }}>No company workspaces available.</div>
             )}
           </div>
         </div>

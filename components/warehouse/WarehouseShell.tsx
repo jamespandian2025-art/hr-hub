@@ -142,7 +142,7 @@ const warehouseShellCss = `
 }
 .warehouse-brand small {
   display: block;
-  color: #64748b;
+  color: #000000;
   font-size: 12px;
   margin-top: 5px;
   font-weight: 650;
@@ -155,7 +155,7 @@ const warehouseShellCss = `
   border: 1px solid #e5e7eb;
   border-radius: 8px;
   background: transparent;
-  color: #475569;
+  color: #000000;
   place-items: center;
 }
 .warehouse-back-link {
@@ -176,7 +176,7 @@ const warehouseShellCss = `
   background: #f1f5f9;
 }
 .warehouse-nav-label {
-  color: #64748b;
+  color: #000000;
   font-size: 10px;
   font-weight: 900;
   letter-spacing: .8px;
@@ -203,7 +203,7 @@ const warehouseShellCss = `
   font-weight: 700;
 }
 .warehouse-nav-row svg {
-  color: #64748b;
+  color: #000000;
   flex: 0 0 auto;
 }
 .warehouse-nav-row:hover {
@@ -257,7 +257,7 @@ const warehouseShellCss = `
 }
 .warehouse-title-block small {
   display: block;
-  color: #64748b;
+  color: #000000;
   font-size: 12px;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -314,7 +314,7 @@ const warehouseShellCss = `
   align-items: center;
   gap: 10px;
   padding: 0 14px;
-  color: #64748b;
+  color: #000000;
 }
 .warehouse-search input {
   min-width: 0;

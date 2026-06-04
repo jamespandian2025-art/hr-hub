@@ -8,7 +8,7 @@ import {
   updateRecord,
 } from '@/lib/hrms/serverStore'
 import { requireCsrf } from '@/lib/security/requestGuards'
-import { assertCompanyAccess, companyIdFromRequest } from '@/lib/tenant/serverStore'
+import { assertCompanyAccess, resolveCompanyId } from '@/lib/tenant/serverStore'
 import { enforceRateLimit, rateLimitPolicies } from '@/lib/security/rateLimit'
 
 export const runtime = 'nodejs'
@@ -24,7 +24,7 @@ export async function GET(request: Request, context: RouteContext) {
     const collection = assertCollection(collectionParam)
     const actor = await actorFromRequest(request)
     assertPermission(actor, collection, 'read')
-    const companyId = companyIdFromRequest(request)
+    const companyId = await resolveCompanyId(request)
     await assertCompanyAccess({ userId: actor.id || '', email: actor.email, role: actor.role }, companyId)
     const record = await getVisibleRecord(collection, id, actor, companyId)
     if (!record) return Response.json({ ok: false, error: 'Record not found.' }, { status: 404 })
@@ -41,7 +41,7 @@ export async function PATCH(request: Request, context: RouteContext) {
     const collection = assertCollection(collectionParam)
     const actor = await actorFromRequest(request)
     assertPermission(actor, collection, 'update')
-    const companyId = companyIdFromRequest(request)
+    const companyId = await resolveCompanyId(request)
     await assertCompanyAccess({ userId: actor.id || '', email: actor.email, role: actor.role }, companyId)
     await enforceRateLimit(request, rateLimitPolicies.hrMutation, actor.id, actor.email, companyId, collection, 'patch')
     const payload = await request.json()
@@ -63,7 +63,7 @@ export async function DELETE(request: Request, context: RouteContext) {
     const collection = assertCollection(collectionParam)
     const actor = await actorFromRequest(request)
     assertPermission(actor, collection, 'delete')
-    const companyId = companyIdFromRequest(request)
+    const companyId = await resolveCompanyId(request)
     await assertCompanyAccess({ userId: actor.id || '', email: actor.email, role: actor.role }, companyId)
     await enforceRateLimit(request, rateLimitPolicies.hrMutation, actor.id, actor.email, companyId, collection, 'delete')
     const confirmation = new URL(request.url).searchParams.get('confirm') || request.headers.get('x-wiseflow-confirm-delete') || ''

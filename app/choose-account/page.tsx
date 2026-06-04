@@ -399,7 +399,7 @@ const chooseAccountCss = `
   height: 34px;
   border: 1px dashed #aeb4bd;
   border-radius: 999px;
-  color: #6b7280;
+  color: #000000;
   display: inline-flex;
   align-items: center;
   justify-content: center;

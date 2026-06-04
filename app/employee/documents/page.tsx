@@ -65,13 +65,13 @@ export default function EmployeeDocumentsPage() {
           <span style={{ display: 'grid', placeItems: 'center', gap: 8 }}><Upload size={22} /> Drag and drop files here or click to upload</span>
           <input type="file" multiple onChange={event => void upload(event.target.files)} style={{ display: 'none' }} />
         </label>
-        {myDocuments.length === 0 ? <div style={{ padding: 36, textAlign: 'center', color: '#64748b' }}>No documents uploaded yet.</div> : (
+        {myDocuments.length === 0 ? <div style={{ padding: 36, textAlign: 'center', color: '#000000' }}>No documents uploaded yet.</div> : (
           <div style={{ display: 'grid', gap: 10 }}>
             {myDocuments.map(item => (
               <div key={item.id} style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) auto', alignItems: 'center', gap: 12, padding: 12, border: '1px solid #eef2f7', borderRadius: 8 }}>
                 <span style={{ minWidth: 0 }}>
                   <strong style={{ display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.name}</strong>
-                  <small style={{ color: '#64748b', fontSize: 13 }}>{formatDate(item.uploadedAt)}{item.sizeBytes ? ` - ${formatFileSize(item.sizeBytes)}` : ''}</small>
+                  <small style={{ color: '#000000', fontSize: 13 }}>{formatDate(item.uploadedAt)}{item.sizeBytes ? ` - ${formatFileSize(item.sizeBytes)}` : ''}</small>
                 </span>
                 <span style={{ display: 'flex', gap: 8 }}>
                   <button type="button" onClick={() => downloadDocument(item)} style={iconButtonStyle} aria-label={`Download ${item.name}`}><Download size={15} /></button>

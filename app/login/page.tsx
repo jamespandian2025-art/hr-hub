@@ -766,7 +766,7 @@ html[data-theme='light'] body .login-shell .login-panel-subtitle.login-panel-sub
   border: 1px solid rgba(148, 163, 184, 0.2);
   border-radius: 8px;
   background: rgba(5, 9, 13, 0.46);
-  color: #94a3b8;
+  color: #000000;
   box-shadow: inset 0 1px 12px rgba(0, 0, 0, 0.12);
 }
 
@@ -1400,6 +1400,13 @@ html[data-theme='light'] .login-shell .employee-login-link:hover {
     padding: 11px;
     gap: 9px;
     font-size: 13px;
+    color: #d6dce5;
+    background: rgba(5, 9, 13, 0.34);
+    border-color: rgba(148, 163, 184, 0.36);
+  }
+
+  .employee-login-panel > div {
+    color: #d6dce5;
   }
 
   .employee-login-link {

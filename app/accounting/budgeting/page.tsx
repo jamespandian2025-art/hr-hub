@@ -19,6 +19,7 @@ import {
   TrendingUp,
 } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
+import { AnalyticsToggleButton, CollapsibleAnalytics, useAnalyticsDisclosure } from '@/components/AnalyticsDisclosure'
 import {
   type AccountingBudget,
   emptyAccountingData,
@@ -58,7 +59,7 @@ function statusTone(value: string) {
   if (status === 'approved') return { bg: '#dcfce7', color: '#15803d' }
   if (status === 'pending') return { bg: '#fef3c7', color: '#b45309' }
   if (status === 'over budget' || status === 'rejected') return { bg: '#fee2e2', color: '#dc2626' }
-  return { bg: '#f1f5f9', color: '#475569' }
+  return { bg: '#f1f5f9', color: '#000000' }
 }
 
 function derivedStatus(budget: AccountingBudget) {
@@ -106,6 +107,7 @@ export default function AccountingBudgetingPage() {
   const [filtersOpen, setFiltersOpen] = useState(false)
   const [showCreate, setShowCreate] = useState(false)
   const [selected, setSelected] = useState<string[]>([])
+  const analytics = useAnalyticsDisclosure('wiseflow:analytics:accounting-budgeting')
   const [form, setForm] = useState<BudgetForm>({
     name: '',
     project: '',
@@ -238,30 +240,33 @@ export default function AccountingBudgetingPage() {
         </div>
         <div className="budget-header-actions">
           <label className="budget-search">
-            <Search size={16} color="#64748b" />
+            <Search size={16} color="#000000" />
             <input value={search} onChange={event => setSearch(event.target.value)} placeholder="Search budgets, projects..." />
           </label>
+          <AnalyticsToggleButton open={analytics.open} onToggle={analytics.toggle} panelId={analytics.panelId} className="budget-toolbar-button" />
           <button type="button" className="budget-toolbar-button" onClick={exportBudgets}><Download size={15} /> Export CSV</button>
           <button type="button" className={filtersOpen ? 'budget-toolbar-button is-active' : 'budget-toolbar-button'} onClick={() => setFiltersOpen(open => !open)}><Filter size={15} /> Filters</button>
           <button type="button" className="budget-primary-button" onClick={() => setShowCreate(true)}><Plus size={15} /> New Budget <ChevronDown size={13} /></button>
         </div>
       </div>
 
-      <section className="budget-metrics">
-        {metrics.map(metric => {
-          const Icon = metric.icon
-          return (
-            <div key={metric.title} className="budget-card budget-metric-card">
-              <span className="budget-metric-icon" style={{ background: `${metric.tone}12`, color: metric.tone }}><Icon size={23} /></span>
-              <span>
-                <span className="budget-card-label">{metric.title}</span>
-                <strong className="budget-card-value">{metric.value}</strong>
-                <small className="budget-card-detail" style={{ color: metric.up ? '#16a34a' : '#334155' }}>{metric.detail}</small>
-              </span>
-            </div>
-          )
-        })}
-      </section>
+      <CollapsibleAnalytics open={analytics.open} id={analytics.panelId}>
+        <section className="budget-metrics">
+          {metrics.map(metric => {
+            const Icon = metric.icon
+            return (
+              <div key={metric.title} className="budget-card budget-metric-card">
+                <span className="budget-metric-icon" style={{ background: `${metric.tone}12`, color: metric.tone }}><Icon size={23} /></span>
+                <span>
+                  <span className="budget-card-label">{metric.title}</span>
+                  <strong className="budget-card-value">{metric.value}</strong>
+                  <small className="budget-card-detail" style={{ color: metric.up ? '#16a34a' : '#334155' }}>{metric.detail}</small>
+                </span>
+              </div>
+            )
+          })}
+        </section>
+      </CollapsibleAnalytics>
 
       <nav className="budget-tabs" aria-label="Budget sections">
         {tabs.map(tab => (
@@ -393,7 +398,7 @@ export default function AccountingBudgetingPage() {
           <div className="budget-card">
             <div className="budget-panel-header">
               <h2>Status Summary</h2>
-              <MoreHorizontal size={16} color="#64748b" />
+              <MoreHorizontal size={16} color="#000000" />
             </div>
             <div className="budget-status-list">
               {statusSummary.map(item => (
@@ -408,7 +413,7 @@ export default function AccountingBudgetingPage() {
           <div className="budget-card">
             <div className="budget-panel-header">
               <h2>Category Allocation</h2>
-              <BarChart3 size={16} color="#64748b" />
+              <BarChart3 size={16} color="#000000" />
             </div>
             <div className="budget-category-list">
               {categorySummary.map(([category, amount]) => (
@@ -452,16 +457,16 @@ const budgetCss = `
 .budget-card { background: #fff; border: 1px solid #e8edf4; border-radius: 8px; padding: 18px; box-shadow: 0 1px 2px rgba(15, 23, 42, .03); }
 .budget-metric-card { min-height: 100px; display: flex; align-items: center; }
 .budget-metric-icon { width: 54px; height: 54px; border-radius: 9px; display: grid; place-items: center; margin-right: 16px; flex: 0 0 auto; }
-.budget-card-label { display: block; color: #475569; font-size: 12px; font-weight: 850; }
+.budget-card-label { display: block; color: #000000; font-size: 12px; font-weight: 850; }
 .budget-card-value { display: block; color: #0f172a; font-size: 23px; margin-top: 8px; white-space: nowrap; }
 .budget-card-detail { display: block; color: #334155; font-size: 11.5px; font-weight: 900; margin-top: 8px; }
 .budget-tabs { display: flex; align-items: center; gap: 32px; border-bottom: 1px solid #e8edf4; padding-left: 14px; overflow-x: auto; }
 .budget-tabs button { border: 0; border-bottom: 2px solid transparent; background: transparent; color: #0f172a; min-height: 48px; padding: 0; font-size: 12.5px; font-weight: 900; cursor: pointer; white-space: nowrap; display: inline-flex; align-items: center; gap: 8px; }
 .budget-tabs button.is-active { color: #16a34a; border-bottom-color: #16a34a; }
-.budget-tabs span { min-width: 22px; min-height: 22px; border-radius: 999px; background: #f1f5f9; color: #475569; display: grid; place-items: center; font-size: 11px; }
+.budget-tabs span { min-width: 22px; min-height: 22px; border-radius: 999px; background: #f1f5f9; color: #000000; display: grid; place-items: center; font-size: 11px; }
 .budget-tabs button.is-active span { background: #dcfce7; color: #15803d; }
 .budget-filter-panel { margin: 16px 0 0; border: 1px solid #e8edf4; border-radius: 8px; background: #fff; padding: 14px; display: grid; grid-template-columns: minmax(180px, 240px) auto; gap: 12px; align-items: end; }
-.budget-filter-panel label { display: grid; gap: 7px; color: #475569; font-size: 12px; font-weight: 900; }
+.budget-filter-panel label { display: grid; gap: 7px; color: #000000; font-size: 12px; font-weight: 900; }
 .budget-filter-panel select, .budget-filter-panel button { min-height: 38px; border: 1px solid #e8edf4; border-radius: 8px; background: #fff; color: #0f172a; padding: 0 12px; font-size: 12.5px; font-weight: 850; }
 .budget-filter-panel button { cursor: pointer; justify-self: start; }
 .budget-grid { display: grid; grid-template-columns: minmax(0, 1fr) 360px; gap: 16px; margin-top: 18px; }
@@ -469,14 +474,14 @@ const budgetCss = `
 .budget-panel-header { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 16px; }
 .budget-panel-header h2, .budget-card-heading { margin: 0; color: #0f172a; font-size: 16px; font-weight: 950; }
 .budget-panel-actions { display: flex; align-items: center; flex-wrap: wrap; justify-content: flex-end; gap: 10px; }
-.budget-panel-actions strong { color: #475569; font-size: 12px; }
+.budget-panel-actions strong { color: #000000; font-size: 12px; }
 .budget-panel-actions button, .budget-link-button { min-height: 32px; border: 1px solid #e8edf4; border-radius: 7px; background: #fff; color: #0f172a; padding: 0 10px; font-size: 12px; font-weight: 900; cursor: pointer; }
 .budget-table-wrap { overflow-x: auto; }
 .budget-table { width: 100%; min-width: 1120px; border-collapse: collapse; }
-.budget-table th { text-align: left; padding: 12px 14px; color: #64748b; font-size: 11px; font-weight: 900; }
+.budget-table th { text-align: left; padding: 12px 14px; color: #000000; font-size: 11px; font-weight: 900; }
 .budget-table td { padding: 13px 14px; border-top: 1px solid #eef2f7; color: #0f172a; font-size: 13px; vertical-align: middle; }
 .budget-table td strong { display: block; color: #0f172a; }
-.budget-table td small { display: block; color: #64748b; margin-top: 3px; }
+.budget-table td small { display: block; color: #000000; margin-top: 3px; }
 .budget-positive { color: #16a34a !important; font-weight: 900; }
 .budget-negative { color: #ef4444 !important; font-weight: 900; }
 .budget-status-pill { display: inline-flex; min-height: 24px; align-items: center; border-radius: 7px; padding: 0 9px; font-size: 11.5px; font-weight: 900; white-space: nowrap; }
@@ -484,21 +489,21 @@ const budgetCss = `
 .budget-progress span { display: block; height: 100%; border-radius: 999px; }
 .budget-row-actions { display: flex; align-items: center; gap: 6px; }
 .budget-row-actions button { width: 32px; height: 32px; border: 1px solid #e8edf4; border-radius: 7px; background: #fff; color: #0f172a; display: grid; place-items: center; cursor: pointer; }
-.budget-empty { text-align: center; color: #64748b !important; padding: 34px !important; font-weight: 800; }
+.budget-empty { text-align: center; color: #000000 !important; padding: 34px !important; font-weight: 800; }
 .budget-create-panel { margin-top: 18px; }
 .budget-form { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 14px; }
 .budget-form label { display: grid; gap: 7px; }
-.budget-form span { color: #475569; font-size: 12px; font-weight: 900; }
+.budget-form span { color: #000000; font-size: 12px; font-weight: 900; }
 .budget-form input, .budget-form select, .budget-form textarea { min-height: 40px; border: 1px solid #e8edf4; border-radius: 8px; padding: 0 12px; color: #0f172a; background: #fff; outline: 0; font-size: 13px; font-family: inherit; }
 .budget-form textarea { padding: 10px 12px; resize: vertical; }
 .budget-form-wide { grid-column: span 2; }
 .budget-form-actions { grid-column: 1 / -1; display: flex; justify-content: space-between; align-items: center; gap: 12px; border-top: 1px solid #eef2f7; padding-top: 14px; }
-.budget-form-actions strong { color: #475569; font-size: 12px; }
+.budget-form-actions strong { color: #000000; font-size: 12px; }
 .budget-status-list, .budget-category-list { display: grid; gap: 14px; }
 .budget-status-list div { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 .budget-status-list strong { color: #0f172a; font-size: 18px; }
 .budget-category-list div { display: grid; gap: 7px; }
-.budget-category-list div > span, .budget-category-list p { color: #475569; font-size: 12.5px; font-weight: 850; margin: 0; }
+.budget-category-list div > span, .budget-category-list p { color: #000000; font-size: 12.5px; font-weight: 850; margin: 0; }
 .budget-category-list strong { color: #0f172a; font-size: 13px; }
 .budget-actions { display: grid; grid-template-columns: 1fr; gap: 12px; margin-top: 18px; }
 .budget-actions button { border: 0; background: #fff; color: #0f172a; display: grid; grid-template-columns: 28px minmax(0, 1fr) 16px; align-items: center; gap: 10px; min-height: 38px; font-size: 12.5px; font-weight: 900; cursor: pointer; text-align: left; }
@@ -538,7 +543,7 @@ html[data-theme='dark'] .budget-page .budget-table td { background: #101010 !imp
   .budget-table thead { display: none; }
   .budget-table tr { border: 1px solid #eef2f7; border-radius: 8px; margin-bottom: 12px; background: #fff; overflow: hidden; }
   .budget-table td { border-top: 0; display: grid; grid-template-columns: 112px minmax(0, 1fr); gap: 10px; padding: 10px 12px; font-size: 12.5px; align-items: center; }
-  .budget-table td::before { content: attr(data-label); color: #64748b; font-size: 11px; font-weight: 900; text-transform: uppercase; }
+  .budget-table td::before { content: attr(data-label); color: #000000; font-size: 11px; font-weight: 900; text-transform: uppercase; }
   .budget-row-actions { justify-content: flex-start; }
 }
 `

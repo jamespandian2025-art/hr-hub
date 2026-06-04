@@ -33,12 +33,15 @@ export const businessCollections = [
   'procurement-purchase-requests',
   'procurement-purchase-orders',
   'procurement-rfqs',
+  'procurement-rfq-published',
   'procurement-quotations',
+  'procurement-notifications',
   'procurement-receiving',
   'workflow-state',
   'workflow-jobs',
   'workflow-todos',
   'dataset-state',
+  'account-workspace',
 ] as const
 
 export type BusinessCollection = (typeof businessCollections)[number]

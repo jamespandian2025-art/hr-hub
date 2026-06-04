@@ -223,7 +223,7 @@ export default function HrSettingsPage() {
           <p style={pageSubtitleStyle}>Manage and configure all HR preferences, policies, and processes.</p>
         </div>
         <label style={searchBoxStyle}>
-          <Search size={15} color="#94a3b8" />
+          <Search size={15} color="#000000" />
           <input value={query} onChange={event => setQuery(event.target.value)} placeholder="Search settings..." style={plainInputStyle} />
         </label>
       </div>
@@ -243,7 +243,7 @@ export default function HrSettingsPage() {
             </button>
             <span style={{ minWidth: 0 }}>
               <strong style={{ display: 'block', color: '#0f172a', fontSize: 15 }}>{accountName}</strong>
-              <small style={{ display: 'block', color: '#64748b', marginTop: 3 }}>{account.role || 'HR'} profile picture used in HR header.</small>
+              <small style={{ display: 'block', color: '#000000', marginTop: 3 }}>{account.role || 'HR'} profile picture used in HR header.</small>
               {profileNotice && <small style={{ display: 'block', color: '#15803d', fontWeight: 800, marginTop: 6 }}>{profileNotice}</small>}
               {profileError && <small style={{ display: 'block', color: '#dc2626', fontWeight: 800, marginTop: 6 }}>{profileError}</small>}
             </span>
@@ -274,7 +274,7 @@ export default function HrSettingsPage() {
                       <strong>{item.title}</strong>
                       <small>{item.description}</small>
                     </span>
-                    <ArrowRight size={16} color="#64748b" />
+                    <ArrowRight size={16} color="#000000" />
                   </Link>
                 ))}
               </div>
@@ -386,7 +386,7 @@ function SummaryRow({ label, value }: { label: string; value: number }) {
 function EmptyState({ icon: Icon, title, text, compact = false }: { icon: typeof Settings; title: string; text: string; compact?: boolean }) {
   return (
     <div style={{ ...emptyStateStyle, minHeight: compact ? 120 : 220 }}>
-      <Icon size={compact ? 24 : 34} color="#94a3b8" />
+      <Icon size={compact ? 24 : 34} color="#000000" />
       <strong>{title}</strong>
       <span>{text}</span>
     </div>
@@ -395,7 +395,7 @@ function EmptyState({ icon: Icon, title, text, compact = false }: { icon: typeof
 
 const pageHeaderStyle: CSSProperties = { display: 'flex', justifyContent: 'space-between', gap: 16, alignItems: 'flex-start', flexWrap: 'wrap', marginBottom: 18 }
 const pageTitleStyle: CSSProperties = { margin: 0, color: '#0f172a', fontSize: 28, fontWeight: 900 }
-const pageSubtitleStyle: CSSProperties = { margin: '6px 0 0', color: '#475569', fontSize: 14 }
+const pageSubtitleStyle: CSSProperties = { margin: '6px 0 0', color: '#000000', fontSize: 14 }
 const searchBoxStyle: CSSProperties = { minHeight: 42, minWidth: 360, border: '1px solid #e5e7eb', borderRadius: 8, background: '#fff', padding: '0 12px', display: 'flex', alignItems: 'center', gap: 8, color: '#0f172a', fontSize: 13, fontFamily: font }
 const plainInputStyle: CSSProperties = { border: 'none', outline: 'none', background: 'transparent', width: '100%', font: 'inherit' }
 const tabsStyle: CSSProperties = { display: 'flex', gap: 26, borderBottom: '1px solid #e5e7eb', overflowX: 'auto', marginBottom: 16 }
@@ -410,7 +410,7 @@ const featureCardStyle: CSSProperties = { minHeight: 118, padding: 18, backgroun
 const featureIconStyle: CSSProperties = { width: 44, height: 44, borderRadius: 12, background: '#dcfce7', color: '#16a34a', display: 'grid', placeItems: 'center', flexShrink: 0 }
 const featureContentStyle: CSSProperties = { minWidth: 0, display: 'grid', gap: 6, lineHeight: 1.35 }
 const featureTitleStyle: CSSProperties = { display: 'block', color: '#0f172a', fontSize: 13, fontWeight: 900 }
-const featureTextStyle: CSSProperties = { display: 'block', color: '#475569', fontSize: 12, lineHeight: 1.45 }
+const featureTextStyle: CSSProperties = { display: 'block', color: '#000000', fontSize: 12, lineHeight: 1.45 }
 const featureActionStyle: CSSProperties = { display: 'inline-flex', alignItems: 'center', gap: 4, color: '#0f172a', fontSize: 12, fontWeight: 900 }
 const mainGridStyle: CSSProperties = { display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) 320px', gap: 14, alignItems: 'start', marginBottom: 14 }
 const panelStyle: CSSProperties = { background: '#fff', border: '1px solid #e5e7eb', borderRadius: 12, boxShadow: '0 8px 24px rgba(15,23,42,0.04)', overflow: 'hidden', marginBottom: 14 }
@@ -422,8 +422,8 @@ const configGridStyle: CSSProperties = { display: 'grid', gridTemplateColumns: '
 const configItemStyle: CSSProperties = { minHeight: 98, padding: 18, display: 'grid', gridTemplateColumns: '44px 1fr auto', gap: 14, alignItems: 'center', color: '#0f172a', textDecoration: 'none', borderRight: '1px solid #f1f5f9', borderBottom: '1px solid #f1f5f9', fontSize: 13 }
 const configIconStyle: CSSProperties = { width: 44, height: 44, borderRadius: 12, background: '#f0fdf4', color: '#16a34a', display: 'grid', placeItems: 'center' }
 const actionButtonStyle: CSSProperties = { width: '100%', minHeight: 42, padding: '0 14px', border: 'none', borderBottom: '1px solid #f1f5f9', background: '#fff', color: '#0f172a', display: 'grid', gridTemplateColumns: 'auto 1fr auto', alignItems: 'center', gap: 10, textAlign: 'left', fontSize: 13, fontWeight: 800, fontFamily: font, cursor: 'not-allowed' }
-const summaryRowStyle: CSSProperties = { display: 'flex', justifyContent: 'space-between', gap: 12, padding: '11px 16px', borderBottom: '1px solid #f1f5f9', color: '#475569', fontSize: 13 }
-const emptyStateStyle: CSSProperties = { display: 'grid', placeItems: 'center', alignContent: 'center', gap: 8, padding: 20, color: '#64748b', fontSize: 13, textAlign: 'center' }
+const summaryRowStyle: CSSProperties = { display: 'flex', justifyContent: 'space-between', gap: 12, padding: '11px 16px', borderBottom: '1px solid #f1f5f9', color: '#000000', fontSize: 13 }
+const emptyStateStyle: CSSProperties = { display: 'grid', placeItems: 'center', alignContent: 'center', gap: 8, padding: 20, color: '#000000', fontSize: 13, textAlign: 'center' }
 const activityListStyle: CSSProperties = { display: 'grid' }
 const activityItemStyle: CSSProperties = { minHeight: 64, padding: '12px 16px', borderBottom: '1px solid #f1f5f9', display: 'grid', gridTemplateColumns: '40px 1fr auto', gap: 12, alignItems: 'center', color: '#0f172a', fontSize: 13 }
 const activityIconStyle: CSSProperties = { width: 36, height: 36, borderRadius: 10, background: '#f0fdf4', color: '#16a34a', display: 'grid', placeItems: 'center' }

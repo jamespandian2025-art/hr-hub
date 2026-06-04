@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import type { ComponentType } from 'react'
 import { AlertTriangle, CheckCircle2, Clock3, FileCheck2, HandCoins, Search, ShieldCheck, WalletCards } from 'lucide-react'
+import { AnalyticsToggleButton, CollapsibleAnalytics, useAnalyticsDisclosure } from '@/components/AnalyticsDisclosure'
 import {
   decideLoanRequest,
   DeductionControlDecision,
@@ -56,6 +57,7 @@ export default function FinanceLoanManagementPage() {
   const [query, setQuery] = useState('')
   const [notice, setNotice] = useState('')
   const [editingId, setEditingId] = useState<string | null>(null)
+  const analytics = useAnalyticsDisclosure('wiseflow:analytics:financials-loan-management')
 
   useEffect(() => {
     const load = () => {
@@ -216,20 +218,25 @@ export default function FinanceLoanManagementPage() {
           <h1>Loan Management</h1>
           <p>Review requests, approve deduction terms, and protect payroll when an employee has too many deductions.</p>
         </div>
-        <label className="loan-search">
-          <Search size={16} />
-          <input value={query} onChange={event => setQuery(event.target.value)} placeholder="Search employee, loan, status..." />
-        </label>
+        <div className="loan-header-actions">
+          <AnalyticsToggleButton open={analytics.open} onToggle={analytics.toggle} panelId={analytics.panelId} className="loan-secondary" />
+          <label className="loan-search">
+            <Search size={16} />
+            <input value={query} onChange={event => setQuery(event.target.value)} placeholder="Search employee, loan, status..." />
+          </label>
+        </div>
       </header>
 
       {notice && <div style={noticeStyle}>{notice}<button onClick={() => setNotice('')} style={dismissStyle}>Dismiss</button></div>}
 
-      <section className="loan-kpis" aria-label="Loan summary">
-        <SummaryTile icon={WalletCards} label="Outstanding balance" value={money(totalOutstanding)} helper={`${employeeBalanceRows.length} employees with active balances`} tone="green" />
-        <SummaryTile icon={HandCoins} label="Scheduled this cutoff" value={money(totalScheduled)} helper="Before Finance overrides" tone="blue" />
-        <SummaryTile icon={Clock3} label="Needs approval" value={String(financeQueueRows.length)} helper="New loan requests" tone="amber" />
-        <SummaryTile icon={AlertTriangle} label="Payroll risks" value={String(payrollRiskRows.length)} helper="Needs full, partial, or skip decision" tone={payrollRiskRows.length ? 'red' : 'green'} />
-      </section>
+      <CollapsibleAnalytics open={analytics.open} id={analytics.panelId}>
+        <section className="loan-kpis" aria-label="Loan summary">
+          <SummaryTile icon={WalletCards} label="Outstanding balance" value={money(totalOutstanding)} helper={`${employeeBalanceRows.length} employees with active balances`} tone="green" />
+          <SummaryTile icon={HandCoins} label="Scheduled this cutoff" value={money(totalScheduled)} helper="Before Finance overrides" tone="blue" />
+          <SummaryTile icon={Clock3} label="Needs approval" value={String(financeQueueRows.length)} helper="New loan requests" tone="amber" />
+          <SummaryTile icon={AlertTriangle} label="Payroll risks" value={String(payrollRiskRows.length)} helper="Needs full, partial, or skip decision" tone={payrollRiskRows.length ? 'red' : 'green'} />
+        </section>
+      </CollapsibleAnalytics>
 
       <section className="loan-grid">
         <div className="loan-stack">
@@ -575,7 +582,7 @@ function TermEditor({ request, onSave }: { request: LoanRequest; onSave: (patch:
       <select value={schedule} disabled={request.requestType === 'Cash Advance'} onChange={event => updateSchedule(event.target.value as DeductionSchedule)} style={inputStyle}>
         <option>15th payroll</option><option>30th payroll</option><option>Twice a month</option><option>One-time</option>
       </select>
-      <small style={{ color: '#64748b', gridColumn: '1 / -1' }}>Suggested: {money(suggestedAmount)} per payroll deduction</small>
+      <small style={{ color: '#000000', gridColumn: '1 / -1' }}>Suggested: {money(suggestedAmount)} per payroll deduction</small>
       <button onClick={() => onSave({ repaymentMonths: Number(months || 1), repaymentAmount: Number(amount || 0), deductionOverrideAmount: Number(amount || 0), deductionSchedule: schedule })} style={primarySmall}>Save</button>
     </div>
   )
@@ -620,6 +627,14 @@ const loanManagementCss = `
   margin-bottom: 18px;
 }
 
+.loan-header-actions {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
 .loan-eyebrow {
   color: #008a3d;
   font-size: 11px;
@@ -654,7 +669,25 @@ const loanManagementCss = `
   border: 1px solid #d9e2ef;
   border-radius: 12px;
   background: #fff;
-  color: #64748b;
+  color: #000000;
+  box-shadow: 0 6px 18px rgba(15, 23, 42, .04);
+}
+
+.loan-secondary {
+  min-height: 46px;
+  border: 1px solid #d9e2ef;
+  border-radius: 12px;
+  background: #fff;
+  color: #0f172a;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 0 14px;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 900;
+  cursor: pointer;
   box-shadow: 0 6px 18px rgba(15, 23, 42, .04);
 }
 
@@ -699,7 +732,7 @@ const loanManagementCss = `
 .summary-tile small,
 .summary-tile em {
   display: block;
-  color: #64748b;
+  color: #000000;
   font-size: 12px;
   font-style: normal;
   line-height: 1.35;
@@ -752,7 +785,7 @@ const loanManagementCss = `
 .panel-header small {
   display: block;
   margin-bottom: 4px;
-  color: #64748b;
+  color: #000000;
   font-size: 11px;
   font-weight: 950;
   text-transform: uppercase;
@@ -788,7 +821,7 @@ const loanManagementCss = `
   border: 1px solid #e2e8f0;
   border-radius: 10px;
   background: #f8fafc;
-  color: #475569;
+  color: #000000;
   font-size: 12px;
   font-weight: 900;
 }
@@ -865,7 +898,7 @@ const loanManagementCss = `
 .compact-table small {
   display: block;
   margin-top: 3px;
-  color: #64748b;
+  color: #000000;
   font-size: 12px;
 }
 
@@ -951,7 +984,7 @@ const loanManagementCss = `
 
 .queue-reason {
   margin: 12px 0 0;
-  color: #475569;
+  color: #000000;
   font-size: 13px;
   line-height: 1.45;
 }
@@ -1009,7 +1042,7 @@ const loanManagementCss = `
   margin: 12px 0;
   padding-top: 10px;
   border-top: 1px solid #eef2f7;
-  color: #64748b;
+  color: #000000;
   font-size: 12px;
   font-weight: 800;
 }
@@ -1051,7 +1084,7 @@ const loanManagementCss = `
 .approved-deduction-main small {
   display: block;
   margin-bottom: 4px;
-  color: #64748b;
+  color: #000000;
   font-size: 11px;
   font-weight: 950;
   text-transform: uppercase;
@@ -1069,7 +1102,7 @@ const loanManagementCss = `
 .approved-deduction-main em {
   display: block;
   margin-top: 4px;
-  color: #64748b;
+  color: #000000;
   font-size: 12px;
   font-style: normal;
   line-height: 1.25;
@@ -1132,7 +1165,7 @@ const loanManagementCss = `
 .compact-table th {
   padding: 11px 12px;
   text-align: left;
-  color: #64748b;
+  color: #000000;
   font-size: 11px;
   font-weight: 950;
   text-transform: uppercase;
@@ -1162,7 +1195,7 @@ const loanManagementCss = `
   border: 1px solid #e2e8f0;
   border-radius: 999px;
   background: #f8fafc;
-  color: #475569;
+  color: #000000;
   font-size: 12px;
   font-weight: 900;
 }
@@ -1178,7 +1211,7 @@ const loanManagementCss = `
   min-height: 118px;
   padding: 20px;
   text-align: center;
-  color: #64748b;
+  color: #000000;
   border: 1px dashed #dbe3ef;
   border-radius: 12px;
   background: #f8fafc;

@@ -51,14 +51,24 @@ import {
   Zap,
   Workflow,
 } from 'lucide-react'
-import { companyChangeEvent, companyScopedKey, getActiveCompany } from '@/lib/tenant/company'
-
-const projectsStorageKey = 'flowsys-projects'
-const tasksStorageKey = 'flowsys-assigned-tasks'
-const accountStorageKey = 'flowsys-account'
-const projectManagementStorageKey = 'wiseflow-project-management-state'
-const outboundNotificationsKey = 'flowsys-outbound-notifications'
-const workflowDataChangedEvent = 'wiseflow-workflows-data-changed'
+import { AnalyticsToggleButton, CollapsibleAnalytics, useAnalyticsDisclosure } from '@/components/AnalyticsDisclosure'
+import {
+  accountStorageKey,
+  addWorkflowNotification,
+  companyChangeEvent,
+  loadStored,
+  loadWorkflowProjects,
+  loadWorkflowTasks,
+  nextNumericId,
+  projectsStorageKey,
+  saveWorkflowTasks,
+  workflowDataChangedEvent,
+  type AccountRecord,
+  type AssignedTask,
+  type ProjectRecord,
+  type TaskStatus,
+  type WorkflowStage,
+} from '@/lib/workflows/data'
 
 const departments = [
   'Procurement',
@@ -68,185 +78,6 @@ const departments = [
   'Project Management Team',
   'No Group',
 ]
-
-type TaskStatus = 'Open' | 'In Progress' | 'Completed'
-
-type WorkflowStage = {
-  id: string
-  name: string
-  type: 'normal' | 'done' | 'failed'
-  color?: string
-  order?: number
-  owners?: string[]
-  workers?: string[]
-}
-
-type ProjectRecord = {
-  id: number | string
-  name: string
-  client?: string
-  location?: string
-  department?: string
-  description?: string
-  stages?: WorkflowStage[]
-  reviewers?: string[]
-  deleted?: boolean
-  workflowIcon?: string
-  workflowColor?: string
-}
-
-type AssignedTask = {
-  id: number | string
-  projectId: number | string
-  title: string
-  description?: string
-  status: TaskStatus
-  priority?: 'Urgent' | 'High' | 'Normal' | 'Low'
-  assignee?: string
-  assignees?: string[]
-  stageId?: string
-  dueDate?: string
-  createdAt?: string
-  draft?: boolean
-  updatedAt?: string
-  source?: 'Change Order' | 'Manual'
-}
-
-type AccountRecord = {
-  fullName?: string
-  name?: string
-  role?: string
-}
-
-function loadStored<T>(key: string, fallback: T): T {
-  if (typeof window === 'undefined') return fallback
-  try {
-    const stored = window.localStorage.getItem(key)
-    return stored ? JSON.parse(stored) as T : fallback
-  } catch {
-    return fallback
-  }
-}
-
-function readStored<T>(key: string, fallback: T): T {
-  if (typeof window === 'undefined') return fallback
-  try {
-    const raw = window.localStorage.getItem(key)
-    if (!raw) return fallback
-    return JSON.parse(raw) as T
-  } catch {
-    return fallback
-  }
-}
-
-function loadProjectManagementSnapshot() {
-  if (typeof window === 'undefined') return null
-  const companyId = getActiveCompany()?.id || ''
-  return readStored<Record<string, unknown> | null>(companyScopedKey(projectManagementStorageKey, companyId), null)
-    || readStored<Record<string, unknown> | null>(projectManagementStorageKey, null)
-}
-
-function normalizeProjectTaskStatus(status: string): TaskStatus {
-  if (status === 'Done') return 'Completed'
-  if (status === 'In Progress' || status === 'Review' || status === 'Blocked') return 'In Progress'
-  return 'Open'
-}
-
-function normalizeProjectPriority(priority: string): AssignedTask['priority'] {
-  if (priority === 'Critical') return 'Urgent'
-  if (priority === 'High' || priority === 'Low') return priority
-  return 'Normal'
-}
-
-export function loadWorkflowProjects() {
-  const legacy = loadStored<ProjectRecord[]>(projectsStorageKey, [])
-  const snapshot = loadProjectManagementSnapshot()
-  const projectManagementProjects = Array.isArray(snapshot?.projects) ? snapshot.projects as Array<Record<string, unknown>> : []
-  const mapped = projectManagementProjects
-    .filter(project => !project.archivedAt)
-    .map(project => ({
-      id: String(project.id || ''),
-      name: String(project.name || 'Project workflow'),
-      client: String(project.clientId || ''),
-      department: String(project.department || 'Project Management Team'),
-      description: String(project.description || ''),
-      deleted: Boolean(project.archivedAt),
-      workflowIcon: 'workflow',
-      workflowColor: '#0ea5e9',
-    }))
-    .filter(project => project.id)
-  return uniqueBy([...legacy, ...mapped], project => String(project.id))
-}
-
-export function loadWorkflowTasks() {
-  const legacy = loadStored<AssignedTask[]>(tasksStorageKey, [])
-  const snapshot = loadProjectManagementSnapshot()
-  const members = Array.isArray(snapshot?.members) ? snapshot.members as Array<Record<string, unknown>> : []
-  const memberById = new Map(members.map(member => [String(member.id || ''), String(member.name || '')]))
-  const projectTasks = Array.isArray(snapshot?.tasks) ? snapshot.tasks as Array<Record<string, unknown>> : []
-  const mapped = projectTasks
-    .filter(task => !task.archivedAt)
-    .map(task => {
-      const assigneeName = memberById.get(String(task.assigneeId || '')) || String(task.assigneeId || '')
-      return {
-        id: String(task.id || ''),
-        projectId: String(task.projectId || ''),
-        title: String(task.title || 'Project task'),
-        description: String(task.description || ''),
-        status: normalizeProjectTaskStatus(String(task.status || 'To Do')),
-        priority: normalizeProjectPriority(String(task.priority || 'Medium')),
-        assignee: assigneeName,
-        assignees: assigneeName ? [assigneeName] : [],
-        dueDate: String(task.dueDate || ''),
-        createdAt: String(task.updatedAt || task.startDate || task.dueDate || ''),
-        draft: false,
-        source: 'Manual' as const,
-      }
-    })
-    .filter(task => task.id && task.projectId)
-  return uniqueBy([...legacy, ...mapped], task => String(task.id))
-}
-
-function uniqueBy<T>(rows: T[], keyFor: (row: T) => string) {
-  const seen = new Set<string>()
-  return rows.filter(row => {
-    const key = keyFor(row)
-    if (!key || seen.has(key)) return false
-    seen.add(key)
-    return true
-  })
-}
-
-function nextNumericId(rows: Array<{ id: number | string }>) {
-  return rows.reduce((max, row) => Math.max(max, typeof row.id === 'number' ? row.id : Number(row.id) || 0), 0) + 1
-}
-
-function saveWorkflowTasks(tasks: AssignedTask[]) {
-  if (typeof window === 'undefined') return
-  const legacyTasks = tasks.filter(task => typeof task.id === 'number' || !String(task.id).startsWith('tsk-'))
-  window.localStorage.setItem(tasksStorageKey, JSON.stringify(legacyTasks))
-  window.dispatchEvent(new Event(workflowDataChangedEvent))
-  window.dispatchEvent(new Event('storage'))
-}
-
-function addWorkflowNotification(subject: string, message: string, target: string) {
-  if (typeof window === 'undefined') return
-  const rows = readStored<Array<Record<string, unknown>>>(outboundNotificationsKey, [])
-  const next = {
-    id: Date.now(),
-    channel: 'In-App',
-    recipientRole: 'Admin',
-    subject,
-    message,
-    relatedType: 'Workflow',
-    relatedId: subject,
-    status: 'Queued',
-    target,
-    createdAt: new Date().toISOString(),
-  }
-  window.localStorage.setItem(outboundNotificationsKey, JSON.stringify([next, ...rows].slice(0, 100)))
-  window.dispatchEvent(new Event('storage'))
-}
 
 function initials(name: string) {
   return name.split(/\s+/).filter(Boolean).slice(0, 2).map(part => part[0]).join('').toUpperCase() || 'WF'
@@ -568,6 +399,7 @@ export function MyJobsPageClient() {
   const [projects, setProjects] = useState<ProjectRecord[]>(loadWorkflowProjects)
   const [tasks, setTasks] = useState<AssignedTask[]>(loadWorkflowTasks)
   const [account] = useState(() => loadStored<AccountRecord>(accountStorageKey, {}))
+  const analytics = useAnalyticsDisclosure('wiseflow:analytics:workflows-my-jobs')
   useEffect(() => {
     const reload = () => {
       setProjects(loadWorkflowProjects())
@@ -605,6 +437,7 @@ export function MyJobsPageClient() {
           </div>
         </div>
         <div className="wf-my-jobs-actions">
+          <AnalyticsToggleButton open={analytics.open} onToggle={analytics.toggle} panelId={analytics.panelId} />
           <label><Search size={16} /><input placeholder="Search jobs..." /></label>
           <button type="button"><SlidersHorizontal size={15} /> Filters</button>
           <button type="button"><ArrowUpDown size={15} /> Sort</button>
@@ -612,13 +445,15 @@ export function MyJobsPageClient() {
         </div>
       </section>
 
-      <section className="wf-jobs-metrics">
-        <JobsMetric icon={<UserRound size={24} />} label="Assigned to Me" value={visibleTasks.length} detail="All active jobs" tone="#0f9f5f" />
-        <JobsMetric icon={<Calendar size={24} />} label="Due Today" value={dueToday} detail="Due today" tone="#f59e0b" />
-        <JobsMetric icon={<Clock size={24} />} label="Overdue" value={overdue} detail="Past deadline" tone="#ef4444" />
-        <JobsMetric icon={<CheckCircle2 size={24} />} label="Completed" value={completed} detail="This month" tone="#0f9f5f" />
-        <JobsMetric icon={<ArrowUp size={24} />} label="High Priority" value={highPriority} detail="Urgent & High" tone="#8b5cf6" />
-      </section>
+      <CollapsibleAnalytics open={analytics.open} id={analytics.panelId}>
+        <section className="wf-jobs-metrics">
+          <JobsMetric icon={<UserRound size={24} />} label="Assigned to Me" value={visibleTasks.length} detail="All active jobs" tone="#0f9f5f" />
+          <JobsMetric icon={<Calendar size={24} />} label="Due Today" value={dueToday} detail="Due today" tone="#f59e0b" />
+          <JobsMetric icon={<Clock size={24} />} label="Overdue" value={overdue} detail="Past deadline" tone="#ef4444" />
+          <JobsMetric icon={<CheckCircle2 size={24} />} label="Completed" value={completed} detail="This month" tone="#0f9f5f" />
+          <JobsMetric icon={<ArrowUp size={24} />} label="High Priority" value={highPriority} detail="Urgent & High" tone="#8b5cf6" />
+        </section>
+      </CollapsibleAnalytics>
 
       <nav className="wf-my-jobs-tabs">
         {['Assigned to Me', 'Created by Me', 'Following', 'Team Jobs'].map((item, index) => (
@@ -685,6 +520,7 @@ export function MyJobsPageClient() {
 export function AllWorkflowsPageClient() {
   const [projects, setProjects] = useState<ProjectRecord[]>(loadWorkflowProjects)
   const [tasks, setTasks] = useState<AssignedTask[]>(loadWorkflowTasks)
+  const analytics = useAnalyticsDisclosure('wiseflow:analytics:workflows-all')
   useEffect(() => {
     const reload = () => {
       setProjects(loadWorkflowProjects())
@@ -714,20 +550,23 @@ export function AllWorkflowsPageClient() {
           <p>View and manage all workflows across the organization</p>
         </div>
         <div className="wf-list-actions">
+          <AnalyticsToggleButton open={analytics.open} onToggle={analytics.toggle} panelId={analytics.panelId} />
           <button type="button">Import Workflow</button>
           <button type="button">More Actions <ChevronDown size={15} /></button>
           <Link href="/workflows/create" className="wf-primary">+ Create workflow service</Link>
         </div>
       </section>
 
-      <section className="wf-summary-grid">
-        <SummaryCard icon={<Layers size={26} />} title="Total Workflows" value={projects.length} detail={`${visibleProjects.length} active`} tone="#0f9f5f" />
-        <SummaryCard icon={<PlayCircle size={26} />} title="Active Workflows" value={visibleProjects.length} detail="Available now" tone="#3b82f6" />
-        <SummaryCard icon={<RotateCcw size={26} />} title="Inactive Workflows" value={visibleProjects.filter(project => workflowStats(project, tasks).tasks.length === 0).length} detail="No jobs yet" tone="#f59e0b" />
-        <SummaryCard icon={<Archive size={26} />} title="Archived Workflows" value={archivedProjects.length} detail="Archived records" tone="#8b5cf6" />
-        <SummaryCard icon={<CheckCircle2 size={26} />} title="Completed Jobs" value={totalDone} detail="Across workflows" tone="#0f9f5f" />
-        <SummaryCard icon={<AlertTriangle size={26} />} title="Workflows At Risk" value={overdueWorkflows} detail="Have overdue jobs" tone="#f59e0b" />
-      </section>
+      <CollapsibleAnalytics open={analytics.open} id={analytics.panelId}>
+        <section className="wf-summary-grid">
+          <SummaryCard icon={<Layers size={26} />} title="Total Workflows" value={projects.length} detail={`${visibleProjects.length} active`} tone="#0f9f5f" />
+          <SummaryCard icon={<PlayCircle size={26} />} title="Active Workflows" value={visibleProjects.length} detail="Available now" tone="#3b82f6" />
+          <SummaryCard icon={<RotateCcw size={26} />} title="Inactive Workflows" value={visibleProjects.filter(project => workflowStats(project, tasks).tasks.length === 0).length} detail="No jobs yet" tone="#f59e0b" />
+          <SummaryCard icon={<Archive size={26} />} title="Archived Workflows" value={archivedProjects.length} detail="Archived records" tone="#8b5cf6" />
+          <SummaryCard icon={<CheckCircle2 size={26} />} title="Completed Jobs" value={totalDone} detail="Across workflows" tone="#0f9f5f" />
+          <SummaryCard icon={<AlertTriangle size={26} />} title="Workflows At Risk" value={overdueWorkflows} detail="Have overdue jobs" tone="#f59e0b" />
+        </section>
+      </CollapsibleAnalytics>
 
       <section className="wf-list-filters">
         <label><input placeholder="Search workflows..." /><Search size={16} /></label>
@@ -1924,7 +1763,7 @@ const workflowCss = `
 }
 .wf-page-header p {
   margin: 8px 0 0;
-  color: #6b7280;
+  color: #000000;
   font-size: 14px;
 }
 .wf-header-actions {
@@ -2099,7 +1938,7 @@ const workflowCss = `
 .wf-members span:first-child { margin-left: 0; }
 .wf-members span:nth-child(2) { background: #375a7f; }
 .wf-members span:nth-child(3) { background: #8b9ac5; }
-.wf-members em { background: #e5e7eb; color: #475569; }
+.wf-members em { background: #e5e7eb; color: #000000; }
 .wf-progress {
   height: 4px;
   border-radius: 999px;
@@ -2142,7 +1981,7 @@ const workflowCss = `
   font-size: 30px;
   letter-spacing: 0;
 }
-.wf-create-heading p { margin: 8px 0 0; color: #6b7280; font-size: 14px; }
+.wf-create-heading p { margin: 8px 0 0; color: #000000; font-size: 14px; }
 .wf-steps {
   margin: 34px 0 32px;
   padding: 0 10px;
@@ -2177,14 +2016,14 @@ const workflowCss = `
   border-radius: 999px;
   border: 2px solid #d6dbe3;
   background: #fff;
-  color: #6b7280;
+  color: #000000;
   display: grid;
   place-items: center;
   font-size: 14px;
   font-weight: 900;
 }
 .wf-steps strong { color: #111827; font-size: 14px; }
-.wf-steps small { color: #6b7280; font-size: 13px; }
+.wf-steps small { color: #000000; font-size: 13px; }
 .wf-steps .active span { background: #0f9f5f; color: #fff; border-color: #0f9f5f; }
 .wf-steps .active strong { color: #0f9f5f; }
 .wf-create-grid {
@@ -2211,7 +2050,7 @@ const workflowCss = `
 .wf-form-panel > p,
 .wf-preview-panel > p {
   margin: 7px 0 28px;
-  color: #6b7280;
+  color: #000000;
   font-size: 14px;
 }
 .wf-form-row {
@@ -2232,7 +2071,7 @@ const workflowCss = `
 }
 .wf-field b { color: #e11d48; }
 .wf-field em {
-  color: #6b7280;
+  color: #000000;
   font-style: normal;
   font-weight: 650;
 }
@@ -2257,7 +2096,7 @@ const workflowCss = `
 }
 .wf-field small,
 .wf-picker small {
-  color: #6b7280;
+  color: #000000;
   font-size: 12px;
 }
 .wf-picker { display: grid; gap: 10px; }
@@ -2366,7 +2205,7 @@ const workflowCss = `
 }
 .wf-breadcrumb {
   margin-bottom: 14px;
-  color: #6b7280;
+  color: #000000;
   font-size: 13px;
   font-weight: 650;
 }
@@ -2403,7 +2242,7 @@ const workflowCss = `
 }
 .wf-detail-metric strong.danger { color: #e11d48; }
 .wf-detail-metric span {
-  color: #6b7280;
+  color: #000000;
   font-size: 12px;
   font-weight: 700;
 }
@@ -2437,7 +2276,7 @@ const workflowCss = `
 .wf-member-row span:nth-child(2) { background: #d7eadc; color: #234c35; }
 .wf-member-row span:nth-child(3) { background: #e1e7e7; color: #36505a; }
 .wf-member-row span:nth-child(4) { background: #d5d9e1; color: #2f3b4a; }
-.wf-member-row em { background: #e5e7eb; color: #475569; }
+.wf-member-row em { background: #e5e7eb; color: #000000; }
 .wf-member-row button {
   margin-left: 8px;
   min-height: 34px;
@@ -2541,7 +2380,7 @@ const workflowCss = `
   line-height: 1.2;
 }
 .wf-kanban-column header b {
-  color: #6b7280;
+  color: #000000;
   line-height: 1;
   text-align: right;
   display: grid;
@@ -2597,7 +2436,7 @@ const workflowCss = `
   align-items: center;
 }
 .wf-job-row small {
-  color: #6b7280;
+  color: #000000;
   font-size: 12px;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -2753,7 +2592,7 @@ const workflowCss = `
   flex-wrap: wrap;
   gap: 10px;
   margin-bottom: 22px;
-  color: #6b7280;
+  color: #000000;
   font-size: 13px;
 }
 .wf-job-create-header .wf-breadcrumb a {
@@ -2905,7 +2744,7 @@ const workflowCss = `
   left: 14px;
   top: 50%;
   transform: translateY(-50%);
-  color: #6b7280;
+  color: #000000;
   pointer-events: none;
 }
 .wf-select-icon input,
@@ -2929,7 +2768,7 @@ const workflowCss = `
 }
 .wf-attachment-drop span {
   font-size: 12px;
-  color: #6b7280;
+  color: #000000;
 }
 .wf-job-form-footer {
   justify-content: flex-start;
@@ -3165,7 +3004,7 @@ const workflowCss = `
 }
 .wf-job-table-row .assignees em {
   background: #eef1f5;
-  color: #475569;
+  color: #000000;
 }
 .wf-job-table-row .due.overdue {
   color: #e11d48;
@@ -3208,7 +3047,7 @@ const workflowCss = `
   place-items: center;
   align-content: center;
   gap: 10px;
-  color: #64748b;
+  color: #000000;
   text-align: center;
 }
 .wf-job-list-empty strong {
@@ -3545,7 +3384,7 @@ const workflowCss = `
 .wf-files-row .file-name small {
   display: block;
   margin-top: 2px;
-  color: #64748b;
+  color: #000000;
   font-size: 12px;
   font-weight: 650;
 }
@@ -3847,7 +3686,7 @@ const workflowCss = `
   padding-left: 14px;
 }
 .wf-settings-card code {
-  color: #475569;
+  color: #000000;
   font: inherit;
   font-size: 13px;
 }
@@ -3857,7 +3696,7 @@ const workflowCss = `
   border: 0;
   border-left: 1px solid #edf0f3;
   background: transparent;
-  color: #475569;
+  color: #000000;
   display: grid;
   place-items: center;
   cursor: pointer;
@@ -4008,7 +3847,7 @@ const workflowCss = `
   height: 20px;
   border-radius: 999px;
   background: #eef1f5;
-  color: #475569;
+  color: #000000;
   display: grid;
   place-items: center;
   font-size: 11px;
@@ -4132,7 +3971,7 @@ const workflowCss = `
 }
 .wf-job-comment small {
   margin-left: 10px;
-  color: #6b7280;
+  color: #000000;
   font-size: 12px;
 }
 .wf-job-comment-input {
@@ -4150,7 +3989,7 @@ const workflowCss = `
 .wf-job-comment-input svg {
   justify-self: end;
   margin: 0 12px 0 -34px;
-  color: #6b7280;
+  color: #000000;
 }
 .wf-side-progress {
   display: grid;
@@ -4196,7 +4035,7 @@ const workflowCss = `
   height: 22px;
   border-radius: 999px;
   background: #e5e7eb;
-  color: #475569;
+  color: #000000;
   display: grid;
   place-items: center;
   font-size: 11px;
@@ -4213,7 +4052,7 @@ const workflowCss = `
 }
 .wf-side-panel li small {
   display: block;
-  color: #6b7280;
+  color: #000000;
   font-size: 12px;
   font-weight: 650;
 }
@@ -4225,7 +4064,7 @@ const workflowCss = `
 }
 .wf-time-grid small {
   display: block;
-  color: #6b7280;
+  color: #000000;
   font-size: 11px;
   margin-bottom: 5px;
 }
@@ -4243,7 +4082,7 @@ const workflowCss = `
 }
 .wf-side-panel p small {
   display: block;
-  color: #6b7280;
+  color: #000000;
   font-size: 11px;
   font-weight: 650;
 }
@@ -4592,7 +4431,7 @@ const workflowCss = `
   gap: 20px;
 }
 .wf-list-breadcrumb {
-  color: #64748b;
+  color: #000000;
   font-size: 13px;
   margin-bottom: 14px;
 }
@@ -4676,7 +4515,7 @@ const workflowCss = `
 .wf-summary-card small {
   display: block;
   margin-top: 9px;
-  color: #64748b;
+  color: #000000;
   font-size: 12px;
 }
 .wf-list-filters {
@@ -4696,7 +4535,7 @@ const workflowCss = `
   align-items: center;
   gap: 10px;
   padding: 0 12px;
-  color: #64748b;
+  color: #000000;
 }
 .wf-list-filters input {
   min-width: 0;
@@ -4767,7 +4606,7 @@ const workflowCss = `
 .wf-activity small,
 .wf-jobs-count small {
   display: block;
-  color: #64748b;
+  color: #000000;
   font-size: 12px;
 }
 .wf-chip,
@@ -4846,7 +4685,7 @@ const workflowCss = `
   min-height: 240px;
   display: grid;
   place-items: center;
-  color: #64748b;
+  color: #000000;
   font-size: 14px;
 }
 .wf-list-footer {
@@ -4893,7 +4732,7 @@ const workflowCss = `
 }
 .wf-detail-page .wf-breadcrumb {
   margin: 0 0 3px;
-  color: #6b7280;
+  color: #000000;
   font-size: 11px;
   font-weight: 650;
 }
@@ -4918,7 +4757,7 @@ const workflowCss = `
 }
 .wf-detail-page .wf-detail-title > button {
   border-color: transparent;
-  color: #9ca3af;
+  color: #000000;
 }
 .wf-detail-page .wf-detail-actions {
   display: flex;
@@ -4933,7 +4772,7 @@ const workflowCss = `
   border: 1px solid #dfe3e8;
   border-radius: 4px;
   background: #fff;
-  color: #6b7280;
+  color: #000000;
   display: flex;
   align-items: center;
   gap: 8px;
@@ -5002,7 +4841,7 @@ const workflowCss = `
   font-weight: 850;
 }
 .wf-detail-page .wf-board-toolbar span {
-  color: #6b7280;
+  color: #000000;
   font-size: 12px;
   font-weight: 750;
 }

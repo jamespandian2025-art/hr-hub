@@ -1,6 +1,6 @@
 'use client'
 
-import { ChangeEvent, DragEvent, FormEvent, KeyboardEvent, MouseEvent, ReactNode, useEffect, useMemo, useRef, useState } from 'react'
+import { CSSProperties, ChangeEvent, DragEvent, FormEvent, KeyboardEvent, MouseEvent, ReactNode, useEffect, useMemo, useRef, useState } from 'react'
 import {
   Archive,
   ArrowUpDown,
@@ -12,7 +12,9 @@ import {
   ChevronDown,
   ChevronLeft,
   ChevronRight,
+  Copy,
   Download,
+  Eye,
   FileCheck2,
   FileText,
   Home,
@@ -30,14 +32,15 @@ import {
   Printer,
   Repeat2,
   RotateCcw,
-  Share2,
+  Search,
   Star,
   Trash2,
   UploadCloud,
   WalletCards,
+  X,
 } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
-import { budgetSummary, formatDate, formatMoney, initials, monthlyStatusTrend, tasksByStatus, workloadByMember } from '@/lib/project-management/metrics'
+import { budgetSummary, formatDate, formatMoney, initials, monthlyStatusTrend, workloadByMember } from '@/lib/project-management/metrics'
 import type { MilestoneStatus, ProjectHealth, ProjectManagementState, ProjectMilestone, ProjectRecord, ProjectStatus, ProjectTask, TaskPriority, TaskStatus } from '@/lib/project-management/types'
 import type { MilestoneDraft, MilestoneUpdateDraft, ProjectSalesOpportunity, ProjectUpdateDraft } from '@/lib/project-management/service'
 import { loadProjectThumbnailAsset } from '@/lib/project-management/service'
@@ -46,8 +49,10 @@ import { uploadFileObject } from '@/lib/uploads/client'
 type ProjectDirectoryTab = 'Projects' | 'Archived'
 type ProjectDirectoryView = 'list' | 'grid'
 type ProjectSort = { key: 'name' | 'budget'; direction: 'asc' | 'desc' }
+type ProjectDirectoryStatus = 'PENDING' | 'ONGOING' | 'COMPLETED' | 'WITH ISSUE'
 export const detailTabs = ['Overview', 'Tasks', 'Kanban', 'Files', 'Team', 'Budget', 'Schedule', 'Reports', 'Settings']
 const projectStatusOptions: ProjectStatus[] = ['Planning', 'Active', 'In Progress', 'On Hold', 'Completed', 'Cancelled']
+const projectDirectoryStatusOptions: ProjectDirectoryStatus[] = ['PENDING', 'ONGOING', 'COMPLETED', 'WITH ISSUE']
 const healthOptions: ProjectHealth[] = ['Good', 'At Risk', 'Delayed']
 const milestoneStatusOptions: MilestoneStatus[] = ['Pending', 'In Progress', 'Done', 'Delayed']
 const phaseOptions = ['Planning', 'Design', 'Procurement', 'Execution', 'Inspection', 'Handover', 'Closeout']
@@ -70,11 +75,33 @@ const projectStatusBudgetGroups: Array<{ label: string; statuses: ProjectStatus[
   { label: 'Active / In Progress', statuses: ['Active', 'In Progress'], color: colors.blue },
   { label: 'On Hold', statuses: ['On Hold'], color: colors.orange },
   { label: 'Planning', statuses: ['Planning'], color: colors.purple },
-  { label: 'Cancelled', statuses: ['Cancelled'], color: '#94a3b8' },
+  { label: 'Cancelled', statuses: ['Cancelled'], color: '#000000' },
 ]
 
 function fieldId(name: string) {
   return `pm-${name.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`
+}
+
+const commentUrlPattern = /(https?:\/\/[^\s]+)/g
+
+function LinkedCommentText({ text }: { text: string }) {
+  return (
+    <>
+      {text.split(commentUrlPattern).map((part, index) => {
+        if (!part) return null
+        if (!/^https?:\/\/[^\s]+$/.test(part)) return <span key={`${part}-${index}`}>{part}</span>
+        const match = part.match(/^(.*?)([.,!?;:)]*)$/)
+        const href = match?.[1] || part
+        const suffix = match?.[2] || ''
+        return (
+          <span key={`${part}-${index}`}>
+            <a href={href} target="_blank" rel="noreferrer">{href}</a>
+            {suffix}
+          </span>
+        )
+      })}
+    </>
+  )
 }
 
 function opportunityKey(source?: ProjectSalesOpportunity['source'], id?: string) {
@@ -102,6 +129,23 @@ function resolveOpportunityClientId(opportunity: ProjectSalesOpportunity, client
   return clients.find(client => client.name.trim().toLowerCase() === clientName)?.id || ''
 }
 
+function normalizedLookupKey(value: string) {
+  return value.trim().toLowerCase()
+}
+
+function resolveProjectClient(project: ProjectRecord, clients: ProjectManagementState['clients']) {
+  const projectClientId = normalizedLookupKey(project.clientId)
+  if (!projectClientId || projectClientId === 'client-local') return undefined
+  return clients.find(client => (
+    normalizedLookupKey(client.id) === projectClientId ||
+    normalizedLookupKey(client.name) === projectClientId
+  ))
+}
+
+function projectClientName(project: ProjectRecord, clients: ProjectManagementState['clients'], fallback = 'Unassigned') {
+  return resolveProjectClient(project, clients)?.name || fallback
+}
+
 function formatCurrency(value: number, currency = 'PHP') {
   const safeCurrency = currency || 'PHP'
   const locale = safeCurrency === 'PHP' ? 'en-PH' : 'en-US'
@@ -127,6 +171,19 @@ function formatRelativeTime(value: string | undefined, nowMs: number) {
   const months = Math.floor(days / 30)
   if (months < 12) return `${months}mo ago`
   return `${Math.floor(months / 12)}y ago`
+}
+
+function formatTaskCardDate(value: string) {
+  if (!value) return '-'
+  const date = new Date(value.includes('T') ? value : `${value}T00:00:00`)
+  return Number.isNaN(date.getTime()) ? '-' : date.toLocaleDateString('en-US', { month: 'numeric', day: 'numeric', year: '2-digit' })
+}
+
+function taskCardAssigneeLabel(value?: string) {
+  const label = value?.trim() || 'Unassigned'
+  if (!label.includes('@')) return label
+  const [local] = label.split('@')
+  return `${(local || label).slice(0, 12)}...`
 }
 
 function isProjectThumbnailFile(file: File) {
@@ -172,7 +229,6 @@ export function OverviewTab({
   state,
   opportunities,
   projects,
-  budget,
   hasAnyProjects,
   onOpen,
   onEdit,
@@ -193,15 +249,9 @@ export function OverviewTab({
 }) {
   if (!hasAnyProjects) return <ProjectEmptyState onNewProject={onNewProject} />
 
-  const budgetSegments = projectBudgetByStatus(projects)
-  const trend = monthlyStatusTrend(state)
-  const visibleBudget = projects.reduce((sum, project) => sum + project.budget, 0)
   return (
-    <section className="pm-overview-grid pm-dashboard-overview">
-      <div className="pm-card pm-progress-card"><SectionTitle title="Budget by Status" /><Donut data={budgetSegments} center={formatMoney(visibleBudget)} sub="Budget Allocation" valueFormatter={formatMoney} /></div>
-      <div className="pm-card pm-trend"><SectionTitle title="Projects by Status" /><LineChart data={trend} /></div>
+    <section className="pm-overview-grid pm-dashboard-overview pm-dashboard-overview-recent-only">
       <div className="pm-card pm-recent"><SectionTitle title="Recent Projects" /><ProjectTable state={state} opportunities={opportunities} projects={projects.slice(0, 5)} onOpen={onOpen} onEdit={onEdit} onArchive={onArchive} onDelete={onDelete} /></div>
-      <div className="pm-card pm-budget-card"><SectionTitle title="Budget Utilization" /><BudgetUtilization budget={budget} /></div>
     </section>
   )
 }
@@ -246,7 +296,7 @@ export function ProjectsTab({
   const [viewMode, setViewMode] = useState<ProjectDirectoryView>('list')
   const [sort, setSort] = useState<ProjectSort>({ key: 'name', direction: 'asc' })
   const [page, setPage] = useState(1)
-  const [nowMs] = useState(() => Date.now())
+  const [selectedProjectIds, setSelectedProjectIds] = useState<string[]>([])
   const rowsPerPage = 8
   const visibleProjects = useMemo(
     () => state.projects.filter(project => activeDirectoryTab === 'Archived' ? Boolean(project.archivedAt) : !project.archivedAt),
@@ -258,8 +308,16 @@ export function ProjectsTab({
   const pageProjects = sortedProjects.slice((currentPage - 1) * rowsPerPage, currentPage * rowsPerPage)
   const pageStart = sortedProjects.length ? (currentPage - 1) * rowsPerPage + 1 : 0
   const pageEnd = Math.min(currentPage * rowsPerPage, sortedProjects.length)
+  const pageProjectIds = useMemo(() => pageProjects.map(project => project.id), [pageProjects])
+  const selectedProjectSet = useMemo(() => new Set(selectedProjectIds), [selectedProjectIds])
+  const allPageSelected = pageProjectIds.length > 0 && pageProjectIds.every(id => selectedProjectSet.has(id))
   const directoryLabel = activeDirectoryTab === 'Archived' ? 'Archived projects' : 'Project directory'
   const directorySummary = `${sortedProjects.length} ${sortedProjects.length === 1 ? 'project' : 'projects'} ${activeDirectoryTab === 'Archived' ? 'archived' : 'active'}`
+
+  useEffect(() => {
+    const visibleProjectIds = new Set(visibleProjects.map(project => project.id))
+    setSelectedProjectIds(previous => previous.filter(id => visibleProjectIds.has(id)))
+  }, [visibleProjects])
 
   const changeViewMode = (mode: ProjectDirectoryView) => {
     setViewMode(mode)
@@ -272,6 +330,26 @@ export function ProjectsTab({
       key,
       direction: previous.key === key && previous.direction === 'asc' ? 'desc' : 'asc',
     }))
+  }
+
+  const toggleProjectSelection = (projectId: string, selected: boolean) => {
+    setSelectedProjectIds(previous => {
+      const next = new Set(previous)
+      if (selected) next.add(projectId)
+      else next.delete(projectId)
+      return Array.from(next)
+    })
+  }
+
+  const togglePageSelection = (selected: boolean) => {
+    setSelectedProjectIds(previous => {
+      const next = new Set(previous)
+      pageProjectIds.forEach(projectId => {
+        if (selected) next.add(projectId)
+        else next.delete(projectId)
+      })
+      return Array.from(next)
+    })
   }
 
   return (
@@ -288,7 +366,7 @@ export function ProjectsTab({
       </div>
 
       {viewMode === 'list' ? (
-        <ProjectDirectoryTable state={state} opportunities={opportunities} projects={pageProjects} currency={currency} sort={sort} nowMs={nowMs} onSort={setSortKey} onOpen={onOpen} onEdit={onEdit} onUpdate={onUpdate} onArchive={onArchive} onRestore={onRestore} onDelete={onDelete} />
+        <ProjectDirectoryTable state={state} opportunities={opportunities} projects={pageProjects} currency={currency} sort={sort} selectedProjectIds={selectedProjectSet} allPageSelected={allPageSelected} onTogglePageSelection={togglePageSelection} onToggleProjectSelection={toggleProjectSelection} onSort={setSortKey} onOpen={onOpen} onEdit={onEdit} onUpdate={onUpdate} onArchive={onArchive} onRestore={onRestore} onDelete={onDelete} />
       ) : (
         <ProjectDirectoryGrid state={state} opportunities={opportunities} projects={pageProjects} currency={currency} onOpen={onOpen} onEdit={onEdit} onUpdate={onUpdate} onArchive={onArchive} onRestore={onRestore} onDelete={onDelete} />
       )}
@@ -323,6 +401,45 @@ function projectSubtitle(project: ProjectRecord, opportunity?: ProjectSalesOppor
   return project.department || 'Construction'
 }
 
+function projectLocationLabel(project: ProjectRecord) {
+  const cityProvince = [project.location?.city, project.location?.province].filter(Boolean).join(' ')
+  if (cityProvince) return cityProvince
+  if (project.location?.address) return project.location.address
+  return project.department || '-'
+}
+
+function projectClientLabel(state: ProjectManagementState, project: ProjectRecord, opportunity?: ProjectSalesOpportunity) {
+  return opportunity?.clientName || state.clients.find(client => client.id === project.clientId)?.name || '--'
+}
+
+function formatTableDate(value: string) {
+  const date = new Date(value.includes('T') ? value : `${value}T00:00:00`)
+  if (Number.isNaN(date.getTime())) return '-'
+  return `${date.getMonth() + 1}/${date.getDate()}/${date.getFullYear()}`
+}
+
+function projectDurationLabel(project: ProjectRecord) {
+  return `${formatTableDate(project.startDate)} - ${formatTableDate(project.dueDate)}`
+}
+
+function projectDirectoryStatusValue(project: ProjectRecord): ProjectDirectoryStatus {
+  if (project.status === 'Completed') return 'COMPLETED'
+  if (project.status === 'On Hold' || project.status === 'Cancelled' || project.health === 'At Risk' || project.health === 'Delayed') return 'WITH ISSUE'
+  if (project.status === 'Active' || project.status === 'In Progress') return 'ONGOING'
+  return 'PENDING'
+}
+
+function projectDirectoryStatusTone(status: ProjectDirectoryStatus) {
+  return status.toLowerCase().replace(/\s+/g, '-')
+}
+
+function projectDirectoryStatusPatch(status: ProjectDirectoryStatus, project: ProjectRecord): ProjectUpdateDraft {
+  if (status === 'PENDING') return { status: 'Planning', health: 'Good' }
+  if (status === 'ONGOING') return { status: 'In Progress', health: 'Good' }
+  if (status === 'COMPLETED') return { status: 'Completed', health: 'Good', progress: 100 }
+  return { status: 'On Hold', health: project.health === 'Delayed' ? 'Delayed' : 'At Risk' }
+}
+
 function latestProjectUpdatedAt(state: ProjectManagementState, project: ProjectRecord) {
   const values = [
     project.updatedAt,
@@ -343,37 +460,41 @@ function projectBudgetByStatus(projects: ProjectRecord[]) {
   }))
 }
 
-function ProjectDirectoryTable({ state, opportunities, projects, currency, sort, nowMs, onSort, onOpen, onEdit, onUpdate, onArchive, onRestore, onDelete }: { state: ProjectManagementState; opportunities: ProjectSalesOpportunity[]; projects: ProjectRecord[]; currency: string; sort: ProjectSort; nowMs: number; onSort: (key: ProjectSort['key']) => void; onOpen: (id: string) => void; onEdit: (id: string) => void; onUpdate: (projectId: string, patch: ProjectUpdateDraft, action?: string) => void; onArchive: (id: string) => void; onRestore: (id: string) => void; onDelete: (id: string) => void }) {
+function ProjectDirectoryTable({ state, opportunities, projects, currency, sort, selectedProjectIds, allPageSelected, onTogglePageSelection, onToggleProjectSelection, onSort, onOpen, onEdit, onUpdate, onArchive, onRestore, onDelete }: { state: ProjectManagementState; opportunities: ProjectSalesOpportunity[]; projects: ProjectRecord[]; currency: string; sort: ProjectSort; selectedProjectIds: Set<string>; allPageSelected: boolean; onTogglePageSelection: (selected: boolean) => void; onToggleProjectSelection: (projectId: string, selected: boolean) => void; onSort: (key: ProjectSort['key']) => void; onOpen: (id: string) => void; onEdit: (id: string) => void; onUpdate: (projectId: string, patch: ProjectUpdateDraft, action?: string) => void; onArchive: (id: string) => void; onRestore: (id: string) => void; onDelete: (id: string) => void }) {
   if (!projects.length) return <EmptyState title="No projects found" body="Create a project to see project records here." />
   return (
     <div className="pm-project-table-frame">
-      <table className="pm-project-table">
+      <table className="pm-project-table pm-project-opportunity-table">
         <thead>
           <tr>
+            <th className="pm-project-check-cell">
+              <input
+                type="checkbox"
+                aria-label="Select all projects on this page"
+                checked={allPageSelected}
+                onClick={event => event.stopPropagation()}
+                onChange={event => onTogglePageSelection(event.target.checked)}
+              />
+            </th>
             <th>
               <button type="button" onClick={() => onSort('name')} aria-label={`Sort projects by name ${sort.key === 'name' && sort.direction === 'asc' ? 'descending' : 'ascending'}`}>
-                Project <ArrowUpDown size={13} />
+                Title <ArrowUpDown size={13} />
               </button>
             </th>
-            <th>Owner</th>
-            <th>Status</th>
-            <th>Priority</th>
-            <th>Progress</th>
+            <th>Client</th>
             <th>
               <button type="button" onClick={() => onSort('budget')} aria-label={`Sort projects by budget ${sort.key === 'budget' && sort.direction === 'asc' ? 'descending' : 'ascending'}`}>
-                Budget <ArrowUpDown size={13} />
+                Project Cost <ArrowUpDown size={13} />
               </button>
             </th>
-            <th>Start date</th>
-            <th>Due date</th>
-            <th>Tasks</th>
-            <th>Updated</th>
-            <th>Actions</th>
+            <th>Duration</th>
+            <th>Status</th>
+            <th aria-label="Actions" />
           </tr>
         </thead>
         <tbody>
           {projects.map(project => (
-            <ProjectDirectoryRow key={project.id} state={state} opportunities={opportunities} project={project} currency={currency} nowMs={nowMs} onOpen={onOpen} onEdit={onEdit} onUpdate={onUpdate} onArchive={onArchive} onRestore={onRestore} onDelete={onDelete} />
+            <ProjectDirectoryRow key={project.id} state={state} opportunities={opportunities} project={project} currency={currency} selected={selectedProjectIds.has(project.id)} onToggleSelected={onToggleProjectSelection} onOpen={onOpen} onEdit={onEdit} onUpdate={onUpdate} onArchive={onArchive} onRestore={onRestore} onDelete={onDelete} />
           ))}
         </tbody>
       </table>
@@ -381,14 +502,9 @@ function ProjectDirectoryTable({ state, opportunities, projects, currency, sort,
   )
 }
 
-function ProjectDirectoryRow({ state, opportunities, project, currency, nowMs, onOpen, onEdit, onUpdate, onArchive, onRestore, onDelete }: { state: ProjectManagementState; opportunities: ProjectSalesOpportunity[]; project: ProjectRecord; currency: string; nowMs: number; onOpen: (id: string) => void; onEdit: (id: string) => void; onUpdate: (projectId: string, patch: ProjectUpdateDraft, action?: string) => void; onArchive: (id: string) => void; onRestore: (id: string) => void; onDelete: (id: string) => void }) {
-  const manager = state.members.find(member => member.id === project.managerId)
+function ProjectDirectoryRow({ state, opportunities, project, currency, selected, onToggleSelected, onOpen, onEdit, onUpdate, onArchive, onRestore, onDelete }: { state: ProjectManagementState; opportunities: ProjectSalesOpportunity[]; project: ProjectRecord; currency: string; selected: boolean; onToggleSelected: (projectId: string, selected: boolean) => void; onOpen: (id: string) => void; onEdit: (id: string) => void; onUpdate: (projectId: string, patch: ProjectUpdateDraft, action?: string) => void; onArchive: (id: string) => void; onRestore: (id: string) => void; onDelete: (id: string) => void }) {
   const opportunity = findOpportunityByKey(opportunities, opportunityKey(project.opportunitySource, project.opportunityId))
-  const tasks = projectTasksFor(state, project.id)
-  const completedTasks = tasks.filter(task => task.status === 'Done').length
-  const spentPercent = project.budget ? Math.round((project.spent / project.budget) * 100) : 0
-  const remaining = Math.max(project.budget - project.spent - project.committed, 0)
-  const updatedAt = latestProjectUpdatedAt(state, project)
+  const clientLabel = projectClientLabel(state, project, opportunity)
   const openRow = (event: MouseEvent<HTMLTableRowElement>) => {
     const target = event.target as HTMLElement | null
     if (target?.closest('button, a, input, select, textarea, [role="listbox"], [role="option"], .pm-project-badge-menu-wrap')) return
@@ -403,34 +519,33 @@ function ProjectDirectoryRow({ state, opportunities, project, currency, nowMs, o
 
   return (
     <tr className="pm-clickable-row" tabIndex={0} onClick={openRow} onKeyDown={openRowOnKeyboard} aria-label={`Open ${project.name}`}>
+      <td className="pm-project-check-cell">
+        <input
+          type="checkbox"
+          aria-label={`Select ${project.name}`}
+          checked={selected}
+          onClick={event => event.stopPropagation()}
+          onChange={event => onToggleSelected(project.id, event.target.checked)}
+        />
+      </td>
       <td>
-        <div className="pm-project-name-cell">
-          <ProjectThumbnail project={project} />
+        <div className="pm-project-name-cell pm-project-name-cell-compact">
           <span className="pm-project-title-block">
             <button type="button" onClick={() => onOpen(project.id)}>{project.name}</button>
-            <small>{projectSubtitle(project, opportunity)}</small>
+            <small>{projectLocationLabel(project)}</small>
           </span>
         </div>
       </td>
-      <td><span className="pm-project-owner"><Avatar member={manager} /> {manager?.name || 'Unassigned'}</span></td>
-      <td><ProjectStatusBadge status={project.status} onChange={status => onUpdate(project.id, { status }, `Changed project status to ${status}`)} /></td>
-      <td><ProjectPriorityBadge priority={project.priority} onChange={priority => onUpdate(project.id, { priority }, `Changed project priority to ${priority}`)} /></td>
-      <td>
-        <span className="pm-project-progress-cell"><Progress value={project.progress} /><strong>{Math.round(project.progress)}%</strong></span>
-      </td>
+      <td><span className="pm-project-client-cell">{clientLabel}</span></td>
       <td>
         <span className="pm-project-budget-cell">
           <strong>{formatCurrency(project.budget, currency)}</strong>
-          <small>Spent {formatCurrency(project.spent, currency)} ({spentPercent}%)</small>
-          <small>Remaining {formatCurrency(remaining, currency)}</small>
         </span>
       </td>
-      <td>{formatDate(project.startDate)}</td>
-      <td>{formatDate(project.dueDate)}</td>
-      <td>{completedTasks} / {tasks.length}</td>
-      <td>{formatRelativeTime(updatedAt, nowMs)}</td>
+      <td>{projectDurationLabel(project)}</td>
+      <td><ProjectDirectoryStatusBadge project={project} onChange={status => onUpdate(project.id, projectDirectoryStatusPatch(status, project), `Changed project status to ${status}`)} /></td>
       <td>
-        <ProjectDirectoryActions project={project} onEdit={onEdit} onArchive={onArchive} onRestore={onRestore} onDelete={onDelete} />
+        <ProjectDirectoryActions project={project} onOpen={onOpen} onEdit={onEdit} onArchive={onArchive} onRestore={onRestore} onDelete={onDelete} />
       </td>
     </tr>
   )
@@ -439,8 +554,9 @@ function ProjectDirectoryRow({ state, opportunities, project, currency, nowMs, o
 function ProjectDirectoryActions({ project, onOpen, onEdit, onArchive, onRestore, onDelete }: { project: ProjectRecord; onOpen?: (id: string) => void; onEdit: (id: string) => void; onArchive: (id: string) => void; onRestore?: (id: string) => void; onDelete: (id: string) => void }) {
   const isArchived = Boolean(project.archivedAt)
   const [open, setOpen] = useState(false)
-  const [placement, setPlacement] = useState<'up' | 'down'>('down')
+  const [menuPosition, setMenuPosition] = useState<CSSProperties>({ top: 0, left: 0, minWidth: 150 })
   const menuRef = useRef<HTMLDivElement | null>(null)
+  const triggerRef = useRef<HTMLButtonElement | null>(null)
 
   useEffect(() => {
     if (!open) return
@@ -452,6 +568,34 @@ function ProjectDirectoryActions({ project, onOpen, onEdit, onArchive, onRestore
     document.addEventListener('pointerdown', closeOnOutsideTap)
     return () => document.removeEventListener('pointerdown', closeOnOutsideTap)
   }, [open])
+
+  useEffect(() => {
+    if (!open) return
+
+    const updateMenuPosition = () => {
+      const rect = triggerRef.current?.getBoundingClientRect()
+      if (!rect) return
+      const menuWidth = 150
+      const menuHeight = onOpen ? 122 : isArchived && onRestore ? 122 : 156
+      const availableBelow = window.innerHeight - rect.bottom
+      const top = availableBelow < menuHeight + 16 && rect.top > menuHeight
+        ? Math.max(12, rect.top - menuHeight - 6)
+        : rect.bottom + 6
+      const left = Math.min(
+        Math.max(12, rect.right - menuWidth),
+        Math.max(12, window.innerWidth - menuWidth - 12),
+      )
+      setMenuPosition({ top, left, minWidth: menuWidth })
+    }
+
+    updateMenuPosition()
+    window.addEventListener('scroll', updateMenuPosition, true)
+    window.addEventListener('resize', updateMenuPosition)
+    return () => {
+      window.removeEventListener('scroll', updateMenuPosition, true)
+      window.removeEventListener('resize', updateMenuPosition)
+    }
+  }, [isArchived, onOpen, onRestore, open])
 
   const viewProject = () => {
     setOpen(false)
@@ -479,25 +623,19 @@ function ProjectDirectoryActions({ project, onOpen, onEdit, onArchive, onRestore
   }
 
   const toggleMenu = () => {
-    if (!open) {
-      const rect = menuRef.current?.getBoundingClientRect()
-      const pagination = menuRef.current?.closest('.pm-project-directory')?.querySelector('.pm-project-pagination')
-      const lowerBoundary = pagination instanceof HTMLElement ? pagination.getBoundingClientRect().top : window.innerHeight
-      const availableBelow = rect ? lowerBoundary - rect.bottom : Number.POSITIVE_INFINITY
-      setPlacement(availableBelow < 150 ? 'up' : 'down')
-    }
     setOpen(previous => !previous)
   }
 
   return (
     <div
-      className={`pm-project-actions ${placement === 'up' ? 'menu-up' : ''}`}
+      className="pm-project-actions"
       ref={menuRef}
       aria-label={`Actions for ${project.name}`}
       onClick={event => event.stopPropagation()}
       onKeyDown={event => event.stopPropagation()}
     >
       <button
+        ref={triggerRef}
         type="button"
         className="pm-project-action"
         onClick={toggleMenu}
@@ -508,12 +646,12 @@ function ProjectDirectoryActions({ project, onOpen, onEdit, onArchive, onRestore
         <MoreHorizontal size={16} />
       </button>
       {open && (
-        <div className="pm-project-action-menu" role="menu" aria-label={`Actions for ${project.name}`}>
-          {onOpen && <button type="button" role="menuitem" onClick={viewProject}><BriefcaseBusiness size={14} /> View details</button>}
+        <div className="pm-project-action-menu" role="menu" aria-label={`Actions for ${project.name}`} style={menuPosition}>
+          {onOpen && <button type="button" role="menuitem" onClick={viewProject}><Eye size={14} /> View</button>}
           <button type="button" role="menuitem" onClick={editProject}><Pencil size={14} /> Edit</button>
-          {isArchived && onRestore && <button type="button" role="menuitem" onClick={restoreProject}><RotateCcw size={14} /> Restore</button>}
           <button type="button" role="menuitem" className="danger" onClick={deleteProject}><Trash2 size={14} /> Delete</button>
-          {!isArchived && <button type="button" role="menuitem" onClick={archiveProject}><Archive size={14} /> Archive</button>}
+          {!onOpen && isArchived && onRestore && <button type="button" role="menuitem" onClick={restoreProject}><RotateCcw size={14} /> Restore</button>}
+          {!onOpen && !isArchived && <button type="button" role="menuitem" onClick={archiveProject}><Archive size={14} /> Archive</button>}
         </div>
       )}
     </div>
@@ -576,28 +714,56 @@ export function useProjectThumbnailSource(project: Pick<ProjectRecord, 'thumbnai
   return assetSource.assetId === project.thumbnailAssetId ? assetSource.dataUrl : ''
 }
 
-export function ProjectThumbnail({ project }: { project: ProjectRecord }) {
+export function ProjectThumbnail({ project, className = '' }: { project: ProjectRecord; className?: string }) {
   const variant = Math.abs(`${project.id}-${project.name}`.split('').reduce((sum, char) => sum + char.charCodeAt(0), 0)) % 5
   const thumbnailSource = useProjectThumbnailSource(project)
+  const thumbClassName = `pm-project-thumb variant-${variant}${className ? ` ${className}` : ''}`
 
   return (
-    <span className={`pm-project-thumb variant-${variant}`} aria-hidden="true">
+    <span className={thumbClassName} aria-hidden="true">
       {thumbnailSource ? <span className="pm-project-thumb-image" style={{ backgroundImage: `url(${thumbnailSource})` }} /> : <><i /><b /><em /></>}
     </span>
   )
 }
 
-export function ProjectStatusBadge({ status, onChange }: { status: ProjectStatus; onChange?: (status: ProjectStatus) => void }) {
-  const className = `pm-project-badge status-${status.toLowerCase().replaceAll(' ', '-')}${onChange ? ' is-editable' : ''}`
+function ProjectDirectoryStatusBadge({ project, onChange }: { project: ProjectRecord; onChange: (status: ProjectDirectoryStatus) => void }) {
+  const status = projectDirectoryStatusValue(project)
+  const tone = projectDirectoryStatusTone(status)
+  const className = `pm-project-badge status-${tone} is-editable`
+
+  return (
+    <ProjectBadgeSelect
+      value={status}
+      label={status}
+      className={className}
+      options={projectDirectoryStatusOptions.map(option => ({
+        value: option,
+        label: option,
+        className: `status-${projectDirectoryStatusTone(option)}`,
+      }))}
+      ariaLabel="Project status"
+      onChange={onChange}
+    />
+  )
+}
+
+export function ProjectStatusBadge({ status, onChange, label, tone }: { status: ProjectStatus; onChange?: (status: ProjectStatus) => void; label?: string; tone?: string }) {
+  const displayLabel = label || projectStatusLabel(status)
+  const className = `pm-project-badge status-${(tone || status).toLowerCase().replaceAll(' ', '-')}${onChange ? ' is-editable' : ''}`
   const menuOptions = projectStatusOptions.filter(option => status === 'Active' ? option !== 'In Progress' : option !== 'Active')
-  if (!onChange) return <span className={className}><i />{projectStatusLabel(status)}</span>
-  return <ProjectBadgeSelect value={status} label={projectStatusLabel(status)} className={className} options={menuOptions.map(option => ({ value: option, label: projectStatusLabel(option), className: `status-${option.toLowerCase().replaceAll(' ', '-')}` }))} ariaLabel="Project status" onChange={onChange} />
+  if (!onChange) return <span className={className}><i />{displayLabel}</span>
+  return <ProjectBadgeSelect value={status} label={displayLabel} className={className} options={menuOptions.map(option => ({ value: option, label: projectStatusLabel(option), className: `status-${option.toLowerCase().replaceAll(' ', '-')}` }))} ariaLabel="Project status" onChange={onChange} />
 }
 
 export function ProjectPriorityBadge({ priority, onChange }: { priority: TaskPriority; onChange?: (priority: TaskPriority) => void }) {
   const className = `pm-project-badge priority-${priority.toLowerCase()}${onChange ? ' is-editable' : ''}`
   if (!onChange) return <span className={className}><i />{priority}</span>
   return <ProjectBadgeSelect value={priority} label={priority} className={className} options={priorityOptions.filter((option): option is TaskPriority => option !== 'All').map(option => ({ value: option, label: option, className: `priority-${option.toLowerCase()}` }))} ariaLabel="Project priority" onChange={onChange} />
+}
+
+function ProjectTaskStatusBadge({ status, onChange }: { status: TaskStatus; onChange: (status: TaskStatus) => void }) {
+  const className = `pm-project-badge status-${status.toLowerCase().replaceAll(' ', '-')} is-editable`
+  return <ProjectBadgeSelect value={status} label={status} className={className} options={KANBAN_STATUSES.map(option => ({ value: option, label: option, className: `status-${option.toLowerCase().replaceAll(' ', '-')}` }))} ariaLabel="Task status" onChange={onChange} />
 }
 
 function ProjectBadgeSelect<T extends string>({ value, label, className, options, ariaLabel, onChange }: { value: T; label: string; className: string; options: Array<{ value: T; label: string; className: string }>; ariaLabel: string; onChange: (value: T) => void }) {
@@ -678,13 +844,12 @@ function ProjectTable({ state, opportunities, projects, onOpen, onEdit, onArchiv
         <table className="pm-table pm-recent-projects-table">
           <thead><tr>{['Project Name', 'Client', 'Project Manager', 'Status', 'Progress', 'Budget', 'Due Date', 'Actions'].map(head => <th key={head}>{head}</th>)}</tr></thead>
           <tbody>{projects.map(project => {
-            const client = state.clients.find(c => c.id === project.clientId)
             const manager = state.members.find(m => m.id === project.managerId)
             const opportunity = findOpportunityByKey(opportunities, opportunityKey(project.opportunitySource, project.opportunityId))
             return (
               <tr key={project.id} className="pm-clickable-row" tabIndex={0} onClick={() => onOpen(project.id)} onKeyDown={event => openOnKeyboard(event, project.id)} aria-label={`Open ${project.name}`}>
                 <td><strong>{project.name}</strong><small>{opportunity ? `Linked to ${opportunity.label}` : project.tags.join(', ') || project.department}</small></td>
-                <td>{client?.name || project.clientId}</td>
+                <td>{projectClientName(project, state.clients)}</td>
                 <td><Avatar member={manager} /> {manager?.name || '-'}</td>
                 <td><Pill value={project.status} /></td>
                 <td>
@@ -699,12 +864,11 @@ function ProjectTable({ state, opportunities, projects, onOpen, onEdit, onArchiv
         </table>
       </div>
       <div className="pm-mobile-projects">{projects.map(project => {
-        const client = state.clients.find(c => c.id === project.clientId)
         const opportunity = findOpportunityByKey(opportunities, opportunityKey(project.opportunitySource, project.opportunityId))
         return (
           <article key={project.id} className="pm-mobile-project-card pm-clickable-card" onClick={() => onOpen(project.id)} tabIndex={0} role="button" onKeyDown={event => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); onOpen(project.id) } }}>
             <div><strong>{project.name}</strong><ProjectDirectoryActions project={project} onOpen={onOpen} onEdit={onEdit} onArchive={onArchive} onDelete={onDelete} /></div>
-            <small>{client?.name || project.clientId}</small>
+            <small>{projectClientName(project, state.clients)}</small>
             {opportunity && <small>Linked to {opportunity.label}</small>}
             <Pill value={project.status} />
             <span>{formatMoney(project.budget)} - Due {formatDate(project.dueDate)}</span>
@@ -888,7 +1052,7 @@ export function TaskDescriptionEditor({ value, onChange, onAttach }: { value: st
   )
 }
 
-export function TasksTab({ state, onAddTask, onOpenTask, onEditTask, onArchiveTask, onDeleteTask }: { state: ProjectManagementState; onAddTask?: () => void; onOpenTask?: (taskId: string) => void; onEditTask: (task: ProjectTask) => void; onArchiveTask: (taskId: string) => void; onDeleteTask: (taskId: string) => void }) {
+export function TasksTab({ state, onAddTask, onOpenTask, onEditTask, onArchiveTask, onDeleteTask, onUpdateTaskStatus }: { state: ProjectManagementState; onAddTask?: () => void; onOpenTask?: (taskId: string) => void; onEditTask: (task: ProjectTask) => void; onArchiveTask: (taskId: string) => void; onDeleteTask: (taskId: string) => void; onUpdateTaskStatus: (taskId: string, status: TaskStatus) => void }) {
   const taskCount = state.tasks.length
   const header = (
     <div className="pm-task-board-toolbar">
@@ -907,19 +1071,18 @@ export function TasksTab({ state, onAddTask, onOpenTask, onEditTask, onArchiveTa
     <section className="pm-card pm-task-board-card">
       {header}
       <div className="pm-task-board" role="table" aria-label="Task board">
-        <div className="pm-task-board-group"><span>Active tasks</span><strong>{state.tasks.length}</strong></div>
         <div className="pm-task-board-head" role="row">
           {['Task', 'Owner', 'Status', 'Priority', 'Due date', 'Progress', 'Updates', 'Files', 'Actions'].map(label => <span key={label} role="columnheader">{label}</span>)}
         </div>
         {state.tasks.map(task => (
-          <TaskBoardRow key={task.id} state={state} task={task} onOpen={onOpenTask} onEdit={onEditTask} onArchive={onArchiveTask} onDelete={onDeleteTask} />
+          <TaskBoardRow key={task.id} state={state} task={task} onOpen={onOpenTask} onEdit={onEditTask} onArchive={onArchiveTask} onDelete={onDeleteTask} onUpdateStatus={onUpdateTaskStatus} />
         ))}
       </div>
     </section>
   )
 }
 
-function TaskBoardRow({ state, task, onOpen, onEdit, onArchive, onDelete }: { state: ProjectManagementState; task: ProjectTask; onOpen?: (taskId: string) => void; onEdit: (task: ProjectTask) => void; onArchive: (taskId: string) => void; onDelete: (taskId: string) => void }) {
+function TaskBoardRow({ state, task, onOpen, onEdit, onArchive, onDelete, onUpdateStatus }: { state: ProjectManagementState; task: ProjectTask; onOpen?: (taskId: string) => void; onEdit: (task: ProjectTask) => void; onArchive: (taskId: string) => void; onDelete: (taskId: string) => void; onUpdateStatus: (taskId: string, status: TaskStatus) => void }) {
   const member = state.members.find(item => item.id === task.assigneeId)
   const project = state.projects.find(item => item.id === task.projectId)
   const commentCount = Math.max(task.comments, state.taskComments.filter(comment => comment.taskId === task.id).length)
@@ -939,7 +1102,7 @@ function TaskBoardRow({ state, task, onOpen, onEdit, onArchive, onDelete }: { st
         {task.labels.length > 0 && <span>{task.labels.slice(0, 3).join(', ')}</span>}
       </div>
       <div className="pm-task-board-owner" role="cell"><Avatar member={member} /><span>{member?.name || 'Unassigned'}</span></div>
-      <div role="cell"><Pill value={task.status} /></div>
+      <div role="cell" onMouseDown={event => event.stopPropagation()} onClick={event => event.stopPropagation()}><ProjectTaskStatusBadge status={task.status} onChange={status => onUpdateStatus(task.id, status)} /></div>
       <div role="cell"><Pill value={task.priority} /></div>
       <div className="pm-task-board-date" role="cell">{formatDate(task.dueDate)}</div>
       <div role="cell"><Progress value={task.progress} /></div>
@@ -954,9 +1117,136 @@ function TaskBoardRow({ state, task, onOpen, onEdit, onArchive, onDelete }: { st
   )
 }
 
-export function KanbanTab({ state, onDrag, onDrop, onOpenTask, onEditTask, onArchiveTask, onDeleteTask }: { state: ProjectManagementState; onDrag: (id: string) => void; onDrop: (status: TaskStatus) => void; onOpenTask?: (taskId: string) => void; onEditTask: (task: ProjectTask) => void; onArchiveTask: (taskId: string) => void; onDeleteTask: (taskId: string) => void }) {
-  if (!state.tasks.length) return <section className="pm-card"><SectionTitle title="Kanban" /><EmptyState title="No cards yet" body="Assigned tasks will appear in kanban columns by status." /></section>
-  return <section className="pm-kanban">{tasksByStatus(state).map(column => <div key={column.status} className="pm-card pm-kanban-col" onDragOver={event => event.preventDefault()} onDrop={() => onDrop(column.status)}><SectionTitle title={column.status} action={String(column.tasks.length)} />{column.tasks.map(task => <TaskCard key={task.id} state={state} task={task} draggable onDrag={() => onDrag(task.id)} onOpen={onOpenTask} onEdit={onEditTask} onArchive={onArchiveTask} onDelete={onDeleteTask} />)}</div>)}</section>
+const KANBAN_STATUSES: TaskStatus[] = ['To Do', 'In Progress', 'Review', 'Done', 'Blocked']
+const KANBAN_PRIORITIES: TaskPriority[] = ['Low', 'Medium', 'High', 'Critical']
+
+function kanbanEmptyHint(status: TaskStatus) {
+  switch (status) {
+    case 'To Do': return 'Add the first task to start planning.'
+    case 'In Progress': return 'Move tasks here once work begins.'
+    case 'Review': return 'Tasks waiting for approval appear here.'
+    case 'Done': return 'Completed tasks are collected here.'
+    case 'Blocked': return 'Flag blockers so the team can clear them.'
+    default: return 'Tasks will appear here.'
+  }
+}
+
+export function KanbanTab({ state, onDrag, onDrop, onOpenTask, onEditTask, onArchiveTask, onDeleteTask, onQuickAddTask }: {
+  state: ProjectManagementState
+  onDrag: (id: string) => void
+  onDrop: (status: TaskStatus) => void
+  onOpenTask?: (taskId: string) => void
+  onEditTask: (task: ProjectTask) => void
+  onArchiveTask: (taskId: string) => void
+  onDeleteTask: (taskId: string) => void
+  onQuickAddTask?: (status: TaskStatus, title: string) => void
+}) {
+  const [query, setQuery] = useState('')
+  const [priorityFilter, setPriorityFilter] = useState('All')
+  const [composerStatus, setComposerStatus] = useState<TaskStatus | null>(null)
+  const [composerText, setComposerText] = useState('')
+
+  const normalizedQuery = query.trim().toLowerCase()
+  const filterActive = Boolean(normalizedQuery) || priorityFilter !== 'All'
+
+  const visibleTasks = useMemo(() => state.tasks.filter(task => {
+    if (priorityFilter !== 'All' && task.priority !== priorityFilter) return false
+    if (normalizedQuery) {
+      const haystack = `${task.title} ${(task.labels || []).join(' ')}`.toLowerCase()
+      if (!haystack.includes(normalizedQuery)) return false
+    }
+    return true
+  }), [state.tasks, priorityFilter, normalizedQuery])
+
+  const columns = KANBAN_STATUSES.map(status => ({ status, tasks: visibleTasks.filter(task => task.status === status) }))
+
+  const startComposer = (status: TaskStatus) => {
+    setComposerStatus(status)
+    setComposerText('')
+  }
+
+  const submitComposer = (status: TaskStatus) => {
+    const title = composerText.trim()
+    if (!title || !onQuickAddTask) {
+      setComposerStatus(null)
+      setComposerText('')
+      return
+    }
+    onQuickAddTask(status, title)
+    setComposerText('')
+  }
+
+  const clearFilters = () => {
+    setQuery('')
+    setPriorityFilter('All')
+  }
+
+  return (
+    <div className="pm-board">
+      <div className="pm-board-toolbar">
+        <label className="pm-board-search">
+          <Search size={15} />
+          <input value={query} onChange={event => setQuery(event.target.value)} placeholder="Search tasks..." aria-label="Search tasks" />
+        </label>
+        <select value={priorityFilter} onChange={event => setPriorityFilter(event.target.value)} aria-label="Filter by priority">
+          <option value="All">All priorities</option>
+          {KANBAN_PRIORITIES.map(option => <option key={option} value={option}>{option}</option>)}
+        </select>
+        {filterActive && <button type="button" className="pm-board-clear" onClick={clearFilters}><X size={14} /> Clear</button>}
+      </div>
+
+      <div className="pm-board-body is-panel-collapsed">
+        <div className="pm-board-columns">
+          {columns.map(column => (
+            <section
+              key={column.status}
+              className="pm-board-col"
+              data-status={column.status}
+              onDragOver={event => event.preventDefault()}
+              onDrop={() => onDrop(column.status)}
+            >
+              <header className="pm-board-col-head">
+                <strong>{column.status}</strong>
+                <span className="pm-board-col-count">{column.tasks.length}</span>
+              </header>
+              <div className="pm-board-col-body">
+                {composerStatus === column.status ? (
+                  <div className="pm-board-composer">
+                    <textarea
+                      autoFocus
+                      value={composerText}
+                      onChange={event => setComposerText(event.target.value)}
+                      onKeyDown={event => {
+                        if (event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); submitComposer(column.status) }
+                        if (event.key === 'Escape') { setComposerStatus(null); setComposerText('') }
+                      }}
+                      placeholder={`Add a task to ${column.status}...`}
+                    />
+                    <div className="pm-board-composer-actions">
+                      <button type="button" className="pm-primary" onClick={() => submitComposer(column.status)}>Add task</button>
+                      <button type="button" className="pm-control" onClick={() => { setComposerStatus(null); setComposerText('') }}>Cancel</button>
+                    </div>
+                  </div>
+                ) : (
+                  <button type="button" className="pm-board-col-add" onClick={() => startComposer(column.status)}><Plus size={15} /> New task</button>
+                )}
+                {column.tasks.map(task => (
+                  <TaskCard key={task.id} state={state} task={task} draggable onDrag={() => onDrag(task.id)} onOpen={onOpenTask} onEdit={onEditTask} onArchive={onArchiveTask} onDelete={onDeleteTask} />
+                ))}
+                {column.tasks.length === 0 && composerStatus !== column.status && (
+                  <div className="pm-board-col-empty">
+                    <span><ListChecks size={16} /></span>
+                    <strong>{filterActive ? 'No matching tasks' : `No ${column.status.toLowerCase()} tasks`}</strong>
+                    <p>{filterActive ? 'Try clearing filters to see more.' : kanbanEmptyHint(column.status)}</p>
+                  </div>
+                )}
+              </div>
+            </section>
+          ))}
+        </div>
+      </div>
+    </div>
+  )
 }
 
 function TaskCard({ state, task, draggable, onDrag, onOpen, onEdit, onArchive, onDelete }: { state: ProjectManagementState; task: ProjectTask; draggable?: boolean; onDrag?: () => void; onOpen?: (taskId: string) => void; onEdit: (task: ProjectTask) => void; onArchive: (taskId: string) => void; onDelete: (taskId: string) => void }) {
@@ -967,6 +1257,8 @@ function TaskCard({ state, task, draggable, onDrag, onOpen, onEdit, onArchive, o
   const evidenceCount = state.taskAttachments.filter(attachment => attachment.taskId === task.id && attachment.evidence).length
   const checklistItems = state.taskChecklists.filter(item => item.taskId === task.id)
   const checklistDone = checklistItems.filter(item => item.done).length
+  const assigneeTitle = member?.name || 'Unassigned'
+  const assigneeLabel = taskCardAssigneeLabel(member?.name)
   const openTask = () => onOpen ? onOpen(task.id) : onEdit(task)
   const openTaskFromKeyboard = (event: React.KeyboardEvent<HTMLElement>) => {
     if (event.key !== 'Enter' && event.key !== ' ') return
@@ -986,7 +1278,7 @@ function TaskCard({ state, task, draggable, onDrag, onOpen, onEdit, onArchive, o
       </div>
       <TaskDescriptionViewer value={task.description} compact />
       <div className="pm-chip-row"><Pill value={task.priority} /><Pill value={task.status} />{task.labels.map(label => <span key={label}>{label}</span>)}{task.dependencies.length > 0 && <span><ListChecks size={13} /> {task.dependencies.length}</span>}{checklistItems.length > 0 && <span><CheckSquare size={13} /> {checklistDone}/{checklistItems.length}</span>}{task.recurrence && task.recurrence !== 'None' && <span><Repeat2 size={13} /> {task.recurrence}</span>}<span><MessageSquare size={13} /> {commentCount}</span><span><Paperclip size={13} /> {attachmentCount}</span>{evidenceCount > 0 && <span><FileCheck2 size={13} /> {evidenceCount}</span>}</div>
-      <footer><Avatar member={member} /><span>{member?.name || 'Unassigned'}</span><span>{formatDate(task.dueDate)}</span><Progress value={task.progress} /></footer>
+      <footer><Avatar member={member} /><span className="pm-task-card-assignee" title={assigneeTitle}>{assigneeLabel}</span><span className="pm-task-card-date" title={formatDate(task.dueDate)}>{formatTaskCardDate(task.dueDate)}</span></footer>
     </article>
   )
 }
@@ -1066,7 +1358,7 @@ export function TaskCollaborationPanel({
           <div className="pm-task-comment-list">
             {comments.length ? comments.map(comment => {
               const actor = state.members.find(member => member.id === comment.actorId)
-              return <article key={comment.id}><Avatar member={actor} /><div><strong>{comment.body}</strong><small>{actor?.name || 'WiseFlow'} - {new Date(comment.createdAt).toLocaleString('en-US', { month: 'short', day: '2-digit', hour: '2-digit', minute: '2-digit' })}</small></div></article>
+              return <article key={comment.id}><Avatar member={actor} /><div><strong><LinkedCommentText text={comment.body} /></strong><small>{actor?.name || 'WiseFlow'} - {new Date(comment.createdAt).toLocaleString('en-US', { month: 'short', day: '2-digit', hour: '2-digit', minute: '2-digit' })}</small></div></article>
             }) : <EmptyState title="No comments yet" body="Task discussion will appear here." />}
           </div>
         </div>
@@ -1334,13 +1626,15 @@ function ProjectBudgetOverview({ budget }: { budget: ReturnType<typeof budgetSum
     <section className="pm-detail-panel pm-detail-budget-overview">
       <div className="pm-detail-panel-head"><h3>Budget Overview</h3><button type="button">View full report</button></div>
       <div className="pm-detail-budget-content">
-        <div className="pm-detail-donut" style={donutStyle}>
-          <div><strong>{formatMoney(total)}</strong><span>Total Budget</span></div>
-        </div>
-        <div className="pm-detail-budget-legend">
-          {rows.map(row => (
-            <p key={row.label}><i style={{ background: row.color }} /><span>{row.label}</span><strong>{formatMoney(row.value)} ({percentOf(row.value, total)}%)</strong></p>
-          ))}
+        <div className="pm-detail-budget-main">
+          <div className="pm-detail-donut" style={donutStyle}>
+            <div><strong>{formatMoney(total)}</strong><span>Total Budget</span></div>
+          </div>
+          <div className="pm-detail-budget-legend">
+            {rows.map(row => (
+              <p key={row.label}><i style={{ background: row.color }} /><span>{row.label}</span><strong>{formatMoney(row.value)} ({percentOf(row.value, total)}%)</strong></p>
+            ))}
+          </div>
         </div>
         <div className="pm-detail-budget-bars">
           <h4>Budget vs Actual</h4>
@@ -1498,6 +1792,8 @@ export function ProjectDetails({
   onEditTask,
   onArchiveTask,
   onDeleteTask,
+  onUpdateTaskStatus,
+  onQuickAddTask,
   onDragTask,
   onDropTask,
   onArchive,
@@ -1521,6 +1817,8 @@ export function ProjectDetails({
   onEditTask: (task: ProjectTask) => void
   onArchiveTask: (taskId: string) => void
   onDeleteTask: (taskId: string) => void
+  onUpdateTaskStatus: (taskId: string, status: TaskStatus) => void
+  onQuickAddTask?: (projectId: string, status: TaskStatus, title: string) => void
   onDragTask: (taskId: string) => void
   onDropTask: (status: TaskStatus) => void
   onArchive: (projectId: string) => void
@@ -1542,17 +1840,22 @@ export function ProjectDetails({
   const taskChecklists = state.taskChecklists.filter(item => taskIds.has(item.taskId))
   const taskAttachments = state.taskAttachments.filter(attachment => taskIds.has(attachment.taskId))
   const projectState = { ...state, projects: [project], tasks, milestones, documents, timeLogs, taskComments, taskChecklists, taskAttachments, activities }
-  const client = state.clients.find(item => item.id === project.clientId)
+  const clientName = projectClientName(project, state.clients)
   const manager = state.members.find(item => item.id === project.managerId)
   const linkedOpportunity = findOpportunityByKey(opportunities, opportunityKey(project.opportunitySource, project.opportunityId))
   const budget = { total: project.budget, spent: project.spent, committed: project.committed, remaining: project.budget - project.spent - project.committed }
   const [draft, setDraft] = useState(() => projectDetailDraft(project))
   const [noteDraft, setNoteDraft] = useState('')
   const [savedAt, setSavedAt] = useState<number | null>(null)
+  const [projectLinkCopiedAt, setProjectLinkCopiedAt] = useState<number | null>(null)
+  const [projectActionMenuOpen, setProjectActionMenuOpen] = useState(false)
+  const projectActionMenuRef = useRef<HTMLDivElement | null>(null)
   const existingThumbnailSource = useProjectThumbnailSource(project)
   const draftThumbnailSource = draft.thumbnailDataUrl || existingThumbnailSource
   const teamMemberIds = new Set(draft.memberIds)
   const draftOpportunity = findOpportunityByKey(opportunities, draft.opportunityKey)
+  const draftClient = draft.clientId ? resolveProjectClient({ ...project, clientId: draft.clientId }, state.clients) : undefined
+  const draftClientId = draftClient?.id || state.clients[0]?.id || 'client-local'
 
   const departmentOptions = Array.from(new Set([...projectDepartmentOptions, project.department, draft.department].filter(Boolean)))
   const detailProjectTypeOptions = Array.from(new Set([...projectTypeOptions, ...state.projects.map(item => item.projectType || item.department), draft.projectType].filter(Boolean)))
@@ -1571,11 +1874,63 @@ export function ProjectDetails({
     .map(memberId => state.members.find(member => member.id === memberId))
     .filter((member): member is ProjectManagementState['members'][number] => Boolean(member))
   const latestUpdate = project.updatedAt || activities[0]?.createdAt || documents[0]?.updatedAt || project.startDate
-  const projectLocation = [client?.name, linkedOpportunity?.clientName, project.department].filter(Boolean)[0] || 'No location assigned'
+  const projectLocation = [project.location?.address, project.location?.city, project.location?.province].filter(Boolean).join(', ') || 'No location assigned'
   const selectedDetailTab = active === 'Details' ? 'Settings'
     : active === 'Planning' ? 'Schedule'
       : active === 'Activity Logs' ? 'Reports'
         : active
+  const projectLinkCopied = Boolean(projectLinkCopiedAt)
+
+  useEffect(() => {
+    if (!projectActionMenuOpen) return
+    const closeOnOutsideTap = (event: PointerEvent) => {
+      const target = event.target as Node | null
+      if (target && projectActionMenuRef.current?.contains(target)) return
+      setProjectActionMenuOpen(false)
+    }
+    document.addEventListener('pointerdown', closeOnOutsideTap)
+    return () => document.removeEventListener('pointerdown', closeOnOutsideTap)
+  }, [projectActionMenuOpen])
+
+  const buildProjectLink = () => {
+    if (typeof window === 'undefined') {
+      return `/project-management/projects?project=${encodeURIComponent(project.id)}${selectedDetailTab === 'Overview' ? '' : `&detail=${encodeURIComponent(selectedDetailTab)}`}`
+    }
+    const url = new URL(window.location.href)
+    url.searchParams.set('project', project.id)
+    if (selectedDetailTab === 'Overview') url.searchParams.delete('detail')
+    else url.searchParams.set('detail', selectedDetailTab)
+    url.hash = ''
+    return url.toString()
+  }
+
+  const copyProjectLink = async () => {
+    const href = buildProjectLink()
+    try {
+      await navigator.clipboard.writeText(href)
+      setProjectLinkCopiedAt(Date.now())
+      window.setTimeout(() => setProjectLinkCopiedAt(null), 1600)
+    } catch {
+      window.prompt('Project link', href)
+    }
+  }
+
+  const runProjectAction = (action: () => void) => {
+    setProjectActionMenuOpen(false)
+    action()
+  }
+
+  const archiveProject = () => runProjectAction(() => {
+    if (!project.archivedAt && window.confirm(`Archive ${project.name}?`)) onArchive(project.id)
+  })
+
+  const restoreProject = () => runProjectAction(() => {
+    if (project.archivedAt && window.confirm(`Restore ${project.name} to active projects?`)) onRestore(project.id)
+  })
+
+  const deleteProject = () => runProjectAction(() => {
+    if (window.confirm(`Delete ${project.name} and all related records?`)) onDelete(project.id)
+  })
 
   const applyDetailOpportunity = (key: string) => {
     const opportunity = findOpportunityByKey(opportunities, key)
@@ -1624,7 +1979,7 @@ export function ProjectDetails({
     const opportunityLink = parseOpportunityKey(draft.opportunityKey)
     onUpdate(project.id, {
       name: draft.name.trim() || project.name,
-      clientId: draft.clientId || state.clients[0]?.id || project.clientId,
+      clientId: draftClientId,
       description: draft.description,
       status: draft.status,
       health: draft.health,
@@ -1698,7 +2053,7 @@ export function ProjectDetails({
     `Health: ${project.health}`,
     `Priority: ${project.priority}`,
     `Progress: ${Math.round(project.progress)}%`,
-    `Client: ${client?.name || 'Unassigned'}`,
+    `Client: ${clientName}`,
     `Manager: ${manager?.name || 'Unassigned'}`,
     `Schedule: ${formatDate(project.startDate)} to ${formatDate(project.dueDate)}`,
     `Budget: ${formatMoney(project.budget)}`,
@@ -1758,19 +2113,40 @@ export function ProjectDetails({
       </div>
 
       <header className="pm-detail-hero-new">
-        <ProjectThumbnail project={project} />
+        <ProjectThumbnail project={project} className="pm-project-thumb-hero" />
         <div className="pm-detail-hero-copy">
           <div className="pm-detail-hero-meta">
             <ProjectStatusBadge status={project.status} />
-            <button type="button" aria-label="Open project flow"><ChevronRight size={14} /></button>
           </div>
           <h2>{project.name}<Star size={17} /></h2>
           <p>{project.tags[0] || project.department || 'Construction Project'}</p>
           <span><MapPin size={15} /> {projectLocation}</span>
         </div>
         <div className="pm-detail-hero-actions">
-          <button type="button" aria-label={`Open actions for ${project.name}`}><MoreHorizontal size={18} /></button>
-          <button type="button" onClick={() => { void navigator.clipboard?.writeText(project.name).catch(() => undefined) }}><Share2 size={16} /> Share</button>
+          <div className="pm-detail-hero-menu" ref={projectActionMenuRef}>
+            <button
+              type="button"
+              className="pm-detail-more-button"
+              onClick={() => setProjectActionMenuOpen(open => !open)}
+              aria-haspopup="menu"
+              aria-expanded={projectActionMenuOpen}
+              aria-label={`Open project actions for ${project.name}`}
+            >
+              <MoreHorizontal size={18} />
+            </button>
+            {projectActionMenuOpen && (
+              <div className="pm-project-action-menu" role="menu" aria-label={`Project actions for ${project.name}`}>
+                <button type="button" role="menuitem" onClick={() => runProjectAction(() => onAddTask(project.id))}><Plus size={14} /> New task</button>
+                <button type="button" role="menuitem" onClick={() => runProjectAction(() => onTab('Settings'))}><Pencil size={14} /> Edit project</button>
+                <button type="button" role="menuitem" onClick={() => runProjectAction(() => onTab('Reports'))}><Printer size={14} /> Reports</button>
+                {project.archivedAt
+                  ? <button type="button" role="menuitem" onClick={restoreProject}><RotateCcw size={14} /> Restore</button>
+                  : <button type="button" role="menuitem" onClick={archiveProject}><Archive size={14} /> Archive</button>}
+                <button type="button" role="menuitem" className="danger" onClick={deleteProject}><Trash2 size={14} /> Delete</button>
+              </div>
+            )}
+          </div>
+          <button type="button" onClick={() => { void copyProjectLink() }} aria-label={projectLinkCopied ? 'Project link copied' : 'Copy project link'}><Copy size={16} /> {projectLinkCopied ? 'Copied' : 'Copy project link'}</button>
         </div>
       </header>
 
@@ -1799,7 +2175,7 @@ export function ProjectDetails({
               <section className="pm-detail-panel pm-detail-info-card">
                 <h3>Project Details</h3>
                 <ProjectDetailValue label="Project Code" value={projectDisplayCode(project)} />
-                <ProjectDetailValue label="Client" value={client?.name || 'Unassigned'} />
+                <ProjectDetailValue label="Client" value={clientName} />
                 <ProjectDetailValue label="Project Manager" value={<><Avatar member={manager} /> {manager?.name || 'Unassigned'}</>} />
                 <ProjectDetailValue label="Department" value={project.department || 'Unassigned'} />
                 <ProjectDetailValue label="Status" value={<span className="pm-detail-dot-text"><i />{projectStatusLabel(project.status)}</span>} />
@@ -1851,7 +2227,7 @@ export function ProjectDetails({
                       {opportunities.map(opportunity => <option key={opportunityKey(opportunity.source, opportunity.id)} value={opportunityKey(opportunity.source, opportunity.id)}>{opportunityLabel(opportunity)}</option>)}
                     </select>
                   </Field>
-                  <Field label="Client"><select value={draft.clientId} onChange={event => setDraft(prev => ({ ...prev, clientId: event.target.value }))}>{!state.clients.length && <option value="client-local">Internal / Unassigned</option>}{state.clients.map(item => <option key={item.id} value={item.id}>{item.name}</option>)}</select></Field>
+                  <Field label="Client"><select value={draftClientId} onChange={event => setDraft(prev => ({ ...prev, clientId: event.target.value }))}>{!state.clients.length && <option value="client-local">Internal / Unassigned</option>}{state.clients.map(item => <option key={item.id} value={item.id}>{item.name}</option>)}</select></Field>
                   <Field label="Project type"><select value={draft.projectType} onChange={event => setDraft(prev => ({ ...prev, projectType: event.target.value, department: event.target.value || prev.department }))}>{detailProjectTypeOptions.map(type => <option key={type} value={type}>{type}</option>)}</select></Field>
                   <Field label="Contract type"><select value={draft.contractType} onChange={event => setDraft(prev => ({ ...prev, contractType: event.target.value }))}><option value="">Select contract type</option>{detailContractTypeOptions.map(type => <option key={type} value={type}>{type}</option>)}</select></Field>
                   <Field label="Department"><select value={draft.department} onChange={event => setDraft(prev => ({ ...prev, department: event.target.value }))}>{departmentOptions.map(department => <option key={department} value={department}>{department}</option>)}</select></Field>
@@ -1952,10 +2328,10 @@ export function ProjectDetails({
         </form>
       )}
       {selectedDetailTab === 'Tasks' && (
-        <TasksTab state={projectState} onAddTask={() => onAddTask(project.id)} onOpenTask={onOpenTask} onEditTask={onEditTask} onArchiveTask={onArchiveTask} onDeleteTask={onDeleteTask} />
+        <TasksTab state={projectState} onAddTask={() => onAddTask(project.id)} onOpenTask={onOpenTask} onEditTask={onEditTask} onArchiveTask={onArchiveTask} onDeleteTask={onDeleteTask} onUpdateTaskStatus={onUpdateTaskStatus} />
       )}
       {selectedDetailTab === 'Kanban' && (
-        <KanbanTab state={projectState} onDrag={onDragTask} onDrop={onDropTask} onOpenTask={onOpenTask} onEditTask={onEditTask} onArchiveTask={onArchiveTask} onDeleteTask={onDeleteTask} />
+        <KanbanTab state={projectState} onDrag={onDragTask} onDrop={onDropTask} onOpenTask={onOpenTask} onEditTask={onEditTask} onArchiveTask={onArchiveTask} onDeleteTask={onDeleteTask} onQuickAddTask={(status, title) => onQuickAddTask?.(project.id, status, title)} />
       )}
       {selectedDetailTab === 'Schedule' && (
         <PlanningTab

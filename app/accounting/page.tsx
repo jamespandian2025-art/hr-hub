@@ -18,6 +18,7 @@ import {
   WalletCards,
 } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
+import { AnalyticsToggleButton, CollapsibleAnalytics, useAnalyticsDisclosure } from '@/components/AnalyticsDisclosure'
 import StateFeedback from '@/components/StateFeedback'
 import { loadAccountingData as loadSharedAccountingData, subscribeAccountingData } from '@/lib/accounting/data'
 
@@ -112,6 +113,7 @@ const emptyAccountingData: AccountingData = {
 
 export default function AccountingOverviewPage() {
   const [data, setData] = useState<AccountingData>(emptyAccountingData)
+  const analytics = useAnalyticsDisclosure('wiseflow:analytics:accounting-overview')
 
   useEffect(() => {
     const load = () => setData(loadAccountingData())
@@ -134,6 +136,7 @@ export default function AccountingOverviewPage() {
               <p>Monitor cash, receivables, payables, payroll costs, and financial controls for {data.companyName}.</p>
             </div>
             <div className="accounting-hero-actions" aria-label="Accounting actions">
+              <AnalyticsToggleButton open={analytics.open} onToggle={analytics.toggle} panelId={analytics.panelId} className="accounting-hero-action" />
               {heroActions.map(action => {
                 const Icon = action.icon
                 return (
@@ -146,24 +149,26 @@ export default function AccountingOverviewPage() {
             </div>
           </div>
 
-          <section className="accounting-metrics" aria-label="Accounting overview metrics">
-            {view.metrics.map(metric => {
-              const Icon = metric.icon
-              return (
-                <div key={metric.title} className="accounting-metric-card">
-                  <span className="accounting-metric-icon" style={{ background: `${metric.tone}12`, color: metric.tone }}><Icon size={21} /></span>
-                  <div className="accounting-metric-copy">
-                    <div className="accounting-eyebrow">{metric.title}</div>
-                    <div className="accounting-metric-value">{metric.value}</div>
-                    <div className="accounting-metric-delta" style={{ color: metric.up === false ? '#ef4444' : '#16a34a' }}>
-                      {metric.up === false ? <ArrowDownLeft size={13} /> : metric.up ? <ArrowUpRight size={13} /> : null}
-                      {metric.delta}
+          <CollapsibleAnalytics open={analytics.open} id={analytics.panelId}>
+            <section className="accounting-metrics" aria-label="Accounting overview metrics">
+              {view.metrics.map(metric => {
+                const Icon = metric.icon
+                return (
+                  <div key={metric.title} className="accounting-metric-card">
+                    <span className="accounting-metric-icon" style={{ background: `${metric.tone}12`, color: metric.tone }}><Icon size={21} /></span>
+                    <div className="accounting-metric-copy">
+                      <div className="accounting-eyebrow">{metric.title}</div>
+                      <div className="accounting-metric-value">{metric.value}</div>
+                      <div className="accounting-metric-delta" style={{ color: metric.up === false ? '#ef4444' : '#16a34a' }}>
+                        {metric.up === false ? <ArrowDownLeft size={13} /> : metric.up ? <ArrowUpRight size={13} /> : null}
+                        {metric.delta}
+                      </div>
                     </div>
                   </div>
-                </div>
-              )
-            })}
-          </section>
+                )
+              })}
+            </section>
+          </CollapsibleAnalytics>
         </div>
       </section>
 
@@ -810,7 +815,7 @@ const accountingOverviewCss = `
 .accounting-panel-header a { color: #0f172a; text-decoration: none; font-size: 12px; font-weight: 600; }
 .accounting-panel-header span { border: 1px solid #e5e7eb; background: #f8fafc; border-radius: 6px; min-height: 30px; display: inline-flex; align-items: center; padding: 0 10px; color: #334155; font-size: 12px; font-weight: 600; max-width: 170px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .cash-flow-panel { min-height: 300px; display: grid; grid-template-rows: auto 1fr; gap: 16px; }
-.accounting-legend-row { display: flex; flex-wrap: wrap; gap: 18px; color: #475569; font-size: 12px; font-weight: 600; }
+.accounting-legend-row { display: flex; flex-wrap: wrap; gap: 18px; color: #000000; font-size: 12px; font-weight: 600; }
 .accounting-legend { display: flex; align-items: center; gap: 9px; min-width: 0; }
 .accounting-legend > span:first-child { width: 8px; height: 8px; border-radius: 999px; flex: 0 0 auto; }
 .accounting-legend > span:nth-child(2) { flex: 1; min-width: 0; font-size: 12px; font-weight: 600; color: #334155; }
@@ -818,47 +823,47 @@ const accountingOverviewCss = `
 .cash-chart { min-height: 248px; position: relative; border-bottom: 1px solid #e5e7eb; border-left: 1px solid #e5e7eb; overflow: hidden; }
 .cash-chart > span { position: absolute; left: 0; right: 0; border-top: 1px solid #eef2f7; }
 .cash-chart svg { position: absolute; inset: 0 0 24px; width: 100%; height: calc(100% - 24px); }
-.cash-labels { position: absolute; left: 8px; right: 0; bottom: 0; display: flex; justify-content: space-between; color: #64748b; font-size: 10.5px; font-weight: 700; }
+.cash-labels { position: absolute; left: 8px; right: 0; bottom: 0; display: flex; justify-content: space-between; color: #000000; font-size: 10.5px; font-weight: 700; }
 .expense-breakdown { display: grid; grid-template-columns: 170px 1fr; gap: 18px; align-items: center; min-height: 300px; }
 .expense-donut { width: 156px; height: 156px; border-radius: 50%; background: conic-gradient(var(--donut-gradient)); display: grid; place-items: center; }
 .expense-donut > div { width: 92px; height: 92px; border-radius: 50%; background: #fff; display: grid; place-items: center; text-align: center; padding: 8px; }
 .expense-donut strong { font-size: 16px; }
-.expense-donut span { font-size: 11px; color: #64748b; font-weight: 600; }
+.expense-donut span { font-size: 11px; color: #000000; font-weight: 600; }
 .expense-segments { display: grid; gap: 12px; }
 .bank-list { display: grid; }
 .bank-row { display: grid; grid-template-columns: 42px minmax(0, 1fr) auto; gap: 12px; align-items: center; padding: 14px 0; border-bottom: 1px solid #eef2f7; }
 .bank-icon { width: 38px; height: 38px; border-radius: 8px; color: #fff; display: grid; place-items: center; }
 .bank-copy strong { display: block; font-size: 13.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.bank-copy small { color: #64748b; font-weight: 600; }
+.bank-copy small { color: #000000; font-weight: 600; }
 .accounting-add-link { text-decoration: none; color: #0f172a; font-weight: 600; font-size: 13px; text-align: center; padding: 14px 0 0; }
 .mini-rows { display: grid; gap: 12px; }
 .mini-rows > div:not(.mini-total) { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; gap: 12px; font-size: 12.5px; }
 .mini-rows span:first-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.mini-rows span:nth-child(2) { color: #64748b; font-weight: 600; }
+.mini-rows span:nth-child(2) { color: #000000; font-weight: 600; }
 .mini-rows strong { color: #ef4444; }
 .mini-total { border-top: 1px solid #eef2f7; padding-top: 12px; display: flex; justify-content: space-between; font-size: 12.5px; }
 .accounting-table-wrap { overflow-x: auto; border: 1px solid #e5e7eb; border-radius: 8px; background: #ffffff; }
 .accounting-table { width: 100%; border-collapse: collapse; min-width: 880px; }
-.accounting-table th { text-align: left; padding: 11px 12px; color: #475569; background: #f8fafc; font-size: 11px; text-transform: uppercase; font-weight: 700; }
+.accounting-table th { text-align: left; padding: 11px 12px; color: #000000; background: #f8fafc; font-size: 11px; text-transform: uppercase; font-weight: 700; }
 .accounting-table td { padding: 12px; font-size: 12.5px; color: #111827; vertical-align: middle; border-top: 1px solid #eef2f7; }
 .accounting-table td strong { display: block; }
-.accounting-table td small { display: block; color: #64748b; margin-top: 3px; }
+.accounting-table td small { display: block; color: #000000; margin-top: 3px; }
 .accounting-pill { display: inline-flex; align-items: center; min-height: 22px; border-radius: 6px; background: #eef2ff; color: #4f46e5; padding: 0 8px; font-size: 11.5px; font-weight: 700; }
 .status-paid, .status-completed, .status-released { background: #dcfce7; color: #15803d; }
 .status-overdue, .status-cancelled { background: #fee2e2; color: #dc2626; }
 .type-expense, .amount-negative { color: #ef4444 !important; font-weight: 700; }
 .type-income { color: #16a34a !important; font-weight: 700; }
 .type-transfer { color: #2563eb !important; font-weight: 700; }
-.accounting-more-button { width: 32px; height: 30px; border-radius: 7px; border: 1px solid #eef2f7; background: #fff; color: #475569; display: grid; place-items: center; cursor: pointer; }
+.accounting-more-button { width: 32px; height: 30px; border-radius: 7px; border: 1px solid #eef2f7; background: #fff; color: #000000; display: grid; place-items: center; cursor: pointer; }
 .quick-actions-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
 .quick-action { min-height: 76px; border: 1px solid #eef2f7; border-radius: 8px; text-decoration: none; color: #111827; display: flex; align-items: center; gap: 12px; padding: 12px; }
 .quick-action > span:first-child { width: 36px; height: 36px; border-radius: 8px; background: #ecfdf3; color: #16a34a; display: grid; place-items: center; flex: 0 0 auto; }
 .quick-action strong { display: block; font-size: 13px; font-weight: 700; }
-.quick-action small { display: block; color: #64748b; margin-top: 3px; }
-.accounting-empty { min-height: 154px; display: grid; place-items: center; align-content: center; gap: 8px; text-align: center; color: #64748b; font-size: 13px; font-weight: 500; line-height: 1.45; padding: 22px; border: 1px dashed #dbe2ea; border-radius: 8px; background: #ffffff; }
+.quick-action small { display: block; color: #000000; margin-top: 3px; }
+.accounting-empty { min-height: 154px; display: grid; place-items: center; align-content: center; gap: 8px; text-align: center; color: #000000; font-size: 13px; font-weight: 500; line-height: 1.45; padding: 22px; border: 1px dashed #dbe2ea; border-radius: 8px; background: #ffffff; }
 .accounting-empty .wf-state__icon { width: 52px; height: 52px; border: 1px solid #dbe2ea; border-radius: 8px; display: grid; place-items: center; background: #f8fafc; color: #0f172a; }
 .accounting-empty h1 { max-width: 360px; margin: 0; color: #0f172a; font-size: 13px; line-height: 1.35; font-weight: 650; }
-.accounting-empty p { margin: 0; color: #64748b; font-size: 12.5px; line-height: 1.4; }
+.accounting-empty p { margin: 0; color: #000000; font-size: 12.5px; line-height: 1.4; }
 @media (max-width: 1320px) {
   .accounting-metrics { grid-template-columns: repeat(3, minmax(180px, 1fr)); }
   .accounting-main-grid { grid-template-columns: minmax(0, 1fr) minmax(320px, .8fr); }
@@ -889,6 +894,216 @@ const accountingOverviewCss = `
   .accounting-table thead { display: none; }
   .accounting-table tr { border: 1px solid #eef2f7; border-radius: 8px; margin-bottom: 12px; overflow: hidden; background: #ffffff; }
   .accounting-table td { border-top: 0; display: grid; grid-template-columns: 105px minmax(0, 1fr); gap: 10px; padding: 10px 12px; }
-  .accounting-table td::before { content: attr(data-label); color: #64748b; font-size: 11px; font-weight: 700; text-transform: uppercase; }
+  .accounting-table td::before { content: attr(data-label); color: #000000; font-size: 11px; font-weight: 700; text-transform: uppercase; }
+}
+
+/* Final overview polish: keep this page readable inside the accounting shell. */
+html[data-theme='light'] .accounting-shell .accounting-scroll-content .accounting-overview-page .accounting-dashboard-inner,
+html[data-theme='light'] .accounting-shell .accounting-scroll-content .accounting-overview-page .accounting-dashboard-content {
+  width: min(var(--accounting-dashboard-max-width), calc(100% - var(--accounting-dashboard-inline-space) * 2)) !important;
+}
+
+html[data-theme='light'] .accounting-shell .accounting-scroll-content .accounting-overview-page .accounting-metrics {
+  grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+  gap: 14px !important;
+  padding: 0 !important;
+  background: transparent !important;
+  border: 0 !important;
+  box-shadow: none !important;
+}
+
+html[data-theme='light'] .accounting-shell .accounting-scroll-content .accounting-overview-page .accounting-metric-card {
+  min-height: 118px !important;
+  grid-template-columns: 42px minmax(0, 1fr) !important;
+  align-items: center !important;
+  padding: 16px !important;
+}
+
+html[data-theme='light'] .accounting-shell .accounting-scroll-content .accounting-overview-page .accounting-metric-icon {
+  width: 40px !important;
+  height: 40px !important;
+  border-radius: 8px !important;
+}
+
+html[data-theme='light'] .accounting-shell .accounting-scroll-content .accounting-overview-page .accounting-eyebrow {
+  min-height: 0 !important;
+  color: #000000 !important;
+  font-size: 12px !important;
+  line-height: 1.25 !important;
+  font-weight: 700 !important;
+  opacity: 1 !important;
+}
+
+html[data-theme='light'] .accounting-shell .accounting-scroll-content .accounting-overview-page .accounting-metric-value {
+  color: #0f172a !important;
+  font-size: 23px !important;
+  letter-spacing: 0 !important;
+}
+
+html[data-theme='light'] .accounting-shell .accounting-scroll-content .accounting-overview-page .accounting-metric-delta {
+  font-size: 12px !important;
+  opacity: 1 !important;
+}
+
+html[data-theme='light'] .accounting-shell .accounting-scroll-content .accounting-overview-page .accounting-main-grid,
+html[data-theme='light'] .accounting-shell .accounting-scroll-content .accounting-overview-page .accounting-lower-grid,
+html[data-theme='light'] .accounting-shell .accounting-scroll-content .accounting-overview-page .accounting-side-stack {
+  gap: 18px !important;
+}
+
+html[data-theme='light'] .accounting-shell .accounting-scroll-content .accounting-overview-page .accounting-card {
+  padding: 20px !important;
+}
+
+html[data-theme='light'] .accounting-shell .accounting-scroll-content .accounting-overview-page .accounting-panel-header {
+  margin-bottom: 16px !important;
+}
+
+html[data-theme='light'] .accounting-shell .accounting-scroll-content .accounting-overview-page .accounting-panel-header h2 {
+  color: #0f172a !important;
+  font-size: 15px !important;
+  line-height: 1.25 !important;
+  font-weight: 760 !important;
+}
+
+html[data-theme='light'] .accounting-shell .accounting-scroll-content .accounting-overview-page .accounting-panel-header a,
+html[data-theme='light'] .accounting-shell .accounting-scroll-content .accounting-overview-page .accounting-add-link {
+  color: #166534 !important;
+}
+
+html[data-theme='light'] .accounting-shell .accounting-scroll-content .accounting-overview-page .accounting-empty {
+  min-height: 170px !important;
+  background: #fbfdff !important;
+  border-color: #d8dee7 !important;
+}
+
+html[data-theme='light'] .accounting-shell .accounting-scroll-content .accounting-overview-page .quick-action {
+  min-height: 72px !important;
+  border-color: #dbe2ea !important;
+  background: #ffffff !important;
+}
+
+html[data-theme='light'] .accounting-shell .accounting-scroll-content .accounting-overview-page .quick-action:hover {
+  background: #f8fafc !important;
+  border-color: #cbd5e1 !important;
+}
+
+@media (max-width: 1120px) {
+  html[data-theme='light'] .accounting-shell .accounting-scroll-content .accounting-overview-page .accounting-metrics {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  }
+}
+
+@media (max-width: 760px) {
+  html[data-theme='light'] .accounting-shell .accounting-scroll-content > .accounting-overview-page {
+    background: #f3f4f6 !important;
+  }
+
+  html[data-theme='light'] .accounting-shell .accounting-scroll-content .accounting-overview-page .accounting-dashboard-hero {
+    padding: 18px 0 20px !important;
+    background: linear-gradient(180deg, var(--acc-hero) 0, var(--acc-hero) 270px, #f3f4f6 270px, #f3f4f6 100%) !important;
+  }
+
+  html[data-theme='light'] .accounting-shell .accounting-scroll-content .accounting-overview-page .accounting-dashboard-inner,
+  html[data-theme='light'] .accounting-shell .accounting-scroll-content .accounting-overview-page .accounting-dashboard-content {
+    width: min(100%, calc(100% - 28px)) !important;
+  }
+
+  html[data-theme='light'] .accounting-shell .accounting-scroll-content .accounting-overview-page .accounting-dashboard-inner {
+    gap: 14px !important;
+  }
+
+  html[data-theme='light'] .accounting-shell .accounting-scroll-content .accounting-overview-page .accounting-hero-header {
+    gap: 12px !important;
+  }
+
+  html[data-theme='light'] .accounting-shell .accounting-scroll-content .accounting-overview-page .accounting-breadcrumb {
+    display: none !important;
+  }
+
+  html[data-theme='light'] .accounting-shell .accounting-scroll-content .accounting-overview-page .accounting-hero-copy h1 {
+    font-size: 24px !important;
+  }
+
+  html[data-theme='light'] .accounting-shell .accounting-scroll-content .accounting-overview-page .accounting-hero-copy p {
+    margin-top: 6px !important;
+    font-size: 13px !important;
+    line-height: 1.45 !important;
+  }
+
+  html[data-theme='light'] .accounting-shell .accounting-scroll-content .accounting-overview-page .accounting-hero-actions {
+    display: grid !important;
+    grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+    gap: 8px !important;
+    width: 100% !important;
+  }
+
+  html[data-theme='light'] .accounting-shell .accounting-scroll-content .accounting-overview-page .accounting-hero-action {
+    width: auto !important;
+    min-height: 40px !important;
+    height: 40px !important;
+    padding: 0 8px !important;
+    gap: 6px !important;
+    font-size: 12px !important;
+  }
+
+  html[data-theme='light'] .accounting-shell .accounting-scroll-content .accounting-overview-page .accounting-hero-action svg {
+    width: 14px !important;
+    height: 14px !important;
+  }
+
+  html[data-theme='light'] .accounting-shell .accounting-scroll-content .accounting-overview-page .accounting-metrics {
+    display: grid !important;
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+    gap: 12px !important;
+    overflow: visible !important;
+    padding-bottom: 0 !important;
+  }
+
+  html[data-theme='light'] .accounting-shell .accounting-scroll-content .accounting-overview-page .accounting-metric-card {
+    min-width: 0 !important;
+    min-height: 104px !important;
+    grid-template-columns: 34px minmax(0, 1fr) !important;
+    gap: 10px !important;
+    padding: 13px !important;
+    scroll-snap-align: none !important;
+  }
+
+  html[data-theme='light'] .accounting-shell .accounting-scroll-content .accounting-overview-page .accounting-metric-icon {
+    width: 34px !important;
+    height: 34px !important;
+  }
+
+  html[data-theme='light'] .accounting-shell .accounting-scroll-content .accounting-overview-page .accounting-eyebrow {
+    font-size: 11px !important;
+  }
+
+  html[data-theme='light'] .accounting-shell .accounting-scroll-content .accounting-overview-page .accounting-metric-value {
+    font-size: 20px !important;
+  }
+
+  html[data-theme='light'] .accounting-shell .accounting-scroll-content .accounting-overview-page .accounting-metric-delta {
+    font-size: 11px !important;
+  }
+
+  html[data-theme='light'] .accounting-shell .accounting-scroll-content .accounting-overview-page .accounting-main-grid,
+  html[data-theme='light'] .accounting-shell .accounting-scroll-content .accounting-overview-page .accounting-lower-grid,
+  html[data-theme='light'] .accounting-shell .accounting-scroll-content .accounting-overview-page .accounting-side-stack {
+    gap: 16px !important;
+  }
+
+  html[data-theme='light'] .accounting-shell .accounting-scroll-content .accounting-overview-page .accounting-card {
+    padding: 16px !important;
+  }
+}
+
+@media (max-width: 370px) {
+  html[data-theme='light'] .accounting-shell .accounting-scroll-content .accounting-overview-page .accounting-metrics {
+    grid-template-columns: 1fr !important;
+  }
+
+  html[data-theme='light'] .accounting-shell .accounting-scroll-content .accounting-overview-page .accounting-metric-card {
+    grid-template-columns: 40px minmax(0, 1fr) !important;
+  }
 }
 `

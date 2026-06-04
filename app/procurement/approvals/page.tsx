@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState, type ComponentType } from 'react'
 import { CheckCircle2, Clock3, FileCheck2, Filter, Search, ShieldCheck, XCircle } from 'lucide-react'
+import { AnalyticsToggleButton, CollapsibleAnalytics, useAnalyticsDisclosure } from '@/components/AnalyticsDisclosure'
 import { companyChangeEvent, companyScopedKey, getActiveCompany } from '@/lib/tenant/company'
 
 const font = 'var(--font-body)'
@@ -45,6 +46,7 @@ export default function ProcurementApprovalsPage() {
   const [search, setSearch] = useState('')
   const [typeFilter, setTypeFilter] = useState<'All' | ApprovalType>('All')
   const [statusFilter, setStatusFilter] = useState<'All' | ApprovalStatus>('All')
+  const analytics = useAnalyticsDisclosure('wiseflow:analytics:procurement-approvals')
 
   useEffect(() => {
     const load = () => {
@@ -143,15 +145,20 @@ export default function ProcurementApprovalsPage() {
             </div>
           </div>
         </div>
-        <button type="button" className="approval-secondary" onClick={resetFilters}><Filter size={16} /> Reset</button>
+        <div className="approval-head-actions">
+          <AnalyticsToggleButton open={analytics.open} onToggle={analytics.toggle} panelId={analytics.panelId} className="approval-secondary" />
+          <button type="button" className="approval-secondary" onClick={resetFilters}><Filter size={16} /> Reset</button>
+        </div>
       </header>
 
-      <section className="approval-kpis" aria-label="Procurement approval summary">
-        <Kpi icon={FileCheck2} title="Total Items" value={String(stats.total)} helper="Approval records" />
-        <Kpi icon={Clock3} title="Pending" value={String(stats.pending)} helper={formatCurrency(stats.value)} />
-        <Kpi icon={CheckCircle2} title="Approved" value={String(stats.approved)} helper="Completed decisions" />
-        <Kpi icon={XCircle} title="Rejected" value={String(stats.rejected)} helper="Returned or cancelled" />
-      </section>
+      <CollapsibleAnalytics open={analytics.open} id={analytics.panelId}>
+        <section className="approval-kpis" aria-label="Procurement approval summary">
+          <Kpi icon={FileCheck2} title="Total Items" value={String(stats.total)} helper="Approval records" />
+          <Kpi icon={Clock3} title="Pending" value={String(stats.pending)} helper={formatCurrency(stats.value)} />
+          <Kpi icon={CheckCircle2} title="Approved" value={String(stats.approved)} helper="Completed decisions" />
+          <Kpi icon={XCircle} title="Rejected" value={String(stats.rejected)} helper="Returned or cancelled" />
+        </section>
+      </CollapsibleAnalytics>
 
       <section className="approval-workspace">
         <div className="approval-toolbar">
@@ -354,10 +361,16 @@ const approvalsCss = `
   align-items: flex-start;
   margin-bottom: 22px;
 }
+.approval-head-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  flex-wrap: wrap;
+}
 .approval-breadcrumb {
   display: flex;
   gap: 8px;
-  color: #64748b;
+  color: #000000;
   font-size: 13px;
   margin-bottom: 10px;
 }
@@ -385,7 +398,7 @@ const approvalsCss = `
 .approval-empty p,
 td small {
   margin: 3px 0 0;
-  color: #64748b;
+  color: #000000;
 }
 .approval-secondary,
 .approval-actions button {
@@ -416,7 +429,7 @@ td small {
   gap: 12px;
 }
 .approval-kpis small {
-  color: #64748b;
+  color: #000000;
   font-weight: 800;
 }
 .approval-kpis strong {
@@ -455,7 +468,7 @@ td small {
   position: absolute;
   left: 12px;
   bottom: 12px;
-  color: #64748b;
+  color: #000000;
 }
 .approval-toolbar input,
 .approval-toolbar select {
@@ -488,7 +501,7 @@ td {
 }
 th {
   background: #f8fafc;
-  color: #475569;
+  color: #000000;
   font-size: 12px;
   text-transform: uppercase;
   letter-spacing: .04em;
@@ -543,7 +556,7 @@ td small {
   place-items: center;
   text-align: center;
   gap: 8px;
-  color: #64748b;
+  color: #000000;
 }
 .approval-empty strong {
   color: #0f172a;

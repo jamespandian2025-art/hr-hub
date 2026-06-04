@@ -53,7 +53,7 @@ export default function SecurityPage() {
           title: 'Backups and monitoring',
           body: [
             'Production should enable database backups or point-in-time recovery, plus per-company export/restore checks. Restore should be rehearsed in staging before real customer launch.',
-            'Health checks, client error monitoring, failed-login audit events, and API failure monitoring should be reviewed during beta and after launch.',
+            'Health checks, client error monitoring, failed-login audit events, and API failure monitoring should be reviewed before and after launch.',
           ],
         },
         {
@@ -66,4 +66,3 @@ export default function SecurityPage() {
     />
   )
 }
-

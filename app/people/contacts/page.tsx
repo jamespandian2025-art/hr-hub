@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useMemo, useState } from 'react'
+import { usePathname, useRouter, useSearchParams } from 'next/navigation'
 import { companyScopedKey, getActiveCompany } from '@/lib/tenant/company'
 
 const font = "var(--font-body)"
@@ -120,18 +121,27 @@ const stringValue = (value: unknown, fallback = '') => typeof value === 'string'
 const numberValue = (value: unknown, fallback = 0) => typeof value === 'number' && Number.isFinite(value) ? value : fallback
 
 export default function ContactsPage() {
+  const router = useRouter()
+  const pathname = usePathname()
+  const searchParams = useSearchParams()
+  const createRequested = searchParams.get('new') === '1'
+  const requestedName = searchParams.get('name') || ''
+  const requestedClientName = searchParams.get('clientName') || ''
+  const requestedCompany = searchParams.get('company') || requestedClientName
+  const requestedEmail = searchParams.get('email') || ''
+  const requestedPhone = searchParams.get('phone') || ''
   const [clients, setClients] = useState<Client[]>(loadClients)
   const [manualContacts, setManualContacts] = useState<ManualContact[]>(loadContacts)
   const [search, setSearch] = useState('')
   const [sourceFilter, setSourceFilter] = useState<'All' | 'Client' | 'Contact'>('All')
   const [selected, setSelected] = useState<string[]>([])
   const [activeMenu, setActiveMenu] = useState<string | null>(null)
-  const [showForm, setShowForm] = useState(false)
+  const [showForm, setShowForm] = useState(createRequested)
   const [editingKey, setEditingKey] = useState<string | null>(null)
-  const [name, setName] = useState('')
-  const [email, setEmail] = useState('')
-  const [phone, setPhone] = useState('')
-  const [company, setCompany] = useState('')
+  const [name, setName] = useState(requestedName)
+  const [email, setEmail] = useState(requestedEmail)
+  const [phone, setPhone] = useState(requestedPhone)
+  const [company, setCompany] = useState(requestedCompany)
 
   useEffect(() => {
     window.localStorage.setItem(contactsStorageKey, JSON.stringify(manualContacts))
@@ -189,6 +199,7 @@ export default function ContactsPage() {
   const closeForm = () => {
     resetForm()
     setShowForm(false)
+    if (createRequested) router.replace(pathname)
   }
 
   const startCreate = () => {
@@ -289,7 +300,7 @@ export default function ContactsPage() {
           Back
         </button>
         <div style={{ fontSize: '24px', fontWeight: 600, color: '#111827', marginBottom: '6px' }}>{editingKey ? 'Edit Contact' : 'Add Contact'}</div>
-        <div style={{ fontSize: '13px', color: '#9ca3af', marginBottom: '28px', display: 'flex', gap: '6px' }}>
+        <div style={{ fontSize: '13px', color: '#000000', marginBottom: '28px', display: 'flex', gap: '6px' }}>
           <span style={{ color: '#6c63ff', fontWeight: 600 }}>Contacts</span>
           <span>/</span>
           <span>{editingKey ? 'Edit' : 'New'}</span>
@@ -298,7 +309,7 @@ export default function ContactsPage() {
         <div style={{ display: 'grid', gridTemplateColumns: 'minmax(220px, 260px) minmax(0, 1fr)', gap: '32px' }}>
           <div>
             <div style={{ fontSize: '15px', fontWeight: 600, color: '#111827', marginBottom: '8px' }}>Contact Details</div>
-            <div style={{ fontSize: '13px', color: '#6b7280', lineHeight: 1.6 }}>
+            <div style={{ fontSize: '13px', color: '#000000', lineHeight: 1.6 }}>
               Client records appear here automatically. Editing a client contact updates the Clients page too.
             </div>
           </div>
@@ -344,7 +355,7 @@ export default function ContactsPage() {
         </button>
       </div>
 
-      <div style={{ fontSize: '13px', color: '#9ca3af', marginBottom: '24px', display: 'flex', gap: '6px' }}>
+      <div style={{ fontSize: '13px', color: '#000000', marginBottom: '24px', display: 'flex', gap: '6px' }}>
         <span style={{ color: '#6c63ff', fontWeight: 600 }}>Contacts</span>
         <span>/</span>
         <span>List</span>
@@ -357,9 +368,9 @@ export default function ContactsPage() {
           ['Manual Contacts', rows.filter(row => row.source === 'Contact').length.toLocaleString(), 'Added here'],
         ].map(([label, value, detail]) => (
           <div key={label} style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: '12px', padding: '18px' }}>
-            <div style={{ fontSize: '12px', color: '#6b7280', fontWeight: 600, marginBottom: '8px' }}>{label}</div>
+            <div style={{ fontSize: '12px', color: '#000000', fontWeight: 600, marginBottom: '8px' }}>{label}</div>
             <div style={{ fontSize: '20px', color: '#111827', fontWeight: 600 }}>{value}</div>
-            <div style={{ fontSize: '12px', color: '#9ca3af', fontWeight: 600, marginTop: '5px' }}>{detail}</div>
+            <div style={{ fontSize: '12px', color: '#000000', fontWeight: 600, marginTop: '5px' }}>{detail}</div>
           </div>
         ))}
       </div>
@@ -372,13 +383,13 @@ export default function ContactsPage() {
             <option>Contact</option>
           </select>
           <div style={{ flex: 1, minWidth: '220px', display: 'flex', gap: '8px', padding: '9px 14px', border: '1px solid #e5e7eb', borderRadius: '8px', background: '#fafafa' }}>
-            <span style={{ color: '#9ca3af' }}>Search</span>
+            <span style={{ color: '#000000' }}>Search</span>
             <input type="text" placeholder="Search name, email, phone, or company..." value={search} onChange={event => setSearch(event.target.value)} style={{ border: 'none', background: 'transparent', outline: 'none', flex: 1, color: '#374151' }} />
           </div>
         </div>
 
         {filtered.length === 0 ? (
-          <div style={{ padding: '70px 24px', textAlign: 'center', color: '#9ca3af', fontSize: '14px', fontWeight: 600 }}>
+          <div style={{ padding: '70px 24px', textAlign: 'center', color: '#000000', fontSize: '14px', fontWeight: 600 }}>
             No contacts found.
           </div>
         ) : (
@@ -390,7 +401,7 @@ export default function ContactsPage() {
                     <input type="checkbox" checked={filtered.length > 0 && filtered.every(contact => selected.includes(contact.key))} onChange={toggleSelectAll} />
                   </th>
                   {['Name', 'Email', 'Phone', 'Company', 'Source', ''].map(header => (
-                    <th key={header} style={{ padding: '12px 16px', textAlign: 'left', fontSize: '12px', fontWeight: 600, color: '#6b7280', textTransform: 'uppercase' }}>{header}</th>
+                    <th key={header} style={{ padding: '12px 16px', textAlign: 'left', fontSize: '12px', fontWeight: 600, color: '#000000', textTransform: 'uppercase' }}>{header}</th>
                   ))}
                 </tr>
               </thead>
@@ -423,7 +434,7 @@ export default function ContactsPage() {
                           event.stopPropagation()
                           setActiveMenu(activeMenu === contact.key ? null : contact.key)
                         }}
-                        style={{ border: 'none', background: 'transparent', cursor: 'pointer', fontSize: '18px', color: '#9ca3af' }}
+                        style={{ border: 'none', background: 'transparent', cursor: 'pointer', fontSize: '18px', color: '#000000' }}
                       >
                         ...
                       </button>

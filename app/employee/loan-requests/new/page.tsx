@@ -69,7 +69,8 @@ export default function NewLoanRequestPage() {
       const now = new Date().toISOString()
       const request: LoanRequest = {
         id: `LRQ-${new Date().getFullYear()}-${String(Date.now()).slice(-6)}`,
-        employeeId: employee.id,
+        // Server scopes ownership by session employeeId; use it so the write isn't rejected.
+        employeeId: employee.employeeId || employee.id,
         employeeName,
         employeeCode: employee.employeeId || employee.id,
         department: employee.department,
@@ -160,7 +161,7 @@ export default function NewLoanRequestPage() {
         <aside style={{ display: 'grid', gap: 16, alignContent: 'start' }}>
           <section className="employee-panel" style={{ padding: 20 }}>
             <h2 style={{ margin: 0, fontSize: 17 }}>Request Summary</h2>
-            <div style={{ display: 'grid', gap: 10, marginTop: 16 }}>{summary.map(([label, value]) => <div key={label} style={{ display: 'flex', justifyContent: 'space-between', gap: 12, fontSize: 13 }}><span style={{ color: '#64748b' }}>{label}</span><strong>{value}</strong></div>)}</div>
+            <div style={{ display: 'grid', gap: 10, marginTop: 16 }}>{summary.map(([label, value]) => <div key={label} style={{ display: 'flex', justifyContent: 'space-between', gap: 12, fontSize: 13 }}><span style={{ color: '#000000' }}>{label}</span><strong>{value}</strong></div>)}</div>
           </section>
           <section className="employee-panel" style={{ padding: 20 }}>
             <h2 style={{ margin: 0, fontSize: 17 }}>Approval Workflow</h2>
@@ -181,7 +182,7 @@ export default function NewLoanRequestPage() {
 }
 
 function WorkflowRow({ label, value, done }: { label: string; value: string; done?: boolean }) {
-  return <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}><span style={{ width: 28, height: 28, borderRadius: '50%', display: 'grid', placeItems: 'center', background: done ? '#16a34a' : '#eff6ff', color: done ? '#fff' : '#2563eb' }}>{done ? <CheckCircle2 size={16} /> : label[0]}</span><span><strong style={{ display: 'block', fontSize: 13 }}>{label}</strong><small style={{ color: '#64748b' }}>{value}</small></span></div>
+  return <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}><span style={{ width: 28, height: 28, borderRadius: '50%', display: 'grid', placeItems: 'center', background: done ? '#16a34a' : '#eff6ff', color: done ? '#fff' : '#2563eb' }}>{done ? <CheckCircle2 size={16} /> : label[0]}</span><span><strong style={{ display: 'block', fontSize: 13 }}>{label}</strong><small style={{ color: '#000000' }}>{value}</small></span></div>
 }
 
 const sectionTitle = { display: 'flex', alignItems: 'center', gap: 10, margin: '0 0 16px', color: '#0f172a', fontSize: 16 } as const

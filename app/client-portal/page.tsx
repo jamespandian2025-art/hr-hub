@@ -259,7 +259,7 @@ export default function ClientPortalPage() {
             <div style={brandMarkStyle}>W</div>
             <div>
               <div style={{ fontSize: 17, color: '#111827', fontWeight: 600 }}>WiseFlow</div>
-              <div style={{ fontSize: 12, color: '#64748b', fontWeight: 600 }}>Client Portal</div>
+              <div style={{ fontSize: 12, color: '#000000', fontWeight: 600 }}>Client Portal</div>
             </div>
           </div>
           <div style={{ display: 'grid', gap: 6 }}>
@@ -285,7 +285,7 @@ export default function ClientPortalPage() {
           <div style={miniAvatarStyle}>{(account.fullName || account.company || 'Client').charAt(0).toUpperCase()}</div>
           <div style={{ minWidth: 0 }}>
             <div style={{ fontSize: 13, color: '#111827', fontWeight: 950, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{account.fullName || account.company || 'Client User'}</div>
-            <div style={{ fontSize: 11, color: '#64748b', fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{account.email || 'client@example.com'}</div>
+            <div style={{ fontSize: 11, color: '#000000', fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{account.email || 'client@example.com'}</div>
           </div>
         </div>
       </aside>
@@ -294,7 +294,7 @@ export default function ClientPortalPage() {
         <header style={topBarStyle}>
           <div>
             <div style={{ fontSize: 24, color: '#111827', fontWeight: 950 }}>{activeSection}</div>
-            <div style={{ fontSize: 13, color: '#64748b', fontWeight: 600, marginTop: 4 }}>A private view of your active project updates.</div>
+            <div style={{ fontSize: 13, color: '#000000', fontWeight: 600, marginTop: 4 }}>A private view of your active project updates.</div>
           </div>
           <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap', position: 'relative' }}>
             <select value={client} onChange={event => changeClient(event.target.value)} style={selectStyle}>
@@ -313,7 +313,7 @@ export default function ClientPortalPage() {
               <div style={accountMenuStyle}>
                 <div style={{ padding: 18, textAlign: 'center', borderBottom: '1px solid #f1f5f9' }}>
                   <div style={{ fontSize: 15, color: '#111827', fontWeight: 950 }}>{account.fullName || account.company || 'Client User'}</div>
-                  <div style={{ fontSize: 12, color: '#64748b', fontWeight: 600, marginTop: 4 }}>{account.email || 'client@example.com'}</div>
+                  <div style={{ fontSize: 12, color: '#000000', fontWeight: 600, marginTop: 4 }}>{account.email || 'client@example.com'}</div>
                 </div>
                 <button onClick={() => { setSettingsOpen(true); setAccountOpen(false); setNotice('') }} style={menuButtonStyle}><Settings size={16} /> Account settings</button>
                 <button onClick={logout} style={{ ...menuButtonStyle, color: '#dc2626', borderTop: '1px solid #f1f5f9' }}><LogOut size={16} /> Logout</button>
@@ -328,7 +328,7 @@ export default function ClientPortalPage() {
             <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'center', padding: '18px 20px', borderBottom: '1px solid #f1f5f9' }}>
               <div>
                 <div style={{ fontSize: 18, color: '#111827', fontWeight: 950 }}>Account settings</div>
-                <div style={{ fontSize: 12, color: '#64748b', fontWeight: 600, marginTop: 3 }}>Manage your client profile details.</div>
+                <div style={{ fontSize: 12, color: '#000000', fontWeight: 600, marginTop: 3 }}>Manage your client profile details.</div>
               </div>
               <button onClick={() => setSettingsOpen(false)} style={iconButtonStyle}><X size={18} /></button>
             </div>
@@ -354,7 +354,7 @@ export default function ClientPortalPage() {
         <section style={emptyPanelStyle}>
           <div style={emptyIconStyle}><ShieldCheck size={34} /></div>
           <h1 style={{ fontSize: 24, color: '#111827', fontWeight: 600, margin: '14px 0 8px' }}>No project assigned yet</h1>
-          <p style={{ fontSize: 14, color: '#64748b', lineHeight: 1.7, maxWidth: 520, margin: '0 auto' }}>
+          <p style={{ fontSize: 14, color: '#000000', lineHeight: 1.7, maxWidth: 520, margin: '0 auto' }}>
             Once your project is created and shared, this dashboard will show your timeline, progress updates, photos, documents, and payment status.
           </p>
         </section>
@@ -373,12 +373,12 @@ export default function ClientPortalPage() {
                       <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10, alignItems: 'flex-start' }}>
                         <div style={{ textAlign: 'left' }}>
                           <div style={{ fontSize: 15, color: '#111827', fontWeight: 950, marginBottom: 5 }}>{project.name}</div>
-                          <div style={{ fontSize: 12, color: '#64748b', fontWeight: 600 }}>{project.location}</div>
+                          <div style={{ fontSize: 12, color: '#000000', fontWeight: 600 }}>{project.location}</div>
                         </div>
                         <span style={{ ...statusPillStyle, background: statusStyle[project.status].bg, color: statusStyle[project.status].color, borderColor: statusStyle[project.status].border }}>{project.status}</span>
                       </div>
                       <div style={{ display: 'grid', gap: 8, marginTop: 18 }}>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, color: '#64748b', fontWeight: 600 }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, color: '#000000', fontWeight: 600 }}>
                           <span>Completion</span>
                           <span>{projectCompletion}%</span>
                         </div>
@@ -419,7 +419,7 @@ export default function ClientPortalPage() {
                   <label style={fieldGroupStyle}>
                     <span style={labelStyle}>Reference photos</span>
                     <input type="file" multiple accept="image/*" onChange={event => setChangeFiles(Array.from(event.target.files || []).map(file => file.name))} style={inputStyle} />
-                    <span style={{ fontSize: 12, color: '#64748b', lineHeight: 1.5 }}>
+                    <span style={{ fontSize: 12, color: '#000000', lineHeight: 1.5 }}>
                       Add photos, screenshots, or inspiration images for the team to review.
                     </span>
                   </label>
@@ -438,11 +438,11 @@ export default function ClientPortalPage() {
                       <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
                         <div>
                           <div style={{ fontSize: 15, color: '#111827', fontWeight: 950 }}>{order.title}</div>
-                          <div style={{ fontSize: 12, color: '#64748b', fontWeight: 600, marginTop: 4 }}>{new Date(order.createdAt).toLocaleDateString('en-PH')}</div>
+                          <div style={{ fontSize: 12, color: '#000000', fontWeight: 600, marginTop: 4 }}>{new Date(order.createdAt).toLocaleDateString('en-PH')}</div>
                         </div>
                         <span style={changeStatusStyle(order.status)}>{order.status}</span>
                       </div>
-                      {order.description && <div style={{ fontSize: 13, color: '#475569', lineHeight: 1.65, marginTop: 10 }}>{order.description}</div>}
+                      {order.description && <div style={{ fontSize: 13, color: '#000000', lineHeight: 1.65, marginTop: 10 }}>{order.description}</div>}
                       {order.files?.length > 0 && (
                         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(120px, 1fr))', gap: 8, marginTop: 12 }}>
                           {order.files.map(file => (
@@ -472,7 +472,7 @@ export default function ClientPortalPage() {
                 {selectedProject.status.toUpperCase()}
               </span>
               <h1 style={{ fontSize: 34, color: '#111827', lineHeight: 1.12, fontWeight: 950, margin: '16px 0 8px' }}>{selectedProject.name}</h1>
-              <div style={{ fontSize: 14, color: '#64748b', fontWeight: 600 }}>{selectedProject.location} - {duration(selectedProject)}</div>
+              <div style={{ fontSize: 14, color: '#000000', fontWeight: 600 }}>{selectedProject.location} - {duration(selectedProject)}</div>
               <div style={heroActionsStyle}>
                 <button style={primaryButtonStyle}><MessageSquare size={16} /> Message project team</button>
                 <button style={secondaryButtonStyle}><CalendarDays size={16} /> Request site visit</button>
@@ -483,12 +483,12 @@ export default function ClientPortalPage() {
               <div style={{ width: 132, height: 132, borderRadius: '50%', background: `conic-gradient(#10b981 0 ${completion}%, #e5e7eb ${completion}% 100%)`, display: 'grid', placeItems: 'center', margin: '0 auto 16px' }}>
                 <div style={{ width: 94, height: 94, borderRadius: '50%', background: '#fff', display: 'grid', placeItems: 'center', textAlign: 'center' }}>
                   <div>
-                    <div style={{ fontSize: 11, color: '#64748b', fontWeight: 600, textTransform: 'uppercase' }}>Complete</div>
+                    <div style={{ fontSize: 11, color: '#000000', fontWeight: 600, textTransform: 'uppercase' }}>Complete</div>
                     <div style={{ fontSize: 26, color: '#111827', fontWeight: 950 }}>{completion}%</div>
                   </div>
                 </div>
               </div>
-              <div style={{ fontSize: 13, color: '#64748b', fontWeight: 600, textAlign: 'center' }}>
+              <div style={{ fontSize: 13, color: '#000000', fontWeight: 600, textAlign: 'center' }}>
                 Latest shared updates: {projectUpdates.length}
               </div>
             </div>
@@ -517,10 +517,10 @@ export default function ClientPortalPage() {
                     <article style={timelineCardStyle}>
                       <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap', marginBottom: 8 }}>
                         <span style={phasePillStyle}>{update.phase}</span>
-                        <span style={{ fontSize: 12, color: '#64748b', fontWeight: 600 }}>{update.updateDate}</span>
+                        <span style={{ fontSize: 12, color: '#000000', fontWeight: 600 }}>{update.updateDate}</span>
                       </div>
                       <div style={{ fontSize: 15, color: '#111827', fontWeight: 600 }}>{update.title}</div>
-                      <div style={{ fontSize: 13, color: '#475569', lineHeight: 1.65, marginTop: 7 }}>{update.remarks || 'Photo/video update posted by the project team.'}</div>
+                      <div style={{ fontSize: 13, color: '#000000', lineHeight: 1.65, marginTop: 7 }}>{update.remarks || 'Photo/video update posted by the project team.'}</div>
                       {update.files.length > 0 && <div style={{ fontSize: 12, color: '#6c63ff', fontWeight: 600, marginTop: 10 }}>{update.files.length} attached gallery item{update.files.length === 1 ? '' : 's'}</div>}
                     </article>
                   </div>
@@ -550,7 +550,7 @@ export default function ClientPortalPage() {
                       <span style={{ ...avatarStyle, background: ['#6c63ff', '#10b981', '#f59e0b'][index] }}>{role.charAt(0)}</span>
                       <div>
                         <div style={{ fontSize: 13, color: '#111827', fontWeight: 600 }}>{role}</div>
-                        <div style={{ fontSize: 12, color: '#64748b', fontWeight: 600 }}>Livewise Team</div>
+                        <div style={{ fontSize: 12, color: '#000000', fontWeight: 600 }}>Livewise Team</div>
                       </div>
                     </div>
                   ))}
@@ -565,11 +565,11 @@ export default function ClientPortalPage() {
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))', gap: 12, marginTop: 18 }}>
                 {gallery.length === 0 ? <EmptyState text="No photos or videos posted yet." /> : gallery.map(item => (
                   <div key={`${item.file}-${item.date}`} style={galleryCardStyle}>
-                    <div style={{ height: 96, borderRadius: 12, background: 'linear-gradient(135deg,#dbeafe,#f8fafc)', display: 'grid', placeItems: 'center', color: '#64748b' }}>
+                    <div style={{ height: 96, borderRadius: 12, background: 'linear-gradient(135deg,#dbeafe,#f8fafc)', display: 'grid', placeItems: 'center', color: '#000000' }}>
                       <ImageIcon size={28} />
                     </div>
                     <div style={{ fontSize: 12, color: '#111827', fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.file}</div>
-                    <div style={{ fontSize: 11, color: '#64748b', fontWeight: 600 }}>{item.phase} - {item.date}</div>
+                    <div style={{ fontSize: 11, color: '#000000', fontWeight: 600 }}>{item.phase} - {item.date}</div>
                   </div>
                 ))}
               </div>
@@ -583,7 +583,7 @@ export default function ClientPortalPage() {
                     <FileText size={17} color="#6c63ff" />
                     <div style={{ minWidth: 0 }}>
                       <div style={{ fontSize: 13, color: '#111827', fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{file.name}</div>
-                      <div style={{ fontSize: 12, color: '#64748b', fontWeight: 600, marginTop: 3 }}>{fileSize(file.size)} - {file.addedAt.slice(0, 10)}</div>
+                      <div style={{ fontSize: 12, color: '#000000', fontWeight: 600, marginTop: 3 }}>{fileSize(file.size)} - {file.addedAt.slice(0, 10)}</div>
                     </div>
                   </div>
                 ))}
@@ -603,7 +603,7 @@ function SectionHeader({ title, subtitle }: { title: string; subtitle: string })
   return (
     <div>
       <div style={{ fontSize: 16, color: '#111827', fontWeight: 950 }}>{title}</div>
-      <div style={{ fontSize: 13, color: '#64748b', fontWeight: 600, marginTop: 4 }}>{subtitle}</div>
+      <div style={{ fontSize: 13, color: '#000000', fontWeight: 600, marginTop: 4 }}>{subtitle}</div>
     </div>
   )
 }
@@ -612,9 +612,9 @@ function MetricCard({ icon, label, value, sub, tone, bg }: { icon: React.ReactNo
   return (
     <section style={{ ...panelStyle, padding: 18, minHeight: 126 }}>
       <div style={{ width: 34, height: 34, borderRadius: 10, background: bg, color: tone, display: 'grid', placeItems: 'center', marginBottom: 14 }}>{icon}</div>
-      <div style={{ fontSize: 12, color: '#64748b', fontWeight: 600, textTransform: 'uppercase' }}>{label}</div>
+      <div style={{ fontSize: 12, color: '#000000', fontWeight: 600, textTransform: 'uppercase' }}>{label}</div>
       <div style={{ fontSize: 22, color: tone, fontWeight: 950, marginTop: 5 }}>{value}</div>
-      {sub && <div style={{ fontSize: 12, color: '#64748b', fontWeight: 600, marginTop: 3 }}>{sub}</div>}
+      {sub && <div style={{ fontSize: 12, color: '#000000', fontWeight: 600, marginTop: 3 }}>{sub}</div>}
     </section>
   )
 }
@@ -622,7 +622,7 @@ function MetricCard({ icon, label, value, sub, tone, bg }: { icon: React.ReactNo
 function MoneyRow({ label, value, strong, danger }: { label: string; value: number; strong?: boolean; danger?: boolean }) {
   return (
     <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, borderBottom: '1px solid #f1f5f9', paddingBottom: 10 }}>
-      <span style={{ fontSize: 13, color: '#64748b', fontWeight: strong ? 900 : 800 }}>{label}</span>
+      <span style={{ fontSize: 13, color: '#000000', fontWeight: strong ? 900 : 800 }}>{label}</span>
       <strong style={{ fontSize: 13, color: danger ? '#dc2626' : '#111827', fontWeight: 950 }}>{money(value)}</strong>
     </div>
   )
@@ -639,7 +639,7 @@ const clientNavButtonStyle = (active: boolean) => ({
   border: 'none',
   borderRadius: 13,
   background: active ? '#f5f4ff' : 'transparent',
-  color: active ? '#6c63ff' : '#475569',
+  color: active ? '#6c63ff' : '#000000',
   padding: '12px 13px',
   display: 'flex',
   alignItems: 'center',
@@ -673,7 +673,7 @@ const attachmentPreviewStyle = {
   border: '1px solid #e5e7eb',
   borderRadius: 12,
   background: '#f8fafc',
-  color: '#64748b',
+  color: '#000000',
   padding: 10,
   display: 'grid',
   gap: 6,
@@ -700,7 +700,7 @@ const miniStatStyle = {
   padding: 10,
   display: 'grid',
   gap: 4,
-  color: '#64748b',
+  color: '#000000',
   fontSize: 11,
   fontWeight: 600,
 }
@@ -734,4 +734,4 @@ const galleryCardStyle = { border: '1px solid #e5e7eb', borderRadius: 16, backgr
 const documentRowStyle = { display: 'grid', gridTemplateColumns: '24px minmax(0,1fr)', gap: 10, alignItems: 'center', border: '1px solid #f1f5f9', borderRadius: 14, padding: 12 }
 const emptyPanelStyle = { ...panelStyle, minHeight: 420, display: 'grid', placeItems: 'center', textAlign: 'center' as const }
 const emptyIconStyle = { width: 72, height: 72, borderRadius: 22, background: '#effff4', color: '#22c55e', display: 'grid', placeItems: 'center', margin: '0 auto' }
-const emptyStyle = { border: '1px dashed #cbd5e1', borderRadius: 14, padding: 22, color: '#64748b', fontSize: 13, fontWeight: 750, textAlign: 'center' as const }
+const emptyStyle = { border: '1px dashed #cbd5e1', borderRadius: 14, padding: 22, color: '#000000', fontSize: 13, fontWeight: 750, textAlign: 'center' as const }

@@ -6,6 +6,7 @@ import {
   CalendarDays, CheckCircle2, Download, Filter, MoreHorizontal,
   Plane, Plus, Search, XCircle,
 } from 'lucide-react'
+import { AnalyticsToggleButton, CollapsibleAnalytics, useAnalyticsDisclosure } from '@/components/AnalyticsDisclosure'
 import { Cell, Pie, PieChart, ResponsiveContainer } from 'recharts'
 import {
   approvalState, buildRows, dateSpan, daysBetweenInclusive, decideLeaveRequest, downloadCsv, employeeKey,
@@ -58,6 +59,7 @@ export default function HrLeaveRequestsPage() {
   const [modalOpen, setModalOpen] = useState(false)
   const [form, setForm] = useState<FormState>(defaultForm)
   const [syncError, setSyncError] = useState('')
+  const analytics = useAnalyticsDisclosure('wiseflow:analytics:hr-leave-requests')
   const menuRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -219,23 +221,26 @@ export default function HrLeaveRequestsPage() {
       <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 16, marginBottom: 18 }}>
         <div>
           <h1 style={{ margin: 0, color: '#0f172a', fontSize: 28, fontWeight: 900 }}>Leave Requests</h1>
-          <p style={{ margin: '6px 0 0', color: '#475569', fontSize: 14 }}>Manage and review employee leave requests, balances, and approval status.</p>
+          <p style={{ margin: '6px 0 0', color: '#000000', fontSize: 14 }}>Manage and review employee leave requests, balances, and approval status.</p>
         </div>
         <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+          <AnalyticsToggleButton open={analytics.open} onToggle={analytics.toggle} panelId={analytics.panelId} style={secondaryButtonStyle} />
           <button onClick={exportRows} style={secondaryButtonStyle}><Download size={15} /> Export Report</button>
           <button onClick={() => setModalOpen(true)} style={primaryButtonStyle}><Plus size={15} /> New Leave Request</button>
         </div>
       </div>
       {syncError && <div style={syncErrorStyle}>{syncError}</div>}
 
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(6, minmax(0, 1fr))', gap: 12, marginBottom: 18 }}>
-        <StatCard icon={CalendarDays} label="Total Requests" value={stats.total} sub={monthRangeLabel()} tone="#3b82f6" bg="#dbeafe" />
-        <StatCard icon={CalendarDays} label="Pending" value={stats.pending} sub={`${percent(stats.pending, stats.total)}% of total`} tone="#f59e0b" bg="#fef3c7" />
-        <StatCard icon={CheckCircle2} label="Approved" value={stats.approved} sub={`${percent(stats.approved, stats.total)}% of total`} tone="#16a34a" bg="#dcfce7" />
-        <StatCard icon={XCircle} label="Rejected" value={stats.rejected} sub={`${percent(stats.rejected, stats.total)}% of total`} tone="#ef4444" bg="#fee2e2" />
-        <StatCard icon={Plane} label="On Leave Today" value={stats.onLeaveToday} sub="Approved today" tone="#8b5cf6" bg="#ede9fe" />
-        <StatCard icon={CalendarDays} label="Upcoming Leaves" value={stats.upcoming} sub="Approved next 7 days" tone="#2563eb" bg="#dbeafe" />
-      </div>
+      <CollapsibleAnalytics open={analytics.open} id={analytics.panelId}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(6, minmax(0, 1fr))', gap: 12, marginBottom: 18 }}>
+          <StatCard icon={CalendarDays} label="Total Requests" value={stats.total} sub={monthRangeLabel()} tone="#3b82f6" bg="#dbeafe" />
+          <StatCard icon={CalendarDays} label="Pending" value={stats.pending} sub={`${percent(stats.pending, stats.total)}% of total`} tone="#f59e0b" bg="#fef3c7" />
+          <StatCard icon={CheckCircle2} label="Approved" value={stats.approved} sub={`${percent(stats.approved, stats.total)}% of total`} tone="#16a34a" bg="#dcfce7" />
+          <StatCard icon={XCircle} label="Rejected" value={stats.rejected} sub={`${percent(stats.rejected, stats.total)}% of total`} tone="#ef4444" bg="#fee2e2" />
+          <StatCard icon={Plane} label="On Leave Today" value={stats.onLeaveToday} sub="Approved today" tone="#8b5cf6" bg="#ede9fe" />
+          <StatCard icon={CalendarDays} label="Upcoming Leaves" value={stats.upcoming} sub="Approved next 7 days" tone="#2563eb" bg="#dbeafe" />
+        </div>
+      </CollapsibleAnalytics>
 
       <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) 304px', gap: 18 }}>
         <div style={{ minWidth: 0 }}>
@@ -254,7 +259,7 @@ export default function HrLeaveRequestsPage() {
               <select value={typeFilter} onChange={event => setTypeFilter(event.target.value)} style={inputStyle}><option>All</option>{leaveTypes.map(item => <option key={item}>{item}</option>)}</select>
               <select value={statusFilter} onChange={event => setStatusFilter(event.target.value as LeaveStatus | 'All')} style={inputStyle}>{statuses.map(item => <option key={item}>{item}</option>)}</select>
               <label style={{ ...inputStyle, display: 'flex', alignItems: 'center', gap: 8 }}>
-                <Search size={14} color="#94a3b8" />
+                <Search size={14} color="#000000" />
                 <input value={query} onChange={event => setQuery(event.target.value)} placeholder="Search by employee..." style={{ border: 'none', outline: 'none', background: 'transparent', width: '100%', font: 'inherit' }} />
               </label>
               <button onClick={() => { setDepartmentFilter('All'); setTypeFilter('All'); setStatusFilter('All'); setQuery('') }} style={{ ...secondaryIconButtonStyle, width: 42 }}><Filter size={16} /></button>
@@ -263,7 +268,7 @@ export default function HrLeaveRequestsPage() {
             <div style={{ overflowX: 'auto' }}>
               <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 920 }}>
                 <thead>
-                  <tr style={{ color: '#475569', fontSize: 11 }}>
+                  <tr style={{ color: '#000000', fontSize: 11 }}>
                     <th style={thStyle}>Employee</th>
                     <th style={thStyle}>Leave Type</th>
                     <th style={thStyle}>Duration</th>
@@ -278,9 +283,9 @@ export default function HrLeaveRequestsPage() {
                   {filteredRows.map(row => <LeaveTableRow key={row.id} row={row} menuId={menuId} setMenuId={setMenuId} menuPosition={menuPosition} setMenuPosition={setMenuPosition} menuRef={menuRef} onStatus={updateStatus} onOpen={() => router.push(`/hr/leave-requests/${encodeURIComponent(row.employee?.id || row.employeeId)}`)} />)}
                 </tbody>
               </table>
-              {filteredRows.length === 0 && <div style={{ padding: 36, textAlign: 'center', color: '#94a3b8', fontSize: 13 }}>No leave requests found.</div>}
+              {filteredRows.length === 0 && <div style={{ padding: 36, textAlign: 'center', color: '#000000', fontSize: 13 }}>No leave requests found.</div>}
             </div>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '14px 18px', color: '#475569', fontSize: 12 }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '14px 18px', color: '#000000', fontSize: 12 }}>
               <span>Showing 1 to {filteredRows.length} of {rows.length} results</span>
               <div style={{ display: 'flex', gap: 8 }}><button style={pagerStyle}>â€¹</button><button style={{ ...pagerStyle, background: '#16a34a', color: '#fff', borderColor: '#16a34a' }}>1</button><button style={pagerStyle}>2</button><button style={pagerStyle}>â€º</button></div>
             </div>
@@ -367,12 +372,12 @@ function LeaveTableRow({ row, menuId, setMenuId, menuPosition, setMenuPosition, 
       <td style={tdStyle}>
         <button onClick={onOpen} style={{ border: 'none', background: 'transparent', display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer', padding: 0, textAlign: 'left', fontFamily: font }}>
           <Avatar row={row} />
-          <span><strong style={{ display: 'block', color: '#0f172a', fontSize: 12 }}>{row.employeeName}</strong><small style={{ color: '#64748b' }}>{row.employeeCode}</small></span>
+          <span><strong style={{ display: 'block', color: '#0f172a', fontSize: 12 }}>{row.employeeName}</strong><small style={{ color: '#000000' }}>{row.employeeCode}</small></span>
         </button>
       </td>
       <td style={tdStyle}><span style={{ ...pillStyle, background: typeTone.bg, color: typeTone.text }}>{row.leaveType}</span></td>
       <td style={tdStyle}>{row.days} Day{row.days === 1 ? '' : 's'}</td>
-      <td style={tdStyle}><div>{dateSpan(row)}</div><small style={{ color: '#64748b' }}>{formatDay(row.startDate)} - {formatDay(row.endDate)}</small></td>
+      <td style={tdStyle}><div>{dateSpan(row)}</div><small style={{ color: '#000000' }}>{formatDay(row.startDate)} - {formatDay(row.endDate)}</small></td>
       <td style={tdStyle}>{row.reason || '-'}</td>
       <td style={tdStyle}><span style={{ ...pillStyle, background: st.bg, color: st.text }}>{normalizeStatus(row.status)}</span></td>
       <td style={tdStyle}>{formatDateTime(row.createdAt)}</td>
@@ -396,7 +401,7 @@ function Avatar({ row, size = 34 }: { row: LeaveRow; size?: number }) {
 }
 
 function StatCard({ icon: Icon, label, value, sub, tone, bg }: { icon: React.ComponentType<{ size?: number; color?: string }>; label: string; value: number; sub: string; tone: string; bg: string }) {
-  return <div style={{ ...cardStyle, display: 'flex', alignItems: 'center', gap: 14 }}><div style={{ width: 48, height: 48, borderRadius: 16, background: bg, color: tone, display: 'grid', placeItems: 'center' }}><Icon size={22} color={tone} /></div><div><div style={{ fontSize: 12, color: '#64748b' }}>{label}</div><div style={{ fontSize: 24, fontWeight: 900, color: '#0f172a', marginTop: 4 }}>{value}</div><div style={{ fontSize: 11, color: sub.includes('View') ? '#16a34a' : '#64748b', marginTop: 6 }}>{sub}</div></div></div>
+  return <div style={{ ...cardStyle, display: 'flex', alignItems: 'center', gap: 14 }}><div style={{ width: 48, height: 48, borderRadius: 16, background: bg, color: tone, display: 'grid', placeItems: 'center' }}><Icon size={22} color={tone} /></div><div><div style={{ fontSize: 12, color: '#000000' }}>{label}</div><div style={{ fontSize: 24, fontWeight: 900, color: '#0f172a', marginTop: 4 }}>{value}</div><div style={{ fontSize: 11, color: sub.includes('View') ? '#16a34a' : '#000000', marginTop: 6 }}>{sub}</div></div></div>
 }
 
 function SectionTitle({ title, action }: { title: string; action?: string }) {
@@ -412,7 +417,7 @@ function LegendRow({ item, total }: { item: { name: string; value: number; color
 }
 
 function EmptyMiniText({ children }: { children: React.ReactNode }) {
-  return <div style={{ color: '#94a3b8', fontSize: 12, lineHeight: 1.5 }}>{children}</div>
+  return <div style={{ color: '#000000', fontSize: 12, lineHeight: 1.5 }}>{children}</div>
 }
 
 function percent(value: number, total: number) {
@@ -427,11 +432,11 @@ const pillStyle = { display: 'inline-flex', alignItems: 'center', borderRadius: 
 const primaryButtonStyle = { minHeight: 38, border: 'none', borderRadius: 8, background: '#16a34a', color: '#fff', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 8, padding: '0 15px', fontSize: 12, fontWeight: 900, cursor: 'pointer', fontFamily: font } as const
 const secondaryButtonStyle = { minHeight: 38, border: '1px solid #e5e7eb', borderRadius: 8, background: '#fff', color: '#0f172a', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 8, padding: '0 15px', fontSize: 12, fontWeight: 900, cursor: 'pointer', fontFamily: font } as const
 const secondaryIconButtonStyle = { width: 34, height: 34, border: '1px solid #e5e7eb', borderRadius: 8, background: '#fff', color: '#0f172a', display: 'inline-grid', placeItems: 'center', cursor: 'pointer' } as const
-const pagerStyle = { width: 32, height: 32, border: '1px solid #e5e7eb', borderRadius: 8, background: '#fff', color: '#475569', cursor: 'pointer' } as const
+const pagerStyle = { width: 32, height: 32, border: '1px solid #e5e7eb', borderRadius: 8, background: '#fff', color: '#000000', cursor: 'pointer' } as const
 const quickButtonStyle = { minHeight: 36, border: '1px solid #e5e7eb', borderRadius: 8, background: '#fff', color: '#0f172a', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, fontSize: 12, fontWeight: 800, cursor: 'pointer', fontFamily: font } as const
 const menuStyle = { position: 'fixed' as const, width: 178, background: '#fff', border: '1px solid #e5e7eb', borderRadius: 10, boxShadow: '0 18px 50px rgba(15,23,42,0.18)', padding: 6, zIndex: 260 }
 const menuItemStyle = { width: '100%', border: 'none', background: 'transparent', padding: '9px 10px', textAlign: 'left' as const, borderRadius: 7, color: '#334155', fontSize: 12, cursor: 'pointer', fontFamily: font }
 const modalBackdropStyle = { position: 'fixed' as const, inset: 0, background: 'rgba(15,23,42,0.45)', display: 'grid', placeItems: 'center', zIndex: 160, padding: 20 }
 const modalStyle = { width: 'min(560px, 100%)', background: '#fff', borderRadius: 12, boxShadow: '0 28px 90px rgba(15,23,42,0.25)', overflow: 'hidden' }
-const plainIconButtonStyle = { border: 'none', background: 'transparent', color: '#64748b', cursor: 'pointer', display: 'grid', placeItems: 'center' } as const
+const plainIconButtonStyle = { border: 'none', background: 'transparent', color: '#000000', cursor: 'pointer', display: 'grid', placeItems: 'center' } as const
 const fieldLabelStyle = { display: 'grid', gap: 7, color: '#334155', fontSize: 12, fontWeight: 800 } as const

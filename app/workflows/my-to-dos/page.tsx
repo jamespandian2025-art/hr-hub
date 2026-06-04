@@ -17,47 +17,17 @@ import {
   Search,
   UserRound,
 } from 'lucide-react'
-import { loadWorkflowProjects, loadWorkflowTasks } from '../workflow-ui'
-
-const accountStorageKey = 'flowsys-account'
-
-type TaskStatus = 'Open' | 'In Progress' | 'Completed'
-
-type AssignedTask = {
-  id: number | string
-  projectId: number | string
-  title: string
-  description?: string
-  status: TaskStatus
-  priority?: 'Urgent' | 'High' | 'Normal' | 'Low'
-  assignee?: string
-  assignees?: string[]
-  dueDate?: string
-  draft?: boolean
-}
-
-type ProjectRecord = {
-  id: number | string
-  name: string
-  workflowColor?: string
-}
-
-type AccountRecord = {
-  fullName?: string
-  name?: string
-}
+import { AnalyticsToggleButton, CollapsibleAnalytics, useAnalyticsDisclosure } from '@/components/AnalyticsDisclosure'
+import {
+  accountStorageKey,
+  loadStored,
+  loadWorkflowProjects,
+  loadWorkflowTasks,
+  type AccountRecord,
+  type AssignedTask,
+} from '@/lib/workflows/data'
 
 type TabId = 'all' | 'open' | 'overdue' | 'today' | 'upcoming'
-
-function loadStored<T>(key: string, fallback: T): T {
-  if (typeof window === 'undefined') return fallback
-  try {
-    const stored = window.localStorage.getItem(key)
-    return stored ? JSON.parse(stored) as T : fallback
-  } catch {
-    return fallback
-  }
-}
 
 function initials(name: string) {
   return name.split(/\s+/).filter(Boolean).slice(0, 2).map(part => part[0]).join('').toUpperCase() || 'WF'
@@ -131,11 +101,12 @@ function dueSubLabel(state: ReturnType<typeof dueState>, date?: string) {
 }
 
 export default function WorkflowMyToDosPage() {
-  const [tasks] = useState(() => loadWorkflowTasks() as AssignedTask[])
-  const [projects] = useState(() => loadWorkflowProjects() as ProjectRecord[])
+  const [tasks] = useState(loadWorkflowTasks)
+  const [projects] = useState(loadWorkflowProjects)
   const [account] = useState(() => loadStored<AccountRecord>(accountStorageKey, {}))
   const [search, setSearch] = useState('')
   const [activeTab, setActiveTab] = useState<TabId>('all')
+  const analytics = useAnalyticsDisclosure('wiseflow:analytics:workflows-my-to-dos')
   const currentUser = account.fullName || account.name || 'James Pandian'
   const projectById = useMemo(() => new Map(projects.map(p => [p.id, p])), [projects])
 
@@ -193,18 +164,21 @@ export default function WorkflowMyToDosPage() {
             <Search size={16} />
             <input value={search} onChange={event => setSearch(event.target.value)} placeholder="Search to-dos..." />
           </label>
+          <AnalyticsToggleButton open={analytics.open} onToggle={analytics.toggle} panelId={analytics.panelId} className="wf-todos-toolbtn" />
           <button type="button" className="wf-todos-toolbtn"><Filter size={15} /> Filters</button>
           <button type="button" className="wf-todos-toolbtn"><ArrowUpDown size={15} /> Sort</button>
           <Link href="/workflows/my-jobs" className="wf-todos-new"><Plus size={16} /> New To-do</Link>
         </div>
       </section>
 
-      <section className="wf-todos-metrics">
-        <Metric icon={<UserRound size={20} />} label="Open To-dos" detail="Tasks currently open" value={openCount} tone="#0f9f5f" chart="line" />
-        <Metric icon={<CalendarDays size={20} />} label="Due Today" detail="Due within today" value={todayCount} tone="#f59e0b" chart="bar" />
-        <Metric icon={<Clock3 size={20} />} label="Overdue" detail="Past deadline tasks" value={overdueCount} tone="#ef4444" chart="line" />
-        <Metric icon={<CheckCircle2 size={20} />} label="Upcoming" detail="Scheduled for later" value={upcomingCount} tone="#2563eb" chart="bar" />
-      </section>
+      <CollapsibleAnalytics open={analytics.open} id={analytics.panelId}>
+        <section className="wf-todos-metrics">
+          <Metric icon={<UserRound size={20} />} label="Open To-dos" detail="Tasks currently open" value={openCount} tone="#0f9f5f" chart="line" />
+          <Metric icon={<CalendarDays size={20} />} label="Due Today" detail="Due within today" value={todayCount} tone="#f59e0b" chart="bar" />
+          <Metric icon={<Clock3 size={20} />} label="Overdue" detail="Past deadline tasks" value={overdueCount} tone="#ef4444" chart="line" />
+          <Metric icon={<CheckCircle2 size={20} />} label="Upcoming" detail="Scheduled for later" value={upcomingCount} tone="#2563eb" chart="bar" />
+        </section>
+      </CollapsibleAnalytics>
 
       <nav className="wf-todos-tabs">
         {tabs.map(tab => (
@@ -364,7 +338,7 @@ const todosCss = `
   place-items: center;
 }
 .wf-todos-breadcrumb {
-  color: #64748b;
+  color: #000000;
   font-size: 13px;
 }
 .wf-todos-breadcrumb strong {
@@ -486,7 +460,7 @@ const todosCss = `
 .wf-todos-metric-text small {
   display: block;
   margin-top: 4px;
-  color: #64748b;
+  color: #000000;
   font-size: 11.5px;
 }
 .wf-todos-metric-chart {
@@ -533,7 +507,7 @@ const todosCss = `
   padding: 1px 7px;
   border-radius: 999px;
   background: #f1f3f7;
-  color: #475569;
+  color: #000000;
   font-size: 11px;
   font-weight: 800;
 }
@@ -562,7 +536,7 @@ const todosCss = `
 }
 .wf-todos-row.head {
   min-height: 50px;
-  color: #475569;
+  color: #000000;
   font-size: 12px;
   font-weight: 800;
   background: #fbfcfd;
@@ -607,10 +581,10 @@ const todosCss = `
   font-weight: 800;
 }
 .wf-todos-main-text strong svg {
-  color: #94a3b8;
+  color: #000000;
 }
 .wf-todos-main-text small {
-  color: #64748b;
+  color: #000000;
   font-size: 12px;
   line-height: 1.4;
 }
@@ -646,7 +620,7 @@ const todosCss = `
   white-space: nowrap;
 }
 .wf-todos-workflow-text small {
-  color: #94a3b8;
+  color: #000000;
   font-size: 11.5px;
 }
 .wf-todos-priority {
@@ -677,7 +651,7 @@ const todosCss = `
   color: #0f172a;
 }
 .wf-todos-due svg {
-  color: #94a3b8;
+  color: #000000;
   margin-top: 2px;
   flex-shrink: 0;
 }
@@ -691,7 +665,7 @@ const todosCss = `
   font-weight: 800;
 }
 .wf-todos-due-text small {
-  color: #64748b;
+  color: #000000;
   font-size: 11.5px;
 }
 .wf-todos-due.overdue .wf-todos-due-text small { color: #e11d48; font-weight: 700; }
@@ -717,7 +691,7 @@ const todosCss = `
 .wf-todos-status.open { background: #ecfdf3; color: #0f9f5f; }
 .wf-todos-status.in-progress { background: #fef6e7; color: #b7791f; }
 .wf-todos-status.overdue { background: #fef2f2; color: #e11d48; }
-.wf-todos-status.completed { background: #f1f5f9; color: #475569; }
+.wf-todos-status.completed { background: #f1f5f9; color: #000000; }
 .wf-todos-rowaction {
   display: flex;
   align-items: center;
@@ -728,7 +702,7 @@ const todosCss = `
   height: 32px;
   border: 0;
   background: transparent;
-  color: #94a3b8;
+  color: #000000;
   display: grid;
   place-items: center;
   border-radius: 8px;
@@ -744,7 +718,7 @@ const todosCss = `
   place-items: center;
   gap: 8px;
   text-align: center;
-  color: #64748b;
+  color: #000000;
   padding: 34px;
 }
 .wf-todos-empty strong {
@@ -762,7 +736,7 @@ const todosCss = `
   justify-content: space-between;
   gap: 14px;
   margin-top: 18px;
-  color: #64748b;
+  color: #000000;
   font-size: 13px;
 }
 .wf-todos-pager {

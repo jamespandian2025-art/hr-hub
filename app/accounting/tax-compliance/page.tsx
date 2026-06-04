@@ -16,6 +16,7 @@ import {
   Search,
   ShieldCheck,
 } from 'lucide-react'
+import { AnalyticsToggleButton, CollapsibleAnalytics, useAnalyticsDisclosure } from '@/components/AnalyticsDisclosure'
 import { emptyAccountingData, formatDate, loadAccountingData, money, subscribeAccountingData, type TaxObligation as AccountingTaxObligation } from '@/lib/accounting/data'
 
 const font = 'var(--font-body)'
@@ -52,6 +53,7 @@ export default function TaxCompliancePage() {
   const [typeFilter, setTypeFilter] = useState('All')
   const [statusFilter, setStatusFilter] = useState('All')
   const [taxNotice, setTaxNotice] = useState('')
+  const analytics = useAnalyticsDisclosure('wiseflow:analytics:accounting-tax-compliance')
 
   useEffect(() => {
     const load = () => setData(loadAccountingData())
@@ -172,27 +174,30 @@ export default function TaxCompliancePage() {
           <p className="tax-subtitle">Manage tax obligations, filings, and compliance requirements.</p>
         </div>
         <div className="tax-actions">
+          <AnalyticsToggleButton open={analytics.open} onToggle={analytics.toggle} panelId={analytics.panelId} />
           <Link href="/accounting/withholding-tax-calculator">Calculator <Calculator size={14} /></Link>
           <button type="button" onClick={() => { exportTaxRows(activeTab, filteredObligations, payments, filings, certificates, reports, data.currency); setTaxNotice(`Tax ${activeTab} exported.`) }}>Export <Download size={14} /></button>
         </div>
       </div>
       {taxNotice && <div className="tax-notice" role="status">{taxNotice}<button type="button" onClick={() => setTaxNotice('')}>Dismiss</button></div>}
 
-      <section className="tax-metrics">
-        {metrics.map(metric => {
-          const Icon = metric.icon
-          return (
-            <div key={metric.title} className="tax-card tax-metric-card">
-              <span className="tax-metric-icon" style={{ background: `${metric.tone}12`, color: metric.tone }}><Icon size={23} /></span>
-              <span>
-                <span className="tax-label">{metric.title}</span>
-                <strong className="tax-value">{metric.value}</strong>
-                <small className="tax-detail" style={{ color: metric.good ? '#16a34a' : metric.bad ? '#ef4444' : '#334155' }}>{metric.good ? 'Down ' : metric.bad ? 'Up ' : ''}{metric.detail}</small>
-              </span>
-            </div>
-          )
-        })}
-      </section>
+      <CollapsibleAnalytics open={analytics.open} id={analytics.panelId}>
+        <section className="tax-metrics">
+          {metrics.map(metric => {
+            const Icon = metric.icon
+            return (
+              <div key={metric.title} className="tax-card tax-metric-card">
+                <span className="tax-metric-icon" style={{ background: `${metric.tone}12`, color: metric.tone }}><Icon size={23} /></span>
+                <span>
+                  <span className="tax-label">{metric.title}</span>
+                  <strong className="tax-value">{metric.value}</strong>
+                  <small className="tax-detail" style={{ color: metric.good ? '#16a34a' : metric.bad ? '#ef4444' : '#334155' }}>{metric.good ? 'Down ' : metric.bad ? 'Up ' : ''}{metric.detail}</small>
+                </span>
+              </div>
+            )
+          })}
+        </section>
+      </CollapsibleAnalytics>
 
       <nav className="tax-tabs" aria-label="Tax sections" role="tablist">
         {taxTabs.map(tab => (
@@ -273,7 +278,7 @@ export default function TaxCompliancePage() {
         <div className="tax-card">
           <h2>Tax Obligations</h2>
           <div className="tax-filterbar">
-            <label><Search size={15} color="#64748b" /><input value={searchTerm} onChange={event => setSearchTerm(event.target.value)} placeholder="Search tax obligations..." /></label>
+            <label><Search size={15} color="#000000" /><input value={searchTerm} onChange={event => setSearchTerm(event.target.value)} placeholder="Search tax obligations..." /></label>
             <select value={typeFilter} onChange={event => setTypeFilter(event.target.value)} aria-label="Filter tax type">
               {taxTypes.map(type => <option key={type} value={type}>{type === 'All' ? 'All Tax Types' : type}</option>)}
             </select>
@@ -359,7 +364,7 @@ function TaxObligationsPanel({
     <div className="tax-card">
       <h2>Tax Obligations</h2>
       <div className="tax-filterbar">
-        <label><Search size={15} color="#64748b" /><input value={searchTerm} onChange={event => onSearchTermChange(event.target.value)} placeholder="Search tax obligations..." /></label>
+        <label><Search size={15} color="#000000" /><input value={searchTerm} onChange={event => onSearchTermChange(event.target.value)} placeholder="Search tax obligations..." /></label>
         <select value={typeFilter} onChange={event => onTypeFilterChange(event.target.value)} aria-label="Filter tax type">
           {taxTypes.map(type => <option key={type} value={type}>{type === 'All' ? 'All Tax Types' : type}</option>)}
         </select>
@@ -598,14 +603,14 @@ const taxCss = `
 .tax-actions { display: flex; gap: 12px; flex-wrap: wrap; justify-content: flex-end; }
 .tax-actions button, .tax-actions a, .tax-filterbar button, .tax-filterbar select, .tax-pagination button, .tax-page-size { min-height: 38px; border-radius: 8px; border: 1px solid #e8edf4; background: #fff; color: #0f172a; display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 0 12px; font-size: 12.5px; font-weight: 850; cursor: pointer; text-decoration: none; }
 .tax-page-size { cursor: default; }
-.tax-pagination button:disabled { color: #94a3b8; cursor: not-allowed; }
+.tax-pagination button:disabled { color: #000000; cursor: not-allowed; }
 .tax-notice { margin: -8px 0 16px; border: 1px solid #bbf7d0; border-radius: 8px; background: #f0fdf4; color: #15803d; padding: 10px 12px; font-size: 12.5px; font-weight: 900; display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 .tax-notice button { border: 0; background: transparent; color: #15803d; font: inherit; cursor: pointer; }
 .tax-metrics { display: grid; grid-template-columns: repeat(5, minmax(170px, 1fr)); gap: 18px; margin-bottom: 18px; }
 .tax-card { background: #fff; border: 1px solid #e8edf4; border-radius: 8px; padding: 18px; box-shadow: 0 1px 2px rgba(15, 23, 42, .03); }
 .tax-metric-card { min-height: 100px; display: flex; align-items: center; }
 .tax-metric-icon { width: 54px; height: 54px; border-radius: 9px; display: grid; place-items: center; margin-right: 16px; flex: 0 0 auto; }
-.tax-label { display: block; color: #475569; font-size: 12px; font-weight: 850; }
+.tax-label { display: block; color: #000000; font-size: 12px; font-weight: 850; }
 .tax-value { display: block; color: #0f172a; font-size: 23px; margin-top: 8px; white-space: nowrap; }
 .tax-detail { display: block; font-size: 11.5px; font-weight: 900; margin-top: 8px; }
 .tax-tabs { display: flex; gap: 32px; border-bottom: 1px solid #e8edf4; padding-left: 14px; overflow-x: auto; }
@@ -623,18 +628,18 @@ const taxCss = `
 .tax-donut { width: clamp(150px, 14vw, 180px); aspect-ratio: 1; border-radius: 50%; display: grid; place-items: center; justify-self: center; }
 .tax-donut-center { width: 62%; aspect-ratio: 1; border-radius: 50%; background: #fff; display: grid; place-items: center; align-content: center; gap: 6px; padding: 10px; text-align: center; }
 .tax-donut strong { display: block; max-width: 100%; color: #0f172a; font-size: clamp(15px, 1.35vw, 19px); line-height: 1.08; overflow-wrap: anywhere; }
-.tax-donut small { color: #64748b; font-size: 11.5px; font-weight: 850; line-height: 1.15; }
+.tax-donut small { color: #000000; font-size: 11.5px; font-weight: 850; line-height: 1.15; }
 .tax-liability-list { display: grid; gap: 14px; min-width: 0; }
 .tax-liability-list div { display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(105px, .7fr) minmax(68px, .45fr); gap: 14px; align-items: center; font-size: 13px; }
 .tax-liability-type { display: flex; align-items: flex-start; gap: 10px; min-width: 0; line-height: 1.25; }
 .tax-liability-type span { min-width: 0; overflow-wrap: anywhere; }
 .tax-liability-list i { width: 12px; height: 12px; border-radius: 4px; display: inline-block; flex: 0 0 auto; margin-top: 2px; }
 .tax-liability-amount, .tax-liability-percent { justify-self: end; text-align: right; white-space: nowrap; }
-.tax-liability-head { color: #64748b; font-size: 11px !important; font-weight: 900; }
+.tax-liability-head { color: #000000; font-size: 11px !important; font-weight: 900; }
 .tax-liability-total { border-top: 1px solid #eef2f7; padding-top: 12px; font-weight: 950; }
 .tax-status-list, .tax-deadlines, .tax-side-list { display: grid; gap: 13px; }
 .tax-status-list div { display: grid; grid-template-columns: 38px minmax(0, 1fr) auto; align-items: center; gap: 12px; border: 1px solid #eef2f7; border-radius: 8px; padding: 11px; }
-.tax-status-list small, .tax-deadlines small, .tax-side-list small { display: block; color: #64748b; margin-top: 4px; }
+.tax-status-list small, .tax-deadlines small, .tax-side-list small { display: block; color: #000000; margin-top: 4px; }
 .tax-status-icon { width: 34px; height: 34px; border-radius: 8px; display: grid; place-items: center; }
 .tax-status-icon.good { background: #dcfce7; color: #16a34a; }
 .tax-status-icon.warn { background: #fff7ed; color: #f59e0b; }
@@ -649,7 +654,7 @@ const taxCss = `
 .tax-filterbar select { width: 100%; appearance: auto; }
 .tax-table-wrap { overflow-x: auto; }
 .tax-table { width: 100%; min-width: 860px; border-collapse: collapse; }
-.tax-table th { text-align: left; padding: 12px 10px; color: #64748b; font-size: 11px; font-weight: 900; }
+.tax-table th { text-align: left; padding: 12px 10px; color: #000000; font-size: 11px; font-weight: 900; }
 .tax-table td { padding: 12px 10px; border-top: 1px solid #eef2f7; color: #0f172a; font-size: 12.5px; }
 .tax-icon-button { width: 32px; height: 32px; border: 1px solid #e8edf4; border-radius: 7px; background: #fff; display: grid; place-items: center; cursor: pointer; }
 .tax-row-actions { position: relative; display: inline-grid; place-items: center; }
@@ -666,11 +671,11 @@ const taxCss = `
 .tax-pagination .is-active { background: #16a34a; color: #fff; border-color: #16a34a; }
 .tax-side-list div { display: grid; grid-template-columns: 34px minmax(0, 1fr) auto 16px; align-items: center; gap: 12px; border-bottom: 1px solid #eef2f7; padding-bottom: 13px; }
 .tax-side-list svg { color: #2563eb; }
-.tax-empty { border: 1px dashed #cbd5e1; border-radius: 8px; color: #64748b; font-size: 13px; font-weight: 850; margin-top: 14px; padding: 18px; text-align: center; }
+.tax-empty { border: 1px dashed #cbd5e1; border-radius: 8px; color: #000000; font-size: 13px; font-weight: 850; margin-top: 14px; padding: 18px; text-align: center; }
 .tax-record-list { display: grid; gap: 12px; margin-top: 16px; }
 .tax-record-row { display: grid; grid-template-columns: 36px minmax(0, 1fr) auto auto; align-items: center; gap: 12px; border: 1px solid #eef2f7; border-radius: 8px; padding: 12px; }
 .tax-record-row svg { color: #2563eb; }
-.tax-record-row small, .tax-report-card small { display: block; color: #64748b; margin-top: 4px; }
+.tax-record-row small, .tax-report-card small { display: block; color: #000000; margin-top: 4px; }
 .tax-report-grid { display: grid; grid-template-columns: repeat(4, minmax(180px, 1fr)); gap: 16px; }
 .tax-report-card { display: grid; grid-template-columns: 38px minmax(0, 1fr); gap: 12px; align-items: start; }
 .tax-report-card svg { color: #16a34a; }
@@ -678,24 +683,24 @@ const taxCss = `
 .tax-calendar-card { padding: 0; overflow: hidden; }
 .tax-calendar-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; padding: 18px; border-bottom: 1px solid #e8edf4; }
 .tax-calendar-header h2 { margin: 0; font-size: 16px; font-weight: 950; }
-.tax-calendar-header p { margin: 5px 0 0; color: #64748b; font-size: 12.5px; font-weight: 700; }
+.tax-calendar-header p { margin: 5px 0 0; color: #000000; font-size: 12.5px; font-weight: 700; }
 .tax-calendar-header strong { min-height: 34px; border: 1px solid #e8edf4; border-radius: 999px; display: inline-flex; align-items: center; padding: 0 14px; color: #0f172a; font-size: 12.5px; font-weight: 950; white-space: nowrap; }
 .tax-calendar-weekdays { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); background: #f8fafc; border-bottom: 1px solid #e8edf4; }
-.tax-calendar-weekdays span { min-height: 38px; display: flex; align-items: center; padding: 0 12px; color: #64748b; font-size: 11px; font-weight: 950; text-transform: uppercase; letter-spacing: .02em; }
+.tax-calendar-weekdays span { min-height: 38px; display: flex; align-items: center; padding: 0 12px; color: #000000; font-size: 11px; font-weight: 950; text-transform: uppercase; letter-spacing: .02em; }
 .tax-calendar-grid { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); }
 .tax-calendar-day { min-height: 128px; border-right: 1px solid #eef2f7; border-bottom: 1px solid #eef2f7; padding: 10px; background: #fff; display: flex; flex-direction: column; gap: 8px; min-width: 0; }
 .tax-calendar-day:nth-child(7n) { border-right: 0; }
 .tax-calendar-day time { width: 28px; height: 28px; border-radius: 999px; display: inline-flex; align-items: center; justify-content: center; color: #0f172a; font-size: 12px; font-weight: 950; }
 .tax-calendar-day.is-muted { background: #fbfdff; }
-.tax-calendar-day.is-muted time { color: #cbd5e1; }
+.tax-calendar-day.is-muted time { color: #000000; }
 .tax-calendar-day.is-today time { background: #16a34a; color: #fff; }
 .tax-calendar-events { display: grid; gap: 5px; min-width: 0; }
 .tax-calendar-events span { min-height: 24px; border-radius: 6px; background: #ecfdf5; color: #15803d; padding: 5px 7px; font-size: 11px; font-weight: 900; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .tax-calendar-events span.pending, .tax-calendar-events span.due-in-10-days { background: #fff7ed; color: #d97706; }
 .tax-calendar-events span.overdue { background: #fef2f2; color: #dc2626; }
 .tax-calendar-events span.paid, .tax-calendar-events span.filed, .tax-calendar-events span.compliant { background: #dcfce7; color: #15803d; }
-.tax-calendar-events em { color: #64748b; font-size: 11px; font-style: normal; font-weight: 900; }
-.tax-calendar-empty { margin: 0; padding: 14px 18px 18px; color: #64748b; font-size: 12.5px; font-weight: 850; text-align: center; }
+.tax-calendar-events em { color: #000000; font-size: 11px; font-style: normal; font-weight: 900; }
+.tax-calendar-empty { margin: 0; padding: 14px 18px 18px; color: #000000; font-size: 12.5px; font-weight: 850; text-align: center; }
 .accounting-theme-dark .tax-page,
 html[data-theme='dark'] .tax-page {
   background: #101010 !important;
@@ -808,6 +813,6 @@ html[data-theme='dark'] .tax-page .tax-table tr {
   .tax-table thead { display: none; }
   .tax-table tr { border: 1px solid #eef2f7; border-radius: 8px; margin-bottom: 12px; background: #fff; overflow: hidden; }
   .tax-table td { border-top: 0; display: grid; grid-template-columns: 120px minmax(0, 1fr); gap: 10px; padding: 10px 12px; }
-  .tax-table td::before { content: attr(data-label); color: #64748b; font-size: 11px; font-weight: 900; text-transform: uppercase; }
+  .tax-table td::before { content: attr(data-label); color: #000000; font-size: 11px; font-weight: 900; text-transform: uppercase; }
 }
 `

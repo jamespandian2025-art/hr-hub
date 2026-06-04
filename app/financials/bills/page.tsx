@@ -211,7 +211,7 @@ export default function BillsPage() {
         <div
           style={{
             fontSize: '13px',
-            color: '#9ca3af',
+            color: '#000000',
             marginBottom: '28px',
             display: 'flex',
             alignItems: 'center',
@@ -230,7 +230,7 @@ export default function BillsPage() {
             <div style={{ fontSize: '15px', fontWeight: 600, color: '#111827', marginBottom: '6px' }}>
               Basic Details
             </div>
-            <div style={{ fontSize: '13px', color: '#6b7280', lineHeight: 1.6 }}>
+            <div style={{ fontSize: '13px', color: '#000000', lineHeight: 1.6 }}>
               Add the bill name, type, vendor, and project or expense association.
             </div>
           </div>
@@ -262,7 +262,7 @@ export default function BillsPage() {
 
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px' }}>
               <div>
-                <div style={{ fontSize: '12px', color: '#6b7280', fontWeight: 500, marginBottom: '6px' }}>
+                <div style={{ fontSize: '12px', color: '#000000', fontWeight: 500, marginBottom: '6px' }}>
                   Type
                 </div>
                 <select
@@ -285,7 +285,7 @@ export default function BillsPage() {
               </div>
 
               <div>
-                <div style={{ fontSize: '12px', color: '#6b7280', fontWeight: 500, marginBottom: '6px' }}>
+                <div style={{ fontSize: '12px', color: '#000000', fontWeight: 500, marginBottom: '6px' }}>
                   Vendor
                 </div>
                 <input
@@ -325,7 +325,7 @@ export default function BillsPage() {
             <div style={{ fontSize: '15px', fontWeight: 600, color: '#111827', marginBottom: '6px' }}>
               Amount and Status
             </div>
-            <div style={{ fontSize: '13px', color: '#6b7280', lineHeight: 1.6 }}>
+            <div style={{ fontSize: '13px', color: '#000000', lineHeight: 1.6 }}>
               Set the expense category, amount, date, and payment status.
             </div>
           </div>
@@ -342,7 +342,7 @@ export default function BillsPage() {
           >
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px' }}>
               <div>
-                <div style={{ fontSize: '12px', color: '#6b7280', fontWeight: 500, marginBottom: '6px' }}>
+                <div style={{ fontSize: '12px', color: '#000000', fontWeight: 500, marginBottom: '6px' }}>
                   Category
                 </div>
                 <select
@@ -367,7 +367,7 @@ export default function BillsPage() {
               </div>
 
               <div>
-                <div style={{ fontSize: '12px', color: '#6b7280', fontWeight: 500, marginBottom: '6px' }}>
+                <div style={{ fontSize: '12px', color: '#000000', fontWeight: 500, marginBottom: '6px' }}>
                   Amount
                 </div>
                 <input
@@ -390,7 +390,7 @@ export default function BillsPage() {
 
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px' }}>
               <div>
-                <div style={{ fontSize: '12px', color: '#6b7280', fontWeight: 500, marginBottom: '6px' }}>
+                <div style={{ fontSize: '12px', color: '#000000', fontWeight: 500, marginBottom: '6px' }}>
                   Status
                 </div>
                 <select
@@ -413,7 +413,7 @@ export default function BillsPage() {
               </div>
 
               <div>
-                <div style={{ fontSize: '12px', color: '#6b7280', fontWeight: 500, marginBottom: '6px' }}>
+                <div style={{ fontSize: '12px', color: '#000000', fontWeight: 500, marginBottom: '6px' }}>
                   Date
                 </div>
                 <input
@@ -499,7 +499,7 @@ export default function BillsPage() {
         </button>
 
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '16px', marginBottom: '44px', flexWrap: 'wrap' }}>
-          <div style={{ fontSize: '13px', color: '#94a3b8', display: 'flex', gap: '10px', alignItems: 'center', flexWrap: 'wrap' }}>
+          <div style={{ fontSize: '13px', color: '#000000', display: 'flex', gap: '10px', alignItems: 'center', flexWrap: 'wrap' }}>
             <span style={{ color: '#111827', fontWeight: 600 }}>Financials</span>
             <span>•</span>
             <span style={{ color: '#111827', fontWeight: 600 }}>Bills and Expenses</span>
@@ -553,7 +553,7 @@ export default function BillsPage() {
                   <div style={{ fontSize: '14px', color: '#111827', fontWeight: 600, lineHeight: 1.55 }}>
                     Local User added a new expense costing {formatCurrency(selectedBill.amount)} for {selectedBill.associated}
                   </div>
-                  <div style={{ fontSize: '12px', color: '#94a3b8', marginTop: '7px', fontWeight: 600 }}>{formatDate(selectedBill.date)}</div>
+                  <div style={{ fontSize: '12px', color: '#000000', marginTop: '7px', fontWeight: 600 }}>{formatDate(selectedBill.date)}</div>
                 </div>
               </div>
               <button style={{ border: 'none', background: 'transparent', color: '#111827', cursor: 'pointer', fontSize: '13px', fontWeight: 600, marginTop: '22px', padding: 0 }}>? See more</button>
@@ -562,7 +562,7 @@ export default function BillsPage() {
 
           <div style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: '18px', minHeight: '350px', display: 'grid', placeItems: 'center', textAlign: 'center', boxShadow: '0 18px 45px rgba(15,23,42,0.04)', padding: '28px' }}>
             <div>
-              <div style={{ width: '190px', height: '130px', borderRadius: '24px', background: 'linear-gradient(135deg, #e5e7eb, #f8fafc)', margin: '0 auto 34px', display: 'grid', placeItems: 'center', color: '#cbd5e1', fontSize: '54px' }}>?</div>
+              <div style={{ width: '190px', height: '130px', borderRadius: '24px', background: 'linear-gradient(135deg, #e5e7eb, #f8fafc)', margin: '0 auto 34px', display: 'grid', placeItems: 'center', color: '#000000', fontSize: '54px' }}>?</div>
               <div style={{ fontSize: '14px', color: '#334155', fontWeight: 600 }}>This item doesn’t have a photo yet.</div>
             </div>
           </div>
@@ -598,7 +598,7 @@ export default function BillsPage() {
       <div
         style={{
           fontSize: '13px',
-          color: '#9ca3af',
+          color: '#000000',
           marginBottom: '16px',
           display: 'flex',
           alignItems: 'center',
@@ -643,7 +643,7 @@ export default function BillsPage() {
                 cursor: 'pointer',
                 fontSize: '13px',
                 fontWeight: activeTab === tab ? 700 : 500,
-                color: activeTab === tab ? '#111827' : '#6b7280',
+                color: activeTab === tab ? '#111827' : '#000000',
                 borderBottom: activeTab === tab ? '2px solid #111827' : '2px solid transparent',
                 marginBottom: '-1.5px',
               }}
@@ -655,7 +655,7 @@ export default function BillsPage() {
                   padding: '1px 7px',
                   borderRadius: '20px',
                   background: activeTab === tab ? '#111827' : '#f3f4f6',
-                  color: activeTab === tab ? '#fff' : '#6b7280',
+                  color: activeTab === tab ? '#fff' : '#000000',
                   fontWeight: 600,
                 }}
               >
@@ -686,7 +686,7 @@ export default function BillsPage() {
               background: '#fafafa',
             }}
           >
-            <span style={{ color: '#9ca3af' }}>??</span>
+            <span style={{ color: '#000000' }}>??</span>
             <input
               type="text"
               placeholder="Search..."
@@ -729,7 +729,7 @@ export default function BillsPage() {
             }}
           >
             <div style={{ padding: '24px', borderRight: '1px solid #f3f4f6' }}>
-              <div style={{ fontSize: '13px', color: '#6b7280', fontWeight: 500, marginBottom: '8px' }}>
+              <div style={{ fontSize: '13px', color: '#000000', fontWeight: 500, marginBottom: '8px' }}>
                 Bills and Expenses
               </div>
               <div style={{ fontSize: '26px', fontWeight: 600, color: '#111827', marginBottom: '4px' }}>
@@ -741,7 +741,7 @@ export default function BillsPage() {
             </div>
 
             <div style={{ padding: '24px', borderRight: '1px solid #f3f4f6' }}>
-              <div style={{ fontSize: '13px', color: '#6b7280', fontWeight: 500, marginBottom: '8px' }}>
+              <div style={{ fontSize: '13px', color: '#000000', fontWeight: 500, marginBottom: '8px' }}>
                 Payment Status
               </div>
               <div style={{ fontSize: '20px', fontWeight: 600, color: '#111827', marginBottom: '6px' }}>
@@ -783,7 +783,7 @@ export default function BillsPage() {
                     justifyContent: 'center',
                   }}
                 >
-                  <div style={{ fontSize: '9px', color: '#6b7280', fontWeight: 600 }}>TOTAL</div>
+                  <div style={{ fontSize: '9px', color: '#000000', fontWeight: 600 }}>TOTAL</div>
                   <div style={{ fontSize: '11px', fontWeight: 600, color: '#111827' }}>
                     {totalAmount ? `PHP ${(totalAmount / 1000000).toFixed(2)}M` : 'PHP 0'}
                   </div>
@@ -830,7 +830,7 @@ export default function BillsPage() {
             }}
           >
             <div style={{ fontSize: '40px', opacity: 0.2 }}>??</div>
-            <div style={{ fontSize: '14px', fontWeight: 600, color: '#9ca3af' }}>
+            <div style={{ fontSize: '14px', fontWeight: 600, color: '#000000' }}>
               No bills or expenses yet - click + Bill and expense to create one
             </div>
           </div>
@@ -850,7 +850,7 @@ export default function BillsPage() {
                         textAlign: 'left',
                         fontSize: '12px',
                         fontWeight: 600,
-                        color: '#6b7280',
+                        color: '#000000',
                         textTransform: 'uppercase',
                         letterSpacing: '0.5px',
                       }}
@@ -881,14 +881,14 @@ export default function BillsPage() {
                     </td>
                     <td style={{ padding: '16px' }}>
                       <button onClick={event => { event.stopPropagation(); setSelectedBillId(item.id) }} style={{ display: 'block', width: '100%', border: 'none', background: 'transparent', padding: 0, fontSize: '13px', fontWeight: 600, color: '#111827', cursor: 'pointer', textAlign: 'left', lineHeight: 1.35 }}>{item.name}</button>
-                      <div style={{ fontSize: '12px', color: '#6b7280' }}>{item.type}</div>
+                      <div style={{ fontSize: '12px', color: '#000000' }}>{item.type}</div>
                     </td>
                     <td style={{ padding: '16px' }}>
                       <div style={{ fontSize: '13px', fontWeight: 500, color: '#374151' }}>{item.associated}</div>
-                      <div style={{ fontSize: '12px', color: '#9ca3af' }}>{item.category}</div>
+                      <div style={{ fontSize: '12px', color: '#000000' }}>{item.category}</div>
                     </td>
-                    <td style={{ padding: '16px', fontSize: '13px', color: '#6b7280' }}>{item.vendor}</td>
-                    <td style={{ padding: '16px', fontSize: '13px', color: '#6b7280' }}>{item.category}</td>
+                    <td style={{ padding: '16px', fontSize: '13px', color: '#000000' }}>{item.vendor}</td>
+                    <td style={{ padding: '16px', fontSize: '13px', color: '#000000' }}>{item.category}</td>
                     <td style={{ padding: '16px', fontSize: '13px', fontWeight: 600, color: '#111827' }}>
                       {formatCurrency(item.amount)}
                     </td>
@@ -906,8 +906,8 @@ export default function BillsPage() {
                         {item.status}
                       </span>
                     </td>
-                    <td style={{ padding: '16px', fontSize: '13px', color: '#6b7280' }}>{item.date}</td>
-                    <td style={{ padding: '16px', color: '#9ca3af', cursor: 'pointer', fontSize: '18px' }}>?</td>
+                    <td style={{ padding: '16px', fontSize: '13px', color: '#000000' }}>{item.date}</td>
+                    <td style={{ padding: '16px', color: '#000000', cursor: 'pointer', fontSize: '18px' }}>?</td>
                   </tr>
                 ))}
               </tbody>
@@ -952,7 +952,7 @@ export default function BillsPage() {
                 borderRadius: '6px',
                 background: '#fafafa',
                 cursor: 'pointer',
-                color: '#9ca3af',
+                color: '#000000',
               }}
             >
               ‹
@@ -964,7 +964,7 @@ export default function BillsPage() {
                 borderRadius: '6px',
                 background: '#fafafa',
                 cursor: 'pointer',
-                color: '#9ca3af',
+                color: '#000000',
               }}
             >
               ›

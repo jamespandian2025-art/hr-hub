@@ -74,7 +74,7 @@ export default function VendorsPage() {
       </div>
 
       {/* Breadcrumb */}
-      <div style={{ fontSize: '13px', color: '#9ca3af', marginBottom: '24px' }}>
+      <div style={{ fontSize: '13px', color: '#000000', marginBottom: '24px' }}>
         <span style={{ color: '#6c63ff', fontWeight: 500 }}>Vendors</span> • List
       </div>
 
@@ -103,11 +103,11 @@ export default function VendorsPage() {
           <thead>
             <tr style={{ background: '#fafafa' }}>
               <th style={{ padding: '12px 24px' }}></th>
-              <th style={{ padding: '12px 16px', textAlign: 'left', fontSize: '12px', color: '#6b7280' }}>Vendor</th>
-              <th style={{ padding: '12px 16px', textAlign: 'left', fontSize: '12px', color: '#6b7280' }}>Contact</th>
-              <th style={{ padding: '12px 16px', textAlign: 'left', fontSize: '12px', color: '#6b7280' }}>Email</th>
-              <th style={{ padding: '12px 16px', textAlign: 'center', fontSize: '12px', color: '#6b7280' }}>Transactions</th>
-              <th style={{ padding: '12px 16px', textAlign: 'left', fontSize: '12px', color: '#6b7280' }}>Total Cost</th>
+              <th style={{ padding: '12px 16px', textAlign: 'left', fontSize: '12px', color: '#000000' }}>Vendor</th>
+              <th style={{ padding: '12px 16px', textAlign: 'left', fontSize: '12px', color: '#000000' }}>Contact</th>
+              <th style={{ padding: '12px 16px', textAlign: 'left', fontSize: '12px', color: '#000000' }}>Email</th>
+              <th style={{ padding: '12px 16px', textAlign: 'center', fontSize: '12px', color: '#000000' }}>Transactions</th>
+              <th style={{ padding: '12px 16px', textAlign: 'left', fontSize: '12px', color: '#000000' }}>Total Cost</th>
               <th></th>
             </tr>
           </thead>
@@ -163,7 +163,7 @@ export default function VendorsPage() {
                       e.stopPropagation()
                       setActiveMenu(activeMenu === vendor.id ? null : vendor.id)
                     }}
-                    style={{ cursor: 'pointer', fontSize: '18px', color: '#9ca3af' }}
+                    style={{ cursor: 'pointer', fontSize: '18px', color: '#000000' }}
                   >
                     ?
                   </div>
@@ -193,7 +193,7 @@ export default function VendorsPage() {
         </table>
 
         {/* Footer */}
-        <div style={{ padding: '16px 24px', borderTop: '1px solid #f3f4f6', fontSize: '13px', color: '#6b7280' }}>
+        <div style={{ padding: '16px 24px', borderTop: '1px solid #f3f4f6', fontSize: '13px', color: '#000000' }}>
           {filtered.length} vendors
         </div>
       </div>

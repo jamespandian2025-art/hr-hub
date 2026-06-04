@@ -1,3 +1,5 @@
+import 'server-only'
+
 import { createClient, type SupabaseClient } from '@supabase/supabase-js'
 import { businessCollections, isBusinessCollection, type BusinessCollection } from '@/lib/business/collections'
 import { listBusinessRecords, replaceBusinessRecords } from '@/lib/business/serverStore'

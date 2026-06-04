@@ -1,6 +1,8 @@
+import 'server-only'
+
 import { randomUUID } from 'node:crypto'
 import { createClient, type SupabaseClient } from '@supabase/supabase-js'
-import type { ServerSession } from '@/lib/security/session'
+import { sessionFromRequest, type ServerSession } from '@/lib/security/session'
 import { normalizeRole } from '@/lib/security/rbac'
 
 export const runtime = 'nodejs'
@@ -130,6 +132,23 @@ export function companyIdFromRequest(request: Request) {
     throw Object.assign(new Error('Company context is required.'), { status: 400 })
   }
   return companyId || 'default-company'
+}
+
+// Like companyIdFromRequest, but falls back to the authenticated session's
+// companyId when no explicit header/query is sent. The employee portal does not
+// maintain a client-side active company, so without this fallback its writes
+// land in 'default-company' and HR (scoped to the real company) never sees them.
+export async function resolveCompanyId(request: Request) {
+  const fromHeader = request.headers.get('x-wiseflow-company-id')?.trim()
+  const explicit = fromHeader || companyIdFromRequestUrl(request)
+  if (explicit) return explicit
+  const session = await sessionFromRequest(request)
+  const sessionCompanyId = session?.companyId?.trim()
+  if (sessionCompanyId) return sessionCompanyId
+  if (process.env.NODE_ENV === 'production') {
+    throw Object.assign(new Error('Company context is required.'), { status: 400 })
+  }
+  return 'default-company'
 }
 
 async function findMemberByUserId(supabase: SupabaseClient, companyId: string, userId: string) {

@@ -446,7 +446,7 @@ export default function ChatPage() {
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '16px', marginBottom: '18px', flexWrap: 'wrap' }}>
         <div>
           <div style={{ fontSize: '24px', fontWeight: 600, color: '#111827', marginBottom: '6px' }}>Chat</div>
-          <div style={{ fontSize: '13px', color: '#94a3b8', fontWeight: 600 }}>Workspace conversations, project updates, and client messages</div>
+          <div style={{ fontSize: '13px', color: '#000000', fontWeight: 600 }}>Workspace conversations, project updates, and client messages</div>
         </div>
         <button onClick={() => setShowNewChannel(true)} style={primaryButtonStyle}>
           <Plus size={16} /> New Channel
@@ -459,12 +459,12 @@ export default function ChatPage() {
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px' }}>
               <div>
                 <div style={{ fontSize: '16px', fontWeight: 600 }}>WiseFlow</div>
-                <div style={{ fontSize: '12px', color: '#94a3b8', marginTop: '3px' }}>{store.channels.length} active conversations</div>
+                <div style={{ fontSize: '12px', color: '#000000', marginTop: '3px' }}>{store.channels.length} active conversations</div>
               </div>
               <ChevronDown size={16} />
             </div>
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px', background: 'rgba(255,255,255,0.08)', borderRadius: '8px', padding: '9px 10px' }}>
-              <Search size={15} color="#94a3b8" />
+              <Search size={15} color="#000000" />
               <input value={search} onChange={event => setSearch(event.target.value)} placeholder="Search chats" style={{ flex: 1, minWidth: 0, border: 'none', outline: 'none', background: 'transparent', color: '#fff', fontSize: '13px' }} />
             </div>
           </div>
@@ -487,7 +487,7 @@ export default function ChatPage() {
               <input value={newChannelName} onChange={event => setNewChannelName(event.target.value)} placeholder="channel-name" style={{ ...inputStyle, background: '#0f172a', borderColor: '#334155', color: '#fff' }} />
               <div style={{ display: 'flex', gap: '8px' }}>
                 <button onClick={addChannel} style={{ ...smallButtonStyle, background: '#fff', color: '#111827' }}>Create</button>
-                <button onClick={() => setShowNewChannel(false)} style={{ ...smallButtonStyle, background: 'transparent', color: '#cbd5e1', border: '1px solid #334155' }}>Cancel</button>
+                <button onClick={() => setShowNewChannel(false)} style={{ ...smallButtonStyle, background: 'transparent', color: '#000000', border: '1px solid #334155' }}>Cancel</button>
               </div>
             </div>
           )}
@@ -501,7 +501,7 @@ export default function ChatPage() {
                 <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{activeChannel.name}</span>
                 {activeChannel.pinned && <Star size={15} fill="#f59e0b" color="#f59e0b" />}
               </div>
-              <div style={{ fontSize: '12px', color: '#64748b', fontWeight: 600, marginTop: '4px' }}>{activeChannel.description}</div>
+              <div style={{ fontSize: '12px', color: '#000000', fontWeight: 600, marginTop: '4px' }}>{activeChannel.description}</div>
             </div>
             <div style={{ display: 'flex', gap: '8px' }}>
               <button style={iconButtonStyle}><Bell size={17} /></button>
@@ -511,11 +511,11 @@ export default function ChatPage() {
 
           <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', padding: '18px 20px', background: '#fff' }}>
             <div style={{ display: 'flex', justifyContent: 'center', margin: '8px 0 18px' }}>
-              <span style={{ border: '1px solid #e5e7eb', borderRadius: '20px', padding: '6px 12px', color: '#64748b', fontSize: '12px', fontWeight: 600 }}>{channelMessages[0] ? formatDay(channelMessages[0].createdAt) : 'Today'}</span>
+              <span style={{ border: '1px solid #e5e7eb', borderRadius: '20px', padding: '6px 12px', color: '#000000', fontSize: '12px', fontWeight: 600 }}>{channelMessages[0] ? formatDay(channelMessages[0].createdAt) : 'Today'}</span>
             </div>
 
             {channelMessages.length === 0 ? (
-              <div style={{ display: 'grid', placeItems: 'center', height: '100%', color: '#94a3b8', textAlign: 'center' }}>
+              <div style={{ display: 'grid', placeItems: 'center', height: '100%', color: '#000000', textAlign: 'center' }}>
                 <div>
                   <Hash size={42} />
                   <div style={{ fontSize: '18px', fontWeight: 600, marginTop: '12px' }}>No messages yet</div>
@@ -531,8 +531,8 @@ export default function ChatPage() {
                   <div style={{ minWidth: 0 }}>
                     <div style={{ display: 'flex', alignItems: 'baseline', gap: '8px', flexWrap: 'wrap' }}>
                       <span style={{ fontSize: '14px', fontWeight: 600, color: '#111827' }}>{item.author}</span>
-                      <span style={{ fontSize: '12px', color: '#64748b', fontWeight: 600 }}>{item.role}</span>
-                      <span style={{ fontSize: '12px', color: '#94a3b8' }}>{formatTime(item.createdAt)}</span>
+                      <span style={{ fontSize: '12px', color: '#000000', fontWeight: 600 }}>{item.role}</span>
+                      <span style={{ fontSize: '12px', color: '#000000' }}>{formatTime(item.createdAt)}</span>
                     </div>
                     <div style={{ marginTop: '5px', fontSize: '14px', color: '#1f2937', lineHeight: 1.55, whiteSpace: 'pre-wrap' }}>{item.body}</div>
                     {item.attachments.length > 0 && (
@@ -548,7 +548,7 @@ export default function ChatPage() {
                       {item.reactions.map(reaction => (
                         <span key={reaction} style={{ border: '1px solid #e5e7eb', borderRadius: '16px', padding: '3px 8px', fontSize: '12px', background: '#f8fafc' }}>{reaction}</span>
                       ))}
-                      <button onClick={() => addReaction(item.id)} style={{ border: 'none', background: 'transparent', color: '#64748b', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '4px', fontSize: '12px', fontWeight: 600 }}>
+                      <button onClick={() => addReaction(item.id)} style={{ border: 'none', background: 'transparent', color: '#000000', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '4px', fontSize: '12px', fontWeight: 600 }}>
                         <Smile size={14} /> React
                       </button>
                     </div>
@@ -599,7 +599,7 @@ export default function ChatPage() {
                 {activeChannel.type === 'channel' ? <Hash size={18} /> : <Users size={18} />}
                 <strong>{activeChannel.name}</strong>
               </div>
-              <div style={{ fontSize: '13px', color: '#64748b', lineHeight: 1.55 }}>{activeChannel.description}</div>
+              <div style={{ fontSize: '13px', color: '#000000', lineHeight: 1.55 }}>{activeChannel.description}</div>
             </div>
 
             <div style={detailCardStyle}>
@@ -618,7 +618,7 @@ export default function ChatPage() {
 
             <div style={detailCardStyle}>
               <div style={{ fontSize: '13px', color: '#111827', fontWeight: 600, marginBottom: '10px' }}>Latest Activity</div>
-              <div style={{ fontSize: '13px', color: '#64748b', lineHeight: 1.55 }}>
+              <div style={{ fontSize: '13px', color: '#000000', lineHeight: 1.55 }}>
                 {latestMessage ? `${latestMessage.author}: ${latestMessage.body}` : 'No activity yet.'}
               </div>
             </div>
@@ -627,7 +627,7 @@ export default function ChatPage() {
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '13px', color: '#111827', fontWeight: 600 }}>
                 <Lock size={15} /> Data
               </div>
-              <div style={{ fontSize: '12px', color: '#64748b', marginTop: '8px', lineHeight: 1.5 }}>
+              <div style={{ fontSize: '12px', color: '#000000', marginTop: '8px', lineHeight: 1.5 }}>
                 Messages are saved locally in this browser for this prototype.
               </div>
             </div>
@@ -640,16 +640,16 @@ export default function ChatPage() {
 
 function NavSection({ title, onAdd }: { title: string; onAdd?: () => void }) {
   return (
-    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '7px 8px', color: '#94a3b8', fontSize: '12px', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '7px 8px', color: '#000000', fontSize: '12px', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.04em' }}>
       <span>{title}</span>
-      {onAdd && <button onClick={onAdd} style={{ border: 'none', background: 'transparent', color: '#cbd5e1', cursor: 'pointer', display: 'inline-flex' }}><Plus size={14} /></button>}
+      {onAdd && <button onClick={onAdd} style={{ border: 'none', background: 'transparent', color: '#000000', cursor: 'pointer', display: 'inline-flex' }}><Plus size={14} /></button>}
     </div>
   )
 }
 
 function ChannelRow({ channel, active, onClick }: { channel: ChatChannel; active: boolean; onClick: () => void }) {
   return (
-    <button onClick={onClick} style={{ width: '100%', border: 'none', borderRadius: '8px', background: active ? '#334155' : 'transparent', color: active ? '#fff' : '#cbd5e1', display: 'grid', gridTemplateColumns: '18px minmax(0, 1fr) auto', alignItems: 'center', gap: '8px', padding: '8px', cursor: 'pointer', textAlign: 'left', marginBottom: '2px' }}>
+    <button onClick={onClick} style={{ width: '100%', border: 'none', borderRadius: '8px', background: active ? '#334155' : 'transparent', color: active ? '#fff' : '#000000', display: 'grid', gridTemplateColumns: '18px minmax(0, 1fr) auto', alignItems: 'center', gap: '8px', padding: '8px', cursor: 'pointer', textAlign: 'left', marginBottom: '2px' }}>
       {channel.type === 'channel' ? <Hash size={15} /> : <span style={{ width: 16, height: 16, borderRadius: '50%', background: avatarColor(channel.name), display: 'block' }} />}
       <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: '14px', fontWeight: active ? 900 : 700 }}>{channel.name}</span>
       {channel.unread > 0 && <span style={{ minWidth: '20px', height: '20px', borderRadius: '10px', background: '#ef4444', color: '#fff', display: 'grid', placeItems: 'center', fontSize: '11px', fontWeight: 600 }}>{channel.unread}</span>}
@@ -708,7 +708,7 @@ const composerButtonStyle = {
   border: 'none',
   borderRadius: '8px',
   background: '#f8fafc',
-  color: '#475569',
+  color: '#000000',
   display: 'inline-flex',
   alignItems: 'center',
   justifyContent: 'center',

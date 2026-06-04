@@ -244,7 +244,7 @@ function TermsColumn({ title, months, schedule, amount, deduction, isApproved }:
 const loanDetailCss = `
 .loan-detail-page {
   --loan-border: #e2e8f0;
-  --loan-muted: #64748b;
+  --loan-muted: #000000;
   --loan-ink: #0f172a;
   padding-bottom: 40px;
 }
@@ -287,7 +287,7 @@ const loanDetailCss = `
 
 .loan-info-line svg {
   flex: 0 0 auto;
-  color: #475569;
+  color: #000000;
 }
 
 .loan-metric {
@@ -359,13 +359,13 @@ const loanDetailCss = `
 }
 
 .loan-timeline-item small {
-  color: #475569;
+  color: #000000;
   font-size: 13px;
 }
 
 .loan-timeline-item p {
   margin: 6px 0 0;
-  color: #475569;
+  color: #000000;
   font-size: 13px;
 }
 
@@ -564,10 +564,10 @@ const loanDetailCss = `
 }
 `
 
-const breadcrumbStyle = { color: '#64748b', fontSize: 13, marginBottom: 18 } as const
+const breadcrumbStyle = { color: '#000000', fontSize: 13, marginBottom: 18 } as const
 const pageHeaderStyle = { display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 16, flexWrap: 'wrap', marginBottom: 18 } as const
 const pageTitleStyle = { margin: 0, fontSize: 30, fontWeight: 950, color: '#0f172a' } as const
-const pageSubtitleStyle = { margin: '7px 0 0', color: '#475569', fontSize: 14 } as const
+const pageSubtitleStyle = { margin: '7px 0 0', color: '#000000', fontSize: 14 } as const
 const secondaryButtonStyle = { minHeight: 40, border: '1px solid #e2e8f0', background: '#fff', color: '#0f172a', borderRadius: 8, padding: '0 13px', display: 'inline-flex', alignItems: 'center', gap: 8, fontSize: 13, fontWeight: 900, cursor: 'pointer' } as const
 const cardStyle = { border: '1px solid #e2e8f0', borderRadius: 12, background: '#fff', padding: 18, boxShadow: '0 12px 30px rgba(15,23,42,.05)' } as const
 const heroCardStyle = { ...cardStyle, display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(420px, .9fr)', gap: 18, marginBottom: 18 } as const
@@ -575,9 +575,9 @@ const employeePanelStyle = { display: 'flex', alignItems: 'center', gap: 20, min
 const avatarStyle = { width: 92, height: 92, borderRadius: '50%', objectFit: 'cover' } as const
 const avatarFallback = { width: 92, height: 92, borderRadius: '50%', display: 'grid', placeItems: 'center', background: '#dcfce7', color: '#15803d', fontSize: 26, fontWeight: 950 } as const
 const employeeNameStyle = { margin: 0, color: '#0f172a', fontSize: 24, fontWeight: 950 } as const
-const employeeMetaStyle = { margin: '6px 0 14px', color: '#475569', fontSize: 13, fontWeight: 750 } as const
+const employeeMetaStyle = { margin: '6px 0 14px', color: '#000000', fontSize: 13, fontWeight: 750 } as const
 const employeeGridStyle = { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 10 } as const
-const infoLineStyle = { display: 'flex', alignItems: 'center', gap: 8, color: '#475569' } as const
+const infoLineStyle = { display: 'flex', alignItems: 'center', gap: 8, color: '#000000' } as const
 const summaryGridStyle = { display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 12 } as const
 const metricStyle = { border: '1px solid #eef2f7', borderRadius: 10, padding: 14, display: 'flex', gap: 12, alignItems: 'center', minWidth: 0 } as const
 const metricIconStyle = { width: 44, height: 44, borderRadius: 12, display: 'grid', placeItems: 'center', flex: '0 0 auto' } as const
@@ -588,7 +588,7 @@ const termsCompareStyle = { display: 'grid', gridTemplateColumns: 'repeat(2, min
 const termsColumnStyle = { border: '1px solid #e2e8f0', borderRadius: 10, padding: 14, display: 'grid', gap: 11 } as const
 const timelineStyle = { display: 'grid', gap: 12 } as const
 const timelineItemStyle = { display: 'grid', gridTemplateColumns: '34px minmax(0, 1fr)', gap: 10, paddingBottom: 12, borderBottom: '1px solid #eef2f7' } as const
-const emptyStyle = { minHeight: 110, display: 'grid', placeItems: 'center', color: '#64748b', fontSize: 13 } as const
+const emptyStyle = { minHeight: 110, display: 'grid', placeItems: 'center', color: '#000000', fontSize: 13 } as const
 
 function timelineIconStyle(decision: string) {
   const rejected = String(decision).toLowerCase() === 'rejected'

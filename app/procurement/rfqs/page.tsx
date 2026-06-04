@@ -1,6 +1,6 @@
 'use client'
 
-import { ChangeEvent, FormEvent, type ComponentType, useEffect, useMemo, useRef, useState } from 'react'
+import { ChangeEvent, FormEvent, type ComponentType, type MouseEvent as ReactMouseEvent, useEffect, useMemo, useRef, useState } from 'react'
 import {
   BarChart3,
   CheckCircle2,
@@ -21,7 +21,10 @@ import {
   X,
   XCircle,
 } from 'lucide-react'
+import { AnalyticsToggleButton, CollapsibleAnalytics, useAnalyticsDisclosure } from '@/components/AnalyticsDisclosure'
 import { companyChangeEvent, companyScopedKey, getActiveCompany } from '@/lib/tenant/company'
+import { withCsrfHeaders } from '@/lib/security/csrfClient'
+import { useVoiceIntent } from '@/lib/voice/intent'
 
 const font = 'var(--font-body)'
 const rfqsKey = 'flowsys-procurement-rfqs'
@@ -35,6 +38,7 @@ type ViewMode = 'table' | 'cards'
 type SupplierOption = {
   id: string
   name: string
+  email: string
 }
 
 type ProjectOption = {
@@ -150,13 +154,23 @@ export default function RFQsPage() {
   const [showFilters, setShowFilters] = useState(false)
   const [showCreate, setShowCreate] = useState(false)
   const [selectedId, setSelectedId] = useState('')
+  const [detailRfqId, setDetailRfqId] = useState('')
   const [openActionId, setOpenActionId] = useState('')
+  const [actionMenuPos, setActionMenuPos] = useState<{ top: number; left: number } | null>(null)
   const [page, setPage] = useState(1)
   const [pageSize, setPageSize] = useState(10)
   const [form, setForm] = useState<RfqForm>(emptyForm)
   const [invitedSupplierIds, setInvitedSupplierIds] = useState<string[]>([])
+  const [inviteRfqId, setInviteRfqId] = useState('')
+  const [inviteSelection, setInviteSelection] = useState<string[]>([])
+  const [flash, setFlash] = useState('')
+  const [manualLinks, setManualLinks] = useState<Array<{ name: string; url: string }>>([])
+  const [copiedLink, setCopiedLink] = useState('')
+  const [publishing, setPublishing] = useState(false)
+  const [quotationCounts, setQuotationCounts] = useState<Record<string, number>>({})
   const [requestedItems, setRequestedItems] = useState<RfqItem[]>([])
   const [attachments, setAttachments] = useState<AttachmentRecord[]>([])
+  const analytics = useAnalyticsDisclosure('wiseflow:analytics:procurement-rfqs')
   const importItemsRef = useRef<HTMLInputElement | null>(null)
   const attachmentRef = useRef<HTMLInputElement | null>(null)
 
@@ -180,6 +194,41 @@ export default function RFQsPage() {
       window.removeEventListener(companyChangeEvent, load)
     }
   }, [])
+
+  const refreshQuotations = useMemo(() => async () => {
+    if (!companyId) return
+    try {
+      const response = await fetch(`/api/procurement/quotations?companyId=${encodeURIComponent(companyId)}`, { headers: { 'x-wiseflow-company-id': companyId }, cache: 'no-store' })
+      const payload = await response.json().catch(() => null) as { ok?: boolean; quotations?: Array<{ rfqId: string }>; notifications?: Array<{ read?: boolean; message?: string }> } | null
+      if (!response.ok || !payload?.ok) return
+      const counts: Record<string, number> = {}
+      for (const quote of payload.quotations || []) counts[quote.rfqId] = (counts[quote.rfqId] || 0) + 1
+      setQuotationCounts(counts)
+      const unread = (payload.notifications || []).filter(note => !note.read)
+      if (unread.length) setFlash(unread.length === 1 ? (unread[0].message || 'A supplier submitted a quotation.') : `${unread.length} new supplier quotations received.`)
+    } catch {
+      // Quotations are a server enhancement; ignore fetch failures.
+    }
+  }, [companyId])
+
+  useEffect(() => { void refreshQuotations() }, [refreshQuotations])
+
+  useVoiceIntent('new-rfq', () => setShowCreate(true))
+
+  // The row action menu is rendered with fixed positioning (see toggleActionMenu)
+  // so the table's scroll container can't clip it. Close it on scroll/resize/outside click.
+  useEffect(() => {
+    if (!openActionId) return
+    const close = () => setOpenActionId('')
+    window.addEventListener('scroll', close, true)
+    window.addEventListener('resize', close)
+    window.addEventListener('click', close)
+    return () => {
+      window.removeEventListener('scroll', close, true)
+      window.removeEventListener('resize', close)
+      window.removeEventListener('click', close)
+    }
+  }, [openActionId])
 
   const rfqs = useMemo(() => storedRfqs.map((rfq, index) => normalizeRfq(rfq, index)).filter(Boolean) as NormalizedRfq[], [storedRfqs])
   const categories = useMemo(() => uniqueValues([...categoryOptions, ...rfqs.map(rfq => rfq.category).filter(Boolean)]), [rfqs])
@@ -238,6 +287,7 @@ export default function RFQsPage() {
   const pageEnd = Math.min(currentPage * pageSize, filteredRfqs.length)
   const visibleRfqs = filteredRfqs.slice((currentPage - 1) * pageSize, currentPage * pageSize)
   const selectedRfq = rfqs.find(rfq => rfq.id === selectedId) || visibleRfqs[0] || filteredRfqs[0]
+  const detailRfq = rfqs.find(rfq => rfq.id === detailRfqId)
   const statusDistribution = useMemo(() => tabs.filter(tab => tab.label !== 'All' && tab.count > 0), [tabs])
   const recentActivity = useMemo(() => rfqs.flatMap(rfq => {
     const entries = rfq.activity.length ? rfq.activity : [`${rfq.rfqNumber} is ${rfq.status.toLowerCase()}`]
@@ -262,6 +312,12 @@ export default function RFQsPage() {
     const unique = uniqueRows(nextRfqs)
     setStoredRfqs(unique)
     persistRows(rfqsKey, unique, companyId)
+  }
+
+  function openRfqDetails(rfq: NormalizedRfq) {
+    setSelectedId(rfq.id)
+    setDetailRfqId(rfq.id)
+    setOpenActionId('')
   }
 
   function resetFilters() {
@@ -407,9 +463,153 @@ export default function RFQsPage() {
     setOpenActionId('')
   }
 
+  function toggleActionMenu(rfqId: string, event: ReactMouseEvent<HTMLButtonElement>) {
+    if (openActionId === rfqId) {
+      setOpenActionId('')
+      return
+    }
+    const rect = event.currentTarget.getBoundingClientRect()
+    const menuWidth = 184
+    const menuHeight = 268
+    const openUp = window.innerHeight - rect.bottom < menuHeight + 16
+    setActionMenuPos({
+      top: openUp ? Math.max(8, rect.top - menuHeight - 6) : rect.bottom + 6,
+      left: Math.max(8, Math.min(rect.right - menuWidth, window.innerWidth - menuWidth - 8)),
+    })
+    setOpenActionId(rfqId)
+  }
+
+  function openInviteSuppliers(rfq: NormalizedRfq) {
+    setInviteRfqId(rfq.id)
+    setInviteSelection(readStringArray(rfq.source.supplierIds))
+    setOpenActionId('')
+  }
+
+  function toggleInviteSelection(supplierId: string) {
+    setInviteSelection(previous => previous.includes(supplierId)
+      ? previous.filter(id => id !== supplierId)
+      : [...previous, supplierId])
+  }
+
+  async function sendInvites() {
+    if (!inviteRfqId) return
+    const targetId = inviteRfqId
+    const invited = suppliers.filter(supplier => inviteSelection.includes(supplier.id))
+    const names = invited.map(supplier => supplier.name)
+    const rfq = rfqs.find(item => item.id === targetId)
+    const status: RfqStatus = rfq?.status === 'Draft' ? 'Open' : (rfq?.status || 'Open')
+
+    // Local record keeps the buyer's list instant + offline-friendly.
+    const next = storedRfqs.map(record => {
+      const normalized = normalizeRfq(record, 0)
+      if (!normalized || normalized.id !== targetId) return record
+      return {
+        ...record,
+        supplierIds: inviteSelection,
+        supplierNames: names,
+        suppliersInvited: inviteSelection.length,
+        status,
+        activity: [
+          `Sent RFQ to ${inviteSelection.length} supplier${inviteSelection.length === 1 ? '' : 's'} on ${formatDate(new Date().toISOString())}`,
+          ...readStringArray(record.activity),
+        ],
+        updatedAt: new Date().toISOString(),
+      }
+    })
+    persist(next)
+    setSelectedId(targetId)
+    setInviteRfqId('')
+    setInviteSelection([])
+
+    // Publish server-side + email each supplier a tokenized response link.
+    setPublishing(true)
+    try {
+      const items = rfq ? readArray(rfq.source.items).map((raw, index) => {
+        const item = isRecord(raw) ? raw : {}
+        return {
+          id: textFrom(item.id) || `item-${index + 1}`,
+          name: textFrom(item.name) || textFrom(item.description) || `Item ${index + 1}`,
+          quantity: numberValue(item.quantity),
+          unit: textFrom(item.unit),
+          details: textFrom(item.specifications) || textFrom(item.notes),
+        }
+      }) : []
+      const response = await fetch(`/api/procurement/rfqs/publish?companyId=${encodeURIComponent(companyId)}`, {
+        method: 'POST',
+        headers: withCsrfHeaders({ 'Content-Type': 'application/json', 'x-wiseflow-company-id': companyId }),
+        body: JSON.stringify({
+          companyName: getActiveCompany()?.name || 'WiseFlow',
+          rfq: { id: targetId, rfqNumber: rfq?.rfqNumber || targetId, title: rfq?.title || 'Request for Quotation', currency: textFrom(rfq?.source.currency) || 'PHP', closingDate: rfq?.closingDate || '', status, items },
+          suppliers: invited.map(supplier => ({ supplierId: supplier.id, name: supplier.name, email: supplier.email })),
+        }),
+      })
+      const payload = await response.json().catch(() => null) as { ok?: boolean; emailResults?: Array<{ name: string; sent: boolean; reason?: string; url?: string }>; error?: string } | null
+      if (!response.ok || !payload?.ok) {
+        setFlash(`Suppliers recorded, but the RFQ could not be published: ${payload?.error || 'server error'}.`)
+        setManualLinks([])
+      } else {
+        const results = payload.emailResults || []
+        const sent = results.filter(item => item.sent).length
+        const failed = results.filter(item => !item.sent)
+        // When email can't be sent (provider not configured / no supplier email),
+        // surface the secure response link so the buyer can share it manually.
+        setManualLinks(failed.filter(item => item.url).map(item => ({ name: item.name, url: item.url as string })))
+        setFlash(sent === results.length && sent > 0
+          ? `RFQ link emailed to ${sent} supplier${sent === 1 ? '' : 's'}.`
+          : `RFQ published. ${sent} email${sent === 1 ? '' : 's'} sent${failed.length ? `; ${failed.length} link${failed.length === 1 ? '' : 's'} ready to share below (email not configured).` : '.'}`)
+      }
+    } catch (error) {
+      setFlash(`Suppliers recorded locally, but publishing failed: ${error instanceof Error ? error.message : 'network error'}.`)
+    } finally {
+      setPublishing(false)
+    }
+  }
+
+  async function copyShareLink(url: string, button: HTMLButtonElement) {
+    // Select the field first so the user can always Ctrl+C even if the
+    // programmatic copy is blocked (clipboard API needs a secure context +
+    // clipboard-write permission, which some embedded/iframe views deny).
+    const input = button.closest('.rfq-share-row')?.querySelector('input') as HTMLInputElement | null
+    if (input) { input.focus(); input.select() }
+    let ok = false
+    try {
+      if (navigator.clipboard?.writeText) { await navigator.clipboard.writeText(url); ok = true }
+    } catch {
+      ok = false
+    }
+    if (!ok && input) {
+      try { ok = document.execCommand('copy') } catch { ok = false }
+    }
+    setCopiedLink(ok ? url : `select:${url}`)
+  }
+
   return (
     <main className="rfq-page" style={{ fontFamily: font }}>
       <style>{rfqCss}</style>
+
+      {flash && (
+        <div className="rfq-flash" role="status">
+          <span>{flash}</span>
+          <button type="button" aria-label="Dismiss" onClick={() => setFlash('')}><X size={15} /></button>
+        </div>
+      )}
+
+      {manualLinks.length > 0 && (
+        <div className="rfq-share-links">
+          <div className="rfq-share-head">
+            <strong>Supplier response links</strong>
+            <button type="button" aria-label="Dismiss links" onClick={() => { setManualLinks([]); setCopiedLink('') }}><X size={15} /></button>
+          </div>
+          <p>Email isn&apos;t configured yet, so share these secure links with each supplier. Each link opens their RFQ price form — no login needed.</p>
+          {manualLinks.map(link => (
+            <div className="rfq-share-row" key={link.url}>
+              <span className="rfq-share-name">{link.name}</span>
+              <input readOnly value={link.url} onFocus={event => event.currentTarget.select()} />
+              <button type="button" className="rfq-outline-button" onClick={event => void copyShareLink(link.url, event.currentTarget)}>{copiedLink === link.url ? 'Copied' : copiedLink === `select:${link.url}` ? 'Press Ctrl+C' : 'Copy'}</button>
+            </div>
+          ))}
+        </div>
+      )}
 
       <section className="rfq-page-head">
         <div>
@@ -427,6 +627,7 @@ export default function RFQsPage() {
           </div>
         </div>
         <div className="rfq-actions">
+          <AnalyticsToggleButton open={analytics.open} onToggle={analytics.toggle} panelId={analytics.panelId} className="rfq-secondary-button" />
           <button type="button" className="rfq-secondary-button" onClick={() => setViewMode(viewMode === 'table' ? 'cards' : 'table')}>
             <Grid3X3 size={16} /> Views <ChevronDown size={14} />
           </button>
@@ -444,13 +645,15 @@ export default function RFQsPage() {
 
       <section className="rfq-grid-shell">
         <div className="rfq-left">
-          <section className="rfq-stats" aria-label="RFQ summary">
-            <KpiCard title="Total RFQs" value={String(stats.total)} helper="All time" icon={FileText} tone="green" />
-            <KpiCard title="Open RFQs" value={String(stats.open)} helper={stats.total ? `${percent(stats.open, stats.total)} of total` : 'No open RFQs'} icon={Send} tone="purple" />
-            <KpiCard title="Pending Evaluation" value={String(stats.pending)} helper={stats.total ? `${percent(stats.pending, stats.total)} of total` : 'No pending evaluation'} icon={Clock3} tone="blue" />
-            <KpiCard title="Awarded" value={String(stats.awarded)} helper={stats.total ? `${percent(stats.awarded, stats.total)} of total` : 'No awarded RFQs'} icon={CheckCircle2} tone="orange" />
-            <KpiCard title="Cancelled" value={String(stats.cancelled)} helper={stats.total ? `${percent(stats.cancelled, stats.total)} of total` : 'No cancelled RFQs'} icon={XCircle} tone="red" />
-          </section>
+          <CollapsibleAnalytics open={analytics.open} id={analytics.panelId}>
+            <section className="rfq-stats" aria-label="RFQ summary">
+              <KpiCard title="Total RFQs" value={String(stats.total)} helper="All time" icon={FileText} tone="green" />
+              <KpiCard title="Open RFQs" value={String(stats.open)} helper={stats.total ? `${percent(stats.open, stats.total)} of total` : 'No open RFQs'} icon={Send} tone="purple" />
+              <KpiCard title="Pending Evaluation" value={String(stats.pending)} helper={stats.total ? `${percent(stats.pending, stats.total)} of total` : 'No pending evaluation'} icon={Clock3} tone="blue" />
+              <KpiCard title="Awarded" value={String(stats.awarded)} helper={stats.total ? `${percent(stats.awarded, stats.total)} of total` : 'No awarded RFQs'} icon={CheckCircle2} tone="orange" />
+              <KpiCard title="Cancelled" value={String(stats.cancelled)} helper={stats.total ? `${percent(stats.cancelled, stats.total)} of total` : 'No cancelled RFQs'} icon={XCircle} tone="red" />
+            </section>
+          </CollapsibleAnalytics>
 
           <section className="rfq-tabs" aria-label="RFQ status tabs">
             {tabs.map(tab => (
@@ -515,24 +718,25 @@ export default function RFQsPage() {
                       </thead>
                       <tbody>
                         {visibleRfqs.map(rfq => (
-                          <tr key={rfq.id} className={selectedRfq?.id === rfq.id ? 'selected' : ''} onClick={() => setSelectedId(rfq.id)}>
-                            <td data-label="Select"><input type="checkbox" checked={selectedRfq?.id === rfq.id} onChange={() => setSelectedId(rfq.id)} aria-label={`Select ${rfq.rfqNumber}`} /></td>
-                            <td data-label="RFQ Number"><button type="button" className="rfq-link-button" onClick={() => setSelectedId(rfq.id)}>{rfq.rfqNumber}</button></td>
-                            <td data-label="Title"><strong>{rfq.title}</strong><small>{rfq.items.slice(0, 3).join(', ') || rfq.description}</small></td>
+                          <tr key={rfq.id} className={selectedRfq?.id === rfq.id ? 'selected' : ''} onClick={() => openRfqDetails(rfq)}>
+                            <td data-label="Select" onClick={event => event.stopPropagation()}><input type="checkbox" checked={selectedRfq?.id === rfq.id} onChange={() => setSelectedId(rfq.id)} aria-label={`Select ${rfq.rfqNumber}`} /></td>
+                            <td data-label="RFQ Number"><button type="button" className="rfq-link-button" onClick={event => { event.stopPropagation(); openRfqDetails(rfq) }}>{rfq.rfqNumber}</button></td>
+                            <td data-label="Title"><button type="button" className="rfq-title-button" onClick={event => { event.stopPropagation(); openRfqDetails(rfq) }}><strong>{rfq.title}</strong><small>{rfq.items.slice(0, 3).join(', ') || rfq.description}</small></button></td>
                             <td data-label="Category">{rfq.category}</td>
                             <td data-label="Issue Date">{formatDate(rfq.issueDate)}</td>
                             <td data-label="Closing Date">{formatDate(rfq.closingDate)}</td>
                             <td data-label="Status"><Badge tone={statusConfig[rfq.status].tone}>{statusConfig[rfq.status].label}</Badge></td>
                             <td data-label="Suppliers Invited">{rfq.suppliersInvited}</td>
-                            <td data-label="Quotations">{rfq.quotations}</td>
+                            <td data-label="Quotations">{Math.max(rfq.quotations, quotationCounts[rfq.id] || 0)}</td>
                             <td data-label="Actions">
                               <div className="rfq-row-actions" onClick={event => event.stopPropagation()}>
-                                <button type="button" aria-label={`Open actions for ${rfq.rfqNumber}`} onClick={() => setOpenActionId(openActionId === rfq.id ? '' : rfq.id)}>
+                                <button type="button" aria-label={`Open actions for ${rfq.rfqNumber}`} onClick={event => toggleActionMenu(rfq.id, event)}>
                                   <MoreHorizontal size={16} />
                                 </button>
-                                {openActionId === rfq.id && (
-                                  <div className="rfq-action-menu">
-                                    <button type="button" onClick={() => { setSelectedId(rfq.id); setOpenActionId('') }}>Open details</button>
+                                {openActionId === rfq.id && actionMenuPos && (
+                                  <div className="rfq-action-menu" style={{ position: 'fixed', top: actionMenuPos.top, left: actionMenuPos.left, right: 'auto' }}>
+                                    <button type="button" onClick={() => openRfqDetails(rfq)}>Open details</button>
+                                    <button type="button" onClick={() => openInviteSuppliers(rfq)}>Invite suppliers</button>
                                     <button type="button" onClick={() => updateStatus(rfq, 'Pending Evaluation')}>Start evaluation</button>
                                     <button type="button" onClick={() => updateStatus(rfq, 'Awarded')}>Mark awarded</button>
                                     <button type="button" onClick={() => updateStatus(rfq, 'Closed')}>Close RFQ</button>
@@ -549,7 +753,7 @@ export default function RFQsPage() {
                 ) : (
                   <div className="rfq-card-grid">
                     {visibleRfqs.map(rfq => (
-                      <article key={rfq.id} className={`rfq-card${selectedRfq?.id === rfq.id ? ' selected' : ''}`} onClick={() => setSelectedId(rfq.id)}>
+                      <article key={rfq.id} className={`rfq-card${selectedRfq?.id === rfq.id ? ' selected' : ''}`} onClick={() => openRfqDetails(rfq)}>
                         <div>
                           <strong>{rfq.rfqNumber}</strong>
                           <Badge tone={statusConfig[rfq.status].tone}>{rfq.status}</Badge>
@@ -622,7 +826,7 @@ export default function RFQsPage() {
             </div>
             <div className="rfq-activity">
               {recentActivity.length ? recentActivity.map(activity => (
-                <button key={activity.id} type="button" onClick={() => setSelectedId(activity.rfq.id)}>
+                <button key={activity.id} type="button" onClick={() => openRfqDetails(activity.rfq)}>
                   <span className={`rfq-activity-icon ${statusConfig[activity.rfq.status].tone}`}><FileText size={14} /></span>
                   <span>
                     <strong>{activity.rfq.rfqNumber}</strong>
@@ -653,6 +857,59 @@ export default function RFQsPage() {
           )}
         </aside>
       </section>
+
+      {detailRfq && (
+        <RfqDetailsModal
+          rfq={detailRfq}
+          onClose={() => setDetailRfqId('')}
+          onStatusChange={status => updateStatus(detailRfq, status)}
+          onInvite={() => { openInviteSuppliers(detailRfq); setDetailRfqId('') }}
+        />
+      )}
+
+      {inviteRfqId && (
+        <div className="rfq-drawer-backdrop rfq-invite-backdrop" role="presentation" onMouseDown={() => setInviteRfqId('')}>
+          <aside className="rfq-invite-modal" role="dialog" aria-modal="true" aria-labelledby="invite-suppliers-title" onMouseDown={event => event.stopPropagation()}>
+            <div className="rfq-drawer-head">
+              <div className="rfq-title-row">
+                <span className="rfq-title-icon purple"><Send size={20} /></span>
+                <div>
+                  <h2 id="invite-suppliers-title">Invite suppliers</h2>
+                  <p>Select suppliers to send this RFQ to. They&apos;ll be invited to submit quotations.</p>
+                </div>
+              </div>
+              <button type="button" aria-label="Close invite suppliers" onClick={() => setInviteRfqId('')}><X size={20} /></button>
+            </div>
+            <div className="rfq-invite-body">
+              {suppliers.length ? (
+                <div className="rfq-supplier-grid">
+                  {suppliers.map(supplier => (
+                    <label key={supplier.id} className={inviteSelection.includes(supplier.id) ? 'selected' : ''}>
+                      <input type="checkbox" checked={inviteSelection.includes(supplier.id)} onChange={() => toggleInviteSelection(supplier.id)} />
+                      <span>{supplier.name}</span>
+                    </label>
+                  ))}
+                </div>
+              ) : (
+                <div className="rfq-empty-box">
+                  <Send size={34} />
+                  <strong>No suppliers available</strong>
+                  <span>Add suppliers in the Supplier Database first, then come back to invite them.</span>
+                </div>
+              )}
+            </div>
+            <div className="rfq-invite-foot">
+              <span>{inviteSelection.length} selected</span>
+              <div>
+                <button type="button" className="rfq-secondary-button" onClick={() => setInviteRfqId('')}>Cancel</button>
+                <button type="button" className="rfq-primary-button" disabled={!inviteSelection.length || publishing} onClick={() => void sendInvites()}>
+                  <Send size={15} /> {publishing ? 'Sending…' : `Send RFQ${inviteSelection.length ? ` to ${inviteSelection.length} supplier${inviteSelection.length === 1 ? '' : 's'}` : ''}`}
+                </button>
+              </div>
+            </div>
+          </aside>
+        </div>
+      )}
 
       {showCreate && (
         <div className="rfq-drawer-backdrop" role="presentation" onMouseDown={() => setShowCreate(false)}>
@@ -933,6 +1190,123 @@ function MetricBlock({ label, value, helper, progress }: { label: string; value:
   )
 }
 
+function RfqDetailsModal({ rfq, onClose, onStatusChange, onInvite }: { rfq: NormalizedRfq; onClose: () => void; onStatusChange: (status: RfqStatus) => void; onInvite: () => void }) {
+  const itemRows = readArray(rfq.source.items).filter(isRecord)
+  const items = itemRows.length
+    ? itemRows.map((item, index) => ({
+      id: textFrom(item.id) || `${rfq.id}-item-${index}`,
+      name: textFrom(item.name) || textFrom(item.description) || textFrom(item.itemName) || `Item ${index + 1}`,
+      quantity: textFrom(item.quantity) || textFrom(item.qty),
+      unit: textFrom(item.unit) || textFrom(item.uom),
+      details: textFrom(item.specifications) || textFrom(item.details) || textFrom(item.notes),
+      requiredDate: textFrom(item.requiredDate) || textFrom(item.neededBy) || textFrom(item.dueDate),
+    }))
+    : rfq.items.map((item, index) => ({
+      id: `${rfq.id}-item-${index}`,
+      name: item,
+      quantity: '',
+      unit: '',
+      details: '',
+      requiredDate: '',
+    }))
+  const suppliers = rfq.supplierNames.length ? rfq.supplierNames : readArray(rfq.source.suppliers).map(item => isRecord(item) ? textFrom(item.name) || textFrom(item.supplierName) : textFrom(item)).filter(Boolean)
+  const attachments = readArray(rfq.source.attachments).map(item => isRecord(item) ? textFrom(item.name) || textFrom(item.fileName) : textFrom(item)).filter(Boolean)
+  const projectName = textFrom(rfq.source.projectName)
+  const purchaseRequestNo = textFrom(rfq.source.purchaseRequestNo)
+
+  return (
+    <div className="rfq-detail-backdrop" role="presentation" onMouseDown={onClose}>
+      <section className="rfq-detail-modal" role="dialog" aria-modal="true" aria-labelledby="rfq-detail-title" onMouseDown={event => event.stopPropagation()}>
+        <div className="rfq-detail-modal-head">
+          <div>
+            <span>Request for Quotation</span>
+            <h2 id="rfq-detail-title">{rfq.rfqNumber}</h2>
+            <p>{rfq.title}</p>
+          </div>
+          <button type="button" aria-label="Close RFQ details" onClick={onClose}><X size={20} /></button>
+        </div>
+
+        <div className="rfq-detail-modal-body">
+          <section className="rfq-detail-summary-card">
+            <div>
+              <Badge tone={statusConfig[rfq.status].tone}>{rfq.status}</Badge>
+              <strong>{formatCurrency(rfq.estimatedValue)}</strong>
+              <span>Estimated value</span>
+            </div>
+            <div>
+              <strong>{rfq.suppliersInvited}</strong>
+              <span>Suppliers invited</span>
+            </div>
+            <div>
+              <strong>{rfq.quotations}</strong>
+              <span>Quotations</span>
+            </div>
+          </section>
+
+          <section className="rfq-detail-section">
+            <h3>RFQ Information</h3>
+            <div className="rfq-detail-lines modal">
+              <DetailRow label="Title" value={rfq.title} />
+              <DetailRow label="Category" value={rfq.category} />
+              <DetailRow label="Issue Date" value={formatDate(rfq.issueDate)} />
+              <DetailRow label="Closing Date" value={formatDate(rfq.closingDate)} />
+              {projectName ? <DetailRow label="Project" value={projectName} /> : null}
+              {purchaseRequestNo ? <DetailRow label="Purchase Request" value={purchaseRequestNo} /> : null}
+              <DetailRow label="Payment Terms" value={textFrom(rfq.source.paymentTerms) || '-'} />
+              <DetailRow label="Delivery Terms" value={textFrom(rfq.source.deliveryTerms) || '-'} />
+              <DetailRow label="Delivery Location" value={textFrom(rfq.source.deliveryLocation) || '-'} />
+            </div>
+            <p>{rfq.description || textFrom(rfq.source.referenceNotes) || 'No description recorded.'}</p>
+          </section>
+
+          <section className="rfq-detail-section">
+            <h3>Requested Items</h3>
+            <div className="rfq-detail-items">
+              {items.length ? items.map(item => (
+                <article key={item.id}>
+                  <strong>{item.name}</strong>
+                  <span>{[item.quantity, item.unit].filter(Boolean).join(' ') || 'Quantity not specified'}</span>
+                  {item.details ? <p>{item.details}</p> : null}
+                  {item.requiredDate ? <small>Required by {formatDate(item.requiredDate)}</small> : null}
+                </article>
+              )) : <p>No item details recorded.</p>}
+            </div>
+          </section>
+
+          <section className="rfq-detail-section split">
+            <div>
+              <h3>Suppliers</h3>
+              <div className="rfq-detail-chip-list">
+                {suppliers.length ? suppliers.map(supplier => <span key={supplier}>{supplier}</span>) : <p>No suppliers invited yet.</p>}
+              </div>
+            </div>
+            <div>
+              <h3>Attachments</h3>
+              <div className="rfq-detail-chip-list">
+                {attachments.length ? attachments.map(file => <span key={file}>{file}</span>) : <p>No attachments uploaded.</p>}
+              </div>
+            </div>
+          </section>
+
+          <section className="rfq-detail-section">
+            <h3>Activity</h3>
+            <div className="rfq-detail-activity">
+              {rfq.activity.length ? rfq.activity.map(entry => <span key={entry}>{entry}</span>) : <span>{rfq.rfqNumber} is {rfq.status.toLowerCase()}.</span>}
+            </div>
+          </section>
+        </div>
+
+        <div className="rfq-detail-modal-actions">
+          <button type="button" className="rfq-outline-button rfq-detail-invite" onClick={onInvite}><Send size={15} /> Invite suppliers</button>
+          <button type="button" className="rfq-secondary-button" onClick={() => onStatusChange('Pending Evaluation')}>Start evaluation</button>
+          <button type="button" className="rfq-secondary-button" onClick={() => onStatusChange('Awarded')}>Mark awarded</button>
+          <button type="button" className="rfq-primary-button" onClick={() => onStatusChange('Closed')}>Close RFQ</button>
+        </div>
+      </section>
+    </div>
+  )
+}
+
 function DetailRow({ label, value }: { label: string; value: string }) {
   return (
     <div className="rfq-detail-row">
@@ -996,6 +1370,7 @@ function loadSuppliers(companyId: string) {
   return loadRows(suppliersKey, companyId).map((row, index) => ({
     id: textFrom(row.id) || textFrom(row.name) || `supplier-${index}`,
     name: textFrom(row.name) || textFrom(row.supplierName) || 'Unnamed supplier',
+    email: (textFrom(row.email) || textFrom(row.contactEmail) || textFrom(row.emailAddress) || '').toLowerCase(),
   }))
 }
 
@@ -1196,7 +1571,7 @@ const rfqCss = `
   display: flex;
   align-items: center;
   gap: 8px;
-  color: #64748b;
+  color: #000000;
   font-size: 12px;
   margin-bottom: 10px;
 }
@@ -1225,11 +1600,11 @@ const rfqCss = `
   letter-spacing: -0.03em;
 }
 .rfq-title-row h1 svg {
-  color: #94a3b8;
+  color: #000000;
 }
 .rfq-title-row p {
   margin: 8px 0 0;
-  color: #64748b;
+  color: #000000;
   font-size: 14px;
 }
 .rfq-actions {
@@ -1345,7 +1720,7 @@ const rfqCss = `
 .rfq-kpi-icon.red { background: #fee2e2; color: #ef4444; }
 .rfq-kpi span:not(.rfq-kpi-icon) {
   display: block;
-  color: #64748b;
+  color: #000000;
   font-size: 12px;
   font-weight: 800;
 }
@@ -1358,7 +1733,7 @@ const rfqCss = `
 .rfq-kpi small {
   display: block;
   margin-top: 8px;
-  color: #64748b;
+  color: #000000;
   font-size: 12px;
 }
 .rfq-tabs {
@@ -1384,7 +1759,7 @@ const rfqCss = `
   border-color: #16a34a;
 }
 .rfq-tabs span {
-  color: #64748b;
+  color: #000000;
   margin-left: 6px;
   font-size: 12px;
 }
@@ -1407,7 +1782,7 @@ const rfqCss = `
   align-items: center;
   gap: 10px;
   padding: 0 13px;
-  color: #64748b;
+  color: #000000;
   background: #fff;
 }
 .rfq-search input,
@@ -1491,7 +1866,7 @@ const rfqCss = `
 }
 .rfq-table th {
   background: #f8fafc;
-  color: #475569;
+  color: #000000;
   text-transform: uppercase;
   font-size: 10px;
   letter-spacing: .02em;
@@ -1500,18 +1875,35 @@ const rfqCss = `
 .rfq-table tr:hover {
   background: #f0fdf4;
 }
+.rfq-table tbody tr {
+  cursor: pointer;
+}
 .rfq-table td small {
   display: block;
-  color: #64748b;
+  color: #000000;
   margin-top: 4px;
   max-width: 190px;
 }
-.rfq-link-button {
+.rfq-link-button,
+.rfq-title-button {
   border: 0;
   background: transparent;
+  cursor: pointer;
+  font: inherit;
+  padding: 0;
+  text-align: left;
+}
+.rfq-link-button {
   color: #2563eb;
   font-size: 12px;
   font-weight: 900;
+}
+.rfq-title-button {
+  color: inherit;
+}
+.rfq-title-button strong,
+.rfq-title-button small {
+  display: block;
 }
 .rfq-badge {
   display: inline-flex;
@@ -1529,7 +1921,7 @@ const rfqCss = `
 .rfq-badge.blue { background: #dbeafe; color: #2563eb; }
 .rfq-badge.orange { background: #ffedd5; color: #f97316; }
 .rfq-badge.red { background: #fee2e2; color: #ef4444; }
-.rfq-badge.gray { background: #f1f5f9; color: #475569; }
+.rfq-badge.gray { background: #f1f5f9; color: #000000; }
 .rfq-row-actions {
   position: relative;
 }
@@ -1537,8 +1929,8 @@ const rfqCss = `
   position: absolute;
   top: 46px;
   right: 0;
-  z-index: 25;
-  width: 180px;
+  z-index: 120;
+  width: 184px;
   padding: 8px;
   border: 1px solid #e5e7eb;
   border-radius: 12px;
@@ -1588,7 +1980,7 @@ const rfqCss = `
 }
 .rfq-card p,
 .rfq-card-meta {
-  color: #64748b;
+  color: #000000;
   font-size: 12px;
 }
 .rfq-card-meta {
@@ -1642,7 +2034,7 @@ const rfqCss = `
   place-items: center;
   margin-bottom: 18px;
   background: #eff6ff;
-  color: #64748b;
+  color: #000000;
 }
 .rfq-empty h2 {
   margin: 0;
@@ -1650,7 +2042,7 @@ const rfqCss = `
 }
 .rfq-empty p {
   max-width: 360px;
-  color: #64748b;
+  color: #000000;
   font-size: 13px;
   line-height: 1.55;
 }
@@ -1659,7 +2051,7 @@ const rfqCss = `
   gap: 7px;
 }
 .rfq-inline-empty span {
-  color: #64748b;
+  color: #000000;
   font-size: 13px;
 }
 .rfq-inline-empty button {
@@ -1691,7 +2083,7 @@ const rfqCss = `
 }
 .rfq-metric-block span,
 .rfq-metric-block small {
-  color: #64748b;
+  color: #000000;
   font-size: 12px;
 }
 .rfq-metric-block strong {
@@ -1728,7 +2120,7 @@ const rfqCss = `
   display: inline-flex;
   align-items: center;
   gap: 8px;
-  color: #64748b;
+  color: #000000;
 }
 .rfq-status-list strong {
   font-size: 12px;
@@ -1774,13 +2166,13 @@ const rfqCss = `
 .rfq-activity-icon.blue { background: #dbeafe; color: #2563eb; }
 .rfq-activity-icon.orange { background: #ffedd5; color: #f97316; }
 .rfq-activity-icon.red { background: #fee2e2; color: #ef4444; }
-.rfq-activity-icon.gray { background: #f1f5f9; color: #64748b; }
+.rfq-activity-icon.gray { background: #f1f5f9; color: #000000; }
 .rfq-activity strong,
 .rfq-activity small {
   display: block;
 }
 .rfq-activity small {
-  color: #64748b;
+  color: #000000;
   font-size: 11px;
   margin-top: 3px;
 }
@@ -1795,12 +2187,235 @@ const rfqCss = `
   font-size: 12px;
 }
 .rfq-detail-row span {
-  color: #64748b;
+  color: #000000;
 }
 .rfq-side-card p {
-  color: #64748b;
+  color: #000000;
   font-size: 13px;
   line-height: 1.45;
+}
+.rfq-detail-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 90;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: rgba(15, 23, 42, .48);
+}
+.rfq-detail-modal {
+  width: min(920px, 100%);
+  max-height: min(820px, calc(100vh - 48px));
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  border: 1px solid #dbe3ef;
+  border-radius: 16px;
+  overflow: hidden;
+  background: #fff;
+  box-shadow: 0 28px 80px rgba(15, 23, 42, .28);
+}
+.rfq-detail-modal-head,
+.rfq-detail-modal-actions {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 18px 22px;
+  border-bottom: 1px solid #e5e7eb;
+}
+.rfq-detail-modal-head span {
+  color: #16a34a;
+  font-size: 11px;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+.rfq-detail-modal-head h2 {
+  margin: 5px 0 0;
+  font-size: 24px;
+}
+.rfq-detail-modal-head p {
+  margin: 6px 0 0;
+  color: #0f172a;
+  font-size: 14px;
+  font-weight: 850;
+}
+.rfq-detail-modal-head button {
+  width: 38px;
+  height: 38px;
+  border: 1px solid #dbe3ef;
+  border-radius: 10px;
+  background: #fff;
+  cursor: pointer;
+}
+.rfq-detail-modal-body {
+  display: grid;
+  gap: 14px;
+  padding: 18px 22px;
+  overflow: auto;
+  background: #f8fafc;
+}
+.rfq-detail-summary-card,
+.rfq-detail-section {
+  border: 1px solid #e5e7eb;
+  border-radius: 14px;
+  background: #fff;
+}
+.rfq-detail-summary-card {
+  display: grid;
+  grid-template-columns: 1.4fr 1fr 1fr;
+  gap: 1px;
+  overflow: hidden;
+  background: #e5e7eb;
+}
+.rfq-detail-summary-card div {
+  min-height: 92px;
+  display: grid;
+  gap: 5px;
+  align-content: center;
+  padding: 14px;
+  background: #fff;
+}
+.rfq-detail-summary-card strong {
+  display: block;
+  font-size: 20px;
+}
+.rfq-detail-summary-card span {
+  color: #000000;
+  font-size: 12px;
+  font-weight: 800;
+}
+.rfq-detail-section {
+  padding: 16px;
+}
+.rfq-detail-section h3 {
+  margin: 0 0 12px;
+  font-size: 15px;
+}
+.rfq-detail-lines.modal {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  margin: 0 0 12px;
+}
+.rfq-detail-lines.modal .rfq-detail-row {
+  min-height: 34px;
+  padding-bottom: 7px;
+  border-bottom: 1px solid #f1f5f9;
+}
+.rfq-detail-section p {
+  margin: 0;
+  color: #000000;
+  font-size: 13px;
+  line-height: 1.5;
+}
+.rfq-detail-items {
+  display: grid;
+  gap: 10px;
+}
+.rfq-detail-items article {
+  display: grid;
+  gap: 5px;
+  padding: 12px;
+  border: 1px solid #e5e7eb;
+  border-radius: 12px;
+  background: #f8fafc;
+}
+.rfq-detail-items article strong {
+  font-size: 13px;
+}
+.rfq-detail-items article span,
+.rfq-detail-items article small {
+  color: #000000;
+  font-size: 12px;
+}
+.rfq-detail-section.split {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+.rfq-detail-chip-list,
+.rfq-detail-activity {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.rfq-detail-chip-list span,
+.rfq-detail-activity span {
+  display: inline-flex;
+  min-height: 30px;
+  align-items: center;
+  padding: 0 10px;
+  border: 1px solid #dbeafe;
+  border-radius: 999px;
+  background: #eff6ff;
+  color: #1d4ed8;
+  font-size: 12px;
+  font-weight: 850;
+}
+.rfq-detail-modal-actions {
+  justify-content: flex-end;
+  border-top: 1px solid #e5e7eb;
+  border-bottom: 0;
+  background: #fff;
+}
+.rfq-detail-modal-actions .rfq-detail-invite {
+  margin-right: auto;
+}
+.rfq-flash {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 14px;
+  padding: 11px 14px;
+  border: 1px solid #bbf7d0;
+  border-radius: 10px;
+  background: #ecfdf5;
+  color: #166534;
+  font-size: 13px;
+  font-weight: 700;
+}
+.rfq-flash button {
+  border: 0;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  display: inline-flex;
+  padding: 4px;
+}
+.rfq-share-links {
+  margin-bottom: 14px;
+  padding: 14px 16px;
+  border: 1px solid #cbd5e1;
+  border-radius: 10px;
+  background: #f8fafc;
+}
+.rfq-share-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.rfq-share-head strong { font-size: 14px; color: #0f172a; }
+.rfq-share-head button { border: 0; background: transparent; cursor: pointer; color: #64748b; display: inline-flex; padding: 4px; }
+.rfq-share-links p { margin: 4px 0 12px; color: #475569; font-size: 12px; }
+.rfq-share-row {
+  display: grid;
+  grid-template-columns: minmax(120px, 180px) minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  margin-top: 8px;
+}
+.rfq-share-name { font-weight: 700; font-size: 13px; color: #0f172a; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rfq-share-row input {
+  min-height: 36px;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  padding: 0 10px;
+  font-size: 12px;
+  background: #fff;
+  color: #334155;
+}
+@media (max-width: 640px) {
+  .rfq-share-row { grid-template-columns: 1fr auto; }
+  .rfq-share-name { grid-column: 1 / -1; }
 }
 .rfq-drawer-backdrop {
   position: fixed;
@@ -1816,6 +2431,46 @@ const rfqCss = `
   border-radius: 0;
   overflow: auto;
 }
+.rfq-invite-backdrop {
+  justify-content: center;
+  align-items: center;
+  padding: 20px;
+}
+.rfq-invite-modal {
+  width: min(560px, calc(100vw - 32px));
+  max-height: min(80vh, 720px);
+  background: #ffffff;
+  border-radius: 14px;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 30px 80px rgba(15, 23, 42, .3);
+}
+.rfq-invite-body {
+  padding: 20px;
+  overflow: auto;
+}
+.rfq-invite-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 16px 20px;
+  border-top: 1px solid #e5e7eb;
+}
+.rfq-invite-foot > div {
+  display: flex;
+  gap: 10px;
+}
+.rfq-invite-foot > span {
+  color: #475569;
+  font-size: 13px;
+  font-weight: 600;
+}
+.rfq-primary-button:disabled {
+  opacity: .55;
+  cursor: not-allowed;
+}
 .rfq-drawer-head {
   display: flex;
   align-items: flex-start;
@@ -1830,7 +2485,7 @@ const rfqCss = `
 }
 .rfq-drawer-head p {
   margin: 8px 0 0;
-  color: #64748b;
+  color: #000000;
   font-size: 13px;
 }
 .rfq-create-layout {
@@ -1862,7 +2517,7 @@ const rfqCss = `
 }
 .rfq-card-title p {
   margin: 5px 0 0;
-  color: #64748b;
+  color: #000000;
   font-size: 12px;
 }
 .rfq-form-grid {
@@ -1926,7 +2581,7 @@ const rfqCss = `
 }
 .rfq-attach-inline small,
 .rfq-form-grid small {
-  color: #64748b;
+  color: #000000;
   font-size: 11px;
   font-weight: 700;
 }
@@ -1952,6 +2607,16 @@ const rfqCss = `
   background: #ecfdf5;
   color: #166534;
 }
+.rfq-supplier-grid label input[type="checkbox"] {
+  width: 16px !important;
+  height: 16px !important;
+  min-width: 16px !important;
+  min-height: 16px !important;
+  flex: 0 0 auto;
+  margin: 0;
+  accent-color: #16a34a;
+  cursor: pointer;
+}
 .rfq-empty-box {
   min-height: 140px;
   display: grid;
@@ -1960,7 +2625,7 @@ const rfqCss = `
   gap: 6px;
   border: 1px dashed #cbd5e1;
   border-radius: 13px;
-  color: #64748b;
+  color: #000000;
   padding: 20px;
 }
 .rfq-empty-box.compact {
@@ -1991,7 +2656,7 @@ const rfqCss = `
 }
 .rfq-items-table th {
   background: #f8fafc;
-  color: #64748b;
+  color: #000000;
   text-transform: uppercase;
 }
 .rfq-summary-line,
@@ -2004,7 +2669,7 @@ const rfqCss = `
   font-size: 12px;
 }
 .rfq-summary-line span {
-  color: #64748b;
+  color: #000000;
 }
 .rfq-total-line {
   margin: 8px -16px -16px;
@@ -2039,7 +2704,7 @@ const rfqCss = `
 .rfq-workflow small {
   display: block;
   margin-top: 3px;
-  color: #64748b;
+  color: #000000;
   font-size: 11px;
 }
 .rfq-dropzone {
@@ -2051,7 +2716,7 @@ const rfqCss = `
   border: 1px dashed #cbd5e1;
   border-radius: 13px;
   padding: 18px;
-  color: #64748b;
+  color: #000000;
   cursor: pointer;
 }
 .rfq-dropzone strong {
@@ -2194,7 +2859,7 @@ const rfqCss = `
     content: attr(data-label);
     display: inline-block;
     min-width: 118px;
-    color: #64748b;
+    color: #000000;
     font-size: 11px;
     font-weight: 900;
   }
@@ -2210,6 +2875,11 @@ const rfqCss = `
   }
   .rfq-form-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .rfq-detail-summary-card,
+  .rfq-detail-lines.modal,
+  .rfq-detail-section.split {
+    grid-template-columns: 1fr;
   }
 }
 @media (max-width: 520px) {
@@ -2243,6 +2913,22 @@ const rfqCss = `
   }
   .rfq-form-actions > * {
     width: 100%;
+  }
+  .rfq-detail-backdrop {
+    align-items: end;
+    padding: 12px;
+  }
+  .rfq-detail-modal {
+    max-height: calc(100vh - 24px);
+    border-radius: 16px;
+  }
+  .rfq-detail-modal-head,
+  .rfq-detail-modal-body,
+  .rfq-detail-modal-actions {
+    padding: 16px;
+  }
+  .rfq-detail-modal-actions {
+    display: grid;
   }
   .rfq-create-footer,
   .rfq-create-footer > div {

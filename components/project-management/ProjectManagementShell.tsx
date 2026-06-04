@@ -164,7 +164,7 @@ const projectManagementShellCss = `
 }
 .project-workspace-brand small {
   display: block;
-  color: #94a3b8;
+  color: #000000;
   font-size: 12px;
   margin-top: 5px;
   font-weight: 650;
@@ -195,7 +195,7 @@ const projectManagementShellCss = `
   background: rgba(255,255,255,.03);
 }
 .project-workspace-nav-label {
-  color: #64748b;
+  color: #000000;
   font-size: 10px;
   font-weight: 900;
   letter-spacing: .8px;
@@ -216,13 +216,13 @@ const projectManagementShellCss = `
   gap: 10px;
   padding: 0 10px;
   border-radius: 8px;
-  color: #a1a1aa;
+  color: #000000;
   text-decoration: none;
   font-size: 13px;
   font-weight: 800;
 }
 .project-workspace-nav-row svg {
-  color: #94a3b8;
+  color: #000000;
   flex: 0 0 auto;
 }
 .project-workspace-nav-row:hover {
@@ -273,7 +273,7 @@ const projectManagementShellCss = `
 }
 .project-workspace-title-block small {
   display: block;
-  color: #64748b;
+  color: #000000;
   font-size: 12px;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -312,7 +312,7 @@ const projectManagementShellCss = `
   align-items: center;
   gap: 10px;
   padding: 0 14px;
-  color: #64748b;
+  color: #000000;
 }
 .project-workspace-search input {
   min-width: 0;
@@ -436,8 +436,8 @@ const projectManagementShellCss = `
   --pm-border: #262626;
   --pm-border-soft: #1a1a1a;
   --pm-foreground: #fafafa;
-  --pm-muted: #a1a1aa;
-  --pm-placeholder: #71717a;
+  --pm-muted: #000000;
+  --pm-placeholder: #000000;
   --pm-input: #0f0f0f;
   grid-template-columns: 240px minmax(0, 1fr);
   background: var(--pm-background);
@@ -720,9 +720,9 @@ html[data-theme='light'] body .project-workspace-shell {
   --pm-card-hover: #f4f4f5;
   --pm-border: #e5e7eb;
   --pm-border-soft: #eef2f7;
-  --pm-foreground: #09090b;
-  --pm-muted: #4b5563;
-  --pm-placeholder: #6b7280;
+  --pm-foreground: #000000;
+  --pm-muted: #000000;
+  --pm-placeholder: #000000;
   --pm-input: #ffffff;
   background: var(--pm-background);
   color: var(--pm-foreground);

@@ -95,7 +95,7 @@ export default function CompanySettingsPage() {
       <section style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 16, flexWrap: 'wrap' }}>
         <div>
           <h1 style={{ margin: 0, fontSize: 32, letterSpacing: 0 }}>Company Settings</h1>
-          <p style={{ margin: '6px 0 0', color: '#475569', maxWidth: 760 }}>Manage company workspaces, members, roles, and permissions. Every module reads the selected company id before loading data.</p>
+          <p style={{ margin: '6px 0 0', color: '#000000', maxWidth: 760 }}>Manage company workspaces, members, roles, and permissions. Every module reads the selected company id before loading data.</p>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px', border: '1px solid #e5e7eb', borderRadius: 12, background: '#fff' }}>
           <Building2 size={18} />
@@ -168,7 +168,7 @@ export default function CompanySettingsPage() {
 const cardStyle = { background: '#fff', border: '1px solid #e5e7eb', borderRadius: 14, padding: 18, boxShadow: '0 18px 45px rgba(15,23,42,0.05)' }
 const sectionTitleStyle = { display: 'flex', alignItems: 'center', gap: 8, fontSize: 16, fontWeight: 800, marginBottom: 16 }
 const formGridStyle = { display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 12, marginBottom: 14 }
-const fieldStyle = { display: 'grid', gap: 7, color: '#475569', fontSize: 12, fontWeight: 700 }
+const fieldStyle = { display: 'grid', gap: 7, color: '#000000', fontSize: 12, fontWeight: 700 }
 const primaryButtonStyle = { height: 40, border: 'none', borderRadius: 10, background: '#16a34a', color: '#fff', fontWeight: 800, padding: '0 14px', cursor: 'pointer' }
 const switchButtonStyle = { width: '100%', border: '1px solid #e5e7eb', borderRadius: 12, padding: 12, display: 'flex', justifyContent: 'space-between', gap: 10, background: '#fff', textAlign: 'left' as const, cursor: 'pointer' }
 const pillStyle = { display: 'inline-flex', alignItems: 'center', borderRadius: 999, background: '#f1f5f9', color: '#334155', padding: '5px 9px', fontSize: 11, fontWeight: 800 }

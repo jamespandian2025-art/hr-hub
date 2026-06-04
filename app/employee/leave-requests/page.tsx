@@ -14,15 +14,10 @@ import {
   saveStored,
   useEmployeePortalData,
 } from '../employeeData'
+import StatusChip from '@/components/employee/StatusChip'
+import { updateHrRecord } from '@/lib/hrms/client'
 
 const tabs = ['All', 'Pending', 'Approved', 'Rejected', 'Cancelled'] as const
-
-function statusStyle(status: string) {
-  if (status === 'Approved') return { background: '#dcfce7', color: '#15803d' }
-  if (status === 'Rejected') return { background: '#fee2e2', color: '#dc2626' }
-  if (status === 'Cancelled') return { background: '#f1f5f9', color: '#64748b' }
-  return { background: '#fef3c7', color: '#d97706' }
-}
 
 export default function EmployeeLeaveRequestsPage() {
   const { employee, myLeaveRequests } = useEmployeePortalData()
@@ -42,10 +37,17 @@ export default function EmployeeLeaveRequestsPage() {
     .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()), [myLeaveRequests, query, tab, type])
 
   const cancelRequest = (id: string) => {
+    const updatedAt = new Date().toISOString()
     const all = loadStored<LeaveRequest[]>(leaveRequestKey, [])
-    const next = all.map(item => item.id === id && matchesEmployeeId(item.employeeId, employee) ? { ...item, status: 'Cancelled' as const, updatedAt: new Date().toISOString() } : item)
+    const next = all.map(item => item.id === id && matchesEmployeeId(item.employeeId, employee) ? { ...item, status: 'Cancelled' as const, updatedAt } : item)
     saveStored(leaveRequestKey, next)
     window.dispatchEvent(new StorageEvent('storage', { key: leaveRequestKey }))
+    // Push the cancellation to the shared HR store so it isn't reverted by the
+    // server-wins sync and HR sees it cross-device. The server enforces that an
+    // employee may only cancel their own pending request.
+    void updateHrRecord('leave-requests', id, { status: 'Cancelled', updatedAt })
+      .then(() => window.dispatchEvent(new Event('wiseflow:hr-data-changed')))
+      .catch(() => undefined)
   }
 
   return (
@@ -69,7 +71,7 @@ export default function EmployeeLeaveRequestsPage() {
               ['Cancelled', myLeaveRequests.filter(item => item.status === 'Cancelled').length],
             ].map(([label, value]) => (
               <div key={label} className="employee-card" style={{ padding: 18 }}>
-                <div style={{ color: '#64748b', fontSize: 13, fontWeight: 800 }}>{label}</div>
+                <div style={{ color: '#000000', fontSize: 13, fontWeight: 800 }}>{label}</div>
                 <strong style={{ display: 'block', marginTop: 6, fontSize: 25 }}>{value}</strong>
               </div>
             ))}
@@ -99,14 +101,14 @@ export default function EmployeeLeaveRequestsPage() {
             </div>
             <div style={{ overflowX: 'auto' }}>
               <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 860 }}>
-                <thead style={{ background: '#f8fafc', color: '#475569', fontSize: 12, textAlign: 'left' }}>
+                <thead style={{ background: '#f8fafc', color: '#000000', fontSize: 12, textAlign: 'left' }}>
                   <tr>
                     {['Request ID', 'Request Type', 'Duration', 'Dates', 'Reason', 'Status', 'Applied On', 'Actions'].map(header => <th key={header} style={{ padding: '12px 16px' }}>{header}</th>)}
                   </tr>
                 </thead>
                 <tbody>
                   {rows.length === 0 ? (
-                    <tr><td colSpan={8} style={{ padding: 42, textAlign: 'center', color: '#64748b' }}>No HR requests found.</td></tr>
+                    <tr><td colSpan={8} style={{ padding: 42, textAlign: 'center', color: '#000000' }}>No HR requests found.</td></tr>
                   ) : rows.map(item => (
                     <tr key={item.id} style={{ borderTop: '1px solid #eef2f7' }}>
                       <td style={cellStyle}><strong style={{ color: '#16a34a' }}>{item.id}</strong></td>
@@ -114,7 +116,7 @@ export default function EmployeeLeaveRequestsPage() {
                       <td style={cellStyle}>{item.days} Day{item.days === 1 ? '' : 's'}</td>
                       <td style={cellStyle}>{formatDate(item.startDate)} - {formatDate(item.endDate)}</td>
                       <td style={cellStyle}>{item.reason || '-'}</td>
-                      <td style={cellStyle}><span style={{ ...statusStyle(item.status), borderRadius: 999, padding: '4px 8px', fontSize: 12, fontWeight: 850 }}>{item.status}</span></td>
+                      <td style={cellStyle}><StatusChip value={item.status} /></td>
                       <td style={cellStyle}>{formatDateTime(item.createdAt)}</td>
                       <td style={cellStyle}>
                         {item.status === 'Pending' ? <button type="button" onClick={() => cancelRequest(item.id)} className="employee-secondary-button">Cancel</button> : <button type="button" className="employee-secondary-button" aria-label="More"><MoreHorizontal size={16} /></button>}

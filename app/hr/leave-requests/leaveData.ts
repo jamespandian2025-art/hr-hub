@@ -247,7 +247,7 @@ export function statusTone(status: string) {
     case 'Approved': return { bg: '#dcfce7', text: '#15803d', dot: '#16a34a' }
     case 'Pending': return { bg: '#fef3c7', text: '#d97706', dot: '#f59e0b' }
     case 'Rejected': return { bg: '#fee2e2', text: '#dc2626', dot: '#ef4444' }
-    case 'Cancelled': return { bg: '#f3f4f6', text: '#6b7280', dot: '#9ca3af' }
+    case 'Cancelled': return { bg: '#f3f4f6', text: '#000000', dot: '#9ca3af' }
   }
 }
 
@@ -260,8 +260,8 @@ export function leaveTypeTone(type: string) {
     case 'maternity leave': return { bg: '#fce7f3', text: '#be185d', color: '#ec4899' }
     case 'paternity leave': return { bg: '#ede9fe', text: '#7c3aed', color: '#8b5cf6' }
     case 'work from home': return { bg: '#dbeafe', text: '#1d4ed8', color: '#3b82f6' }
-    case 'unpaid leave': return { bg: '#f3f4f6', text: '#6b7280', color: '#9ca3af' }
-    default: return { bg: '#f3f4f6', text: '#374151', color: '#94a3b8' }
+    case 'unpaid leave': return { bg: '#f3f4f6', text: '#000000', color: '#000000' }
+    default: return { bg: '#f3f4f6', text: '#000000', color: '#000000' }
   }
 }
 

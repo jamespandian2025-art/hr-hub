@@ -33,7 +33,9 @@ const collectionAccess: Record<HrCollection, Partial<Record<HrAction, HrRoleBuck
   'leave-requests': {
     read: ['admin', 'hr', 'manager', 'employee'],
     create: ['admin', 'hr', 'employee'],
-    update: ['admin', 'hr'],
+    // Employees may update only to cancel their own pending request; the
+    // serverStore enforces that narrow transition (see assertLeaveSelfCancel).
+    update: ['admin', 'hr', 'employee'],
     delete: ['admin', 'hr'],
   },
   'loan-requests': {

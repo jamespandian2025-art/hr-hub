@@ -3,6 +3,7 @@
 import Link from 'next/link'
 import { CheckCircle2, Clock3, HandCoins, Plus, Wallet, XCircle } from 'lucide-react'
 import type { ComponentType } from 'react'
+import { AnalyticsToggleButton, CollapsibleAnalytics, useAnalyticsDisclosure } from '@/components/AnalyticsDisclosure'
 import {
   Employee,
   formatDateTime,
@@ -10,6 +11,7 @@ import {
   initials,
   useEmployeePortalData,
 } from '../employeeData'
+import StatusChip from '@/components/employee/StatusChip'
 import {
   isTrackableLoanBalance,
   loanBalanceAmount,
@@ -25,6 +27,7 @@ import {
 
 export default function EmployeeLoanRequestsPage() {
   const { employees, myLoanRequests } = useEmployeePortalData()
+  const analytics = useAnalyticsDisclosure('wiseflow:analytics:employee-loan-requests')
 
   const stats = [
     { label: 'Total Requests', value: myLoanRequests.length, icon: HandCoins, color: '#2563eb', bg: '#dbeafe' },
@@ -41,10 +44,15 @@ export default function EmployeeLoanRequestsPage() {
           <h1>Loans & Cash Advance</h1>
           <p>Request a company loan or cash advance and track Finance approval and payroll deductions.</p>
         </div>
-        <Link href="/employee/loan-requests/new" className="employee-primary-button"><Plus size={16} /> New Request</Link>
+        <div style={headerActionsStyle}>
+          <AnalyticsToggleButton open={analytics.open} onToggle={analytics.toggle} panelId={analytics.panelId} className="employee-secondary-button" />
+          <Link href="/employee/loan-requests/new" className="employee-primary-button"><Plus size={16} /> New Request</Link>
+        </div>
       </div>
 
-      <div style={metricGrid}>{stats.map(item => <Metric key={item.label} {...item} />)}</div>
+      <CollapsibleAnalytics open={analytics.open} id={analytics.panelId}>
+        <div style={metricGrid}>{stats.map(item => <Metric key={item.label} {...item} />)}</div>
+      </CollapsibleAnalytics>
 
       <section className="employee-panel" style={{ padding: 0, marginTop: 18 }}>
         <div style={panelHeader}>
@@ -84,7 +92,7 @@ function LoanTable({ requests, empty, employees, onApprove, onReject }: { reques
             <article key={request.id} style={requestCardStyle}>
               <div style={requestTopStyle}>
                 <EmployeeCell employee={employee} fallback={request.employeeName} />
-                <Badge value={request.status} />
+                <StatusChip value={request.status} />
               </div>
               <div style={requestBodyStyle}>
                 <InfoBlock label="Loan type" value={loanDisplayName(request)} />
@@ -132,21 +140,17 @@ function InfoBlock({ label, value, hint, strong }: { label: string; value: strin
 }
 
 function EmptyState({ text }: { text: string }) {
-  return <div style={emptyStateStyle}><Wallet size={24} color="#94a3b8" /><span>{text}</span></div>
-}
-
-function Badge({ value }: { value: string }) {
-  const tone = value === 'Approved' || value === 'Processed' ? { bg: '#dcfce7', text: '#15803d' } : value === 'Rejected' ? { bg: '#fee2e2', text: '#dc2626' } : { bg: '#fef3c7', text: '#d97706' }
-  return <span style={{ borderRadius: 999, padding: '4px 10px', background: tone.bg, color: tone.text, fontWeight: 900, fontSize: 12 }}>{value}</span>
+  return <div style={emptyStateStyle}><Wallet size={24} color="#000000" /><span>{text}</span></div>
 }
 
 const metricGrid = { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(210px, 1fr))', gap: 14 } as const
+const headerActionsStyle = { display: 'flex', justifyContent: 'flex-end', gap: 10, flexWrap: 'wrap' as const }
 const metricCardStyle = { display: 'flex', alignItems: 'center', gap: 14, padding: 18, minHeight: 86 }
 const metricIcon = { width: 48, height: 48, borderRadius: 14, display: 'grid', placeItems: 'center' } as const
 const panelHeader = { display: 'flex', justifyContent: 'space-between', padding: '18px 20px', borderBottom: '1px solid #e2e8f0' } as const
 const panelTitle = { margin: 0, fontSize: 18, color: '#0f172a' } as const
-const panelSubtitle = { margin: '4px 0 0', color: '#64748b', fontSize: 13 } as const
-const muted = { color: '#64748b', fontSize: 12 } as const
+const panelSubtitle = { margin: '4px 0 0', color: '#000000', fontSize: 13 } as const
+const muted = { color: '#000000', fontSize: 12 } as const
 const requestListStyle = { display: 'grid', gap: 12, padding: 16 }
 const requestCardStyle = { border: '1px solid #e2e8f0', borderRadius: 12, background: '#fff', padding: 14, display: 'grid', gap: 14 }
 const requestTopStyle = { display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, flexWrap: 'wrap' as const }
@@ -154,6 +158,6 @@ const requestBodyStyle = { display: 'grid', gridTemplateColumns: 'repeat(auto-fi
 const infoBlockStyle = { display: 'grid', gap: 4, minWidth: 0 }
 const cardActionsStyle = { display: 'flex', gap: 8, justifyContent: 'flex-end', borderTop: '1px solid #f1f5f9', paddingTop: 12 }
 const tableStyle = { width: '100%', borderCollapse: 'collapse', fontSize: 13 } as const
-const emptyStateStyle = { display: 'grid', placeItems: 'center', gap: 8, minHeight: 180, color: '#64748b', fontSize: 14, textAlign: 'center' as const }
+const emptyStateStyle = { display: 'grid', placeItems: 'center', gap: 8, minHeight: 180, color: '#000000', fontSize: 14, textAlign: 'center' as const }
 const avatarStyle = { width: 36, height: 36, borderRadius: '50%', objectFit: 'cover' } as const
 const avatarFallback = { width: 36, height: 36, borderRadius: '50%', display: 'grid', placeItems: 'center', background: '#dcfce7', color: '#15803d', fontWeight: 900 } as const

@@ -75,6 +75,8 @@ const smokeClient = {
   notes: [],
 }
 
+const smokeSalesOpportunityName = 'Automated Smoke Sales Project'
+const smokeSalesCloseDate = new Date().toISOString().slice(0, 10)
 const smokeEmployeePassword = 'SmokePass123!'
 const smokeEmployee = {
   id: 'smoke-employee-christina',
@@ -560,7 +562,7 @@ async function setLabeledControl(client, labelText, value, controlSelector = 'in
     const labelText = ${JSON.stringify(labelText)};
     const value = ${JSON.stringify(value)};
     const label = Array.from(document.querySelectorAll('label'))
-      .find(item => (item.querySelector('span')?.textContent || '').trim() === labelText);
+      .find(item => (item.querySelector('span')?.textContent || '').replace(/\\s*\\*$/, '').trim() === labelText);
     const element = label?.querySelector(${JSON.stringify(controlSelector)});
     if (!element) return false;
     const proto = Object.getPrototypeOf(element);
@@ -668,13 +670,95 @@ async function accountingInvoiceFlow(client) {
   )
 }
 
+async function salesOpportunityFlow(client) {
+  await openAuthenticatedPage(client, '/sales')
+  await waitForExpression(client, 'sales workspace', `document.body.innerText.includes('Opportunities') && document.body.innerText.includes('Opportunity List')`)
+  for (const theme of ['dark', 'light']) {
+    await evaluate(client, `document.documentElement.setAttribute('data-theme', ${JSON.stringify(theme)})`)
+    const overflow = await evaluate(client, `Math.max(document.documentElement.scrollWidth, document.body.scrollWidth) - window.innerWidth`)
+    if (overflow > 16) throw new Error(`Sales ${theme} theme rendered with ${overflow}px horizontal overflow.`)
+  }
+  await clickByText(client, 'button', 'Opportunity', 'exact')
+  await waitForExpression(client, 'opportunity drawer', `document.querySelector('[role="dialog"][aria-modal="true"]')?.textContent.includes('Create Project Opportunity')`)
+  await waitForExpression(
+    client,
+    'seeded sales client option',
+    `Array.from(document.querySelectorAll('[role="dialog"] select option')).some(option => option.value === ${JSON.stringify(smokeClient.id)})`,
+  )
+
+  await setLabeledControl(client, 'Client / Company', smokeClient.id, 'select')
+  await setLabeledControl(client, 'Project Name', smokeSalesOpportunityName)
+  await setLabeledControl(client, 'Estimated Contract Value', '1250000')
+  await setLabeledControl(client, 'Project Type', 'Commercial', 'select')
+  await setLabeledControl(client, 'Location / Site Address', smokeClient.billingAddress)
+  await setLabeledControl(client, 'Sales Stage', 'Awarded', 'select')
+  await setLabeledControl(client, 'Probability (%)', '100')
+  await setLabeledControl(client, 'Assigned Team', 'Architecture / Engineering')
+  await setLabeledControl(client, 'Expected Closing Date', smokeSalesCloseDate)
+  await evaluate(client, `document.querySelector('.sales-opportunity-drawer')?.requestSubmit()`)
+  await waitForExpression(
+    client,
+    'created sales opportunity',
+    `document.body.innerText.includes(${JSON.stringify(smokeSalesOpportunityName)}) &&
+      document.body.innerText.includes(${JSON.stringify(smokeClient.name)}) &&
+      document.body.innerText.includes('Create Project')`,
+  )
+  await setElementValue(client, '.workspace-general-search-input, input[placeholder="Search records"]', smokeSalesOpportunityName)
+  await waitForExpression(
+    client,
+    'sales global search result',
+    `document.querySelector('[role="listbox"][aria-label="Global search results"]')?.innerText.includes(${JSON.stringify(smokeSalesOpportunityName)}) &&
+      document.querySelector('[role="listbox"][aria-label="Global search results"]')?.innerText.includes('Sales')`,
+  )
+  await setElementValue(client, '.workspace-general-search-input, input[placeholder="Search records"]', '')
+
+  await clickByText(client, 'button', 'Filters', 'includes')
+  await waitForExpression(client, 'sales filters', `document.body.innerText.includes('Reset filters')`)
+  await setLabeledControl(client, 'Stage', 'Awarded', 'select')
+  await setLabeledControl(client, 'Client', smokeClient.name, 'select')
+  await setElementValue(client, '.sales-panel-search input', smokeSalesOpportunityName)
+  await waitForExpression(client, 'filtered sales opportunity', `document.body.innerText.includes(${JSON.stringify(smokeSalesOpportunityName)})`)
+  await setElementValue(client, '.sales-panel-search input', 'no matching smoke opportunity')
+  await waitForExpression(client, 'sales empty state', `document.body.innerText.includes('No opportunities found')`)
+  await setElementValue(client, '.sales-panel-search input', smokeSalesOpportunityName)
+  await waitForExpression(client, 'sales search restored', `document.body.innerText.includes(${JSON.stringify(smokeSalesOpportunityName)})`)
+
+  await clickByText(client, 'button', 'Export', 'exact')
+  await waitForExpression(client, 'sales export notice', `document.body.innerText.includes('opportunity record') && document.body.innerText.includes('exported')`)
+  await clickByText(client, 'button', 'Reset filters', 'exact')
+  await waitForExpression(client, 'sales reset notice', `document.body.innerText.includes('Sales view reset')`)
+  await waitForExpression(client, 'sales reset keeps record visible', `document.body.innerText.includes(${JSON.stringify(smokeSalesOpportunityName)})`)
+
+  await clickByText(client, 'button', 'Create Project', 'exact')
+  await waitForExpression(client, 'sales project conversion notice', `document.body.innerText.includes('created in Project Management')`)
+  await clickByText(client, 'button', 'Create Project', 'exact')
+  await waitForExpression(client, 'sales duplicate project guard', `document.body.innerText.includes('already linked')`)
+
+  await waitForLoad(client, () => client.send('Page.navigate', { url: `${proxyBaseUrl}/project-management/projects` }))
+  await waitForExpression(client, 'converted project visible', `document.body.innerText.includes(${JSON.stringify(smokeSalesOpportunityName)})`)
+}
+
 async function employeeLoginFlow(client) {
   await openPublicPage(client, '/employee/login')
   await waitForExpression(client, 'employee login page', `document.body.innerText.includes('Welcome Back')`)
   await setElementValue(client, 'input[placeholder="Enter your email"]', smokeEmployee.portalEmail)
   await setElementValue(client, 'input[placeholder="Enter your password"]', smokeEmployeePassword)
-  await clickByText(client, 'button', 'Sign In', 'exact')
-  await waitForExpression(client, 'employee dashboard redirect', `location.pathname === '/employee/dashboard'`, 15000)
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    await clickByText(client, 'button', 'Sign In', 'exact')
+    try {
+      await waitForExpression(client, 'employee dashboard redirect', `location.pathname === '/employee/dashboard'`, 15000)
+      break
+    } catch (error) {
+      if (attempt > 0) throw error
+      await waitForExpression(
+        client,
+        'employee login retry ready',
+        `location.pathname === '/employee/dashboard' || Array.from(document.querySelectorAll('button')).some(button => button.innerText.trim() === 'Sign In')`,
+        5000,
+      )
+      if (await evaluate(client, `location.pathname === '/employee/dashboard'`)) break
+    }
+  }
   await waitForExpression(client, 'employee dashboard content', `document.body.innerText.includes('Employee Dashboard') || document.body.innerText.includes('Download Payslip')`)
 }
 
@@ -796,6 +880,7 @@ try {
   await waitForChrome()
 
   await runBrowserCase('Accounting invoice creation and client reflection', accountingInvoiceFlow)
+  await runBrowserCase('Sales opportunity creation and project conversion', salesOpportunityFlow)
   await runBrowserCase('Employee portal login', employeeLoginFlow)
   await runBrowserCase('Payroll details modal', payrollDetailsModalFlow)
   await runBrowserCase('Project status dropdown', projectStatusDropdownFlow)

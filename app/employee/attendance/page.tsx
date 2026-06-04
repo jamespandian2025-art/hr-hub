@@ -4,8 +4,9 @@ import { useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
 import { Clock3, Home, MonitorCheck, Pause, Play } from 'lucide-react'
 import EmployeeEmptyPage from '@/components/employee/EmployeeEmptyPage'
-import { attendanceKey, AttendanceRecord, formatDate, loadStored, saveStored, useEmployeePortalData } from '../employeeData'
+import { attendanceKey, AttendanceRecord, formatDate, loadStored, matchesEmployeeId, saveStored, useEmployeePortalData } from '../employeeData'
 import { appendAuditLog } from '@/app/hr/enterpriseData'
+import { createHrRecord } from '@/lib/hrms/client'
 
 function todayInput() {
   const date = new Date()
@@ -17,6 +18,27 @@ function todayInput() {
 
 function nowTime() {
   return new Date().toTimeString().slice(0, 8)
+}
+
+// Derive the shift start (HH:MM) from the employee's shift label, e.g.
+// "General Shift (9:00 AM - 6:00 PM)" -> "09:00". Defaults to 09:00.
+function shiftStartTime(shift?: string) {
+  const match = String(shift || '').match(/(\d{1,2}):(\d{2})\s*(AM|PM)?/i)
+  if (!match) return '09:00'
+  let hour = Number(match[1])
+  const minute = match[2]
+  const period = (match[3] || '').toUpperCase()
+  if (period === 'PM' && hour < 12) hour += 12
+  if (period === 'AM' && hour === 12) hour = 0
+  return `${String(hour).padStart(2, '0')}:${minute}`
+}
+
+// A clock-in after the shift start (+ grace) is Late. Enables HR late tracking.
+function isLateClockIn(clockIn: string, shiftStart: string, graceMinutes = 0) {
+  const [ch, cm] = clockIn.split(':').map(Number)
+  const [sh, sm] = shiftStart.split(':').map(Number)
+  if ([ch, cm, sh, sm].some(Number.isNaN)) return false
+  return ch * 60 + cm > sh * 60 + sm + graceMinutes
 }
 
 function timeToDate(date: string, time?: string) {
@@ -64,15 +86,23 @@ export default function EmployeeAttendancePage() {
     return () => window.clearInterval(timer)
   }, [isRunning])
 
-  const saveClock = (mode: 'in' | 'out') => {
+  const saveClock = async (mode: 'in' | 'out') => {
     const all = loadStored<AttendanceRecord[]>(attendanceKey, [])
-    const current = all.find(item => item.employeeId === employee.id && item.date === todayInput())
+    const isToday = (item: AttendanceRecord) => matchesEmployeeId(item.employeeId, employee) && item.date === todayInput()
+    const current = all.find(isToday)
     const currentTime = nowTime()
+    // The server scopes attendance ownership by the session's employeeId, so the
+    // record must carry that id (not the local record id) or the write is rejected.
+    const ownerId = employee.employeeId || employee.id
     const nextRecord: AttendanceRecord = {
-      id: current?.id || `att_${employee.id}_${Date.now()}`,
-      employeeId: employee.id,
+      id: current?.id || `att_${ownerId}_${Date.now()}`,
+      employeeId: ownerId,
       date: todayInput(),
-      status: 'Present',
+      // Clock-in time drives the status so HR can track lates; clock-out keeps
+      // whatever status the clock-in already set.
+      status: mode === 'in'
+        ? (isLateClockIn(currentTime, shiftStartTime((employee as { shift?: string }).shift)) ? 'Late' : 'Present')
+        : (current?.status || 'Present'),
       clockIn: mode === 'in' ? currentTime : current?.clockIn || currentTime,
       clockOut: mode === 'out' ? currentTime : '',
       breakMinutes: current?.breakMinutes ?? 60,
@@ -83,12 +113,22 @@ export default function EmployeeAttendancePage() {
       createdAt: current?.createdAt || new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     }
-    const next = [nextRecord, ...all.filter(item => !(item.employeeId === employee.id && item.date === todayInput()))]
+    const next = [nextRecord, ...all.filter(item => !isToday(item))]
     saveStored(attendanceKey, next)
     window.dispatchEvent(new Event('storage'))
     appendAuditLog({ action: 'attendance.remote', targetType: 'Attendance', targetId: nextRecord.id, summary: `${employeeName} clocked ${mode === 'in' ? 'in' : 'out'} from ${location}.` })
     setNow(Date.now())
     setNotice(`Clock ${mode === 'in' ? 'in' : 'out'} saved for ${location}.`)
+    // Persist to the shared HR store so HR sees the punch cross-device. Employees
+    // have create (not update) rights on attendance; createRecord dedupes by id,
+    // so reusing the same id makes clock-in then clock-out an idempotent upsert.
+    try {
+      await createHrRecord<AttendanceRecord>('attendance', nextRecord as unknown as Record<string, unknown>)
+      window.dispatchEvent(new Event('wiseflow:hr-data-changed'))
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'HR sync failed.'
+      setNotice(`Clock ${mode === 'in' ? 'in' : 'out'} saved on this device, but HR sync failed: ${message}`)
+    }
   }
 
   return (
@@ -137,8 +177,8 @@ export default function EmployeeAttendancePage() {
         <div style={{ padding: 18, borderBottom: '1px solid #e2e8f0' }}><h2 style={{ margin: 0, fontSize: 17 }}>Attendance Records</h2></div>
         <div style={{ overflowX: 'auto' }}>
           <table style={{ width: '100%', minWidth: 840, borderCollapse: 'collapse' }}>
-            <thead style={{ background: '#f8fafc', color: '#475569', fontSize: 12, textAlign: 'left' }}><tr>{['Date', 'Status', 'Location', 'Clock In', 'Clock Out', 'Break', 'Remarks'].map(item => <th key={item} style={{ padding: '12px 16px' }}>{item}</th>)}</tr></thead>
-            <tbody>{myAttendance.length === 0 ? <tr><td colSpan={7} style={{ padding: 42, textAlign: 'center', color: '#64748b' }}>No attendance records found.</td></tr> : myAttendance.map(item => <tr key={item.id} style={{ borderTop: '1px solid #eef2f7' }}><td style={cell}>{formatDate(item.date)}</td><td style={cell}>{item.status}</td><td style={cell}><Home size={14} /> {item.workLocation || 'Office'}</td><td style={cell}>{displayClock(item.clockIn)}</td><td style={cell}>{displayClock(item.clockOut)}</td><td style={cell}>{item.breakMinutes || 0} min</td><td style={cell}>{item.attendanceRemarks || item.notes || '-'}</td></tr>)}</tbody>
+            <thead style={{ background: '#f8fafc', color: '#000000', fontSize: 12, textAlign: 'left' }}><tr>{['Date', 'Status', 'Location', 'Clock In', 'Clock Out', 'Break', 'Remarks'].map(item => <th key={item} style={{ padding: '12px 16px' }}>{item}</th>)}</tr></thead>
+            <tbody>{myAttendance.length === 0 ? <tr><td colSpan={7} style={{ padding: 42, textAlign: 'center', color: '#000000' }}>No attendance records found.</td></tr> : myAttendance.map(item => <tr key={item.id} style={{ borderTop: '1px solid #eef2f7' }}><td style={cell}>{formatDate(item.date)}</td><td style={cell}>{item.status}</td><td style={cell}><Home size={14} /> {item.workLocation || 'Office'}</td><td style={cell}>{displayClock(item.clockIn)}</td><td style={cell}>{displayClock(item.clockOut)}</td><td style={cell}>{item.breakMinutes || 0} min</td><td style={cell}>{item.attendanceRemarks || item.notes || '-'}</td></tr>)}</tbody>
           </table>
         </div>
       </section>
@@ -149,9 +189,9 @@ export default function EmployeeAttendancePage() {
 const clockGrid = { display: 'grid', gridTemplateColumns: 'minmax(180px, 1fr) minmax(180px, 220px) minmax(220px, 1fr) auto', gap: 14, alignItems: 'end' } as const
 const timerShellStyle = { width: '100%', marginBottom: 18, border: '1px solid #dbe4ef', borderRadius: 14, background: '#fff', boxShadow: '0 10px 28px rgba(15,23,42,0.05)', padding: 18, display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 260px), 1fr))', gap: 18, alignItems: 'center' } as const
 const timerMainStyle = { display: 'grid', gap: 7, minWidth: 0 } as const
-const timerLabelStyle = { color: '#64748b', fontSize: 12, fontWeight: 900, textTransform: 'uppercase' as const, letterSpacing: 0 } as const
+const timerLabelStyle = { color: '#000000', fontSize: 12, fontWeight: 900, textTransform: 'uppercase' as const, letterSpacing: 0 } as const
 const timerValueStyle = { color: '#0f172a', fontSize: 42, lineHeight: 1, fontWeight: 900, letterSpacing: 0, fontVariantNumeric: 'tabular-nums' as const } as const
-const timerSubStyle = { color: '#475569', fontSize: 13, lineHeight: 1.4 } as const
+const timerSubStyle = { color: '#000000', fontSize: 13, lineHeight: 1.4 } as const
 const todaySummaryStyle = { borderLeft: '1px solid #e2e8f0', paddingLeft: 18, display: 'grid', gap: 6, minHeight: 74, alignContent: 'center' } as const
 const timerControlStyle = { display: 'flex', justifyContent: 'flex-end', minWidth: 0 } as const
 const timerActionStyle = (running: boolean) => ({
@@ -171,7 +211,7 @@ const timerActionStyle = (running: boolean) => ({
   cursor: 'pointer',
 })
 const titleStyle = { margin: 0, color: '#0f172a', fontSize: 18 } as const
-const mutedStyle = { margin: '6px 0 0', color: '#64748b', fontSize: 13 } as const
+const mutedStyle = { margin: '6px 0 0', color: '#000000', fontSize: 13 } as const
 const fieldStyle = { display: 'grid', gap: 7, color: '#334155', fontSize: 12, fontWeight: 900 } as const
 const inputStyle = { minHeight: 40, border: '1px solid #e2e8f0', borderRadius: 8, padding: '0 12px', font: 'inherit', background: '#fff', color: '#0f172a' } as const
 const buttonGroup = { display: 'flex', gap: 10, flexWrap: 'wrap' as const }

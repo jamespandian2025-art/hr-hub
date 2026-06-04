@@ -1,13 +1,16 @@
 import { spawn } from 'node:child_process'
 import { createHmac } from 'node:crypto'
+import { existsSync } from 'node:fs'
 import { mkdir } from 'node:fs/promises'
 import { fileURLToPath } from 'node:url'
 
 const port = Number(process.env.ROLE_QA_PORT || 3102)
-const baseUrl = `http://127.0.0.1:${port}`
+let baseUrl = `http://127.0.0.1:${port}`
+const existingDevBaseUrl = process.env.ROLE_QA_BASE_URL || `http://127.0.0.1:${Number(process.env.ROLE_QA_EXISTING_DEV_PORT || 3000)}`
 const appRoot = fileURLToPath(new URL('..', import.meta.url))
 const nextBin = fileURLToPath(new URL('../node_modules/next/dist/bin/next', import.meta.url))
-const authSecret = process.env.AUTH_SESSION_SECRET || 'role-qa-only-change-me'
+const hasProductionBuild = existsSync(new URL('../.next/BUILD_ID', import.meta.url))
+const authSecret = process.env.AUTH_SESSION_SECRET || process.env.NEXTAUTH_SECRET || process.env.SUPABASE_JWT_SECRET || 'dev-only-change-me'
 const companyId = process.env.ROLE_QA_COMPANY_ID || 'role-qa-company'
 const requireApiStorageSuccess = process.env.ROLE_QA_REQUIRE_STORAGE === '1'
   || Boolean(process.env.NEXT_PUBLIC_SUPABASE_URL && process.env.SUPABASE_SERVICE_ROLE_KEY)
@@ -140,6 +143,19 @@ async function fetchWithTimeout(path, options = {}, timeoutMs = 10000) {
   }
 }
 
+async function isServerReady(url) {
+  const controller = new AbortController()
+  const timer = setTimeout(() => controller.abort(), 1500)
+  try {
+    const response = await fetch(`${url}/login`, { redirect: 'manual', signal: controller.signal })
+    return response.status === 200
+  } catch {
+    return false
+  } finally {
+    clearTimeout(timer)
+  }
+}
+
 async function waitForServer() {
   for (let attempt = 0; attempt < 50; attempt += 1) {
     try {
@@ -198,22 +214,29 @@ await mkdir(new URL('../.data/role-qa-business', import.meta.url), { recursive: 
 await mkdir(new URL('../.data/role-qa-hrhub', import.meta.url), { recursive: true })
 await mkdir(new URL('../.data/role-qa-rate-limits', import.meta.url), { recursive: true })
 
-const server = spawn(process.execPath, [nextBin, 'start', '-p', String(port)], {
-  cwd: appRoot,
-  stdio: ['ignore', 'pipe', 'pipe'],
-  env: {
-    ...process.env,
-    PORT: String(port),
-    AUTH_SESSION_SECRET: authSecret,
-    WISEFLOW_ALLOW_LOCAL_TENANT_STORE: '1',
-    BUSINESS_DATA_DIR: fileURLToPath(new URL('../.data/role-qa-business', import.meta.url)),
-    HRHUB_DATA_DIR: fileURLToPath(new URL('../.data/role-qa-hrhub', import.meta.url)),
-    RATE_LIMIT_DATA_DIR: fileURLToPath(new URL('../.data/role-qa-rate-limits', import.meta.url)),
-  },
-})
+let server = null
 
-server.stdout.on('data', chunk => process.stdout.write(chunk))
-server.stderr.on('data', chunk => process.stderr.write(chunk))
+if (!hasProductionBuild && await isServerReady(existingDevBaseUrl)) {
+  baseUrl = existingDevBaseUrl
+  console.log(`Using existing Next dev server at ${baseUrl}`)
+} else {
+  server = spawn(process.execPath, [nextBin, hasProductionBuild ? 'start' : 'dev', '-p', String(port)], {
+    cwd: appRoot,
+    stdio: ['ignore', 'pipe', 'pipe'],
+    env: {
+      ...process.env,
+      PORT: String(port),
+      AUTH_SESSION_SECRET: authSecret,
+      WISEFLOW_ALLOW_LOCAL_TENANT_STORE: '1',
+      BUSINESS_DATA_DIR: fileURLToPath(new URL('../.data/role-qa-business', import.meta.url)),
+      HRHUB_DATA_DIR: fileURLToPath(new URL('../.data/role-qa-hrhub', import.meta.url)),
+      RATE_LIMIT_DATA_DIR: fileURLToPath(new URL('../.data/role-qa-rate-limits', import.meta.url)),
+    },
+  })
+
+  server.stdout.on('data', chunk => process.stdout.write(chunk))
+  server.stderr.on('data', chunk => process.stderr.write(chunk))
+}
 
 try {
   await waitForServer()
@@ -227,7 +250,7 @@ try {
     await checkApi(label, role, path, expectation)
   }
 } finally {
-  server.kill('SIGTERM')
+  if (server) server.kill('SIGTERM')
 }
 
 if (failures.length) {

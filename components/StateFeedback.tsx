@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react'
-import { AlertTriangle, Inbox, LoaderCircle, SearchX } from 'lucide-react'
+import { AlertTriangle, Inbox, SearchX } from 'lucide-react'
 
 type StateFeedbackTone = 'empty' | 'error' | 'loading' | 'not-found'
 type StateFeedbackSize = 'page' | 'section' | 'compact'
@@ -17,8 +17,17 @@ type StateFeedbackProps = {
 const defaultIcons: Record<StateFeedbackTone, ReactNode> = {
   empty: <Inbox size={28} />,
   error: <AlertTriangle size={28} />,
-  loading: <LoaderCircle size={28} />,
+  loading: <LoadingGlyph />,
   'not-found': <SearchX size={28} />,
+}
+
+function LoadingGlyph() {
+  return (
+    <span className="wf-loader-mark" aria-hidden="true">
+      <span className="wf-loader-mark__ring" />
+      <span className="wf-loader-mark__center" />
+    </span>
+  )
 }
 
 export default function StateFeedback({
@@ -36,9 +45,14 @@ export default function StateFeedback({
 
   return (
     <section className={classes} role={role} aria-live={tone === 'error' ? 'assertive' : 'polite'} aria-busy={isLoading || undefined}>
-      <span className="wf-state__icon">{icon || defaultIcons[tone]}</span>
+      <span className="wf-state__icon" aria-hidden="true">{icon || defaultIcons[tone]}</span>
       <h1>{title}</h1>
       {message ? <p>{message}</p> : null}
+      {isLoading ? (
+        <span className="wf-state__progress" aria-hidden="true">
+          <span className="wf-state__progress-bar" />
+        </span>
+      ) : null}
       {actions ? <div className="wf-state__actions">{actions}</div> : null}
     </section>
   )

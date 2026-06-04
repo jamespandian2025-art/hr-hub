@@ -71,7 +71,7 @@ export default function ApprovalDetailPage() {
     return (
       <div className="hr-module-page" style={{ fontFamily: font }}>
         <button onClick={() => router.push('/hr/approvals')} style={secondaryButtonStyle}><ArrowLeft size={15} /> Back to Approvals</button>
-        <div style={{ ...cardStyle, marginTop: 18, textAlign: 'center', color: '#64748b' }}>Approval request not found.</div>
+        <div style={{ ...cardStyle, marginTop: 18, textAlign: 'center', color: '#000000' }}>Approval request not found.</div>
       </div>
     )
   }
@@ -80,7 +80,7 @@ export default function ApprovalDetailPage() {
     return (
       <div className="hr-module-page" style={{ fontFamily: font }}>
         <button onClick={() => router.push('/hr/approvals')} style={secondaryButtonStyle}><ArrowLeft size={15} /> Back to Approvals</button>
-        <div style={{ ...cardStyle, marginTop: 18, textAlign: 'center', color: '#64748b' }}>No approval request selected.</div>
+        <div style={{ ...cardStyle, marginTop: 18, textAlign: 'center', color: '#000000' }}>No approval request selected.</div>
       </div>
     )
   }
@@ -95,9 +95,9 @@ export default function ApprovalDetailPage() {
     <div className="hr-module-page" style={{ fontFamily: font }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 14, marginBottom: 18 }}>
         <div>
-          <div style={{ color: '#64748b', fontSize: 12, marginBottom: 22 }}>Approvals&nbsp;&nbsp;&gt;&nbsp;&nbsp;<strong style={{ color: '#0f172a' }}>Approval Details</strong></div>
+          <div style={{ color: '#000000', fontSize: 12, marginBottom: 22 }}>Approvals&nbsp;&nbsp;&gt;&nbsp;&nbsp;<strong style={{ color: '#0f172a' }}>Approval Details</strong></div>
           <h1 style={{ margin: 0, fontSize: 26, color: '#0f172a', letterSpacing: '-0.5px' }}>Approval Details</h1>
-          <p style={{ margin: '6px 0 0', color: '#475569', fontSize: 13 }}>Review this saved request and take action.</p>
+          <p style={{ margin: '6px 0 0', color: '#000000', fontSize: 13 }}>Review this saved request and take action.</p>
         </div>
         <button onClick={() => router.push('/hr/approvals')} style={secondaryButtonStyle}><ArrowLeft size={15} /> Back to Approvals</button>
       </div>
@@ -108,7 +108,7 @@ export default function ApprovalDetailPage() {
             <Avatar row={row} size={82} />
             <div>
               <h2 style={{ margin: 0, color: '#0f172a', fontSize: 18 }}>{employeeName}</h2>
-              <div style={{ color: '#64748b', fontSize: 12, marginTop: 6 }}>{row.jobTitle} {row.department !== '-' ? `â€¢ ${row.department}` : ''}</div>
+              <div style={{ color: '#000000', fontSize: 12, marginTop: 6 }}>{row.jobTitle} {row.department !== '-' ? `â€¢ ${row.department}` : ''}</div>
               <div style={{ color: '#16a34a', fontSize: 12, marginTop: 8, fontWeight: 800 }}>Employee ID: <span style={{ color: '#334155' }}>{row.employeeCode}</span></div>
             </div>
           </div>
@@ -135,7 +135,7 @@ export default function ApprovalDetailPage() {
 
           <div style={cardStyle}>
             <SectionTitle title="Attachments" />
-            <div style={{ color: '#94a3b8', fontSize: 13 }}>No attachments uploaded for this request.</div>
+            <div style={{ color: '#000000', fontSize: 13 }}>No attachments uploaded for this request.</div>
           </div>
 
           <div style={{ ...cardStyle, background: '#f0fdf4', borderColor: '#bbf7d0', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 14, flexWrap: 'wrap' }}>
@@ -173,23 +173,23 @@ function Avatar({ row, size }: { row: LeaveRow; size: number }) {
 }
 
 function HeaderFact({ icon: Icon, label, value, sub, accent }: { icon: React.ComponentType<{ size?: number; color?: string }>; label: string; value: string; sub?: string; accent?: boolean }) {
-  return <div style={{ borderLeft: '1px solid #e5e7eb', paddingLeft: 20 }}><div style={{ display: 'flex', alignItems: 'center', gap: 8, color: '#64748b', fontSize: 12, marginBottom: 10 }}><Icon size={15} color="#64748b" />{label}</div><strong style={{ color: accent ? '#16a34a' : '#0f172a', fontSize: 13 }}>{value}</strong>{sub && <div style={{ color: '#64748b', fontSize: 12, marginTop: 7 }}>{sub}</div>}</div>
+  return <div style={{ borderLeft: '1px solid #e5e7eb', paddingLeft: 20 }}><div style={{ display: 'flex', alignItems: 'center', gap: 8, color: '#000000', fontSize: 12, marginBottom: 10 }}><Icon size={15} color="#000000" />{label}</div><strong style={{ color: accent ? '#16a34a' : '#0f172a', fontSize: 13 }}>{value}</strong>{sub && <div style={{ color: '#000000', fontSize: 12, marginTop: 7 }}>{sub}</div>}</div>
 }
 
 function SectionTitle({ title, icon: Icon }: { title: string; icon?: React.ComponentType<{ size?: number; color?: string }> }) {
-  return <div style={{ display: 'flex', alignItems: 'center', gap: 8, borderBottom: '1px solid #f1f5f9', margin: '-18px -18px 14px', padding: '16px 18px' }}>{Icon && <Icon size={16} color="#64748b" />}<strong style={{ color: '#0f172a', fontSize: 14 }}>{title}</strong></div>
+  return <div style={{ display: 'flex', alignItems: 'center', gap: 8, borderBottom: '1px solid #f1f5f9', margin: '-18px -18px 14px', padding: '16px 18px' }}>{Icon && <Icon size={16} color="#000000" />}<strong style={{ color: '#0f172a', fontSize: 14 }}>{title}</strong></div>
 }
 
 function DetailRow({ label, value, badge, icon: Icon }: { label: string; value: string; badge?: { bg: string; color: string }; icon?: React.ComponentType<{ size?: number; color?: string }> }) {
-  return <div style={{ display: 'grid', gridTemplateColumns: '220px minmax(0, 1fr)', gap: 16, padding: '13px 0', borderBottom: '1px solid #f8fafc', fontSize: 13 }}><span style={{ display: 'flex', alignItems: 'center', gap: 8, color: '#64748b' }}>{Icon && <Icon size={14} color="#64748b" />}{label}</span><span style={{ color: '#0f172a' }}>{badge ? <span style={{ borderRadius: 999, background: badge.bg, color: badge.color, padding: '3px 9px', fontSize: 11, fontWeight: 800 }}>{value}</span> : value}</span></div>
+  return <div style={{ display: 'grid', gridTemplateColumns: '220px minmax(0, 1fr)', gap: 16, padding: '13px 0', borderBottom: '1px solid #f8fafc', fontSize: 13 }}><span style={{ display: 'flex', alignItems: 'center', gap: 8, color: '#000000' }}>{Icon && <Icon size={14} color="#000000" />}{label}</span><span style={{ color: '#0f172a' }}>{badge ? <span style={{ borderRadius: 999, background: badge.bg, color: badge.color, padding: '3px 9px', fontSize: 11, fontWeight: 800 }}>{value}</span> : value}</span></div>
 }
 
 function WorkflowItem({ label, detail, done, active }: { label: string; detail: string; done?: boolean; active?: boolean }) {
-  return <div style={{ display: 'grid', gridTemplateColumns: '38px 1fr', gap: 12, padding: '12px 0' }}><span style={{ width: 30, height: 30, borderRadius: '50%', background: done ? '#16a34a' : active ? '#dcfce7' : '#f1f5f9', color: done ? '#fff' : active ? '#15803d' : '#64748b', display: 'grid', placeItems: 'center', fontWeight: 900, fontSize: 12 }}>{done ? 'âœ“' : active ? '2' : '3'}</span><span><strong style={{ display: 'block', color: '#0f172a', fontSize: 13 }}>{label}</strong><small style={{ color: '#64748b' }}>{detail}</small></span></div>
+  return <div style={{ display: 'grid', gridTemplateColumns: '38px 1fr', gap: 12, padding: '12px 0' }}><span style={{ width: 30, height: 30, borderRadius: '50%', background: done ? '#16a34a' : active ? '#dcfce7' : '#f1f5f9', color: done ? '#fff' : active ? '#15803d' : '#000000', display: 'grid', placeItems: 'center', fontWeight: 900, fontSize: 12 }}>{done ? 'âœ“' : active ? '2' : '3'}</span><span><strong style={{ display: 'block', color: '#0f172a', fontSize: 13 }}>{label}</strong><small style={{ color: '#000000' }}>{detail}</small></span></div>
 }
 
 function ActivityItem({ dot, title, detail }: { dot: string; title: string; detail: string }) {
-  return <div style={{ display: 'grid', gridTemplateColumns: '12px 1fr', gap: 10, padding: '10px 0' }}><span style={{ width: 7, height: 7, borderRadius: '50%', background: dot, marginTop: 6 }} /><span><strong style={{ display: 'block', color: '#0f172a', fontSize: 13 }}>{title}</strong><small style={{ color: '#64748b' }}>{detail}</small></span></div>
+  return <div style={{ display: 'grid', gridTemplateColumns: '12px 1fr', gap: 10, padding: '10px 0' }}><span style={{ width: 7, height: 7, borderRadius: '50%', background: dot, marginTop: 6 }} /><span><strong style={{ display: 'block', color: '#0f172a', fontSize: 13 }}>{title}</strong><small style={{ color: '#000000' }}>{detail}</small></span></div>
 }
 
 const cardStyle = { background: '#fff', border: '1px solid #e5e7eb', borderRadius: 12, boxShadow: '0 8px 24px rgba(15,23,42,0.04)', padding: 18 } as const

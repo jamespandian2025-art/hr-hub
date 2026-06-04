@@ -72,7 +72,8 @@ export default function ApplyLeavePage() {
   const buildRequest = (status: 'Pending' | 'Draft'): LeaveRequest => {
     return {
       id: `LR-${new Date().getFullYear()}-${String(Date.now()).slice(-6)}`,
-      employeeId: employee.id,
+      // Server scopes ownership by session employeeId; use it so the write isn't rejected.
+      employeeId: employee.employeeId || employee.id,
       employeeName,
       jobTitle: employee.jobTitle,
       leaveType,
@@ -173,17 +174,17 @@ export default function ApplyLeavePage() {
           </div>
 
           <div style={sectionBlockStyle}>
-          <h2 style={sectionTitle}><span style={stepBadge}>3</span> Attachments <em style={{ color: '#64748b', fontStyle: 'normal', fontWeight: 600 }}>(Optional)</em></h2>
+          <h2 style={sectionTitle}><span style={stepBadge}>3</span> Attachments <em style={{ color: '#000000', fontStyle: 'normal', fontWeight: 600 }}>(Optional)</em></h2>
           <label onDragOver={event => event.preventDefault()} onDrop={event => { event.preventDefault(); void attachFiles(event.dataTransfer.files) }} style={uploadBoxStyle}>
             <span style={uploadIconStyle}><Upload size={20} /></span>
             <strong>Upload supporting files</strong>
-            <small style={{ color: '#64748b', fontWeight: 600 }}>PDF, JPG, PNG up to your browser limit</small>
+            <small style={{ color: '#000000', fontWeight: 600 }}>PDF, JPG, PNG up to your browser limit</small>
             <input type="file" multiple onChange={event => void attachFiles(event.target.files)} style={{ display: 'none' }} />
           </label>
           {attachments.length > 0 && <div style={{ display: 'grid', gap: 8, marginTop: 12 }}>
             {attachments.map(file => (
               <div key={file.name} style={{ display: 'flex', justifyContent: 'space-between', gap: 12, padding: 12, border: '1px solid #e2e8f0', borderRadius: 8 }}>
-                <span><strong>{file.name}</strong><small style={{ display: 'block', color: '#64748b' }}>{Math.round(file.size / 1024)} KB</small></span>
+                <span><strong>{file.name}</strong><small style={{ display: 'block', color: '#000000' }}>{Math.round(file.size / 1024)} KB</small></span>
                 <button type="button" onClick={() => setAttachments(current => current.filter(item => item.name !== file.name))} className="employee-secondary-button" aria-label="Remove attachment"><Trash2 size={15} /></button>
               </div>
             ))}
@@ -203,7 +204,7 @@ export default function ApplyLeavePage() {
               <h2 style={sideTitleStyle}>{isWorkFromHome ? 'Work From Home Notes' : 'Leave Balance'}</h2>
             </div>
             {isWorkFromHome ? (
-              <p style={{ margin: '12px 0 0', color: '#64748b', fontSize: 13, lineHeight: 1.6 }}>WFH requests do not reduce leave balances. HR reviews the date range, reason, contact details, and work plan before approval.</p>
+              <p style={{ margin: '12px 0 0', color: '#000000', fontSize: 13, lineHeight: 1.6 }}>WFH requests do not reduce leave balances. HR reviews the date range, reason, contact details, and work plan before approval.</p>
             ) : (
               <div style={{ display: 'grid', gap: 14, marginTop: 18 }}>
                 {balances.map(item => <div key={item.type}><div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, fontWeight: 800 }}><span>{item.type}</span><span>{item.remaining} / {item.limit} Days</span></div><div style={{ height: 7, borderRadius: 99, background: '#e2e8f0', marginTop: 8 }}><div style={{ height: '100%', width: `${(item.remaining / item.limit) * 100}%`, borderRadius: 99, background: item.color }} /></div></div>)}
@@ -212,7 +213,7 @@ export default function ApplyLeavePage() {
           </section>
           <section className="employee-panel" style={sideCardStyle}>
             <h2 style={sideTitleStyle}>Request Summary</h2>
-            <div style={{ display: 'grid', gap: 10, marginTop: 16 }}>{summary.map(([label, value]) => <div key={label} style={summaryRowStyle}><span style={{ color: '#64748b' }}>{label}</span><strong style={{ textAlign: 'right' }}>{value}</strong></div>)}</div>
+            <div style={{ display: 'grid', gap: 10, marginTop: 16 }}>{summary.map(([label, value]) => <div key={label} style={summaryRowStyle}><span style={{ color: '#000000' }}>{label}</span><strong style={{ textAlign: 'right' }}>{value}</strong></div>)}</div>
           </section>
           <section className="employee-panel" style={sideCardStyle}>
             <h2 style={sideTitleStyle}>Approval Workflow</h2>
@@ -229,13 +230,13 @@ export default function ApplyLeavePage() {
 }
 
 function WorkflowRow({ label, value, done }: { label: string; value: string; done?: boolean }) {
-  return <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}><span style={{ width: 28, height: 28, borderRadius: '50%', display: 'grid', placeItems: 'center', background: done ? '#16a34a' : '#eff6ff', color: done ? '#fff' : '#2563eb' }}>{done ? <CheckCircle2 size={16} /> : <CalendarDays size={15} />}</span><span><strong style={{ display: 'block', fontSize: 13 }}>{label}</strong><small style={{ color: '#64748b' }}>{value}</small></span></div>
+  return <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}><span style={{ width: 28, height: 28, borderRadius: '50%', display: 'grid', placeItems: 'center', background: done ? '#16a34a' : '#eff6ff', color: done ? '#fff' : '#2563eb' }}>{done ? <CheckCircle2 size={16} /> : <CalendarDays size={15} />}</span><span><strong style={{ display: 'block', fontSize: 13 }}>{label}</strong><small style={{ color: '#000000' }}>{value}</small></span></div>
 }
 
 const pageHeroStyle = { alignItems: 'center', gap: 18 }
 const eyebrowStyle = { display: 'block', color: '#16a34a', fontSize: 11, fontWeight: 900, letterSpacing: 0, marginBottom: 7 }
 const heroMetaStyle = { border: '1px solid #dbeafe', background: '#eff6ff', borderRadius: 12, padding: '12px 14px', color: '#1e40af', display: 'grid', gap: 4, minWidth: 180 }
-const heroMetaLabelStyle = { fontSize: 11, color: '#64748b', fontWeight: 800 }
+const heroMetaLabelStyle = { fontSize: 11, color: '#000000', fontWeight: 800 }
 const layoutStyle = { display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(300px, 360px)', gap: 18, alignItems: 'start' } as const
 const formPanelStyle = { padding: 0, overflow: 'hidden' }
 const sectionBlockStyle = { padding: '22px 24px', borderBottom: '1px solid #edf2f7' }

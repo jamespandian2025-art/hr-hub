@@ -3,7 +3,7 @@
 import { useRouter } from 'next/navigation'
 import type { CSSProperties } from 'react'
 import { useEffect, useMemo, useState } from 'react'
-import { ArrowRight, Building2, Check, FolderKanban, Mail, Sparkles, UserRound, Users } from 'lucide-react'
+import { ArrowRight, Building2, Check, FolderKanban, Mail, ShieldCheck, Sparkles, UserRound, Users } from 'lucide-react'
 import { withCsrfHeaders } from '@/lib/security/csrfClient'
 import { getActiveCompany } from '@/lib/tenant/company'
 
@@ -11,11 +11,13 @@ const onboardingKey = 'flowsys-onboarding'
 const accountKey = 'flowsys-account'
 const projectsKey = 'flowsys-projects'
 
-type Role = 'Admin' | 'Finance' | 'HR' | 'Project Manager' | 'Support' | 'Client'
+const inviteRoles = ['Project Manager', 'Finance', 'HR', 'Support', 'Client'] as const
+type InviteRole = typeof inviteRoles[number]
+type StepName = 'Personal Info' | 'Company' | 'Team Members' | 'First Project' | 'Finish'
 
 interface Invite {
   email: string
-  role: Role
+  role: InviteRole
   status?: 'Pending' | 'Sent' | 'Failed'
   error?: string
 }
@@ -23,7 +25,7 @@ interface Invite {
 interface OnboardingState {
   complete: boolean
   step: number
-  personal: { fullName: string; role: Role; phone: string }
+  personal: { fullName: string; role: 'Admin'; phone: string }
   company: { name: string; size: string; years: string; type: string }
   invites: Invite[]
   project: { name: string; client: string; location: string; budget: number }
@@ -38,20 +40,13 @@ const initialState: OnboardingState = {
   project: { name: '', client: '', location: '', budget: 0 },
 }
 
-const roleDescriptions: Record<Role, string> = {
-  Admin: 'Full setup for company, team, and first project.',
-  Finance: 'Finance workspace for payroll controls, loans, cash advances, and accounting reviews.',
-  HR: 'HR workspace for employee records, attendance, leave, payroll review, and people workflows.',
-  'Project Manager': 'Personal setup with quick access to assigned projects.',
-  Support: 'Personal setup focused on team chat and support work.',
-  Client: 'A simple client portal setup for viewing project updates.',
-}
+const adminRoleDescription = 'Full setup for company, team, and first project.'
 
-const stepDetails: Record<string, { eyebrow: string; title: string; body: string; icon: typeof UserRound }> = {
+const stepDetails: Record<StepName, { eyebrow: string; title: string; body: string; icon: typeof UserRound }> = {
   'Personal Info': {
     eyebrow: 'Your account',
-    title: 'Start with the person using the workspace.',
-    body: 'Pick the role first. The setup adapts so every user only sees what matters for their work.',
+    title: 'Start with the Admin owner account.',
+    body: 'Workspace creators are automatically Admin owners. Finance, HR, Project Managers, Support, and Clients join by invitation after setup.',
     icon: UserRound,
   },
   Company: {
@@ -66,36 +61,39 @@ const stepDetails: Record<string, { eyebrow: string; title: string; body: string
     body: 'Invites are saved to the account so admins can send or review them after onboarding.',
     icon: Users,
   },
-  'Team Setup': {
-    eyebrow: 'Support setup',
-    title: 'Invite teammates who help with messages and coordination.',
-    body: 'This step is optional. Support users can still finish and join team chat later.',
-    icon: Users,
-  },
   'First Project': {
     eyebrow: 'First project',
     title: 'Create one real project so the dashboard has useful data.',
     body: 'This creates a starter project record. You can add budgets, bills, tasks, and files afterward.',
     icon: FolderKanban,
   },
-  'Assigned Projects': {
-    eyebrow: 'Project work',
-    title: 'Note the first project you are assigned to.',
-    body: 'Project managers can skip this if assignments will be added by an admin later.',
-    icon: FolderKanban,
-  },
-  'Client Portal': {
-    eyebrow: 'Client portal',
-    title: 'Keep client access clear and simple.',
-    body: 'Clients see their own projects, invoices, attachments, and messages without internal company data.',
-    icon: UserRound,
-  },
   Finish: {
     eyebrow: 'Ready',
     title: 'Your workspace is ready to use.',
-    body: 'When you finish, onboarding is marked complete and will not appear again for this browser profile.',
+    body: 'Your Admin account, company choices, invitations, and starter project are now stored. The next screen is the main dashboard.',
     icon: Check,
   },
+}
+
+const isInviteRole = (role: unknown): role is InviteRole => {
+  return typeof role === 'string' && inviteRoles.includes(role as InviteRole)
+}
+
+const normalizeAdminOnboarding = (state: Partial<OnboardingState> = {}): OnboardingState => {
+  const personal = state.personal || initialState.personal
+  const company = state.company || initialState.company
+  const project = state.project || initialState.project
+
+  return {
+    ...initialState,
+    ...state,
+    personal: { ...initialState.personal, ...personal, role: 'Admin' },
+    company: { ...initialState.company, ...company },
+    invites: Array.isArray(state.invites)
+      ? state.invites.map(invite => ({ ...invite, role: isInviteRole(invite.role) ? invite.role : 'Project Manager' }))
+      : [],
+    project: { ...initialState.project, ...project },
+  }
 }
 
 const loadOnboarding = () => {
@@ -103,17 +101,15 @@ const loadOnboarding = () => {
 
   try {
     const stored = window.localStorage.getItem(onboardingKey)
-    if (stored) return { ...initialState, ...JSON.parse(stored) } as OnboardingState
+    if (stored) return normalizeAdminOnboarding(JSON.parse(stored) as Partial<OnboardingState>)
     const accountRaw = window.localStorage.getItem(accountKey)
-    const account = accountRaw ? JSON.parse(accountRaw) as { role?: Role; fullName?: string } : {}
-    return {
-      ...initialState,
+    const account = accountRaw ? JSON.parse(accountRaw) as { fullName?: string } : {}
+    return normalizeAdminOnboarding({
       personal: {
         ...initialState.personal,
-        role: account.role || initialState.personal.role,
         fullName: account.fullName || '',
       },
-    }
+    })
   } catch {
     return initialState
   }
@@ -121,30 +117,16 @@ const loadOnboarding = () => {
 
 export default function OnboardingPage() {
   const router = useRouter()
-  const [data, setData] = useState<OnboardingState>(loadOnboarding)
+  const [data, setData] = useState<OnboardingState>(initialState)
+  const [loadedOnboarding, setLoadedOnboarding] = useState(false)
   const [inviteEmail, setInviteEmail] = useState('')
-  const [inviteRole, setInviteRole] = useState<Role>('Project Manager')
+  const [inviteRole, setInviteRole] = useState<InviteRole>('Project Manager')
   const [inviteSending, setInviteSending] = useState(false)
   const [inviteNotice, setInviteNotice] = useState('')
-  const [roleLocked] = useState(() => {
-    if (typeof window === 'undefined') return false
-    try {
-      const accountRaw = window.localStorage.getItem(accountKey)
-      const account = accountRaw ? JSON.parse(accountRaw) as { roleLocked?: boolean } : {}
-      return Boolean(account.roleLocked)
-    } catch {
-      return false
-    }
-  })
 
-  const steps = useMemo(() => {
-    if (data.personal.role === 'Client') return ['Personal Info', 'Client Portal', 'Finish']
-    if (data.personal.role === 'Finance') return ['Personal Info', 'Finish']
-    if (data.personal.role === 'HR') return ['Personal Info', 'Finish']
-    if (data.personal.role === 'Support') return ['Personal Info', 'Team Setup', 'Finish']
-    if (data.personal.role === 'Project Manager') return ['Personal Info', 'Assigned Projects', 'Finish']
+  const steps = useMemo<StepName[]>(() => {
     return ['Personal Info', 'Company', 'Team Members', 'First Project', 'Finish']
-  }, [data.personal.role])
+  }, [])
 
   const currentStep = Math.min(data.step, steps.length - 1)
   const stepName = steps[currentStep]
@@ -153,8 +135,17 @@ export default function OnboardingPage() {
   const progress = ((currentStep + 1) / steps.length) * 100
 
   useEffect(() => {
+    const loadTimer = window.setTimeout(() => {
+      setData(loadOnboarding())
+      setLoadedOnboarding(true)
+    }, 0)
+    return () => window.clearTimeout(loadTimer)
+  }, [])
+
+  useEffect(() => {
+    if (!loadedOnboarding) return
     window.localStorage.setItem(onboardingKey, JSON.stringify({ ...data, step: currentStep }))
-  }, [data, currentStep])
+  }, [data, currentStep, loadedOnboarding])
 
   const update = (next: Partial<OnboardingState>) => setData(previous => ({ ...previous, ...next }))
   const next = () => setData(previous => ({ ...previous, step: Math.min(currentStep + 1, steps.length - 1) }))
@@ -209,13 +200,13 @@ export default function OnboardingPage() {
       ...account,
       company: data.company.name || account.company || 'WiseFlow Company',
       onboardingComplete: true,
-      role: data.personal.role,
+      role: 'Admin',
       fullName: data.personal.fullName,
       phone: data.personal.phone,
       invitations: data.invites.map((invite, index) => ({ id: index + 1, email: invite.email, role: invite.role, status: 'Pending' })),
     }))
 
-    if (data.project.name.trim() && data.personal.role === 'Admin') {
+    if (data.project.name.trim()) {
       const existing = JSON.parse(window.localStorage.getItem(projectsKey) || '[]')
       const nextId = existing.reduce((max: number, project: { id: number }) => Math.max(max, project.id), 0) + 1
       window.localStorage.setItem(projectsKey, JSON.stringify([...existing, {
@@ -238,7 +229,7 @@ export default function OnboardingPage() {
     }
 
     window.localStorage.setItem(onboardingKey, JSON.stringify({ ...data, complete: true, step: currentStep }))
-    router.push(routeForRole(data.personal.role))
+    router.push('/dashboard')
   }
 
   return (
@@ -250,7 +241,7 @@ export default function OnboardingPage() {
             <span>WiseFlow setup</span>
           </div>
 
-          <div style={railTitleStyle}>Set up a workspace that fits your role.</div>
+          <div style={railTitleStyle}>Set up your admin workspace.</div>
           <p style={railTextStyle}>This is a short first-run guide. Progress saves automatically, and optional steps can be skipped.</p>
 
           <div style={progressLabelStyle}>
@@ -264,7 +255,7 @@ export default function OnboardingPage() {
               const isDone = index < currentStep
               const isActive = index === currentStep
               return (
-                <div key={step} style={{ ...stepRowStyle, color: index <= currentStep ? '#fff' : '#94a3b8', background: isActive ? 'rgba(255,255,255,.08)' : 'transparent' }}>
+                <div key={step} style={{ ...stepRowStyle, color: index <= currentStep ? '#fff' : '#000000', background: isActive ? 'rgba(255,255,255,.08)' : 'transparent' }}>
                   <span style={{ ...stepBubbleStyle, background: isDone ? '#20c997' : isActive ? '#6c63ff' : '#334155', boxShadow: isActive ? '0 10px 22px rgba(108,99,255,.32)' : 'none' }}>
                     {isDone ? <Check size={14} /> : index + 1}
                   </span>
@@ -276,8 +267,8 @@ export default function OnboardingPage() {
         </div>
 
         <div style={railFootStyle}>
-          <strong>{data.personal.role}</strong>
-          <span>{roleDescriptions[data.personal.role]}</span>
+          <strong>Admin owner</strong>
+          <span>{adminRoleDescription}</span>
         </div>
       </aside>
 
@@ -300,17 +291,12 @@ export default function OnboardingPage() {
                   <input style={fieldStyle} value={data.personal.fullName} onChange={event => update({ personal: { ...data.personal, fullName: event.target.value } })} placeholder="Example: James Pandian" />
                 </label>
 
-                <div>
-                  <div style={labelStyle}>Choose your role</div>
-                  <div style={roleGridStyle}>
-                    {(roleLocked ? [data.personal.role] : ['Admin', 'Finance', 'HR', 'Project Manager', 'Support', 'Client'] as Role[]).map(role => (
-                      <button key={role} onClick={() => !roleLocked && update({ personal: { ...data.personal, role }, step: 0 })} style={choiceCardStyle(data.personal.role === role)}>
-                        <span style={choiceTitleStyle}>{role}</span>
-                        <span style={choiceBodyStyle}>{roleDescriptions[role]}</span>
-                      </button>
-                    ))}
+                <div style={adminRoleCardStyle}>
+                  <div style={adminRoleIconStyle}><ShieldCheck size={20} /></div>
+                  <div>
+                    <div style={adminRoleTitleStyle}>Admin owner</div>
+                    <div style={adminRoleBodyStyle}>You will manage the company profile, team invitations, permissions, and first project. Other roles are invited after the workspace is created.</div>
                   </div>
-                  {roleLocked && <div style={helperBoxStyle}>For security, this signup is locked as the workspace Admin. HR and Finance accounts should be invited or assigned by Admin after setup.</div>}
                 </div>
 
                 <label style={fieldGroupStyle}>
@@ -332,7 +318,7 @@ export default function OnboardingPage() {
               </div>
             )}
 
-            {(stepName === 'Team Members' || stepName === 'Team Setup') && (
+            {stepName === 'Team Members' && (
               <div style={formGridStyle}>
                 <div style={helperBoxStyle}>Invite teammates now, or skip and add them later from the account menu. HR HUB sends an email invitation when you add an invite.</div>
                 {inviteNotice && <div style={inviteNotice.startsWith('Invitation email sent') ? successBoxStyle : errorBoxStyle}>{inviteNotice}</div>}
@@ -343,13 +329,8 @@ export default function OnboardingPage() {
                   </label>
                   <label style={fieldGroupStyle}>
                     <span style={labelStyle}>Role</span>
-                    <select style={fieldStyle} value={inviteRole} onChange={event => setInviteRole(event.target.value as Role)}>
-                      <option>Project Manager</option>
-                      <option>Finance</option>
-                      <option>HR</option>
-                      <option>Support</option>
-                      <option>Client</option>
-                      <option>Admin</option>
+                    <select style={fieldStyle} value={inviteRole} onChange={event => setInviteRole(event.target.value as InviteRole)}>
+                      {inviteRoles.map(role => <option key={role}>{role}</option>)}
                     </select>
                   </label>
                   <button onClick={addInvite} disabled={inviteSending || !inviteEmail.trim()} style={{ ...darkButtonStyle, opacity: inviteSending || !inviteEmail.trim() ? 0.55 : 1, cursor: inviteSending || !inviteEmail.trim() ? 'not-allowed' : 'pointer' }}><Mail size={15} /> {inviteSending ? 'Sending...' : 'Add Invite'}</button>
@@ -360,9 +341,9 @@ export default function OnboardingPage() {
               </div>
             )}
 
-            {(stepName === 'First Project' || stepName === 'Assigned Projects') && (
+            {stepName === 'First Project' && (
               <div style={formGridStyle}>
-                <div style={helperBoxStyle}>{data.personal.role === 'Admin' ? 'This starter project becomes a real project on your Projects page.' : 'This is optional. Assigned projects can be linked by an admin later.'}</div>
+                <div style={helperBoxStyle}>This starter project becomes a real project on your Projects page.</div>
                 <label style={fieldGroupStyle}>
                   <span style={labelStyle}>Project name</span>
                   <input style={fieldStyle} value={data.project.name} onChange={event => update({ project: { ...data.project, name: event.target.value } })} placeholder="Example: Swimming Pool" />
@@ -383,9 +364,7 @@ export default function OnboardingPage() {
                 </label>
               </div>
             )}
-
-            {stepName === 'Client Portal' && <InfoPanel title="Client portal access is ready" body="After login, clients land in a focused portal for project updates, invoices, files, and messages. Internal dashboards stay hidden from client users." />}
-            {stepName === 'Finish' && <InfoPanel title="Everything is saved" body="Your role, company choices, invitations, and starter project are now stored. The next screen is the main dashboard." />}
+            {stepName === 'Finish' && <InfoPanel title="Everything is saved" body="Your Admin account, company choices, invitations, and starter project are now stored. The next screen is the main dashboard." />}
           </div>
 
           <footer style={footerStyle}>
@@ -426,50 +405,44 @@ function InfoPanel({ title, body }: { title: string; body: string }) {
   )
 }
 
-function routeForRole(role: Role) {
-  if (role === 'Client') return '/client-portal'
-  if (role === 'Finance') return '/financials/loan-management'
-  if (role === 'HR') return '/hr/overview'
-  return '/dashboard'
-}
-
 const shellStyle: CSSProperties = { minHeight: '100vh', background: '#f5f5f5', fontFamily: "var(--font-body)", display: 'grid', gridTemplateColumns: '360px minmax(0,1fr)' }
 const railStyle: CSSProperties = { minHeight: '100vh', background: '#191414', color: '#fff', padding: '34px 30px', display: 'flex', flexDirection: 'column', justifyContent: 'space-between', boxShadow: '18px 0 50px rgba(25,20,20,.22)' }
 const brandStyle: CSSProperties = { display: 'flex', alignItems: 'center', gap: 10, fontSize: 18, fontWeight: 600, marginBottom: 44 }
 const brandIconStyle: CSSProperties = { width: 40, height: 40, borderRadius: 12, background: '#22c55e', color: '#191414', display: 'grid', placeItems: 'center', boxShadow: '0 16px 32px rgba(34,197,94,.24)' }
 const railTitleStyle = { fontSize: 32, lineHeight: 1.12, fontWeight: 600, marginBottom: 14 }
-const railTextStyle = { color: '#cbd5e1', fontSize: 14, lineHeight: 1.6, margin: 0 }
-const progressLabelStyle = { display: 'flex', justifyContent: 'space-between', color: '#cbd5e1', fontSize: 12, fontWeight: 600, marginTop: 30, marginBottom: 9 }
+const railTextStyle = { color: '#000000', fontSize: 14, lineHeight: 1.6, margin: 0 }
+const progressLabelStyle = { display: 'flex', justifyContent: 'space-between', color: '#000000', fontSize: 12, fontWeight: 600, marginTop: 30, marginBottom: 9 }
 const progressTrackStyle = { height: 8, background: '#263244', borderRadius: 99, overflow: 'hidden' }
 const progressFillStyle = { height: '100%', background: '#22c55e', borderRadius: 99, transition: 'width .25s ease' }
 const stepListStyle = { display: 'grid', gap: 12, marginTop: 34 }
 const stepRowStyle = { display: 'flex', alignItems: 'center', gap: 12, fontWeight: 600, padding: '10px 12px', borderRadius: 14 }
 const stepBubbleStyle = { width: 30, height: 30, borderRadius: '50%', display: 'grid', placeItems: 'center', fontSize: 12, flex: '0 0 auto' }
-const railFootStyle = { display: 'grid', gap: 8, color: '#94a3b8', fontSize: 13, lineHeight: 1.5, borderTop: '1px solid rgba(255,255,255,.1)', paddingTop: 18 }
+const railFootStyle = { display: 'grid', gap: 8, color: '#000000', fontSize: 13, lineHeight: 1.5, borderTop: '1px solid rgba(255,255,255,.1)', paddingTop: 18 }
 const contentStyle: CSSProperties = { minHeight: '100vh', padding: '54px clamp(30px, 5vw, 82px)', display: 'flex', flexDirection: 'column' }
 const contentInnerStyle: CSSProperties = { maxWidth: 930, width: '100%', margin: '0 auto', display: 'flex', flexDirection: 'column', flex: 1 }
 const topBarStyle = { display: 'flex', justifyContent: 'space-between', gap: 24, alignItems: 'flex-start', marginBottom: 30 }
 const pillStyle = { display: 'inline-flex', alignItems: 'center', gap: 8, fontSize: 13, color: '#6c63ff', fontWeight: 600, marginBottom: 14, background: '#f5f4ff', border: '1px solid #ddd9ff', borderRadius: 999, padding: '7px 12px' }
 const titleStyle = { fontSize: 38, color: '#111827', fontWeight: 600, lineHeight: 1.12, margin: 0, maxWidth: 720 }
-const subtitleStyle = { fontSize: 15, color: '#64748b', lineHeight: 1.7, margin: '12px 0 0', maxWidth: 660 }
+const subtitleStyle = { fontSize: 15, color: '#000000', lineHeight: 1.7, margin: '12px 0 0', maxWidth: 660 }
 const heroIconStyle = { width: 72, height: 72, borderRadius: 22, color: '#111827', background: 'rgba(255,255,255,.84)', border: '1px solid #e5e7eb', display: 'grid', placeItems: 'center', boxShadow: '0 18px 45px rgba(15,23,42,.08)', flex: '0 0 auto' }
 const panelStyle = { background: 'rgba(255,255,255,.9)', border: '1px solid rgba(226,232,240,.95)', borderRadius: 24, padding: 30, boxShadow: '0 24px 70px rgba(15,23,42,.09)', backdropFilter: 'blur(14px)' }
 const formGridStyle = { display: 'grid', gap: 20 }
 const fieldGroupStyle = { display: 'grid', gap: 8 }
 const labelStyle = { fontSize: 12, color: '#374151', fontWeight: 600 }
-const optionalStyle = { color: '#94a3b8', fontStyle: 'normal', fontWeight: 600 }
+const optionalStyle = { color: '#000000', fontStyle: 'normal', fontWeight: 600 }
 const fieldStyle = { width: '100%', border: '1px solid #dbe3ee', borderRadius: 12, padding: '13px 14px', fontSize: 14, color: '#111827', outline: 'none', background: '#fff', minHeight: 46 }
-const roleGridStyle = { display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 12, marginTop: 9 }
-const choiceTitleStyle = { fontSize: 14, color: '#111827', fontWeight: 600 }
-const choiceBodyStyle = { fontSize: 12, color: '#64748b', lineHeight: 1.5, textAlign: 'left' as const }
+const adminRoleCardStyle = { display: 'grid', gridTemplateColumns: '42px minmax(0,1fr)', alignItems: 'start', gap: 13, border: '1px solid #dbe3ee', borderRadius: 16, background: '#f8fafc', padding: '15px 16px' }
+const adminRoleIconStyle = { width: 42, height: 42, borderRadius: 14, background: '#ecfdf5', color: '#059669', display: 'grid', placeItems: 'center' }
+const adminRoleTitleStyle = { fontSize: 14, color: '#111827', fontWeight: 700, marginBottom: 5 }
+const adminRoleBodyStyle = { fontSize: 13, color: '#000000', lineHeight: 1.55 }
 const choiceGridStyle = { display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: 10, marginTop: 9 }
 const inviteGridStyle = { display: 'grid', gridTemplateColumns: 'minmax(0,1fr) 190px auto', gap: 12, alignItems: 'end' }
 const inviteListStyle = { display: 'grid', gap: 9 }
 const twoColumnStyle = { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }
-const helperBoxStyle = { color: '#475569', fontSize: 14, lineHeight: 1.65, background: '#f8fafc', border: '1px solid #e5e7eb', borderRadius: 16, padding: '14px 16px' }
+const helperBoxStyle = { color: '#000000', fontSize: 14, lineHeight: 1.65, background: '#f8fafc', border: '1px solid #e5e7eb', borderRadius: 16, padding: '14px 16px' }
 const successBoxStyle = { color: '#166534', fontSize: 13, lineHeight: 1.5, fontWeight: 800, background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: 14, padding: '12px 14px' }
 const errorBoxStyle = { color: '#b91c1c', fontSize: 13, lineHeight: 1.5, fontWeight: 800, background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 14, padding: '12px 14px' }
-const emptyRowStyle = { border: '1px dashed #cbd5e1', borderRadius: 14, color: '#94a3b8', fontSize: 13, padding: '16px', textAlign: 'center' as const }
+const emptyRowStyle = { border: '1px dashed #cbd5e1', borderRadius: 14, color: '#000000', fontSize: 13, padding: '16px', textAlign: 'center' as const }
 const listRowStyle = { display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, border: '1px solid #edf2f7', borderRadius: 14, padding: '13px 15px', fontSize: 13, color: '#374151', background: '#fff' }
 const footerStyle = { display: 'flex', justifyContent: 'space-between', gap: 12, marginTop: 'auto', paddingTop: 28 }
 const footerActionsStyle = { display: 'flex', gap: 10, flexWrap: 'wrap' as const, justifyContent: 'flex-end' }
@@ -478,19 +451,7 @@ const lightButtonStyle = { border: '1px solid #dbe3ee', borderRadius: 12, backgr
 const infoPanelStyle = { minHeight: 330, border: '1px solid #e5e7eb', borderRadius: 20, padding: 34, background: 'linear-gradient(180deg,#fff,#f8fafc)', display: 'grid', placeItems: 'center', textAlign: 'center' as const }
 const successIconStyle = { width: 68, height: 68, borderRadius: '50%', background: '#ecfdf5', color: '#10b981', display: 'grid', placeItems: 'center' }
 const infoTitleStyle = { fontSize: 24, color: '#111827', fontWeight: 600, margin: '18px 0 8px' }
-const infoBodyStyle = { fontSize: 14, color: '#64748b', lineHeight: 1.7, maxWidth: 520, margin: 0 }
-
-const choiceCardStyle = (active: boolean) => ({
-  border: `1px solid ${active ? '#6c63ff' : '#e5e7eb'}`,
-  borderRadius: 16,
-  padding: 16,
-  background: active ? '#f5f4ff' : '#fff',
-  cursor: 'pointer',
-  display: 'grid',
-  gap: 6,
-  textAlign: 'left' as const,
-  boxShadow: active ? '0 14px 30px rgba(108,99,255,.12)' : 'none',
-})
+const infoBodyStyle = { fontSize: 14, color: '#000000', lineHeight: 1.7, maxWidth: 520, margin: 0 }
 
 const choicePillStyle = (active: boolean) => ({
   border: `1px solid ${active ? '#6c63ff' : '#e5e7eb'}`,

@@ -189,9 +189,9 @@ function statusBadge(s: string): { bg: string; text: string } {
   switch (s?.toLowerCase()) {
     case 'active':     return { bg: '#dcfce7', text: '#15803d' }
     case 'on leave':   return { bg: '#dbeafe', text: '#1d4ed8' }
-    case 'inactive':   return { bg: '#f3f4f6', text: '#6b7280' }
+    case 'inactive':   return { bg: '#f3f4f6', text: '#000000' }
     case 'resigned':   return { bg: '#fee2e2', text: '#dc2626' }
-    default:           return { bg: '#f3f4f6', text: '#6b7280' }
+    default:           return { bg: '#f3f4f6', text: '#000000' }
   }
 }
 
@@ -200,7 +200,7 @@ function leaveBadge(s: string): { bg: string; text: string } {
     case 'approved':  return { bg: '#dcfce7', text: '#15803d' }
     case 'pending':   return { bg: '#fef3c7', text: '#d97706' }
     case 'rejected':  return { bg: '#fee2e2', text: '#dc2626' }
-    default:          return { bg: '#f3f4f6', text: '#6b7280' }
+    default:          return { bg: '#f3f4f6', text: '#000000' }
   }
 }
 
@@ -274,75 +274,24 @@ function attendanceHours(record: AttendanceRecord) {
   return `${hours}h ${String(minutes).padStart(2, '0')}m`
 }
 
-function createDefaultAttendanceRecord(employee: Employee): AttendanceRecord {
-  const status = employee.attendanceStatus === 'Late' || employee.attendanceStatus === 'Absent' || employee.attendanceStatus === 'On Leave'
-    ? employee.attendanceStatus
-    : 'Present'
-  return {
-    id: secureId('att', 6),
-    employeeId: employee.id,
-    date: toInputDate(new Date()),
-    status,
-    clockIn: status === 'Present' ? '08:00' : status === 'Late' ? '09:15' : '',
-    clockOut: status === 'Present' || status === 'Late' ? '17:00' : '',
-    breakMinutes: status === 'Present' || status === 'Late' ? 60 : 0,
-    notes: 'Initial attendance record',
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
+// One-time cleanup of demo data that an earlier build seeded into storage.
+// Removes only records that exactly match the old seed signatures, so genuine
+// records (real payroll uses the `payroll_` prefix + a `payroll-run` source,
+// real documents/goals/feedback use other ids) are never touched.
+function purgeSeededRecords() {
+  if (typeof window === 'undefined') return
+  const clean = (key: string, isSeed: (row: Record<string, unknown>) => boolean) => {
+    const rows = loadStored<Record<string, unknown>[]>(key, [])
+    if (!Array.isArray(rows)) return
+    const next = rows.filter(row => !(row && typeof row === 'object' && isSeed(row)))
+    if (next.length !== rows.length) window.localStorage.setItem(key, JSON.stringify(next))
   }
-}
-
-function monthLabel(date: Date) {
-  return date.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })
-}
-
-function createSeedDocuments(employee: Employee): Document[] {
-  const today = new Date()
-  return [
-    {
-      id: `doc_${employee.id}_contract`,
-      employeeId: employee.id,
-      name: `${employee.lastName || employee.firstName}-employment-contract.pdf`,
-      type: 'pdf',
-      mimeType: 'application/pdf',
-      size: '248 KB',
-      uploadedAt: new Date(today.getTime() - 1000 * 60 * 60 * 24 * 14).toISOString(),
-    },
-    {
-      id: `doc_${employee.id}_id`,
-      employeeId: employee.id,
-      name: `${employee.employeeId}-government-id.png`,
-      type: 'png',
-      mimeType: 'image/png',
-      size: '512 KB',
-      uploadedAt: new Date(today.getTime() - 1000 * 60 * 60 * 24 * 9).toISOString(),
-    },
-  ]
-}
-
-function createSeedPayrollRecords(employee: Employee): PayrollRecord[] {
-  const today = new Date()
-  const basic = employee.basicSalary || 25000
-  const allowances = employee.allowances || 3500
-  const deductions = employee.deductions || 1800
-  return Array.from({ length: 4 }, (_, index) => {
-    const periodDate = new Date(today.getFullYear(), today.getMonth() - index, 1)
-    const gross = basic + allowances
-    const deductionBreakdown = buildEmployeeTaxBreakdown(gross, deductions, defaultPayrollFrequency)
-    const totalDeductions = Math.min(gross, deductionBreakdownTotal(deductionBreakdown))
-    return {
-      id: `pay_${employee.id}_${periodDate.getFullYear()}_${periodDate.getMonth() + 1}`,
-      employeeId: employee.id,
-      period: monthLabel(periodDate),
-      gross,
-      deductions: totalDeductions,
-      deductionBreakdown,
-      net: roundPayrollMoney(gross - totalDeductions),
-      status: index === 0 ? (employee.payrollStatus === 'Paid' ? 'Paid' : 'Pending') : 'Paid',
-      paidAt: index === 0 ? undefined : new Date(periodDate.getFullYear(), periodDate.getMonth(), 30).toISOString(),
-      createdAt: new Date(today.getTime() - 1000 * 60 * 60 * 24 * (index * 30 + 3)).toISOString(),
-    }
-  })
+  const idStr = (row: Record<string, unknown>) => (typeof row.id === 'string' ? row.id : '')
+  clean('flowsys-hr-documents', row => /^doc_.+_(contract|id)$/.test(idStr(row)))
+  clean('flowsys-hr-payroll-records', row => idStr(row).startsWith('pay_') && !idStr(row).startsWith('payroll_'))
+  clean('flowsys-hr-performance-goals', row => /^goal_.+_(onboarding|training|report)$/.test(idStr(row)))
+  clean('flowsys-hr-performance-feedback', row => /^feedback_.+_[123]$/.test(idStr(row)))
+  clean('flowsys-hr-attendance', row => row.notes === 'Initial attendance record')
 }
 
 function normalizeEmployeePayrollTax(record: PayrollRecord, employee: Employee, frequency: PayrollFrequency): PayrollRecord {
@@ -360,26 +309,7 @@ function normalizeEmployeePayrollTax(record: PayrollRecord, employee: Employee, 
   }
 }
 
-function createSeedPerformanceGoals(employee: Employee): PerformanceGoal[] {
-  const today = new Date()
-  return [
-    { id: `goal_${employee.id}_onboarding`, employeeId: employee.id, title: 'Complete department onboarding checklist', progress: 90, status: 'On Track', dueDate: toInputDate(new Date(today.getFullYear(), today.getMonth(), today.getDate() + 10)), createdAt: new Date(today.getTime() - 1000 * 60 * 60 * 24 * 20).toISOString() },
-    { id: `goal_${employee.id}_training`, employeeId: employee.id, title: 'Finish role-based training modules', progress: 72, status: 'On Track', dueDate: toInputDate(new Date(today.getFullYear(), today.getMonth(), today.getDate() + 18)), createdAt: new Date(today.getTime() - 1000 * 60 * 60 * 24 * 16).toISOString() },
-    { id: `goal_${employee.id}_report`, employeeId: employee.id, title: 'Submit monthly output report', progress: 58, status: 'At Risk', dueDate: toInputDate(new Date(today.getFullYear(), today.getMonth(), today.getDate() + 5)), createdAt: new Date(today.getTime() - 1000 * 60 * 60 * 24 * 8).toISOString() },
-  ]
-}
-
-function createSeedFeedback(employee: Employee): PerformanceFeedback[] {
-  const manager = employee.reportsTo || 'HR Manager'
-  const today = new Date()
-  return [
-    { id: `feedback_${employee.id}_1`, employeeId: employee.id, note: 'Strong collaboration with the team and clear handoffs.', author: manager, rating: 5, createdAt: new Date(today.getTime() - 1000 * 60 * 60 * 24 * 6).toISOString() },
-    { id: `feedback_${employee.id}_2`, employeeId: employee.id, note: 'Good attention to detail on assigned work.', author: manager, rating: 4, createdAt: new Date(today.getTime() - 1000 * 60 * 60 * 24 * 13).toISOString() },
-    { id: `feedback_${employee.id}_3`, employeeId: employee.id, note: 'Keep improving timeline updates before due dates.', author: manager, rating: 4, createdAt: new Date(today.getTime() - 1000 * 60 * 60 * 24 * 21).toISOString() },
-  ]
-}
-
-const TABS = ['Overview','Attendance','Leave History','Leave Balance','Payroll','Loans','Documents','Performance','Activity']
+const TABS =['Overview','Attendance','Leave History','Leave Balance','Payroll','Loans','Documents','Performance','Activity']
 
 // â”€â”€â”€ Leave balance defaults â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
@@ -387,7 +317,7 @@ const LEAVE_BALANCES = [
   { type: 'Vacation Leave', used: 0, total: 20, color: '#22c55e', Icon: CalendarCheck },
   { type: 'Sick Leave',     used: 0, total: 12, color: '#3b82f6', Icon: CalendarCheck },
   { type: 'Personal Leave', used: 0, total: 6,  color: '#8b5cf6', Icon: CalendarCheck },
-  { type: 'Unpaid Leave',   used: 0, total: 10, color: '#9ca3af', Icon: CalendarCheck },
+  { type: 'Unpaid Leave',   used: 0, total: 10, color: '#000000', Icon: CalendarCheck },
 ]
 
 // â”€â”€â”€ Employee Profile page â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
@@ -435,6 +365,7 @@ export default function EmployeeProfilePage() {
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
+      purgeSeededRecords()
       const all: Employee[] = loadStored('flowsys-hr-employees', [])
       const found = all.find(e => e.id === routeId || e.employeeId === routeId)
       if (!found) {
@@ -454,13 +385,7 @@ export default function EmployeeProfilePage() {
 
       const allDocs: Document[] = loadStored('flowsys-hr-documents', [])
       const employeeDocs = allDocs.filter(d => employeeKeys.has(d.employeeId))
-      if (employeeDocs.length) {
-        setDocuments(employeeDocs)
-      } else {
-        const seededDocs = createSeedDocuments(found)
-        window.localStorage.setItem('flowsys-hr-documents', JSON.stringify([...allDocs, ...seededDocs]))
-        setDocuments(seededDocs)
-      }
+      setDocuments(employeeDocs)
       const allLeaves: LeaveRequest[] = loadStored('flowsys-hr-leave-requests', [])
       const realLeaves = allLeaves.filter(l => !isLegacySeedLeaveRequest(l))
       if (realLeaves.length !== allLeaves.length) window.localStorage.setItem('flowsys-hr-leave-requests', JSON.stringify(realLeaves))
@@ -468,26 +393,14 @@ export default function EmployeeProfilePage() {
       setLeaves(employeeLeaves)
       const allAttendance: AttendanceRecord[] = loadStored('flowsys-hr-attendance', [])
       const employeeAttendance = allAttendance.filter(a => employeeKeys.has(a.employeeId))
-      if (employeeAttendance.length) {
-        setAttendanceRecords(employeeAttendance)
-      } else {
-        const initialRecord = createDefaultAttendanceRecord(found)
-        window.localStorage.setItem('flowsys-hr-attendance', JSON.stringify([...allAttendance, initialRecord]))
-        setAttendanceRecords([initialRecord])
-      }
+      setAttendanceRecords(employeeAttendance)
       const allPayroll: PayrollRecord[] = loadStored('flowsys-hr-payroll-records', [])
       const payrollSchedule = loadStored<{ frequency?: PayrollFrequency }>(payrollScheduleKey, {})
       const payrollFrequency = payrollSchedule.frequency || defaultPayrollFrequency
       const employeePayroll = allPayroll
         .filter(p => employeeKeys.has(p.employeeId))
         .map(record => normalizeEmployeePayrollTax(record, found, payrollFrequency))
-      if (employeePayroll.length) {
-        setPayrollRecords(employeePayroll)
-      } else {
-        const seededPayroll = createSeedPayrollRecords(found)
-        window.localStorage.setItem('flowsys-hr-payroll-records', JSON.stringify([...allPayroll, ...seededPayroll]))
-        setPayrollRecords(seededPayroll)
-      }
+      setPayrollRecords(employeePayroll)
       const employeeLoans = loadLoanRequests().filter(request => {
         const requestName = String(request.employeeName || '').trim().toLowerCase()
         return employeeKeys.has(request.employeeId)
@@ -497,22 +410,10 @@ export default function EmployeeProfilePage() {
       setLoanRequests(employeeLoans)
       const allGoals: PerformanceGoal[] = loadStored('flowsys-hr-performance-goals', [])
       const employeeGoals = allGoals.filter(g => employeeKeys.has(g.employeeId))
-      if (employeeGoals.length) {
-        setPerformanceGoals(employeeGoals)
-      } else {
-        const seededGoals = createSeedPerformanceGoals(found)
-        window.localStorage.setItem('flowsys-hr-performance-goals', JSON.stringify([...allGoals, ...seededGoals]))
-        setPerformanceGoals(seededGoals)
-      }
+      setPerformanceGoals(employeeGoals)
       const allFeedback: PerformanceFeedback[] = loadStored('flowsys-hr-performance-feedback', [])
       const employeeFeedback = allFeedback.filter(f => employeeKeys.has(f.employeeId))
-      if (employeeFeedback.length) {
-        setPerformanceFeedback(employeeFeedback)
-      } else {
-        const seededFeedback = createSeedFeedback(found)
-        window.localStorage.setItem('flowsys-hr-performance-feedback', JSON.stringify([...allFeedback, ...seededFeedback]))
-        setPerformanceFeedback(seededFeedback)
-      }
+      setPerformanceFeedback(employeeFeedback)
     }, 0)
     return () => window.clearTimeout(timer)
   }, [routeId])
@@ -853,13 +754,13 @@ export default function EmployeeProfilePage() {
   if (notFound) return (
     <main style={{ fontFamily: font, padding: '40px 20px', textAlign: 'center' }}>
       <Users size={48} color="#d1d5db" style={{ marginBottom: 16 }} />
-      <div style={{ fontSize: 16, fontWeight: 500, color: '#6b7280', marginBottom: 8 }}>Employee not found</div>
+      <div style={{ fontSize: 16, fontWeight: 500, color: '#000000', marginBottom: 8 }}>Employee not found</div>
       <Link href="/hr/employees"><button style={{ background: '#22c55e', border: 'none', borderRadius: 8, padding: '8px 18px', fontSize: 13, fontWeight: 600, color: '#fff', cursor: 'pointer' }}>Back to Employees</button></Link>
     </main>
   )
 
   if (!employee) return (
-    <main style={{ fontFamily: font, padding: '40px 20px', textAlign: 'center', color: '#9ca3af', fontSize: 13 }}>Loadingâ€¦</main>
+    <main style={{ fontFamily: font, padding: '40px 20px', textAlign: 'center', color: '#000000', fontSize: 13 }}>Loadingâ€¦</main>
   )
 
   const name = fullName(employee)
@@ -872,7 +773,7 @@ export default function EmployeeProfilePage() {
 
       {/* Top action bar */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingTop: 16, marginBottom: 14 }}>
-        <button onClick={() => router.back()} style={{ display: 'flex', alignItems: 'center', gap: 6, border: 'none', background: 'transparent', cursor: 'pointer', color: '#6b7280', fontSize: 13, padding: '6px 0' }}>
+        <button onClick={() => router.back()} style={{ display: 'flex', alignItems: 'center', gap: 6, border: 'none', background: 'transparent', cursor: 'pointer', color: '#000000', fontSize: 13, padding: '6px 0' }}>
           <ArrowLeft size={16} /> Back
         </button>
         <div style={{ display: 'flex', gap: 8 }}>
@@ -889,8 +790,8 @@ export default function EmployeeProfilePage() {
       </div>
 
       {/* Dashboard layout: main column + right rail */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) 320px', gap: 16, alignItems: 'start' }}>
-        <div style={{ minWidth: 0, display: 'grid', gap: 14 }}>
+      <div className="hr-profile-layout">
+        <div className="hr-profile-main">
 
       {/* Profile dashboard card */}
       <div style={{ ...cardStyle, padding: '24px 26px', display: 'grid', gridTemplateColumns: 'auto minmax(0, 1fr)', gap: 24, alignItems: 'center' }}>
@@ -904,31 +805,31 @@ export default function EmployeeProfilePage() {
             <h2 style={{ margin: 0, fontSize: 22, fontWeight: 800, color: '#0f172a', letterSpacing: '-0.01em' }}>{name}</h2>
             <span style={{ fontSize: 11, fontWeight: 700, padding: '3px 10px', borderRadius: 99, background: sb.bg, color: sb.text }}>{employee.employmentStatus}</span>
           </div>
-          <div style={{ color: '#475569', fontSize: 13, fontWeight: 600, marginBottom: 12 }}>
+          <div style={{ color: '#000000', fontSize: 13, fontWeight: 600, marginBottom: 12 }}>
             {employee.jobTitle || 'Team member'}
-            <span style={{ color: '#94a3b8', fontWeight: 500 }}>{employee.dateOfJoining ? ` • ${Math.max(0, Math.floor((nowMs - new Date(employee.dateOfJoining).getTime()) / 86400000))} days on the team` : ''}</span>
+            <span style={{ color: '#000000', fontWeight: 500 }}>{employee.dateOfJoining ? ` • ${Math.max(0, Math.floor((nowMs - new Date(employee.dateOfJoining).getTime()) / 86400000))} days on the team` : ''}</span>
           </div>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 10, fontSize: 13, color: '#0f172a' }}>
             {employee.phone && (
               <span style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
-                <Phone size={14} color="#64748b" />
+                <Phone size={14} color="#000000" />
                 <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{employee.phone}</span>
               </span>
             )}
             {employee.email && (
               <span style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
-                <Mail size={14} color="#64748b" />
+                <Mail size={14} color="#000000" />
                 <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{employee.email}</span>
               </span>
             )}
             {employee.workLocation && (
               <span style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
-                <MapPin size={14} color="#64748b" />
+                <MapPin size={14} color="#000000" />
                 <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{employee.workLocation}</span>
               </span>
             )}
             <span style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
-              <Briefcase size={14} color="#64748b" />
+              <Briefcase size={14} color="#000000" />
               <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{employee.department || 'Unassigned'}{employee.team ? ` • ${employee.team}` : ''}</span>
             </span>
           </div>
@@ -972,9 +873,9 @@ export default function EmployeeProfilePage() {
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 14 }}>
             {tiles.map(tile => (
               <article key={tile.label} style={{ ...cardStyle, padding: '18px 20px 16px' }}>
-                <div style={{ color: '#64748b', fontSize: 11, fontWeight: 700, letterSpacing: '0.04em', textTransform: 'uppercase', marginBottom: 8 }}>{tile.label}</div>
+                <div style={{ color: '#000000', fontSize: 11, fontWeight: 700, letterSpacing: '0.04em', textTransform: 'uppercase', marginBottom: 8 }}>{tile.label}</div>
                 <div style={{ color: '#0f172a', fontSize: 26, fontWeight: 800, letterSpacing: '-0.01em', lineHeight: 1 }}>{tile.value}</div>
-                <div style={{ color: '#475569', fontSize: 12, fontWeight: 500, marginTop: 6 }}>{tile.hint}</div>
+                <div style={{ color: '#000000', fontSize: 12, fontWeight: 500, marginTop: 6 }}>{tile.hint}</div>
                 <div style={{ height: 4, marginTop: 12, borderRadius: 99, background: '#f1f5f9', overflow: 'hidden' }}>
                   <div style={{ width: `${tile.bar}%`, height: '100%', background: tile.tone, borderRadius: 99 }} />
                 </div>
@@ -987,7 +888,7 @@ export default function EmployeeProfilePage() {
       {/* Tabs */}
       <div style={{ display: 'flex', gap: 2, borderBottom: '1px solid #e5e7eb', marginBottom: 16, background: '#fff', padding: '0 8px', borderRadius: '12px 12px 0 0', border: '1px solid #e5e7eb', overflowX: 'auto' }}>
         {TABS.map(t => (
-          <button key={t} onClick={() => setActiveTab(t)} style={{ border: 'none', borderBottom: `2px solid ${activeTab === t ? '#22c55e' : 'transparent'}`, background: 'transparent', color: activeTab === t ? '#22c55e' : '#6b7280', padding: '12px 16px', fontSize: 13, fontWeight: activeTab === t ? 600 : 400, cursor: 'pointer', transition: 'color 150ms ease', whiteSpace: 'nowrap', flexShrink: 0 }}>
+          <button key={t} onClick={() => setActiveTab(t)} style={{ border: 'none', borderBottom: `2px solid ${activeTab === t ? '#22c55e' : 'transparent'}`, background: 'transparent', color: activeTab === t ? '#22c55e' : '#000000', padding: '12px 16px', fontSize: 13, fontWeight: activeTab === t ? 600 : 400, cursor: 'pointer', transition: 'color 150ms ease', whiteSpace: 'nowrap', flexShrink: 0 }}>
             {t}
           </button>
         ))}
@@ -1023,7 +924,7 @@ export default function EmployeeProfilePage() {
               ['Emergency Contact', employee.emergencyContactName ? `${employee.emergencyContactName}${employee.emergencyContactRelationship ? ` (${employee.emergencyContactRelationship})` : ''}\n${employee.emergencyContactPhone || ''}` : 'â€”'],
             ].map(([label, value]) => (
               <div key={label} style={{ display: 'grid', gridTemplateColumns: '130px 1fr', gap: 8, padding: '6px 0', borderBottom: '1px solid #f9fafb' }}>
-                <span style={{ fontSize: 12, color: '#9ca3af', fontWeight: 500 }}>{label}</span>
+                <span style={{ fontSize: 12, color: '#000000', fontWeight: 500 }}>{label}</span>
                 <span style={{ fontSize: 12, color: '#374151', fontWeight: 400, whiteSpace: 'pre-line' }}>{value}</span>
               </div>
             ))}
@@ -1048,7 +949,7 @@ export default function EmployeeProfilePage() {
               ['Employee Status',  employee.employmentStatus],
             ].map(([label, value]) => (
               <div key={label} style={{ display: 'grid', gridTemplateColumns: '140px 1fr', gap: 8, padding: '6px 0', borderBottom: '1px solid #f9fafb' }}>
-                <span style={{ fontSize: 12, color: '#9ca3af', fontWeight: 500 }}>{label}</span>
+                <span style={{ fontSize: 12, color: '#000000', fontWeight: 500 }}>{label}</span>
                 <span style={{ fontSize: 12, color: label === 'Employee Status' ? statusBadge(value || '').text : '#374151', fontWeight: label === 'Employee Status' ? 600 : 400 }}>{value}</span>
               </div>
             ))}
@@ -1067,9 +968,9 @@ export default function EmployeeProfilePage() {
                     { label: 'Total Deductions', value: money(salary.deductions) },
                   ].map(s => (
                     <div key={s.label}>
-                      <div style={{ fontSize: 11, color: '#9ca3af', marginBottom: 2 }}>{s.label}</div>
+                      <div style={{ fontSize: 11, color: '#000000', marginBottom: 2 }}>{s.label}</div>
                       <div style={{ fontSize: 13, fontWeight: 600, color: '#374151' }}>{s.value}</div>
-                      <div style={{ fontSize: 10, color: '#9ca3af' }}>Monthly</div>
+                      <div style={{ fontSize: 10, color: '#000000' }}>Monthly</div>
                     </div>
                   ))}
                 </div>
@@ -1089,7 +990,7 @@ export default function EmployeeProfilePage() {
                 <button onClick={() => setActiveTab('Documents')} style={{ border: 'none', background: 'transparent', fontSize: 12, color: '#22c55e', fontWeight: 500, cursor: 'pointer' }}>View All</button>
               </div>
               {documents.length === 0 ? (
-                <div style={{ textAlign: 'center', padding: '14px 0', color: '#9ca3af', fontSize: 12 }}>No documents uploaded yet</div>
+                <div style={{ textAlign: 'center', padding: '14px 0', color: '#000000', fontSize: 12 }}>No documents uploaded yet</div>
               ) : documents.slice(0, 4).map(doc => {
                 const dic = docIcon(doc.type)
                 return (
@@ -1099,12 +1000,12 @@ export default function EmployeeProfilePage() {
                     </div>
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <div style={{ fontSize: 12, fontWeight: 500, color: '#111827', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{doc.name}</div>
-                      <div style={{ fontSize: 10, color: '#9ca3af' }}>{doc.type.toUpperCase()} â€¢ Uploaded on {formatDate(doc.uploadedAt)}</div>
+                      <div style={{ fontSize: 10, color: '#000000' }}>{doc.type.toUpperCase()} â€¢ Uploaded on {formatDate(doc.uploadedAt)}</div>
                     </div>
                     {doc.fileUrl || doc.dataUrl ? (
-                      <a href={doc.fileUrl || doc.dataUrl} download={doc.name} style={{ color: '#9ca3af', display: 'grid', placeItems: 'center' }} aria-label={`Download ${doc.name}`}><Download size={14} /></a>
+                      <a href={doc.fileUrl || doc.dataUrl} download={doc.name} style={{ color: '#000000', display: 'grid', placeItems: 'center' }} aria-label={`Download ${doc.name}`}><Download size={14} /></a>
                     ) : (
-                      <button style={{ border: 'none', background: 'transparent', cursor: 'pointer', color: '#9ca3af' }}><Download size={14} /></button>
+                      <button style={{ border: 'none', background: 'transparent', cursor: 'pointer', color: '#000000' }}><Download size={14} /></button>
                     )}
                   </div>
                 )
@@ -1129,7 +1030,7 @@ export default function EmployeeProfilePage() {
                       </span>
                       <span style={{ color: '#374151' }}>{lb.type}</span>
                     </span>
-                    <span style={{ color: '#6b7280' }}>{lb.remaining} / {lb.total} days</span>
+                    <span style={{ color: '#000000' }}>{lb.remaining} / {lb.total} days</span>
                   </div>
                   <div style={{ height: 5, borderRadius: 3, background: '#f3f4f6', overflow: 'hidden' }}>
                     <div style={{ height: '100%', width: `${Math.min(100, (lb.remaining / lb.total) * 100)}%`, background: lb.color, borderRadius: 3 }} />
@@ -1165,7 +1066,7 @@ export default function EmployeeProfilePage() {
                       <span style={{ display: 'flex', alignItems: 'center', gap: 5, color: '#374151' }}>
                         <span style={{ width: 6, height: 6, borderRadius: '50%', background: r.color }} />{r.label}
                       </span>
-                      <span style={{ color: '#6b7280' }}>{r.value} days</span>
+                      <span style={{ color: '#000000' }}>{r.value} days</span>
                     </div>
                   ))}
                 </div>
@@ -1210,7 +1111,7 @@ export default function EmployeeProfilePage() {
               ['Attendance Rate', `${attendanceStats.attendanceRate}%`, '#22c55e'],
             ].map(([label, value, color]) => (
               <div key={label} style={{ ...cardStyle, padding: '16px 18px' }}>
-                <div style={{ fontSize: 11, color: '#9ca3af', fontWeight: 700, textTransform: 'uppercase', marginBottom: 8 }}>{label}</div>
+                <div style={{ fontSize: 11, color: '#000000', fontWeight: 700, textTransform: 'uppercase', marginBottom: 8 }}>{label}</div>
                 <div style={{ fontSize: 22, fontWeight: 800, color }}>{value}</div>
               </div>
             ))}
@@ -1219,35 +1120,35 @@ export default function EmployeeProfilePage() {
             <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'center', marginBottom: 14 }}>
               <div>
                 <div style={{ fontSize: 15, fontWeight: 700, color: '#111827' }}>Add attendance record</div>
-                <div style={{ fontSize: 12, color: '#6b7280', marginTop: 2 }}>A saved daily attendance entry for this employee.</div>
+                <div style={{ fontSize: 12, color: '#000000', marginTop: 2 }}>A saved daily attendance entry for this employee.</div>
               </div>
               <button onClick={saveAttendanceRecord} style={{ border: 'none', background: '#22c55e', color: '#fff', borderRadius: 8, padding: '9px 14px', fontSize: 12, fontWeight: 800, cursor: 'pointer' }}>Save record</button>
             </div>
             {attendanceError && <div style={{ marginBottom: 12, color: '#b91c1c', background: '#fee2e2', borderRadius: 8, padding: '8px 10px', fontSize: 12, fontWeight: 700 }}>{attendanceError}</div>}
             <div style={{ display: 'grid', gridTemplateColumns: '1.1fr 1fr 1fr 1fr 1fr 2fr', gap: 10 }}>
-              <label style={{ display: 'grid', gap: 5, fontSize: 11, color: '#6b7280', fontWeight: 700 }}>
+              <label style={{ display: 'grid', gap: 5, fontSize: 11, color: '#000000', fontWeight: 700 }}>
                 Date
                 <input type="date" value={attendanceDraft.date || ''} onChange={event => setAttendanceDraft(previous => ({ ...previous, date: event.target.value }))} style={{ border: '1px solid #e5e7eb', borderRadius: 8, padding: '9px 10px', fontSize: 12, color: '#111827' }} />
               </label>
-              <label style={{ display: 'grid', gap: 5, fontSize: 11, color: '#6b7280', fontWeight: 700 }}>
+              <label style={{ display: 'grid', gap: 5, fontSize: 11, color: '#000000', fontWeight: 700 }}>
                 Status
                 <select value={attendanceDraft.status || 'Present'} onChange={event => setAttendanceDraft(previous => ({ ...previous, status: event.target.value as AttendanceRecord['status'] }))} style={{ border: '1px solid #e5e7eb', borderRadius: 8, padding: '9px 10px', fontSize: 12, color: '#111827', background: '#fff' }}>
                   {['Present', 'Late', 'Absent', 'On Leave', 'Rest day'].map(status => <option key={status} value={status}>{status}</option>)}
                 </select>
               </label>
-              <label style={{ display: 'grid', gap: 5, fontSize: 11, color: '#6b7280', fontWeight: 700 }}>
+              <label style={{ display: 'grid', gap: 5, fontSize: 11, color: '#000000', fontWeight: 700 }}>
                 Clock in
                 <input type="time" value={attendanceDraft.clockIn || ''} onChange={event => setAttendanceDraft(previous => ({ ...previous, clockIn: event.target.value }))} style={{ border: '1px solid #e5e7eb', borderRadius: 8, padding: '9px 10px', fontSize: 12, color: '#111827' }} />
               </label>
-              <label style={{ display: 'grid', gap: 5, fontSize: 11, color: '#6b7280', fontWeight: 700 }}>
+              <label style={{ display: 'grid', gap: 5, fontSize: 11, color: '#000000', fontWeight: 700 }}>
                 Clock out
                 <input type="time" value={attendanceDraft.clockOut || ''} onChange={event => setAttendanceDraft(previous => ({ ...previous, clockOut: event.target.value }))} style={{ border: '1px solid #e5e7eb', borderRadius: 8, padding: '9px 10px', fontSize: 12, color: '#111827' }} />
               </label>
-              <label style={{ display: 'grid', gap: 5, fontSize: 11, color: '#6b7280', fontWeight: 700 }}>
+              <label style={{ display: 'grid', gap: 5, fontSize: 11, color: '#000000', fontWeight: 700 }}>
                 Break min
                 <input type="number" min="0" value={attendanceDraft.breakMinutes ?? 0} onChange={event => setAttendanceDraft(previous => ({ ...previous, breakMinutes: Number(event.target.value) }))} style={{ border: '1px solid #e5e7eb', borderRadius: 8, padding: '9px 10px', fontSize: 12, color: '#111827' }} />
               </label>
-              <label style={{ display: 'grid', gap: 5, fontSize: 11, color: '#6b7280', fontWeight: 700 }}>
+              <label style={{ display: 'grid', gap: 5, fontSize: 11, color: '#000000', fontWeight: 700 }}>
                 Notes
                 <input value={attendanceDraft.notes || ''} onChange={event => setAttendanceDraft(previous => ({ ...previous, notes: event.target.value }))} placeholder="Optional note" style={{ border: '1px solid #e5e7eb', borderRadius: 8, padding: '9px 10px', fontSize: 12, color: '#111827' }} />
               </label>
@@ -1257,7 +1158,7 @@ export default function EmployeeProfilePage() {
             <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'center', marginBottom: 14 }}>
               <div>
                 <div style={{ fontSize: 15, fontWeight: 700, color: '#111827' }}>Attendance records</div>
-                <div style={{ fontSize: 12, color: '#6b7280', marginTop: 2 }}>Recent attendance logs for {name}</div>
+                <div style={{ fontSize: 12, color: '#000000', marginTop: 2 }}>Recent attendance logs for {name}</div>
               </div>
               <button style={{ border: '1px solid #e5e7eb', background: '#fff', borderRadius: 8, padding: '8px 12px', fontSize: 12, fontWeight: 700, color: '#374151', cursor: 'pointer' }}>Request correction</button>
             </div>
@@ -1265,7 +1166,7 @@ export default function EmployeeProfilePage() {
               <thead>
                 <tr style={{ borderBottom: '1px solid #f3f4f6' }}>
                   {['Date','Status','Clock in','Clock out','Hours'].map(h => (
-                    <th key={h} style={{ padding: '9px 12px', textAlign: 'left', fontSize: 11, fontWeight: 700, color: '#9ca3af', textTransform: 'uppercase' }}>{h}</th>
+                    <th key={h} style={{ padding: '9px 12px', textAlign: 'left', fontSize: 11, fontWeight: 700, color: '#000000', textTransform: 'uppercase' }}>{h}</th>
                   ))}
                 </tr>
               </thead>
@@ -1295,14 +1196,14 @@ export default function EmployeeProfilePage() {
           {leaves.length === 0 ? (
             <div style={{ textAlign: 'center', padding: '24px 0' }}>
               <CalendarCheck size={36} color="#d1d5db" style={{ marginBottom: 12 }} />
-              <div style={{ fontSize: 13, color: '#6b7280' }}>No leave history yet</div>
+              <div style={{ fontSize: 13, color: '#000000' }}>No leave history yet</div>
             </div>
           ) : (
             <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
               <thead>
                 <tr style={{ borderBottom: '1px solid #f3f4f6' }}>
                   {['Leave Type','Start Date','End Date','Days','Status'].map(h => (
-                    <th key={h} style={{ padding: '8px 12px', textAlign: 'left', fontSize: 11, fontWeight: 600, color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '0.04em' }}>{h}</th>
+                    <th key={h} style={{ padding: '8px 12px', textAlign: 'left', fontSize: 11, fontWeight: 600, color: '#000000', textTransform: 'uppercase', letterSpacing: '0.04em' }}>{h}</th>
                   ))}
                 </tr>
               </thead>
@@ -1335,7 +1236,7 @@ export default function EmployeeProfilePage() {
                   <span style={{ width: 36, height: 36, borderRadius: 10, background: `${lb.color}18`, display: 'grid', placeItems: 'center' }}><CalendarCheck size={16} color={lb.color} /></span>
                   <div>
                     <div style={{ fontSize: 13, fontWeight: 800, color: '#111827' }}>{lb.type}</div>
-                    <div style={{ fontSize: 11, color: '#6b7280' }}>{lb.remaining} remaining of {lb.total} days</div>
+                    <div style={{ fontSize: 11, color: '#000000' }}>{lb.remaining} remaining of {lb.total} days</div>
                   </div>
                 </div>
                 <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, color: '#374151', marginBottom: 7 }}>
@@ -1352,7 +1253,7 @@ export default function EmployeeProfilePage() {
             <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'center', marginBottom: 14 }}>
               <div>
                 <div style={{ fontSize: 15, fontWeight: 800, color: '#111827' }}>Leave Balance Details</div>
-                <div style={{ fontSize: 12, color: '#6b7280', marginTop: 2 }}>HR view of available balances and approved leave usage for {name}.</div>
+                <div style={{ fontSize: 12, color: '#000000', marginTop: 2 }}>HR view of available balances and approved leave usage for {name}.</div>
               </div>
               <button onClick={() => setActiveTab('Leave History')} style={{ border: '1px solid #e5e7eb', background: '#fff', borderRadius: 8, padding: '8px 12px', fontSize: 12, fontWeight: 800, color: '#374151', cursor: 'pointer' }}>View history</button>
             </div>
@@ -1360,7 +1261,7 @@ export default function EmployeeProfilePage() {
               <thead>
                 <tr style={{ borderBottom: '1px solid #f3f4f6' }}>
                   {['Leave Type','Entitlement','Used','Remaining','Status'].map(h => (
-                    <th key={h} style={{ padding: '9px 12px', textAlign: 'left', fontSize: 11, fontWeight: 800, color: '#9ca3af', textTransform: 'uppercase' }}>{h}</th>
+                    <th key={h} style={{ padding: '9px 12px', textAlign: 'left', fontSize: 11, fontWeight: 800, color: '#000000', textTransform: 'uppercase' }}>{h}</th>
                   ))}
                 </tr>
               </thead>
@@ -1394,7 +1295,7 @@ export default function EmployeeProfilePage() {
               ['Bank', employee.bankName || '-'],
             ].map(([label, value]) => (
               <div key={label} style={{ display: 'flex', justifyContent: 'space-between', gap: 12, padding: '9px 0', borderBottom: '1px solid #f3f4f6' }}>
-                <span style={{ fontSize: 12, color: '#6b7280' }}>{label}</span>
+                <span style={{ fontSize: 12, color: '#000000' }}>{label}</span>
                 <span style={{ fontSize: 12, fontWeight: 800, color: label === 'Net Pay' ? '#16a34a' : label === 'Deductions' ? '#ef4444' : '#111827', textAlign: 'right' }}>{value}</span>
               </div>
             ))}
@@ -1412,17 +1313,17 @@ export default function EmployeeProfilePage() {
                       <span style={{ fontSize: 12, color: loan.deductionPaused ? '#d97706' : '#16a34a', fontWeight: 900 }}>{loan.deductionPaused ? 'Paused' : loan.status}</span>
                     </div>
                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginTop: 9 }}>
-                      <span style={{ fontSize: 11, color: '#6b7280' }}>Balance<strong style={{ display: 'block', fontSize: 12, color: '#111827' }}>{money(progress.balance)}</strong></span>
-                      <span style={{ fontSize: 11, color: '#6b7280' }}>Paid<strong style={{ display: 'block', fontSize: 12, color: '#111827' }}>{money(progress.paid)}</strong></span>
-                      <span style={{ fontSize: 11, color: '#6b7280' }}>Paid terms<strong style={{ display: 'block', fontSize: 12, color: '#111827' }}>{progress.paidTerms}</strong></span>
-                      <span style={{ fontSize: 11, color: '#6b7280' }}>Terms left<strong style={{ display: 'block', fontSize: 12, color: '#111827' }}>{progress.remainingTerms}</strong></span>
-                      <span style={{ fontSize: 11, color: '#6b7280' }}>Deduction<strong style={{ display: 'block', fontSize: 12, color: '#111827' }}>{money(progress.scheduled)}</strong></span>
-                      <span style={{ fontSize: 11, color: '#6b7280' }}>Last paid<strong style={{ display: 'block', fontSize: 12, color: '#111827' }}>{progress.lastPaidPeriod || '-'}</strong></span>
+                      <span style={{ fontSize: 11, color: '#000000' }}>Balance<strong style={{ display: 'block', fontSize: 12, color: '#111827' }}>{money(progress.balance)}</strong></span>
+                      <span style={{ fontSize: 11, color: '#000000' }}>Paid<strong style={{ display: 'block', fontSize: 12, color: '#111827' }}>{money(progress.paid)}</strong></span>
+                      <span style={{ fontSize: 11, color: '#000000' }}>Paid terms<strong style={{ display: 'block', fontSize: 12, color: '#111827' }}>{progress.paidTerms}</strong></span>
+                      <span style={{ fontSize: 11, color: '#000000' }}>Terms left<strong style={{ display: 'block', fontSize: 12, color: '#111827' }}>{progress.remainingTerms}</strong></span>
+                      <span style={{ fontSize: 11, color: '#000000' }}>Deduction<strong style={{ display: 'block', fontSize: 12, color: '#111827' }}>{money(progress.scheduled)}</strong></span>
+                      <span style={{ fontSize: 11, color: '#000000' }}>Last paid<strong style={{ display: 'block', fontSize: 12, color: '#111827' }}>{progress.lastPaidPeriod || '-'}</strong></span>
                     </div>
                   </div>
                 )
               }) : (
-                <div style={{ border: '1px dashed #d1d5db', borderRadius: 10, padding: 12, color: '#6b7280', fontSize: 12, textAlign: 'center' }}>No active loan balances.</div>
+                <div style={{ border: '1px dashed #d1d5db', borderRadius: 10, padding: 12, color: '#000000', fontSize: 12, textAlign: 'center' }}>No active loan balances.</div>
               )}
             </div>
           </div>
@@ -1432,7 +1333,7 @@ export default function EmployeeProfilePage() {
               <thead>
                 <tr style={{ borderBottom: '1px solid #f3f4f6' }}>
                   {['Period','Gross','Deductions','Net Pay','Status','Action'].map(h => (
-                    <th key={h} style={{ padding: '9px 12px', textAlign: 'left', fontSize: 11, fontWeight: 700, color: '#9ca3af', textTransform: 'uppercase' }}>{h}</th>
+                    <th key={h} style={{ padding: '9px 12px', textAlign: 'left', fontSize: 11, fontWeight: 700, color: '#000000', textTransform: 'uppercase' }}>{h}</th>
                   ))}
                 </tr>
               </thead>
@@ -1472,7 +1373,7 @@ export default function EmployeeProfilePage() {
               ['Payroll Deductions', money(activeLoanBalances.reduce((sum, loan) => sum + loanPaymentProgress(loan, payrollRecords).scheduled, 0)), '#f59e0b'],
             ].map(([label, value, color]) => (
               <div key={label} style={{ ...cardStyle, padding: '16px 18px' }}>
-                <div style={{ fontSize: 11, color: '#9ca3af', fontWeight: 800, textTransform: 'uppercase', marginBottom: 8 }}>{label}</div>
+                <div style={{ fontSize: 11, color: '#000000', fontWeight: 800, textTransform: 'uppercase', marginBottom: 8 }}>{label}</div>
                 <div style={{ fontSize: 22, fontWeight: 900, color }}>{value}</div>
               </div>
             ))}
@@ -1481,20 +1382,20 @@ export default function EmployeeProfilePage() {
             <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'center', marginBottom: 14 }}>
               <div>
                 <div style={{ fontSize: 15, fontWeight: 800, color: '#111827' }}>Loans & Cash Advances</div>
-                <div style={{ fontSize: 12, color: '#6b7280', marginTop: 2 }}>Read-only HR view. Finance owns approval, terms, schedules, and deduction controls.</div>
+                <div style={{ fontSize: 12, color: '#000000', marginTop: 2 }}>Read-only HR view. Finance owns approval, terms, schedules, and deduction controls.</div>
               </div>
             </div>
             {loanRequests.length === 0 ? (
               <div style={{ textAlign: 'center', padding: '30px 0' }}>
                 <CreditCard size={36} color="#d1d5db" style={{ marginBottom: 12 }} />
-                <div style={{ fontSize: 13, color: '#6b7280' }}>No loan or cash advance records yet</div>
+                <div style={{ fontSize: 13, color: '#000000' }}>No loan or cash advance records yet</div>
               </div>
             ) : (
               <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
                 <thead>
                   <tr style={{ borderBottom: '1px solid #f3f4f6' }}>
                     {['Loan Type','Original Amount','Paid','Balance','Deduction','Paid Terms','Terms Left','Status','Last Deducted'].map(h => (
-                      <th key={h} style={{ padding: '9px 12px', textAlign: 'left', fontSize: 11, fontWeight: 800, color: '#9ca3af', textTransform: 'uppercase' }}>{h}</th>
+                      <th key={h} style={{ padding: '9px 12px', textAlign: 'left', fontSize: 11, fontWeight: 800, color: '#000000', textTransform: 'uppercase' }}>{h}</th>
                     ))}
                   </tr>
                 </thead>
@@ -1508,7 +1409,7 @@ export default function EmployeeProfilePage() {
                         <td style={{ padding: '12px', color: '#374151' }}>{money(loan.amount)}</td>
                         <td style={{ padding: '12px', color: '#374151' }}>{money(progress.paid)}</td>
                         <td style={{ padding: '12px', color: active && progress.balance > 0 ? '#15803d' : '#374151', fontWeight: 900 }}>{money(progress.balance)}</td>
-                        <td style={{ padding: '12px', color: '#374151' }}>{money(progress.scheduled)}<span style={{ display: 'block', color: '#9ca3af', fontSize: 11 }}>{loan.deductionPaused ? 'Paused' : loan.deductionSchedule || 'Twice a month'}</span></td>
+                        <td style={{ padding: '12px', color: '#374151' }}>{money(progress.scheduled)}<span style={{ display: 'block', color: '#000000', fontSize: 11 }}>{loan.deductionPaused ? 'Paused' : loan.deductionSchedule || 'Twice a month'}</span></td>
                         <td style={{ padding: '12px', color: '#374151' }}>{progress.paidTerms}</td>
                         <td style={{ padding: '12px', color: '#374151' }}>{progress.remainingTerms}</td>
                         <td style={{ padding: '12px' }}><span style={{ borderRadius: 999, background: loan.status === 'Rejected' ? '#fee2e2' : active ? '#dcfce7' : '#fef3c7', color: loan.status === 'Rejected' ? '#dc2626' : active ? '#15803d' : '#d97706', padding: '3px 10px', fontSize: 11, fontWeight: 900 }}>{loan.status}</span></td>
@@ -1537,8 +1438,8 @@ export default function EmployeeProfilePage() {
           {documents.length === 0 ? (
             <div style={{ textAlign: 'center', padding: '32px 0' }}>
               <FileText size={36} color="#d1d5db" style={{ marginBottom: 12 }} />
-              <div style={{ fontSize: 13, color: '#6b7280', marginBottom: 6 }}>No documents uploaded yet</div>
-              <div style={{ fontSize: 12, color: '#9ca3af' }}>Upload contracts, IDs, certificates, and other HR documents here.</div>
+              <div style={{ fontSize: 13, color: '#000000', marginBottom: 6 }}>No documents uploaded yet</div>
+              <div style={{ fontSize: 12, color: '#000000' }}>Upload contracts, IDs, certificates, and other HR documents here.</div>
             </div>
           ) : (
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 10 }}>
@@ -1549,12 +1450,12 @@ export default function EmployeeProfilePage() {
                     <div style={{ width: 32, height: 32, borderRadius: 8, background: dic.bg, display: 'grid', placeItems: 'center', flexShrink: 0 }}><FileText size={15} color={dic.color} /></div>
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <div style={{ fontSize: 13, fontWeight: 500, color: '#111827', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{doc.name}</div>
-                      <div style={{ fontSize: 11, color: '#9ca3af' }}>{doc.type.toUpperCase()} â€¢ {formatDate(doc.uploadedAt)}</div>
+                      <div style={{ fontSize: 11, color: '#000000' }}>{doc.type.toUpperCase()} â€¢ {formatDate(doc.uploadedAt)}</div>
                     </div>
                     {doc.fileUrl || doc.dataUrl ? (
-                      <a href={doc.fileUrl || doc.dataUrl} download={doc.name} style={{ color: '#9ca3af', display: 'grid', placeItems: 'center' }} aria-label={`Download ${doc.name}`}><Download size={14} /></a>
+                      <a href={doc.fileUrl || doc.dataUrl} download={doc.name} style={{ color: '#000000', display: 'grid', placeItems: 'center' }} aria-label={`Download ${doc.name}`}><Download size={14} /></a>
                     ) : (
-                      <button style={{ border: 'none', background: 'transparent', cursor: 'pointer', color: '#9ca3af' }}><Download size={14} /></button>
+                      <button style={{ border: 'none', background: 'transparent', cursor: 'pointer', color: '#000000' }}><Download size={14} /></button>
                     )}
                   </div>
                 )
@@ -1575,7 +1476,7 @@ export default function EmployeeProfilePage() {
               ['Next Review', performanceStats.nextReview, '#f59e0b'],
             ].map(([label, value, color]) => (
               <div key={label} style={{ ...cardStyle, padding: '16px 18px' }}>
-                <div style={{ fontSize: 11, color: '#9ca3af', fontWeight: 700, textTransform: 'uppercase', marginBottom: 8 }}>{label}</div>
+                <div style={{ fontSize: 11, color: '#000000', fontWeight: 700, textTransform: 'uppercase', marginBottom: 8 }}>{label}</div>
                 <div style={{ fontSize: 22, fontWeight: 800, color }}>{value}</div>
               </div>
             ))}
@@ -1587,12 +1488,12 @@ export default function EmployeeProfilePage() {
                 <div key={goal.id} style={{ marginBottom: 14 }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6, fontSize: 12 }}>
                     <span style={{ color: '#374151', fontWeight: 700 }}>{goal.title}</span>
-                    <span style={{ color: '#6b7280' }}>{goal.progress}%</span>
+                    <span style={{ color: '#000000' }}>{goal.progress}%</span>
                   </div>
                   <div style={{ height: 7, borderRadius: 99, background: '#f3f4f6', overflow: 'hidden' }}>
                     <div style={{ height: '100%', width: `${goal.progress}%`, background: goal.status === 'At Risk' ? '#f59e0b' : '#22c55e' }} />
                   </div>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 5, fontSize: 11, color: '#9ca3af' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 5, fontSize: 11, color: '#000000' }}>
                     <span>{goal.status}</span>
                     <span>Due {formatDate(goal.dueDate)}</span>
                   </div>
@@ -1606,7 +1507,7 @@ export default function EmployeeProfilePage() {
                   <TrendingUp size={15} color="#22c55e" />
                   <div>
                     <div style={{ fontSize: 13, color: '#374151', fontWeight: 600 }}>{feedback.note}</div>
-                    <div style={{ fontSize: 11, color: '#9ca3af', marginTop: 3 }}>By {feedback.author} - {feedback.rating}/5 - {formatDate(feedback.createdAt)}</div>
+                    <div style={{ fontSize: 11, color: '#000000', marginTop: 3 }}>By {feedback.author} - {feedback.rating}/5 - {formatDate(feedback.createdAt)}</div>
                   </div>
                 </div>
               ))}
@@ -1629,8 +1530,8 @@ export default function EmployeeProfilePage() {
                   </div>
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ fontSize: 13, fontWeight: 600, color: '#111827', marginBottom: 2 }}>{a.title}</div>
-                    <div style={{ fontSize: 12, color: '#6b7280' }}>{a.desc}</div>
-                    <div style={{ fontSize: 11, color: '#9ca3af', marginTop: 4 }}>{a.time}</div>
+                    <div style={{ fontSize: 12, color: '#000000' }}>{a.desc}</div>
+                    <div style={{ fontSize: 11, color: '#000000', marginTop: 4 }}>{a.time}</div>
                   </div>
                 </div>
               )
@@ -1654,7 +1555,7 @@ export default function EmployeeProfilePage() {
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, padding: '18px 22px', borderBottom: '1px solid #e5e7eb' }}>
               <div>
                 <div style={{ fontSize: 16, fontWeight: 800, color: '#111827' }}>Edit {editSection === 'profile' ? 'employee profile' : `${editSection} information`}</div>
-                <div style={{ fontSize: 12, color: '#6b7280', marginTop: 2 }}>Changes save to the employee record and update this page immediately.</div>
+                <div style={{ fontSize: 12, color: '#000000', marginTop: 2 }}>Changes save to the employee record and update this page immediately.</div>
               </div>
               <button onClick={() => setEditOpen(false)} style={{ border: 'none', background: '#f3f4f6', width: 32, height: 32, borderRadius: '50%', cursor: 'pointer', color: '#374151' }}>x</button>
             </div>
@@ -1813,7 +1714,7 @@ function PayslipPreviewModal({ employee, payslip, loanRequests, onClose }: { emp
               <h2 style={{ margin: 0, color: '#0f172a', fontSize: 20 }}>Payslip Preview</h2>
               <span style={{ borderRadius: 999, background: payslip.status === 'Paid' ? '#dcfce7' : '#fef3c7', color: payslip.status === 'Paid' ? '#15803d' : '#d97706', padding: '4px 10px', fontSize: 11, fontWeight: 900 }}>{payslip.status}</span>
             </div>
-            <div style={{ marginTop: 5, color: '#64748b', fontSize: 13 }}>{payslip.period} - Pay date {formatDate(payslip.paidAt || payslip.createdAt)}</div>
+            <div style={{ marginTop: 5, color: '#000000', fontSize: 13 }}>{payslip.period} - Pay date {formatDate(payslip.paidAt || payslip.createdAt)}</div>
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
             <button onClick={downloadPayslipPdf} style={{ border: '1px solid #bbf7d0', background: '#22c55e', color: '#fff', height: 36, borderRadius: 10, padding: '0 13px', display: 'inline-flex', alignItems: 'center', gap: 8, cursor: 'pointer', fontWeight: 900, fontSize: 13 }}><Download size={16} /> Download PDF</button>
@@ -1883,7 +1784,7 @@ function PayslipPreviewModal({ employee, payslip, loanRequests, onClose }: { emp
 function PayslipFact({ label, value }: { label: string; value: string }) {
   return (
     <div style={{ display: 'flex', justifyContent: 'space-between', gap: 14, padding: '8px 0', borderBottom: '1px solid #f1f5f9' }}>
-      <span style={{ color: '#64748b', fontSize: 12 }}>{label}</span>
+      <span style={{ color: '#000000', fontSize: 12 }}>{label}</span>
       <strong style={{ color: '#0f172a', fontSize: 12, textAlign: 'right' }}>{value}</strong>
     </div>
   )

@@ -329,8 +329,8 @@ export default function TeamDetailsPage() {
 
   return (
     <main style={{ fontFamily: font, padding: '0 20px 32px', minHeight: '100vh' }}>
-      <div style={{ padding: '20px 0 18px', fontSize: 12, color: '#6b7280' }}>
-        HR Hub &nbsp;&gt;&nbsp; <Link href="/hr/teams" style={{ color: '#6b7280', textDecoration: 'none' }}>Teams</Link> &nbsp;&gt;&nbsp; {team.name}
+      <div style={{ padding: '20px 0 18px', fontSize: 12, color: '#000000' }}>
+        HR Hub &nbsp;&gt;&nbsp; <Link href="/hr/teams" style={{ color: '#000000', textDecoration: 'none' }}>Teams</Link> &nbsp;&gt;&nbsp; {team.name}
       </div>
 
       <section style={{ ...card, padding: 24, marginBottom: 16 }}>
@@ -343,7 +343,7 @@ export default function TeamDetailsPage() {
                   <h1 style={{ margin: 0, fontSize: 24, color: '#111827' }}>{team.name}</h1>
                   <span style={{ borderRadius: 999, background: '#dcfce7', color: '#15803d', padding: '4px 9px', fontSize: 11, fontWeight: 800 }}>{team.status}</span>
                 </div>
-                <div style={{ color: '#6b7280', fontSize: 13, marginTop: 5 }}>{team.department} Department</div>
+                <div style={{ color: '#000000', fontSize: 13, marginTop: 5 }}>{team.department} Department</div>
               </div>
             </div>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(6, minmax(0, 1fr))', gap: 16 }}>
@@ -419,7 +419,7 @@ export default function TeamDetailsPage() {
                   <div style={{ width: 30, height: 30, borderRadius: 8, background: index === 0 ? '#dcfce7' : index === 1 ? '#dbeafe' : '#ede9fe', display: 'grid', placeItems: 'center' }}>{index === 0 ? <Users size={14} color="#16a34a" /> : index === 1 ? <Folder size={14} color="#2563eb" /> : <FileText size={14} color="#7c3aed" />}</div>
                   <div>
                     <div style={{ color: '#111827', fontSize: 13, fontWeight: 700 }}>{item}</div>
-                    <div style={{ color: '#6b7280', fontSize: 11 }}>Updated by {team.managerName}</div>
+                    <div style={{ color: '#000000', fontSize: 11 }}>Updated by {team.managerName}</div>
                   </div>
                 </div>
               ))}
@@ -434,7 +434,7 @@ export default function TeamDetailsPage() {
                 {[['Total Members', team.members.length], ['Full Time', fullTime], ['Part Time', partTime], ['Contractors', contractors]].map(([label, value]) => (
                   <div key={label} style={{ border: '1px solid #f3f4f6', borderRadius: 10, padding: 14 }}>
                     <div style={{ fontSize: 18, color: '#111827', fontWeight: 900 }}>{value}</div>
-                    <div style={{ fontSize: 11, color: '#6b7280' }}>{label}</div>
+                    <div style={{ fontSize: 11, color: '#000000' }}>{label}</div>
                   </div>
                 ))}
               </div>
@@ -507,14 +507,14 @@ export default function TeamDetailsPage() {
       {addMemberOpen && (
         <Modal title="Add Member" subtitle="Search employees and add them to this team." onClose={() => setAddMemberOpen(false)}>
           <label style={{ border: '1px solid #e5e7eb', borderRadius: 8, padding: '10px 12px', display: 'flex', alignItems: 'center', gap: 8 }}>
-            <Search size={15} color="#9ca3af" />
+            <Search size={15} color="#000000" />
             <input value={employeeQuery} onChange={event => setEmployeeQuery(event.target.value)} placeholder="Search employees by name, role, email..." style={{ border: 'none', outline: 'none', width: '100%', fontSize: 13 }} />
           </label>
           <div style={{ display: 'grid', gap: 10, maxHeight: 360, overflow: 'auto' }}>
             {availableEmployees.length === 0 ? (
               <div style={{ border: '1px dashed #d1d5db', borderRadius: 10, padding: 18, textAlign: 'center' }}>
                 <div style={{ color: '#111827', fontSize: 14, fontWeight: 900, marginBottom: 6 }}>No available employees found.</div>
-                <p style={{ margin: '0 0 14px', color: '#6b7280', fontSize: 12 }}>Employees already in this team are hidden. Create an employee first if the list is empty.</p>
+                <p style={{ margin: '0 0 14px', color: '#000000', fontSize: 12 }}>Employees already in this team are hidden. Create an employee first if the list is empty.</p>
                 <Link href="/hr/employees/new" style={{ display: 'inline-flex', alignItems: 'center', gap: 8, background: '#16a34a', color: '#fff', borderRadius: 8, padding: '9px 13px', fontSize: 12, fontWeight: 900, textDecoration: 'none' }}>
                   <Plus size={14} /> Add employee
                 </Link>
@@ -526,9 +526,9 @@ export default function TeamDetailsPage() {
                   <PersonAvatar name={fullName(employee) || employee.email || 'Employee'} photo={employee.photo} size={38} />
                   <div style={{ flex: 1 }}>
                     <strong style={{ color: '#111827', fontSize: 13 }}>{fullName(employee) || employee.email || 'Employee'}</strong>
-                    <div style={{ color: '#6b7280', fontSize: 11 }}>{employee.jobTitle || 'No role'}{employee.department ? ` - ${employee.department}` : ''}</div>
+                    <div style={{ color: '#000000', fontSize: 11 }}>{employee.jobTitle || 'No role'}{employee.department ? ` - ${employee.department}` : ''}</div>
                   </div>
-                  <span style={{ width: 24, height: 24, borderRadius: '50%', border: `1px solid ${selected ? '#16a34a' : '#d1d5db'}`, display: 'grid', placeItems: 'center', color: selected ? '#16a34a' : '#9ca3af' }}>{selected ? <Check size={14} /> : <Plus size={14} />}</span>
+                  <span style={{ width: 24, height: 24, borderRadius: '50%', border: `1px solid ${selected ? '#16a34a' : '#d1d5db'}`, display: 'grid', placeItems: 'center', color: selected ? '#16a34a' : '#000000' }}>{selected ? <Check size={14} /> : <Plus size={14} />}</span>
                 </button>
               )
             })}
@@ -606,12 +606,12 @@ function ProfileMetric({ label, value, sub, icon }: { label: string; value: stri
   const Icon = icon === 'folder' ? Folder : icon === 'calendar' ? Calendar : icon === 'users' ? Users : null
   return (
     <div>
-      <div style={{ color: '#6b7280', fontSize: 11, marginBottom: 8 }}>{label}</div>
+      <div style={{ color: '#000000', fontSize: 11, marginBottom: 8 }}>{label}</div>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-        {Icon ? <Icon size={15} color="#6b7280" /> : <div style={{ width: 28, height: 28, borderRadius: '50%', background: '#e5e7eb', display: 'grid', placeItems: 'center', fontSize: 10, fontWeight: 800 }}>{initials(value)}</div>}
+        {Icon ? <Icon size={15} color="#000000" /> : <div style={{ width: 28, height: 28, borderRadius: '50%', background: '#e5e7eb', display: 'grid', placeItems: 'center', fontSize: 10, fontWeight: 800 }}>{initials(value)}</div>}
         <div>
           <strong style={{ display: 'block', color: '#111827', fontSize: 13 }}>{value}</strong>
-          {sub && <span style={{ color: '#6b7280', fontSize: 11 }}>{sub}</span>}
+          {sub && <span style={{ color: '#000000', fontSize: 11 }}>{sub}</span>}
         </div>
       </div>
     </div>
@@ -647,7 +647,7 @@ function MembersTable({
         <strong style={{ color: '#111827', fontSize: 15 }}>Team Members</strong>
         <div style={{ display: 'flex', gap: 10 }}>
           <label style={{ width: 260, border: '1px solid #e5e7eb', borderRadius: 8, padding: '9px 12px', display: 'flex', alignItems: 'center', gap: 8 }}>
-            <Search size={15} color="#9ca3af" />
+            <Search size={15} color="#000000" />
             <input value={query} onChange={event => setQuery(event.target.value)} placeholder="Search team members..." style={{ border: 'none', outline: 'none', fontSize: 12, width: '100%' }} />
           </label>
           <button type="button" onClick={onAddMember} style={{ border: '1px solid #16a34a', background: '#fff', color: '#16a34a', borderRadius: 8, padding: '9px 14px', fontSize: 12, fontWeight: 800, display: 'flex', gap: 7, alignItems: 'center', cursor: 'pointer' }}><Plus size={14} /> Add Member</button>
@@ -655,7 +655,7 @@ function MembersTable({
       </div>
       <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
         <thead>
-          <tr style={{ color: '#6b7280', borderBottom: '1px solid #f3f4f6' }}>
+          <tr style={{ color: '#000000', borderBottom: '1px solid #f3f4f6' }}>
             {['Employee', 'Position', 'Role', 'Employment Type', 'Status', 'Actions'].map(header => <th key={header} style={{ padding: '10px 12px', textAlign: 'left', fontSize: 11, fontWeight: 800 }}>{header}</th>)}
           </tr>
         </thead>
@@ -665,16 +665,16 @@ function MembersTable({
               <td style={{ padding: '12px' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                   <PersonAvatar name={member.name} photo={member.photo} size={36} />
-                  <div><strong style={{ color: '#111827' }}>{member.name}</strong><div style={{ color: '#6b7280', fontSize: 11 }}>{member.employeeId}</div></div>
+                  <div><strong style={{ color: '#111827' }}>{member.name}</strong><div style={{ color: '#000000', fontSize: 11 }}>{member.employeeId}</div></div>
                 </div>
               </td>
               <td style={{ padding: '12px', color: '#374151' }}>{member.position}</td>
               <td style={{ padding: '12px' }}><span style={{ background: '#ede9fe', color: '#7c3aed', borderRadius: 999, padding: '4px 9px', fontSize: 11, fontWeight: 800 }}>{member.role}</span></td>
               <td style={{ padding: '12px', color: '#374151' }}>{member.employmentType}</td>
-              <td style={{ padding: '12px' }}><span style={{ background: member.status === 'Active' ? '#dcfce7' : '#f3f4f6', color: member.status === 'Active' ? '#15803d' : '#6b7280', borderRadius: 999, padding: '4px 9px', fontSize: 11, fontWeight: 800 }}>{member.status || 'Active'}</span></td>
+              <td style={{ padding: '12px' }}><span style={{ background: member.status === 'Active' ? '#dcfce7' : '#f3f4f6', color: member.status === 'Active' ? '#15803d' : '#000000', borderRadius: 999, padding: '4px 9px', fontSize: 11, fontWeight: 800 }}>{member.status || 'Active'}</span></td>
               <td style={{ padding: '12px', position: 'relative' }}>
                 <button type="button" aria-label={`Actions for ${member.name}`} onClick={() => setOpenMemberMenuId(openMemberMenuId === member.id ? null : member.id)} style={{ border: '1px solid transparent', background: 'transparent', width: 32, height: 32, borderRadius: 8, display: 'grid', placeItems: 'center', cursor: 'pointer' }}>
-                  <MoreHorizontal size={15} color="#6b7280" />
+                  <MoreHorizontal size={15} color="#000000" />
                 </button>
                 {openMemberMenuId === member.id && (
                   <div style={{ position: 'absolute', top: 42, right: 8, width: 190, background: '#fff', border: '1px solid #e5e7eb', borderRadius: 10, boxShadow: '0 18px 46px rgba(15,23,42,0.16)', zIndex: 30, overflow: 'hidden' }}>
@@ -712,7 +712,7 @@ function InfoCard({ team, onToggleStatus }: { team: HRTeam; onToggleStatus: () =
           ['Created On', new Date(team.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })],
         ].map(([label, value]) => (
           <div key={label} style={{ display: 'flex', justifyContent: 'space-between', gap: 12, fontSize: 12 }}>
-            <span style={{ color: '#6b7280' }}>{label}</span>
+            <span style={{ color: '#000000' }}>{label}</span>
             <strong style={{ color: value === 'Active' ? '#16a34a' : '#111827' }}>{value}</strong>
           </div>
         ))}
@@ -755,7 +755,7 @@ function Modal({ title, subtitle, children, onClose }: { title: string; subtitle
         <div style={{ padding: '18px 20px', borderBottom: '1px solid #f3f4f6', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12 }}>
           <div>
             <h2 style={{ margin: 0, color: '#111827', fontSize: 18, fontWeight: 900 }}>{title}</h2>
-            <p style={{ margin: '4px 0 0', color: '#6b7280', fontSize: 12 }}>{subtitle}</p>
+            <p style={{ margin: '4px 0 0', color: '#000000', fontSize: 12 }}>{subtitle}</p>
           </div>
           <button type="button" onClick={onClose} aria-label="Close dialog" style={{ width: 34, height: 34, border: '1px solid #e5e7eb', borderRadius: 8, background: '#fff', display: 'grid', placeItems: 'center', cursor: 'pointer' }}><X size={16} /></button>
         </div>
@@ -797,7 +797,7 @@ function Notice({ message }: { message: string }) {
 }
 
 function EmptyText({ text }: { text: string }) {
-  return <div style={{ border: '1px dashed #d1d5db', borderRadius: 10, padding: 18, textAlign: 'center', color: '#6b7280', fontSize: 13 }}>{text}</div>
+  return <div style={{ border: '1px dashed #d1d5db', borderRadius: 10, padding: 18, textAlign: 'center', color: '#000000', fontSize: 13 }}>{text}</div>
 }
 
 function PersonAvatar({ name, photo, size }: { name: string; photo?: string; size: number }) {

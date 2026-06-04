@@ -460,6 +460,37 @@ export function useEmployeePortalData() {
     }
   }, [employee.id, employee.employeeId, employeeName])
 
+  useEffect(() => {
+    let cancelled = false
+    const syncEmployeePayroll = async () => {
+      if (!employee.id && !employee.employeeId) return
+      const localPayroll = loadStored<PayrollRecord[]>(payrollKey, [])
+      try {
+        const serverPayroll = await listHrRecords<PayrollRecord>('payroll-records', {
+          'x-hr-role': 'Employee',
+          'x-hr-user-id': employee.employeeId || employee.id || '',
+          'x-hr-user-name': employeeName,
+        })
+        const merged = uniqueRecordsById([...localPayroll, ...serverPayroll])
+        if (cancelled) return
+        setPayroll(merged)
+        saveStored(payrollKey, merged)
+      } catch {
+        if (!cancelled) setPayroll(localPayroll)
+      }
+    }
+    void syncEmployeePayroll()
+    window.addEventListener('focus', syncEmployeePayroll)
+    window.addEventListener('wiseflow:hr-data-changed', syncEmployeePayroll)
+    const timer = window.setInterval(syncEmployeePayroll, 4000)
+    return () => {
+      cancelled = true
+      window.removeEventListener('focus', syncEmployeePayroll)
+      window.removeEventListener('wiseflow:hr-data-changed', syncEmployeePayroll)
+      window.clearInterval(timer)
+    }
+  }, [employee.id, employee.employeeId, employeeName])
+
   const myLeaveRequests = useMemo(() => leaveRequests.filter(item => belongsToEmployee(item, employee)), [employee, leaveRequests])
   const myAttendance = useMemo(() => attendance.filter(item => matchesEmployeeId(item.employeeId, employee)), [attendance, employee])
   const myPayroll = useMemo(

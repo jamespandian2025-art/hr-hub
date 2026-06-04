@@ -86,7 +86,7 @@ const placeholderCss = `
   letter-spacing: 0;
 }
 .procurement-placeholder p {
-  color: #64748b;
+  color: #000000;
   font-size: 13px;
   line-height: 1.5;
 }

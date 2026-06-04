@@ -17,6 +17,7 @@ import {
   Settings,
   ShoppingCart,
   UsersRound,
+  UserRound,
   Warehouse,
 } from 'lucide-react'
 
@@ -40,7 +41,10 @@ type NavSubItem = {
   match?: string[]
   badge?: 'tasks' | 'todos' | 'workflows' | 'drafts'
   newTab?: boolean
+  launchLabel?: LaunchLabel
 }
+
+type LaunchLabel = 'Internal'
 
 type NavParentItem = {
   label: string
@@ -48,6 +52,7 @@ type NavParentItem = {
   icon: React.ComponentType<{ size?: number; color?: string }>
   match?: string[]
   newTab?: boolean
+  launchLabel?: LaunchLabel
   children?: NavSubItem[]
 }
 
@@ -115,28 +120,21 @@ const navSections: NavSection[] = [
   {
     section: 'PRODUCTIVITY',
     items: [
-        {
-          label: 'Workflows',
-          href: '/workflows/my-workflows',
-          icon: ClipboardList,
-          match: ['/tasks', '/to-do', '/workflows'],
-        children: [
-          { label: 'My Tasks',      href: '/workflows/my-jobs',      badge: 'tasks', match: ['/tasks'] },
-          { label: 'My To-dos',     href: '/workflows/my-to-dos',    badge: 'todos', match: ['/to-do'] },
-          { label: 'My Workflows',  href: '/workflows/my-workflows', badge: 'workflows' },
-          { label: 'All Workflows', href: '/workflows/all-workflows' },
-          { label: 'Draft Jobs',    href: '/workflows/draft-jobs',   badge: 'drafts' },
-          { label: 'Reports',       href: '/workflows/reports' },
-        ],
+      {
+        label: 'Workflows',
+        href: '/workflows/my-workflows',
+        icon: ClipboardList,
+        match: ['/workflows'],
       },
     ],
   },
   {
     section: 'SETTINGS',
     items: [
+      { label: 'Account',        href: '/account',        icon: UserRound },
       { label: 'Settings',       href: '/settings',       icon: Settings },
       { label: 'Datasets',       href: '/datasets',       icon: DatabaseZap },
-      { label: 'Design System',  href: '/design-system',  icon: BookOpen },
+      { label: 'Design System',  href: '/design-system',  icon: BookOpen, launchLabel: 'Internal' },
     ],
   },
 ]
@@ -160,6 +158,30 @@ function BadgePill({ count }: { count: number }) {
       }}
     >
       {count > 99 ? '99+' : count}
+    </span>
+  )
+}
+
+function LaunchPill({ label }: { label?: LaunchLabel }) {
+  if (!label) return null
+  const isInternal = label === 'Internal'
+  return (
+    <span
+      style={{
+        flexShrink: 0,
+        border: `1px solid ${isInternal ? 'rgba(148,163,184,0.45)' : 'rgba(245,158,11,0.45)'}`,
+        background: isInternal ? 'rgba(148,163,184,0.12)' : 'rgba(245,158,11,0.14)',
+        color: isInternal ? 'var(--muted-foreground)' : '#b45309',
+        fontSize: 9,
+        fontWeight: 800,
+        lineHeight: 1,
+        padding: '3px 5px',
+        borderRadius: 6,
+        textTransform: 'uppercase',
+        letterSpacing: 0,
+      }}
+    >
+      {label}
     </span>
   )
 }
@@ -428,7 +450,7 @@ export default function Sidebar({ collapsed, onToggle }: { collapsed: boolean; o
                           toggleExpanded(item.label)
                         }
                       }}
-                      title={collapsed ? item.label : undefined}
+                      title={collapsed ? `${item.label}${item.launchLabel ? ` (${item.launchLabel})` : ''}` : undefined}
                       onMouseEnter={() => setHoveredItem(hoverKey)}
                       onMouseLeave={() => setHoveredItem(null)}
                       style={{
@@ -488,6 +510,7 @@ export default function Sidebar({ collapsed, onToggle }: { collapsed: boolean; o
                       {!collapsed && (
                         <>
                           <span style={{ flex: 1, whiteSpace: 'nowrap' }}>{item.label}</span>
+                          <LaunchPill label={item.launchLabel} />
                           <span
                             style={{
                               display: 'inline-flex',
@@ -575,6 +598,7 @@ export default function Sidebar({ collapsed, onToggle }: { collapsed: boolean; o
                                   }}
                                 >
                                   <span style={{ flex: 1 }}>{child.label}</span>
+                                  <LaunchPill label={child.launchLabel} />
                                   {badgeCount > 0 && <BadgePill count={badgeCount} />}
                                 </div>
                               </Link>
@@ -595,7 +619,7 @@ export default function Sidebar({ collapsed, onToggle }: { collapsed: boolean; o
                   target={item.newTab ? '_blank' : undefined}
                   rel={item.newTab ? 'noopener noreferrer' : undefined}
                   style={{ textDecoration: 'none' }}
-                  title={collapsed ? item.label : undefined}
+                  title={collapsed ? `${item.label}${item.launchLabel ? ` (${item.launchLabel})` : ''}` : undefined}
                 >
                   <div
                     className={`main-sidebar-row${groupActive ? ' is-active' : ''}${isHovered ? ' is-hovered' : ''}`}
@@ -635,7 +659,10 @@ export default function Sidebar({ collapsed, onToggle }: { collapsed: boolean; o
                       <Icon size={16} />
                     </span>
                     {!collapsed && (
-                      <span style={{ whiteSpace: 'nowrap' }}>{item.label}</span>
+                      <>
+                        <span style={{ flex: 1, whiteSpace: 'nowrap' }}>{item.label}</span>
+                        <LaunchPill label={item.launchLabel} />
+                      </>
                     )}
                   </div>
                 </Link>

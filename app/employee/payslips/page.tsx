@@ -3,6 +3,7 @@
 import { Download } from 'lucide-react'
 import jsPDF from 'jspdf'
 import EmployeeEmptyPage from '@/components/employee/EmployeeEmptyPage'
+import StatusChip from '@/components/employee/StatusChip'
 import { formatDate, money, PayrollRecord, useEmployeePortalData } from '../employeeData'
 
 export default function EmployeePayslipsPage() {
@@ -83,8 +84,8 @@ export default function EmployeePayslipsPage() {
         <div style={{ padding: 18, borderBottom: '1px solid #e2e8f0' }}><h2 style={{ margin: 0, fontSize: 17 }}>Payslips</h2></div>
         <div style={{ overflowX: 'auto' }}>
           <table style={{ width: '100%', minWidth: 760, borderCollapse: 'collapse' }}>
-            <thead style={{ background: '#f8fafc', color: '#475569', fontSize: 12, textAlign: 'left' }}><tr>{['Payroll Cycle', 'Pay Date', 'Gross', 'Allowances', 'Deductions', 'Loan Deductions', 'Net Pay', 'Status', 'Actions'].map(item => <th key={item} style={{ padding: '12px 16px' }}>{item}</th>)}</tr></thead>
-            <tbody>{myPayroll.length === 0 ? <tr><td colSpan={9} style={{ padding: 42, textAlign: 'center', color: '#64748b' }}>No payslips available yet.</td></tr> : myPayroll.map(item => <tr key={item.id} style={{ borderTop: '1px solid #eef2f7' }}><td style={cell}>{item.period}</td><td style={cell}>{formatDate(item.paidAt || item.createdAt)}</td><td style={cell}>{money(item.gross)}</td><td style={cell}><AllowanceLines item={item} /></td><td style={cell}>{money(item.deductions)}</td><td style={cell}><LoanDeductions item={item} /></td><td style={cell}><strong>{money(item.net)}</strong></td><td style={cell}>{item.status}</td><td style={cell}><button className="employee-secondary-button" type="button" onClick={() => downloadPayslipPdf(item)}><Download size={15} /> Download PDF</button></td></tr>)}</tbody>
+            <thead style={{ background: '#f8fafc', color: '#000000', fontSize: 12, textAlign: 'left' }}><tr>{['Payroll Cycle', 'Pay Date', 'Gross', 'Allowances', 'Deductions', 'Loan Deductions', 'Net Pay', 'Status', 'Actions'].map(item => <th key={item} style={{ padding: '12px 16px' }}>{item}</th>)}</tr></thead>
+            <tbody>{myPayroll.length === 0 ? <tr><td colSpan={9} style={{ padding: 42, textAlign: 'center', color: '#000000' }}>No payslips available yet.</td></tr> : myPayroll.map(item => <tr key={item.id} style={{ borderTop: '1px solid #eef2f7' }}><td style={cell}>{item.period}</td><td style={cell}>{formatDate(item.paidAt || item.createdAt)}</td><td style={cell}>{money(item.gross)}</td><td style={cell}><AllowanceLines item={item} /></td><td style={cell}>{money(item.deductions)}</td><td style={cell}><LoanDeductions item={item} /></td><td style={cell}><strong>{money(item.net)}</strong></td><td style={cell}><StatusChip value={item.status} /></td><td style={cell}><button className="employee-secondary-button" type="button" onClick={() => downloadPayslipPdf(item)}><Download size={15} /> Download PDF</button></td></tr>)}</tbody>
           </table>
         </div>
       </section>

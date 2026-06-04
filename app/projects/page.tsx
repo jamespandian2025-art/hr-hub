@@ -773,7 +773,7 @@ export default function ProjectsPage() {
         <div style={{ fontSize: '24px', fontWeight: 600, color: '#111827', marginBottom: '6px' }}>
           {editingId ? 'Edit Project' : 'Create Project'}
         </div>
-        <div style={{ fontSize: '13px', color: '#9ca3af', marginBottom: '28px', display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+        <div style={{ fontSize: '13px', color: '#000000', marginBottom: '28px', display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
           <span style={{ color: '#6c63ff', fontWeight: 600 }}>Projects</span>
           <span>/</span>
           <span>{editingId ? 'Edit' : 'New'}</span>
@@ -782,7 +782,7 @@ export default function ProjectsPage() {
         <div style={{ display: 'grid', gridTemplateColumns: 'minmax(220px, 260px) minmax(0, 1fr)', gap: '32px' }}>
           <div>
             <div style={{ fontSize: '15px', fontWeight: 600, color: '#111827', marginBottom: '8px' }}>Project Details</div>
-            <div style={{ fontSize: '13px', color: '#6b7280', lineHeight: 1.6 }}>
+            <div style={{ fontSize: '13px', color: '#000000', lineHeight: 1.6 }}>
               Add the project profile, budget, payment status, and cost breakdown used by the analytics.
             </div>
           </div>
@@ -818,7 +818,7 @@ export default function ProjectsPage() {
                 {addingClient && (
                   <input style={fieldStyle} value={manualClient} onChange={event => setManualClient(event.target.value)} placeholder="New client name" />
                 )}
-                <span style={{ fontSize: '12px', color: '#6b7280', lineHeight: 1.45 }}>
+                <span style={{ fontSize: '12px', color: '#000000', lineHeight: 1.45 }}>
                   New clients added here are saved to the Clients page.
                 </span>
               </label>
@@ -862,7 +862,7 @@ export default function ProjectsPage() {
               <label style={fieldGroupStyle}>
                 <span style={labelStyle}>Unpaid amount</span>
                 <input style={{ ...fieldStyle, background: '#f9fafb' }} type="number" value={calculatedUnpaidAmount} readOnly placeholder="0" />
-                <span style={{ fontSize: '12px', color: '#6b7280', lineHeight: 1.45 }}>Auto-calculated from project cost minus paid amount.</span>
+                <span style={{ fontSize: '12px', color: '#000000', lineHeight: 1.45 }}>Auto-calculated from project cost minus paid amount.</span>
               </label>
             </div>
 
@@ -978,7 +978,7 @@ export default function ProjectsPage() {
           <textarea style={{ ...fieldStyle, resize: 'vertical' }} rows={3} value={taskNotes} onChange={event => setTaskNotes(event.target.value)} placeholder="Task notes or instructions" />
         )}
         {selectedTasks.length === 0 ? (
-          <div style={{ border: '1px dashed #e5e7eb', borderRadius: '12px', padding: '28px', textAlign: 'center', color: '#6b7280', fontSize: '13px', fontWeight: 600 }}>
+          <div style={{ border: '1px dashed #e5e7eb', borderRadius: '12px', padding: '28px', textAlign: 'center', color: '#000000', fontSize: '13px', fontWeight: 600 }}>
             No tasks yet. Add the first task to organize this project.
           </div>
         ) : viewMode === 'Kanban' ? (
@@ -1079,7 +1079,7 @@ export default function ProjectsPage() {
                 <input type="checkbox" checked={task.status === 'Completed'} onChange={() => toggleProjectTask(task.id)} style={{ cursor: 'pointer' }} />
                 <div>
                   <div style={{ fontSize: '13px', color: '#111827', fontWeight: 600, textDecoration: task.status === 'Completed' ? 'line-through' : 'none' }}>{task.title}</div>
-                  <div style={{ fontSize: '12px', color: '#6b7280', marginTop: '3px' }}>Due {task.dueDate || '-'}{task.notes ? ` - ${task.notes}` : ''}</div>
+                  <div style={{ fontSize: '12px', color: '#000000', marginTop: '3px' }}>Due {task.dueDate || '-'}{task.notes ? ` - ${task.notes}` : ''}</div>
                 </div>
                 <button onClick={() => deleteProjectTask(task.id)} style={{ border: 'none', background: '#fff1f2', color: '#e11d48', borderRadius: '8px', padding: '7px 10px', cursor: 'pointer', fontWeight: 600 }}>Delete</button>
               </div>
@@ -1114,7 +1114,7 @@ export default function ProjectsPage() {
         )}
         <div style={{ display: 'grid', gridTemplateColumns: '200px minmax(220px, 1fr) auto auto', gap: '16px', alignItems: 'start', marginBottom: '20px' }}>
           <div style={{ position: 'relative' }}>
-            <button onClick={() => setFinancialStatusOpen(!financialStatusOpen)} style={{ ...fieldStyle, height: '54px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', color: financialStatusOpen ? '#111827' : '#94a3b8', fontWeight: 600, cursor: 'pointer', borderColor: financialStatusOpen ? '#111827' : '#e5e7eb' }}>
+            <button onClick={() => setFinancialStatusOpen(!financialStatusOpen)} style={{ ...fieldStyle, height: '54px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', color: financialStatusOpen ? '#111827' : '#000000', fontWeight: 600, cursor: 'pointer', borderColor: financialStatusOpen ? '#111827' : '#e5e7eb' }}>
               <span>Status</span>
               <span>{financialStatusOpen ? '^' : '?'}</span>
             </button>
@@ -1131,7 +1131,7 @@ export default function ProjectsPage() {
             )}
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px', border: '1px solid #e5e7eb', borderRadius: '8px', height: '54px', padding: '0 16px', background: '#fff' }}>
-            <span style={{ color: '#94a3b8', fontSize: '17px' }}>?</span>
+            <span style={{ color: '#000000', fontSize: '17px' }}>?</span>
             <input value={financialSearch} onChange={event => setFinancialSearch(event.target.value)} placeholder={searchPlaceholder} style={{ border: 'none', outline: 'none', flex: 1, fontSize: '14px', color: '#374151' }} />
           </div>
           <button style={{ border: 'none', background: 'transparent', color: '#111827', fontSize: '14px', fontWeight: 600, height: '54px', cursor: 'pointer' }}>? Columns</button>
@@ -1143,13 +1143,13 @@ export default function ProjectsPage() {
               <tr style={{ background: '#f1f5f9' }}>
                 <th style={{ padding: '16px', width: '44px', textAlign: 'left' }}><input type="checkbox" /></th>
                 {tableColumns.map(column => (
-                  <th key={column} style={{ padding: '16px', textAlign: 'left', fontSize: '13px', color: '#64748b', fontWeight: 600, borderLeft: '1px solid #e5e7eb' }}>{column}</th>
+                  <th key={column} style={{ padding: '16px', textAlign: 'left', fontSize: '13px', color: '#000000', fontWeight: 600, borderLeft: '1px solid #e5e7eb' }}>{column}</th>
                 ))}
               </tr>
             </thead>
           </table>
           <div style={{ minHeight: financialTab === 'Budget' ? '214px' : '300px', border: '1px dashed #e5e7eb', borderTop: 'none', borderRadius: '0 0 12px 12px', display: 'grid', placeItems: 'center', background: '#fff' }}>
-            <div style={{ textAlign: 'center', color: '#94a3b8', fontSize: '18px', fontWeight: 600 }}>
+            <div style={{ textAlign: 'center', color: '#000000', fontSize: '18px', fontWeight: 600 }}>
               <div style={{ width: '86px', height: '70px', margin: '0 auto 18px', borderRadius: '12px', background: 'linear-gradient(135deg, #e2e8f0, #cbd5e1)', opacity: 0.75 }} />
               No Data
             </div>
@@ -1158,8 +1158,8 @@ export default function ProjectsPage() {
         <div style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: '28px', padding: '18px 8px 0', fontSize: '14px', color: '#111827' }}>
           <span>Rows per page: <strong style={{ marginLeft: '8px', fontWeight: 500 }}>50?</strong></span>
           <span>0-0 of 0</span>
-          <span style={{ color: '#94a3b8', fontSize: '24px' }}>‹</span>
-          <span style={{ color: '#94a3b8', fontSize: '24px' }}>›</span>
+          <span style={{ color: '#000000', fontSize: '24px' }}>‹</span>
+          <span style={{ color: '#000000', fontSize: '24px' }}>›</span>
         </div>
       </div>
     )
@@ -1173,7 +1173,7 @@ export default function ProjectsPage() {
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '16px', flexWrap: 'wrap', marginBottom: '24px' }}>
           <div>
             <div style={{ fontSize: '24px', fontWeight: 600, color: '#111827', marginBottom: '6px' }}>Projects</div>
-            <div style={{ fontSize: '13px', color: '#9ca3af', display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+            <div style={{ fontSize: '13px', color: '#000000', display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
               <span style={{ color: '#6c63ff', fontWeight: 600 }}>Projects</span>
               <span>/</span>
               <span>{selectedProject.name}</span>
@@ -1186,12 +1186,12 @@ export default function ProjectsPage() {
 
         <div style={{ display: 'flex', gap: '22px', borderBottom: '1px solid #e5e7eb', marginBottom: '20px', overflowX: 'auto' }}>
           {projectDetailTabs.map(tab => (
-            <button key={tab} onClick={() => setProjectDetailTab(tab)} style={{ border: 'none', borderBottom: projectDetailTab === tab ? '2px solid #111827' : '2px solid transparent', background: 'transparent', padding: '12px 2px', color: projectDetailTab === tab ? '#111827' : '#64748b', cursor: 'pointer', fontSize: '13px', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '7px', whiteSpace: 'nowrap' }}>
+            <button key={tab} onClick={() => setProjectDetailTab(tab)} style={{ border: 'none', borderBottom: projectDetailTab === tab ? '2px solid #111827' : '2px solid transparent', background: 'transparent', padding: '12px 2px', color: projectDetailTab === tab ? '#111827' : '#000000', cursor: 'pointer', fontSize: '13px', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '7px', whiteSpace: 'nowrap' }}>
               {tab}
-              {tab === 'Progress' && <span style={{ fontSize: '11px', padding: '1px 7px', borderRadius: '20px', background: projectDetailTab === tab ? '#111827' : '#f3f4f6', color: projectDetailTab === tab ? '#fff' : '#64748b' }}>{selectedProgress.length}</span>}
-              {tab === 'Change Orders' && <span style={{ fontSize: '11px', padding: '1px 7px', borderRadius: '20px', background: projectDetailTab === tab ? '#111827' : '#f3f4f6', color: projectDetailTab === tab ? '#fff' : '#64748b' }}>{selectedChangeOrders.length}</span>}
-              {tab === 'Tasks' && <span style={{ fontSize: '11px', padding: '1px 7px', borderRadius: '20px', background: projectDetailTab === tab ? '#111827' : '#f3f4f6', color: projectDetailTab === tab ? '#fff' : '#64748b' }}>{selectedTasks.length + selectedAssignedTasks.length}</span>}
-              {tab === 'Attachments' && <span style={{ fontSize: '11px', padding: '1px 7px', borderRadius: '20px', background: projectDetailTab === tab ? '#111827' : '#f3f4f6', color: projectDetailTab === tab ? '#fff' : '#64748b' }}>{selectedAttachments.length}</span>}
+              {tab === 'Progress' && <span style={{ fontSize: '11px', padding: '1px 7px', borderRadius: '20px', background: projectDetailTab === tab ? '#111827' : '#f3f4f6', color: projectDetailTab === tab ? '#fff' : '#000000' }}>{selectedProgress.length}</span>}
+              {tab === 'Change Orders' && <span style={{ fontSize: '11px', padding: '1px 7px', borderRadius: '20px', background: projectDetailTab === tab ? '#111827' : '#f3f4f6', color: projectDetailTab === tab ? '#fff' : '#000000' }}>{selectedChangeOrders.length}</span>}
+              {tab === 'Tasks' && <span style={{ fontSize: '11px', padding: '1px 7px', borderRadius: '20px', background: projectDetailTab === tab ? '#111827' : '#f3f4f6', color: projectDetailTab === tab ? '#fff' : '#000000' }}>{selectedTasks.length + selectedAssignedTasks.length}</span>}
+              {tab === 'Attachments' && <span style={{ fontSize: '11px', padding: '1px 7px', borderRadius: '20px', background: projectDetailTab === tab ? '#111827' : '#f3f4f6', color: projectDetailTab === tab ? '#fff' : '#000000' }}>{selectedAttachments.length}</span>}
             </button>
           ))}
         </div>
@@ -1200,22 +1200,22 @@ export default function ProjectsPage() {
           <div style={{ display: 'grid', gridTemplateColumns: 'minmax(260px, 1fr) 170px 170px 130px', gap: '22px', alignItems: 'center' }}>
             <div>
               <div style={{ fontSize: '16px', color: '#111827', fontWeight: 600, lineHeight: 1.4 }}>{selectedProject.name}</div>
-              <div style={{ fontSize: '13px', color: '#64748b', fontWeight: 600, marginTop: '5px' }}>{selectedProject.location}</div>
+              <div style={{ fontSize: '13px', color: '#000000', fontWeight: 600, marginTop: '5px' }}>{selectedProject.location}</div>
               <div style={{ display: 'flex', gap: '8px', alignItems: 'center', marginTop: '10px', flexWrap: 'wrap' }}>
                 <span style={{ fontSize: '11px', fontWeight: 600, padding: '4px 10px', borderRadius: '7px', background: getStatusStyle(selectedProject.status).bg, color: getStatusStyle(selectedProject.status).color }}>{statusLabel(selectedProject.status)}</span>
-                <span style={{ fontSize: '12px', color: '#64748b', fontWeight: 600 }}>as of {selectedProject.startDate || '-'}</span>
+                <span style={{ fontSize: '12px', color: '#000000', fontWeight: 600 }}>as of {selectedProject.startDate || '-'}</span>
               </div>
             </div>
             <div style={{ textAlign: 'center' }}>
               <div style={{ fontSize: '12px', color: '#111827', fontWeight: 600, marginBottom: '8px' }}>Project Completion</div>
               <div style={{ width: '58px', height: '58px', borderRadius: '50%', margin: '0 auto', background: `conic-gradient(#22c55e 0% ${completion}%, #f1f5f9 ${completion}% 100%)`, display: 'grid', placeItems: 'center' }}>
-                <div style={{ width: '42px', height: '42px', borderRadius: '50%', background: '#fff', display: 'grid', placeItems: 'center', fontSize: '12px', fontWeight: 600, color: '#64748b' }}>{completion}%</div>
+                <div style={{ width: '42px', height: '42px', borderRadius: '50%', background: '#fff', display: 'grid', placeItems: 'center', fontSize: '12px', fontWeight: 600, color: '#000000' }}>{completion}%</div>
               </div>
             </div>
             <div style={{ borderLeft: '1px solid #e5e7eb', paddingLeft: '22px' }}>
               <div style={{ fontSize: '12px', color: '#111827', fontWeight: 600, marginBottom: '8px' }}>Project Timeline</div>
               <div style={{ width: '94px', height: '3px', background: '#ef4444', borderRadius: '20px', marginBottom: '8px' }} />
-              <div style={{ fontSize: '12px', color: '#64748b', fontWeight: 600 }}>{duration(selectedProject)}</div>
+              <div style={{ fontSize: '12px', color: '#000000', fontWeight: 600 }}>{duration(selectedProject)}</div>
             </div>
             <button style={{ ...buttonStyle, background: '#fff', border: '1px solid #e5e7eb', color: '#111827' }}>Invite Client</button>
           </div>
@@ -1229,7 +1229,7 @@ export default function ProjectsPage() {
                 <div style={{ width: '210px', height: '210px', borderRadius: '50%', margin: '20px auto', background: `conic-gradient(#22c55e 0% 38%, #fbbf24 38% 68%, #e5e7eb 68% 100%)`, display: 'grid', placeItems: 'center' }}>
                   <div style={{ width: '156px', height: '156px', borderRadius: '50%', background: '#fff', display: 'grid', placeItems: 'center', textAlign: 'center', boxShadow: 'inset 0 0 0 10px #f3f4f6' }}>
                     <div>
-                      <div style={{ fontSize: '12px', color: '#64748b', fontWeight: 600 }}>Project cost</div>
+                      <div style={{ fontSize: '12px', color: '#000000', fontWeight: 600 }}>Project cost</div>
                       <div style={{ fontSize: '20px', color: '#111827', fontWeight: 600, marginTop: '8px' }}>{money(selectedProject.projectCost)}</div>
                     </div>
                   </div>
@@ -1259,7 +1259,7 @@ export default function ProjectsPage() {
                   {breakdown.map(item => (
                     <div key={item.key} style={{ display: 'grid', gap: '8px', alignItems: 'end', justifyItems: 'center', height: '100%' }}>
                       <div title={money(item.amount)} style={{ width: '34px', height: `${Math.max(8, (item.amount / maxBarAmount) * 230)}px`, borderRadius: '6px 6px 0 0', background: item.amount ? '#22c55e' : '#e5e7eb' }} />
-                      <div style={{ fontSize: '11px', color: '#94a3b8', fontWeight: 600, textAlign: 'center' }}>{item.label}</div>
+                      <div style={{ fontSize: '11px', color: '#000000', fontWeight: 600, textAlign: 'center' }}>{item.label}</div>
                     </div>
                   ))}
                 </div>
@@ -1274,9 +1274,9 @@ export default function ProjectsPage() {
               <section style={panelStyle}>
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '18px' }}>
                   <div style={panelTitleStyle}>Notes</div>
-                  <button onClick={() => startEdit(selectedProject)} style={{ border: 'none', background: 'transparent', color: '#64748b', fontSize: '18px', cursor: 'pointer' }}>?</button>
+                  <button onClick={() => startEdit(selectedProject)} style={{ border: 'none', background: 'transparent', color: '#000000', fontSize: '18px', cursor: 'pointer' }}>?</button>
                 </div>
-                <div style={{ fontSize: '13px', color: selectedProject.notes ? '#374151' : '#64748b', lineHeight: 1.7, whiteSpace: 'pre-wrap' }}>{selectedProject.notes || 'This is where your notes will appear.'}</div>
+                <div style={{ fontSize: '13px', color: selectedProject.notes ? '#374151' : '#000000', lineHeight: 1.7, whiteSpace: 'pre-wrap' }}>{selectedProject.notes || 'This is where your notes will appear.'}</div>
               </section>
             </div>
 
@@ -1288,7 +1288,7 @@ export default function ProjectsPage() {
                     <span style={{ width: '10px', height: '10px', borderRadius: '50%', background: activity.color, marginTop: '4px' }} />
                     <div>
                       <div style={{ fontSize: '13px', color: '#111827', fontWeight: 600 }}>{activity.text}</div>
-                      <div style={{ fontSize: '12px', color: '#94a3b8', marginTop: '4px', fontWeight: 600 }}>{formatDateTime(activity.date)}</div>
+                      <div style={{ fontSize: '12px', color: '#000000', marginTop: '4px', fontWeight: 600 }}>{formatDateTime(activity.date)}</div>
                     </div>
                   </div>
                 ))}
@@ -1302,7 +1302,7 @@ export default function ProjectsPage() {
             <div style={{ display: 'flex', justifyContent: 'space-between', gap: '12px', alignItems: 'flex-start', marginBottom: '18px', flexWrap: 'wrap' }}>
               <div>
                 <div style={panelTitleStyle}>Progress Log + Gallery</div>
-                <div style={{ fontSize: '13px', color: '#64748b', fontWeight: 600, marginTop: '5px' }}>
+                <div style={{ fontSize: '13px', color: '#000000', fontWeight: 600, marginTop: '5px' }}>
                   Share dated site updates with phase tags, remarks, photos, and client notification tracking.
                 </div>
               </div>
@@ -1334,7 +1334,7 @@ export default function ProjectsPage() {
                 <label style={fieldGroupStyle}>
                   <span style={labelStyle}>Photos / videos</span>
                   <input style={fieldStyle} type="file" multiple accept="image/*,video/*" onChange={collectProgressFiles} />
-                  <span style={{ fontSize: '12px', color: '#64748b', lineHeight: 1.5 }}>
+                  <span style={{ fontSize: '12px', color: '#000000', lineHeight: 1.5 }}>
                     This prototype records file names. Cloud upload can be connected later.
                   </span>
                 </label>
@@ -1354,7 +1354,7 @@ export default function ProjectsPage() {
 
               <div style={{ display: 'grid', gap: '12px' }}>
                 {selectedProgress.length === 0 ? (
-                  <div style={{ border: '1px dashed #cbd5e1', borderRadius: '14px', padding: '42px 20px', textAlign: 'center', color: '#64748b', fontSize: '13px', fontWeight: 600 }}>
+                  <div style={{ border: '1px dashed #cbd5e1', borderRadius: '14px', padding: '42px 20px', textAlign: 'center', color: '#000000', fontSize: '13px', fontWeight: 600 }}>
                     No progress updates yet. Add the first site update for this client.
                   </div>
                 ) : selectedProgress.map(update => (
@@ -1363,7 +1363,7 @@ export default function ProjectsPage() {
                       <div>
                         <span style={{ fontSize: '11px', color: '#047857', fontWeight: 600, background: '#d1fae5', borderRadius: '999px', padding: '4px 9px' }}>{update.phase}</span>
                         <div style={{ fontSize: '15px', color: '#111827', fontWeight: 600, marginTop: '9px' }}>{update.title}</div>
-                        <div style={{ fontSize: '12px', color: '#64748b', fontWeight: 600, marginTop: '4px' }}>
+                        <div style={{ fontSize: '12px', color: '#000000', fontWeight: 600, marginTop: '4px' }}>
                           {update.updateDate} by {update.author} {update.notifyClient ? '- client notified' : '- internal only'}
                         </div>
                       </div>
@@ -1375,7 +1375,7 @@ export default function ProjectsPage() {
                         {update.files.map(file => (
                           <div key={file} style={{ border: '1px solid #e5e7eb', borderRadius: '12px', background: '#f8fafc', padding: '12px', minHeight: '88px', display: 'grid', alignContent: 'space-between' }}>
                             <div style={{ fontSize: '12px', color: '#111827', fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{file}</div>
-                            <div style={{ fontSize: '11px', color: '#64748b', fontWeight: 600 }}>Gallery item</div>
+                            <div style={{ fontSize: '11px', color: '#000000', fontWeight: 600 }}>Gallery item</div>
                           </div>
                         ))}
                       </div>
@@ -1392,7 +1392,7 @@ export default function ProjectsPage() {
             <div style={{ display: 'flex', justifyContent: 'space-between', gap: '12px', alignItems: 'flex-start', marginBottom: '18px', flexWrap: 'wrap' }}>
               <div>
                 <div style={panelTitleStyle}>Change Orders / Add-ons</div>
-                <div style={{ fontSize: '13px', color: '#64748b', fontWeight: 600, marginTop: '5px' }}>
+                <div style={{ fontSize: '13px', color: '#000000', fontWeight: 600, marginTop: '5px' }}>
                   Review client upgrade requests, add price/timeline impact, and approve or reject.
                 </div>
               </div>
@@ -1403,7 +1403,7 @@ export default function ProjectsPage() {
 
             <div style={{ display: 'grid', gap: '12px' }}>
               {selectedChangeOrders.length === 0 ? (
-                <div style={{ border: '1px dashed #cbd5e1', borderRadius: '14px', padding: '34px 20px', textAlign: 'center', color: '#64748b', fontSize: '13px', fontWeight: 600 }}>
+                <div style={{ border: '1px dashed #cbd5e1', borderRadius: '14px', padding: '34px 20px', textAlign: 'center', color: '#000000', fontSize: '13px', fontWeight: 600 }}>
                   No change order requests for this project yet.
                 </div>
               ) : selectedChangeOrders.map(order => (
@@ -1414,7 +1414,7 @@ export default function ProjectsPage() {
                         <div style={{ fontSize: '15px', color: '#111827', fontWeight: 600 }}>{order.title}</div>
                         <span style={{ fontSize: '11px', fontWeight: 600, borderRadius: '999px', padding: '4px 9px', color: order.status === 'Approved' ? '#047857' : order.status === 'Rejected' ? '#b91c1c' : order.status === 'Priced' ? '#6d28d9' : '#c2410c', background: order.status === 'Approved' ? '#d1fae5' : order.status === 'Rejected' ? '#fee2e2' : order.status === 'Priced' ? '#ede9fe' : '#ffedd5' }}>{order.status}</span>
                       </div>
-                      <div style={{ fontSize: '12px', color: '#64748b', fontWeight: 600, marginTop: '5px' }}>
+                      <div style={{ fontSize: '12px', color: '#000000', fontWeight: 600, marginTop: '5px' }}>
                         Requested by {order.requestedBy} - {new Date(order.createdAt).toLocaleDateString('en-PH')}
                       </div>
                       {order.description && <div style={{ fontSize: '13px', color: '#374151', lineHeight: 1.65, marginTop: '10px' }}>{order.description}</div>}
@@ -1423,7 +1423,7 @@ export default function ProjectsPage() {
                           {order.files.map(file => (
                             <div key={file} style={{ border: '1px solid #e5e7eb', borderRadius: '12px', background: '#f8fafc', minHeight: '82px', padding: '10px', display: 'grid', alignContent: 'space-between' }}>
                               <div style={{ fontSize: '12px', color: '#111827', fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{file}</div>
-                              <div style={{ fontSize: '11px', color: '#64748b', fontWeight: 600 }}>Reference photo</div>
+                              <div style={{ fontSize: '11px', color: '#000000', fontWeight: 600 }}>Reference photo</div>
                             </div>
                           ))}
                         </div>
@@ -1499,12 +1499,12 @@ export default function ProjectsPage() {
             <div style={panelTitleStyle}>Project Tasks</div>
             {selectedAssignedTasks.length > 0 && (
               <div style={{ display: 'grid', gap: '10px', margin: '16px 0' }}>
-                <div style={{ fontSize: '13px', color: '#64748b', fontWeight: 600 }}>Assigned from approved client requests</div>
+                <div style={{ fontSize: '13px', color: '#000000', fontWeight: 600 }}>Assigned from approved client requests</div>
                 {selectedAssignedTasks.map(task => (
                   <div key={task.id} style={{ border: '1px solid #f3f4f6', borderRadius: '12px', padding: '12px', display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) auto', gap: '12px', alignItems: 'center' }}>
                     <div>
                       <div style={{ fontSize: '13px', color: '#111827', fontWeight: 600 }}>{task.title}</div>
-                      <div style={{ fontSize: '12px', color: '#64748b', fontWeight: 600, marginTop: '4px' }}>Assigned to {task.assignee} - Due {task.dueDate} - {task.status}</div>
+                      <div style={{ fontSize: '12px', color: '#000000', fontWeight: 600, marginTop: '4px' }}>Assigned to {task.assignee} - Due {task.dueDate} - {task.status}</div>
                     </div>
                     <span style={{ fontSize: '11px', color: '#6d28d9', background: '#f5f3ff', borderRadius: '999px', padding: '5px 9px', fontWeight: 600 }}>{task.source}</span>
                   </div>
@@ -1520,10 +1520,10 @@ export default function ProjectsPage() {
             <div style={panelTitleStyle}>Project Chat</div>
             <div style={{ display: 'grid', gap: '12px', margin: '16px 0' }}>
               {selectedMessages.length === 0 ? (
-                <div style={{ color: '#64748b', fontSize: '13px', fontWeight: 600 }}>No chat notes yet.</div>
+                <div style={{ color: '#000000', fontSize: '13px', fontWeight: 600 }}>No chat notes yet.</div>
               ) : selectedMessages.map(message => (
                 <div key={message.id} style={{ border: '1px solid #f3f4f6', borderRadius: '12px', padding: '12px' }}>
-                  <div style={{ fontSize: '12px', color: '#64748b', fontWeight: 600 }}>{message.author} • {formatDateTime(message.createdAt)}</div>
+                  <div style={{ fontSize: '12px', color: '#000000', fontWeight: 600 }}>{message.author} • {formatDateTime(message.createdAt)}</div>
                   <div style={{ fontSize: '13px', color: '#111827', lineHeight: 1.6, marginTop: '6px' }}>{message.message}</div>
                 </div>
               ))}
@@ -1539,7 +1539,7 @@ export default function ProjectsPage() {
           <section style={{ ...panelStyle, padding: 0, overflow: 'hidden' }}>
             <div style={{ display: 'flex', gap: '24px', padding: '0 16px', borderBottom: '1px solid #f3f4f6', background: '#fff', overflowX: 'auto' }}>
               {financialTabs.map(tab => (
-                <button key={tab} onClick={() => setFinancialTab(tab)} style={{ border: 'none', background: financialTab === tab ? '#f8fafc' : 'transparent', borderRadius: '10px 10px 0 0', padding: '16px', color: financialTab === tab ? '#111827' : '#475569', fontSize: '13px', fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap' }}>
+                <button key={tab} onClick={() => setFinancialTab(tab)} style={{ border: 'none', background: financialTab === tab ? '#f8fafc' : 'transparent', borderRadius: '10px 10px 0 0', padding: '16px', color: financialTab === tab ? '#111827' : '#000000', fontSize: '13px', fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap' }}>
                   {tab}
                 </button>
               ))}
@@ -1554,7 +1554,7 @@ export default function ProjectsPage() {
                         <thead>
                           <tr style={{ background: '#f1f5f9' }}>
                             {['Summary', 'Estimated Cost', 'Actual Cost', 'Remaining Cost'].map(header => (
-                              <th key={header} style={{ padding: '16px', textAlign: header === 'Summary' ? 'left' : 'right', fontSize: '13px', color: '#64748b', fontWeight: 600 }}>{header}</th>
+                              <th key={header} style={{ padding: '16px', textAlign: header === 'Summary' ? 'left' : 'right', fontSize: '13px', color: '#000000', fontWeight: 600 }}>{header}</th>
                             ))}
                           </tr>
                         </thead>
@@ -1588,7 +1588,7 @@ export default function ProjectsPage() {
                         ['Remaining Amount', selectedProject.projectCost, '#111827', 900],
                       ].map(([label, amount, color, weight]) => (
                         <div key={label as string} style={{ display: 'grid', gridTemplateColumns: '180px 160px', gap: '18px', alignItems: 'center' }}>
-                          <span style={{ fontSize: '14px', color: '#64748b', fontWeight: label === 'Remaining Amount' ? 900 : 700 }}>{label}</span>
+                          <span style={{ fontSize: '14px', color: '#000000', fontWeight: label === 'Remaining Amount' ? 900 : 700 }}>{label}</span>
                           <span style={{ textAlign: 'right', fontSize: '14px', color: color as string, fontWeight: weight as number }}>{money(amount as number)}</span>
                         </div>
                       ))}
@@ -1611,12 +1611,12 @@ export default function ProjectsPage() {
             </label>
             <div style={{ display: 'grid', gap: '10px', marginTop: '18px' }}>
               {selectedAttachments.length === 0 ? (
-                <div style={{ color: '#64748b', fontSize: '13px', fontWeight: 600 }}>No attachments uploaded for this project.</div>
+                <div style={{ color: '#000000', fontSize: '13px', fontWeight: 600 }}>No attachments uploaded for this project.</div>
               ) : selectedAttachments.map(attachment => (
                 <div key={attachment.id} style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) auto', gap: '12px', alignItems: 'center', border: '1px solid #f3f4f6', borderRadius: '12px', padding: '12px' }}>
                   <div>
                     <div style={{ fontSize: '13px', color: '#111827', fontWeight: 600 }}>{attachment.name}</div>
-                    <div style={{ fontSize: '12px', color: '#64748b', marginTop: '3px' }}>{fileSize(attachment.size)} - {formatDateTime(attachment.addedAt)}</div>
+                    <div style={{ fontSize: '12px', color: '#000000', marginTop: '3px' }}>{fileSize(attachment.size)} - {formatDateTime(attachment.addedAt)}</div>
                   </div>
                   <button onClick={() => deleteProjectAttachment(attachment.id)} style={{ border: 'none', background: '#fff1f2', color: '#e11d48', borderRadius: '8px', padding: '8px 10px', cursor: 'pointer', fontWeight: 600 }}>Remove</button>
                 </div>
@@ -1638,7 +1638,7 @@ export default function ProjectsPage() {
                 ['End date', selectedProject.endDate],
               ].map(([label, value]) => (
                 <div key={label} style={{ border: '1px solid #f3f4f6', borderRadius: '12px', padding: '14px' }}>
-                  <div style={{ fontSize: '12px', color: '#64748b', fontWeight: 600 }}>{label}</div>
+                  <div style={{ fontSize: '12px', color: '#000000', fontWeight: 600 }}>{label}</div>
                   <div style={{ fontSize: '14px', color: '#111827', fontWeight: 600, marginTop: '7px' }}>{value}</div>
                 </div>
               ))}
@@ -1655,7 +1655,7 @@ export default function ProjectsPage() {
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '16px', marginBottom: '8px', flexWrap: 'wrap' }}>
         <div>
           <div style={{ fontSize: '24px', fontWeight: 600, color: '#111827', marginBottom: '6px' }}>Projects</div>
-          <div style={{ fontSize: '13px', color: '#9ca3af', display: 'flex', alignItems: 'center', gap: '6px' }}>
+          <div style={{ fontSize: '13px', color: '#000000', display: 'flex', alignItems: 'center', gap: '6px' }}>
             <span style={{ color: '#6c63ff', fontWeight: 600 }}>Projects</span>
             <span>/</span>
             <span>List</span>
@@ -1684,7 +1684,7 @@ export default function ProjectsPage() {
             <div style={{ width: '120px', height: '120px', borderRadius: '50%', background: `conic-gradient(${donutGradient})`, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
               <div style={{ width: '68px', height: '68px', borderRadius: '50%', background: '#fff', display: 'grid', placeItems: 'center', textAlign: 'center' }}>
                 <div>
-                  <div style={{ fontSize: '9px', color: '#6b7280', fontWeight: 600 }}>TOTAL</div>
+                  <div style={{ fontSize: '9px', color: '#000000', fontWeight: 600 }}>TOTAL</div>
                   <div style={{ fontSize: '12px', color: '#111827', fontWeight: 600 }}>{money(analytics.totalBills).replace('.00', '')}</div>
                 </div>
               </div>
@@ -1727,7 +1727,7 @@ export default function ProjectsPage() {
             {clients.map(clientName => <option key={clientName}>{clientName}</option>)}
           </select>
           <div style={{ flex: 1, minWidth: '220px', display: 'flex', alignItems: 'center', gap: '8px', padding: '8px 14px', border: '1px solid #e5e7eb', borderRadius: '8px', background: '#fafafa' }}>
-            <span style={{ color: '#9ca3af', fontSize: '13px' }}>Search</span>
+            <span style={{ color: '#000000', fontSize: '13px' }}>Search</span>
             <input type="text" placeholder="Search project, client, or location..." value={search} onChange={event => setSearch(event.target.value)} style={{ border: 'none', background: 'transparent', fontSize: '13px', color: '#374151', outline: 'none', flex: 1 }} />
           </div>
           <button type="button" onClick={() => { setSearch(''); setClientFilter('All'); setActiveTab('All') }} style={{ ...buttonStyle, background: '#fafafa', border: '1px solid #e5e7eb', color: '#374151' }}>Reset</button>
@@ -1743,7 +1743,7 @@ export default function ProjectsPage() {
         </div>
 
         {filtered.length === 0 ? (
-          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '70px 24px', color: '#9ca3af', textAlign: 'center', gap: '12px' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '70px 24px', color: '#000000', textAlign: 'center', gap: '12px' }}>
             <div style={{ fontSize: '15px', fontWeight: 600 }}>No projects yet</div>
             <div style={{ fontSize: '13px', fontWeight: 600 }}>Click + Project to create your first real project.</div>
           </div>
@@ -1756,7 +1756,7 @@ export default function ProjectsPage() {
                     <input type="checkbox" checked={filtered.length > 0 && filtered.every(project => selected.includes(project.id))} onChange={toggleSelectAll} style={{ cursor: 'pointer' }} />
                   </th>
                   {['Title', 'Client', 'Project Cost', 'Bills/Expenses', 'Payment', 'Duration', 'Status', ''].map(header => (
-                    <th key={header} style={{ padding: '12px 16px', textAlign: 'left', fontSize: '12px', fontWeight: 600, color: '#6b7280', textTransform: 'uppercase' }}>{header}</th>
+                    <th key={header} style={{ padding: '12px 16px', textAlign: 'left', fontSize: '12px', fontWeight: 600, color: '#000000', textTransform: 'uppercase' }}>{header}</th>
                   ))}
                 </tr>
               </thead>
@@ -1810,7 +1810,7 @@ export default function ProjectsPage() {
 const cellStyle = {
   padding: '16px',
   fontSize: '13px',
-  color: '#6b7280',
+  color: '#000000',
   fontWeight: 600,
 }
 

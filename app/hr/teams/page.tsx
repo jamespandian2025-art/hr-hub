@@ -7,6 +7,19 @@ import {
   Plus, Search, Settings, Trash2, Users, UserRoundCheck, X,
 } from 'lucide-react'
 import { Employee, ensureTeams, fullName, HRTeam, initials, loadStored, saveStored, TeamMember } from './teamData'
+import { deleteHrRecord, listHrRecords } from '@/lib/hrms/client'
+
+// Merge server + local teams by id, keeping whichever was updated last.
+function mergeTeamsById(rows: HRTeam[]) {
+  const map = new Map<string, HRTeam>()
+  for (const row of rows) {
+    if (!row?.id) continue
+    const stamp = (team: HRTeam) => new Date(team.updatedAt || team.createdAt || 0).getTime()
+    const existing = map.get(row.id)
+    if (!existing || stamp(row) >= stamp(existing)) map.set(row.id, row)
+  }
+  return Array.from(map.values())
+}
 
 const font = "var(--font-body)"
 const card = { background: '#fff', border: '1px solid #e5e7eb', borderRadius: 12, boxShadow: '0 1px 4px rgba(15,23,42,0.05)' }
@@ -137,9 +150,21 @@ export default function HrTeamsPage() {
   const [teamMenuPosition, setTeamMenuPosition] = useState<FloatingMenuPosition>({ top: 0, left: 0 })
 
   useEffect(() => {
-    const timer = window.setTimeout(() => {
+    let cancelled = false
+    const load = async () => {
       const employees = loadStored<Employee[]>('flowsys-hr-employees', [])
-      const storedTeams = ensureTeams()
+      const localTeams = ensureTeams()
+      const archivedIds = new Set(
+        loadStored<Array<{ id?: string }>>(deletedTeamsKey, []).map(item => item.id).filter(Boolean) as string[],
+      )
+      let storedTeams = localTeams
+      try {
+        const server = await listHrRecords<HRTeam>('teams', { 'x-hr-role': 'HR' })
+        storedTeams = mergeTeamsById([...server, ...localTeams]).filter(team => !archivedIds.has(team.id))
+      } catch {
+        storedTeams = localTeams
+      }
+      if (cancelled) return
       const storedDepartments = loadStored<HRDepartment[]>('flowsys-hr-departments', [])
       const cleaned = removeLegacySampleData(storedTeams, storedDepartments)
       const loaded = hydrateTeamPhotos(cleaned.realTeams, employees)
@@ -153,9 +178,20 @@ export default function HrTeamsPage() {
       setEmployees(employees)
       setTeams(loaded)
       setDepartmentRecords(mergedDepartments)
-      setSelectedTeamId(loaded[0]?.id)
-    }, 0)
-    return () => window.clearTimeout(timer)
+      setSelectedTeamId(current => current || loaded[0]?.id)
+    }
+    load()
+    window.addEventListener('storage', load)
+    window.addEventListener('focus', load)
+    window.addEventListener('wiseflow:hr-data-changed', load)
+    const timer = window.setInterval(load, 4000)
+    return () => {
+      cancelled = true
+      window.removeEventListener('storage', load)
+      window.removeEventListener('focus', load)
+      window.removeEventListener('wiseflow:hr-data-changed', load)
+      window.clearInterval(timer)
+    }
   }, [])
 
   const departments = useMemo(() => {
@@ -283,6 +319,9 @@ export default function HrTeamsPage() {
     saveStored(deletedTeamsKey, [{ ...team, deletedAt: new Date().toISOString() }, ...deletedTeams.filter(item => item.id !== team.id)])
     if (selectedTeamId === team.id) setSelectedTeamId(nextTeams[0]?.id)
     setOpenTeamMenuId(null)
+    void deleteHrRecord('teams', team.id)
+      .then(() => window.dispatchEvent(new Event('wiseflow:hr-data-changed')))
+      .catch(() => undefined)
   }
 
   function toggleTeamMenu(teamId: string, event: React.MouseEvent<HTMLButtonElement>) {
@@ -306,7 +345,7 @@ export default function HrTeamsPage() {
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 14, padding: '20px 0 18px', flexWrap: 'wrap' }}>
         <div>
           <h1 style={{ margin: 0, color: '#0f172a', fontSize: 28, fontWeight: 900 }}>Teams</h1>
-          <p style={{ margin: '6px 0 0', color: '#475569', fontSize: 14 }}>Manage departments, teams, managers, members, and reporting lines across your organization.</p>
+          <p style={{ margin: '6px 0 0', color: '#000000', fontSize: 14 }}>Manage departments, teams, managers, members, and reporting lines across your organization.</p>
         </div>
         <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
           <Link href="/hr/teams/deleted" style={{ textDecoration: 'none' }}>
@@ -338,7 +377,7 @@ export default function HrTeamsPage() {
             <div key={item.label} style={{ ...card, padding: '20px 22px', display: 'flex', alignItems: 'center', gap: 16 }}>
               <div style={{ width: 54, height: 54, borderRadius: 16, background: item.bg, display: 'grid', placeItems: 'center' }}><Icon size={25} color={item.color} /></div>
               <div>
-                <div style={{ fontSize: 12, color: '#6b7280', marginBottom: 5 }}>{item.label}</div>
+                <div style={{ fontSize: 12, color: '#000000', marginBottom: 5 }}>{item.label}</div>
                 <div style={{ fontSize: 24, fontWeight: 800, color: '#111827' }}>{item.value}</div>
               </div>
             </div>
@@ -374,7 +413,7 @@ export default function HrTeamsPage() {
             <strong style={{ fontSize: 14, color: '#111827' }}>Teams in {selectedDepartment === 'All Departments' ? 'All Departments' : selectedDepartment} ({filteredTeams.length})</strong>
             <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
               <label style={{ width: 280, border: '1px solid #e5e7eb', borderRadius: 8, padding: '9px 12px', display: 'flex', alignItems: 'center', gap: 8 }}>
-                <Search size={15} color="#9ca3af" />
+                <Search size={15} color="#000000" />
                 <input value={query} onChange={event => setQuery(event.target.value)} placeholder="Search teams..." style={{ border: 'none', outline: 'none', width: '100%', fontSize: 12 }} />
               </label>
               <div style={{ position: 'relative' }}>
@@ -393,14 +432,14 @@ export default function HrTeamsPage() {
           </div>
           <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
             <thead>
-              <tr style={{ background: '#f9fafb', color: '#6b7280' }}>
+              <tr style={{ background: '#f9fafb', color: '#000000' }}>
                 {['Team Name', 'Manager', 'Members', 'Description', 'Actions'].map(header => <th key={header} style={{ padding: '13px 16px', textAlign: 'left', fontSize: 11, fontWeight: 800 }}>{header}</th>)}
               </tr>
           </thead>
           <tbody>
               {filteredTeams.length === 0 ? (
                 <tr>
-                  <td colSpan={5} style={{ padding: '46px 18px', textAlign: 'center', color: '#6b7280' }}>
+                  <td colSpan={5} style={{ padding: '46px 18px', textAlign: 'center', color: '#000000' }}>
                     <div style={{ width: 54, height: 54, borderRadius: '50%', background: '#f0fdf4', color: '#16a34a', display: 'grid', placeItems: 'center', margin: '0 auto 14px' }}>
                       <Users size={24} />
                     </div>
@@ -423,7 +462,7 @@ export default function HrTeamsPage() {
                   </td>
                   <td style={{ padding: '15px 16px' }}>
                     <div style={{ fontWeight: 700, color: '#111827' }}>{team.managerName}</div>
-                    <div style={{ color: '#6b7280', fontSize: 11 }}>{team.managerTitle}</div>
+                    <div style={{ color: '#000000', fontSize: 11 }}>{team.managerTitle}</div>
                   </td>
                   <td style={{ padding: '15px 16px', fontWeight: 800, color: '#111827' }}>{team.members.length}</td>
                   <td style={{ padding: '15px 16px', color: '#374151', lineHeight: 1.45 }}>{team.description}</td>
@@ -449,7 +488,7 @@ export default function HrTeamsPage() {
               ))}
             </tbody>
           </table>
-          <div style={{ padding: '14px 18px', display: 'flex', justifyContent: 'space-between', color: '#6b7280', fontSize: 12, borderTop: '1px solid #f3f4f6' }}>
+          <div style={{ padding: '14px 18px', display: 'flex', justifyContent: 'space-between', color: '#000000', fontSize: 12, borderTop: '1px solid #f3f4f6' }}>
             Showing {filteredTeams.length ? 1 : 0} to {filteredTeams.length} of {filteredTeams.length} teams
             {filteredTeams.length > 0 && <span style={{ background: '#16a34a', color: '#fff', borderRadius: 8, padding: '6px 11px', fontWeight: 800 }}>1</span>}
           </div>
@@ -461,26 +500,26 @@ export default function HrTeamsPage() {
               <div style={{ width: 58, height: 58, borderRadius: 18, background: '#ede9fe', color: '#7c3aed', display: 'grid', placeItems: 'center', fontSize: 18, fontWeight: 900 }}>{initials(selectedTeam.name)}</div>
               <div>
                 <h2 style={{ margin: 0, fontSize: 18, color: '#111827' }}>{selectedTeam.name}</h2>
-                <div style={{ marginTop: 3, fontSize: 12, color: '#6b7280' }}>{selectedTeam.department} Department</div>
+                <div style={{ marginTop: 3, fontSize: 12, color: '#000000' }}>{selectedTeam.department} Department</div>
               </div>
             </div>
             <Link href={`/hr/teams/${selectedTeam.id}`} style={{ textDecoration: 'none' }}>
               <button style={{ width: '100%', border: '1px solid #e5e7eb', background: '#fff', borderRadius: 8, padding: '10px', fontSize: 12, fontWeight: 800, color: '#374151', marginBottom: 16 }}>Edit Team</button>
             </Link>
-            <div style={{ fontSize: 12, color: '#6b7280', marginBottom: 8 }}>Team Manager</div>
+            <div style={{ fontSize: 12, color: '#000000', marginBottom: 8 }}>Team Manager</div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 18 }}>
               <PersonAvatar name={selectedTeam.managerName} photo={selectedTeam.managerPhoto} size={38} />
               <div style={{ flex: 1 }}>
                 <strong style={{ fontSize: 13, color: '#111827' }}>{selectedTeam.managerName}</strong>
-                <div style={{ fontSize: 11, color: '#6b7280' }}>{selectedTeam.managerTitle}</div>
+                <div style={{ fontSize: 11, color: '#000000' }}>{selectedTeam.managerTitle}</div>
               </div>
-              <Mail size={15} color="#6b7280" />
+              <Mail size={15} color="#000000" />
             </div>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', border: '1px solid #f3f4f6', borderRadius: 10, overflow: 'hidden', marginBottom: 18 }}>
               {[['Members', selectedTeam.members.length], ['Open Positions', selectedTeam.openPositions], ['Projects', selectedTeam.projects]].map(([label, value]) => (
                 <div key={label} style={{ padding: 12, textAlign: 'center', borderRight: label !== 'Projects' ? '1px solid #f3f4f6' : 'none' }}>
                   <div style={{ color: '#111827', fontWeight: 900 }}>{value}</div>
-                  <div style={{ color: '#6b7280', fontSize: 11 }}>{label}</div>
+                  <div style={{ color: '#000000', fontSize: 11 }}>{label}</div>
                 </div>
               ))}
             </div>
@@ -509,7 +548,7 @@ export default function HrTeamsPage() {
                 <Users size={24} />
               </div>
               <h2 style={{ margin: 0, fontSize: 18, color: '#111827' }}>No team selected</h2>
-              <p style={{ margin: '8px 0 18px', color: '#6b7280', fontSize: 13, lineHeight: 1.5 }}>Team details will appear here after you create or select a team.</p>
+              <p style={{ margin: '8px 0 18px', color: '#000000', fontSize: 13, lineHeight: 1.5 }}>Team details will appear here after you create or select a team.</p>
               <Link href={addTeamHref} style={{ textDecoration: 'none' }}>
                 <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8, background: '#16a34a', color: '#fff', borderRadius: 8, padding: '10px 14px', fontSize: 12, fontWeight: 900 }}>
                   <Plus size={14} /> Add Team
@@ -526,7 +565,7 @@ export default function HrTeamsPage() {
             <div style={{ padding: '18px 20px', borderBottom: '1px solid #f3f4f6', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12 }}>
               <div>
                 <h2 style={{ margin: 0, color: '#111827', fontSize: 18, fontWeight: 900 }}>{departmentModal === 'manage' ? 'Manage Departments' : departmentForm.id ? 'Edit Department' : 'Add Department'}</h2>
-                <p style={{ margin: '4px 0 0', color: '#6b7280', fontSize: 12 }}>{departmentModal === 'manage' ? 'Edit existing departments or add a new department.' : 'Create a department that teams can be grouped under.'}</p>
+                <p style={{ margin: '4px 0 0', color: '#000000', fontSize: 12 }}>{departmentModal === 'manage' ? 'Edit existing departments or add a new department.' : 'Create a department that teams can be grouped under.'}</p>
               </div>
               <button onClick={() => setDepartmentModal(null)} aria-label="Close department dialog" style={{ width: 34, height: 34, border: '1px solid #e5e7eb', borderRadius: 8, background: '#fff', display: 'grid', placeItems: 'center', cursor: 'pointer' }}><X size={16} /></button>
             </div>
@@ -540,7 +579,7 @@ export default function HrTeamsPage() {
                 </button>
                 <div style={{ display: 'grid', gap: 8 }}>
                   {departmentRecords.length === 0 ? (
-                    <div style={{ border: '1px dashed #e5e7eb', borderRadius: 10, padding: 20, textAlign: 'center', color: '#6b7280', fontSize: 13 }}>
+                    <div style={{ border: '1px dashed #e5e7eb', borderRadius: 10, padding: 20, textAlign: 'center', color: '#000000', fontSize: 13 }}>
                       No departments yet.
                     </div>
                   ) : departmentRecords.map(department => {
@@ -550,10 +589,10 @@ export default function HrTeamsPage() {
                         <span style={{ width: 34, height: 34, borderRadius: 10, background: `${department.color}20`, color: department.color, display: 'grid', placeItems: 'center', fontWeight: 900, fontSize: 12 }}>{department.code || initials(department.name)}</span>
                         <div style={{ flex: 1, minWidth: 0 }}>
                           <strong style={{ color: '#111827', fontSize: 13 }}>{department.name}</strong>
-                          <div style={{ color: '#6b7280', fontSize: 11 }}>{teamCount} team{teamCount === 1 ? '' : 's'}{department.manager ? ` - Managed by ${department.manager}` : ''}</div>
+                          <div style={{ color: '#000000', fontSize: 11 }}>{teamCount} team{teamCount === 1 ? '' : 's'}{department.manager ? ` - Managed by ${department.manager}` : ''}</div>
                         </div>
                         <button onClick={() => openEditDepartment(department)} style={{ border: '1px solid #e5e7eb', background: '#fff', borderRadius: 8, padding: '8px 10px', display: 'flex', gap: 6, alignItems: 'center', fontSize: 12, fontWeight: 800, cursor: 'pointer' }}><Edit2 size={13} /> Edit</button>
-                        <button onClick={() => deleteDepartment(department)} disabled={teamCount > 0} title={teamCount > 0 ? 'Move teams before deleting this department' : 'Delete department'} style={{ border: '1px solid #fecaca', background: teamCount > 0 ? '#f9fafb' : '#fff', color: teamCount > 0 ? '#9ca3af' : '#ef4444', borderRadius: 8, padding: '8px 10px', display: 'flex', gap: 6, alignItems: 'center', fontSize: 12, fontWeight: 800, cursor: teamCount > 0 ? 'not-allowed' : 'pointer' }}><Trash2 size={13} /> Delete</button>
+                        <button onClick={() => deleteDepartment(department)} disabled={teamCount > 0} title={teamCount > 0 ? 'Move teams before deleting this department' : 'Delete department'} style={{ border: '1px solid #fecaca', background: teamCount > 0 ? '#f9fafb' : '#fff', color: teamCount > 0 ? '#000000' : '#ef4444', borderRadius: 8, padding: '8px 10px', display: 'flex', gap: 6, alignItems: 'center', fontSize: 12, fontWeight: 800, cursor: teamCount > 0 ? 'not-allowed' : 'pointer' }}><Trash2 size={13} /> Delete</button>
                       </div>
                     )
                   })}
@@ -572,13 +611,13 @@ export default function HrTeamsPage() {
                   </label>
                   <label style={{ display: 'grid', gap: 7, fontSize: 12, fontWeight: 800, color: '#374151' }}>
                     Department Manager
-                    <select value={departmentForm.manager} onChange={event => setDepartmentForm(previous => ({ ...previous, manager: event.target.value }))} style={{ border: '1px solid #e5e7eb', borderRadius: 8, padding: '11px 12px', outline: 'none', fontSize: 13, color: departmentForm.manager ? '#111827' : '#9ca3af', background: '#fff' }}>
+                    <select value={departmentForm.manager} onChange={event => setDepartmentForm(previous => ({ ...previous, manager: event.target.value }))} style={{ border: '1px solid #e5e7eb', borderRadius: 8, padding: '11px 12px', outline: 'none', fontSize: 13, color: departmentForm.manager ? '#111827' : '#000000', background: '#fff' }}>
                       <option value="">Select department manager</option>
                       {departmentManagerOptions.map(option => (
                         <option key={option.value} value={option.value}>{option.label}</option>
                       ))}
                     </select>
-                    <span style={{ fontSize: 11, fontWeight: 500, color: '#6b7280' }}>
+                    <span style={{ fontSize: 11, fontWeight: 500, color: '#000000' }}>
                       {departmentManagerOptions.length ? 'Managers, leads, supervisors, heads, and directors from active employees.' : 'No active managers or leaders found yet.'}
                     </span>
                   </label>

@@ -1,6 +1,6 @@
 # Manual Browser QA
 
-Last run: 2026-05-28
+Last run: 2026-06-02
 
 ## Result
 
@@ -12,7 +12,7 @@ Last run: 2026-05-28
   - Mobile: 390 x 844
 - Routes checked: 16 routes x 3 viewports = 48 browser checks.
 - Failures: 0.
-- Artifact folder: `.data/manual-browser-qa/2026-05-27T19-50-27-217Z`
+- Artifact folder: `.data/manual-browser-qa/2026-06-02T05-28-11-868Z`
 
 ## Routes Covered
 
@@ -46,5 +46,6 @@ Last run: 2026-05-28
 
 ## Notes
 
-- The latest run still reports 6 non-blocking local API warnings from caught read attempts to `/api/business-records/warehouse-state` and `/api/business-records/project-management-state`. The pages remain usable and passed layout checks.
-- Re-run this in staging with production Supabase env vars before real customer data is entered, and confirm those local-only warnings are gone there.
+- The 2026-06-02 run passed after the closed-beta sidebar labels were added. Sales, Procurement, Workflows, and Datasets were included in the desktop, tablet, and mobile route checks.
+- Previous local runs reported non-blocking local API warnings from caught read attempts to `/api/business-records/warehouse-state` and `/api/business-records/project-management-state`. The pages remained usable and passed layout checks.
+- Re-run this in staging with production Supabase env vars before real customer data is entered, and confirm no local-only API warnings appear there.

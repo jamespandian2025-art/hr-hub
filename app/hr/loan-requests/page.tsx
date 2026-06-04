@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
 import { CheckCircle2, Clock3, Eye, HandCoins, Search, ShieldCheck, XCircle } from 'lucide-react'
 import type { ComponentType } from 'react'
+import { AnalyticsToggleButton, CollapsibleAnalytics, useAnalyticsDisclosure } from '@/components/AnalyticsDisclosure'
 import type { Employee } from '@/app/employee/employeeData'
 import { employeeKey, fullName, initials, loadStored } from '@/app/employee/employeeData'
 import {
@@ -34,6 +35,7 @@ export default function HrLoanRequestsPage() {
   const [filter, setFilter] = useState<Filter>('All')
   const [query, setQuery] = useState('')
   const [notice, setNotice] = useState('')
+  const analytics = useAnalyticsDisclosure('wiseflow:analytics:hr-loan-requests')
 
   useEffect(() => {
     let cancelled = false
@@ -105,14 +107,19 @@ export default function HrLoanRequestsPage() {
           <h1 style={pageTitleStyle}>Loan Requests</h1>
           <p style={pageSubtitleStyle}>HR has read-only visibility into employee loans. Finance owns loan approvals, payment terms, schedules, and deduction controls.</p>
         </div>
-        <Link href="/financials/loan-management" style={financeLinkStyle}><ShieldCheck size={15} /> Finance controls</Link>
+        <div style={headerActionsStyle}>
+          <AnalyticsToggleButton open={analytics.open} onToggle={analytics.toggle} panelId={analytics.panelId} style={analyticsButtonStyle} />
+          <Link href="/financials/loan-management" style={financeLinkStyle}><ShieldCheck size={15} /> Finance controls</Link>
+        </div>
       </div>
 
       {notice && <div style={noticeStyle}>{notice}<button onClick={() => setNotice('')} style={dismissButtonStyle}>Dismiss</button></div>}
 
-      <div style={metricGridStyle}>
-        {stats.map(item => <Metric key={item.label} {...item} />)}
-      </div>
+      <CollapsibleAnalytics open={analytics.open} id={analytics.panelId}>
+        <div style={metricGridStyle}>
+          {stats.map(item => <Metric key={item.label} {...item} />)}
+        </div>
+      </CollapsibleAnalytics>
 
       <div style={tabsStyle}>
         {(['All', 'Waiting Finance', 'Approved for Payroll', 'Processed', 'Rejected'] as Filter[]).map(item => (
@@ -124,7 +131,7 @@ export default function HrLoanRequestsPage() {
         <div style={tableHeaderStyle}>
           <div>
             <strong style={{ display: 'block', color: '#0f172a', fontSize: 16 }}>Loan and Cash Advance Requests</strong>
-            <span style={{ display: 'block', color: '#64748b', fontSize: 13, marginTop: 4 }}>Read-only tracker. Finance is the only role that can approve, reject, or modify loan deductions.</span>
+            <span style={{ display: 'block', color: '#000000', fontSize: 13, marginTop: 4 }}>Read-only tracker. Finance is the only role that can approve, reject, or modify loan deductions.</span>
           </div>
           <label style={searchStyle}><Search size={15} /><input value={query} onChange={event => setQuery(event.target.value)} placeholder="Search loan requests..." style={searchInputStyle} /></label>
         </div>
@@ -159,7 +166,7 @@ export default function HrLoanRequestsPage() {
 }
 
 function Metric({ label, value, icon: Icon, color, bg }: { label: string; value: number; icon: ComponentType<{ size?: number }>; color: string; bg: string }) {
-  return <div style={metricStyle}><span style={{ ...metricIconStyle, color, background: bg }}><Icon size={22} /></span><span><small style={{ color: '#64748b', fontSize: 13 }}>{label}</small><strong style={{ display: 'block', color: '#0f172a', fontSize: 25, marginTop: 3 }}>{value}</strong></span></div>
+  return <div style={metricStyle}><span style={{ ...metricIconStyle, color, background: bg }}><Icon size={22} /></span><span><small style={{ color: '#000000', fontSize: 13 }}>{label}</small><strong style={{ display: 'block', color: '#0f172a', fontSize: 25, marginTop: 3 }}>{value}</strong></span></div>
 }
 
 function EmployeeCell({ employee, fallback }: { employee?: Employee; fallback?: string }) {
@@ -167,7 +174,7 @@ function EmployeeCell({ employee, fallback }: { employee?: Employee; fallback?: 
   return <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>{employee?.photo ? (
     // eslint-disable-next-line @next/next/no-img-element
     <img src={employee.photo} alt="" style={avatarStyle} />
-  ) : <span style={avatarFallback}>{initials(name)}</span>}<span><strong style={{ display: 'block' }}>{name}</strong><small style={{ color: '#64748b' }}>{employee?.employeeId || employee?.jobTitle || '-'}</small></span></div>
+  ) : <span style={avatarFallback}>{initials(name)}</span>}<span><strong style={{ display: 'block' }}>{name}</strong><small style={{ color: '#000000' }}>{employee?.employeeId || employee?.jobTitle || '-'}</small></span></div>
 }
 
 function Badge({ value }: { value: string }) {
@@ -176,15 +183,16 @@ function Badge({ value }: { value: string }) {
 }
 
 function EmptyState({ text }: { text: string }) {
-  return <div style={{ display: 'grid', placeItems: 'center', minHeight: 220, color: '#64748b', fontSize: 14 }}>{text}</div>
+  return <div style={{ display: 'grid', placeItems: 'center', minHeight: 220, color: '#000000', fontSize: 14 }}>{text}</div>
 }
 
 function Th({ children }: { children: React.ReactNode }) { return <th style={thStyle}>{children}</th> }
 function Td({ children }: { children: React.ReactNode }) { return <td style={tdStyle}>{children}</td> }
 
 const pageHeaderStyle = { display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16, flexWrap: 'wrap', marginBottom: 18 } as const
+const headerActionsStyle = { display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 10, flexWrap: 'wrap' } as const
 const pageTitleStyle = { margin: 0, fontSize: 28, fontWeight: 900, color: '#0f172a' } as const
-const pageSubtitleStyle = { margin: '6px 0 0', color: '#475569', fontSize: 14 } as const
+const pageSubtitleStyle = { margin: '6px 0 0', color: '#000000', fontSize: 14 } as const
 const noticeStyle = { display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'center', padding: 12, borderRadius: 10, background: '#ecfdf5', color: '#047857', fontWeight: 800, fontSize: 13, marginBottom: 16 } as const
 const dismissButtonStyle = { border: '0', background: 'transparent', color: '#047857', fontWeight: 900, cursor: 'pointer' } as const
 const metricGridStyle = { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(210px, 1fr))', gap: 14, marginBottom: 18 } as const
@@ -194,14 +202,15 @@ const tabsStyle = { display: 'flex', gap: 20, borderBottom: '1px solid #e2e8f0',
 const tabStyle = (active: boolean) => ({ border: 0, background: 'transparent', padding: '14px 0', borderBottom: active ? '2px solid #111827' : '2px solid transparent', color: active ? '#111827' : '#334155', fontSize: 13, fontWeight: 900, cursor: 'pointer', whiteSpace: 'nowrap' } as const)
 const cardStyle = { border: '1px solid #e2e8f0', borderRadius: 12, background: '#fff', boxShadow: '0 12px 30px rgba(15,23,42,.05)' } as const
 const tableHeaderStyle = { display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 14, padding: 18, borderBottom: '1px solid #e2e8f0', flexWrap: 'wrap' } as const
-const searchStyle = { minWidth: 280, display: 'flex', alignItems: 'center', gap: 8, border: '1px solid #e2e8f0', borderRadius: 8, padding: '0 12px', height: 42, color: '#64748b' } as const
+const searchStyle = { minWidth: 280, display: 'flex', alignItems: 'center', gap: 8, border: '1px solid #e2e8f0', borderRadius: 8, padding: '0 12px', height: 42, color: '#000000' } as const
 const searchInputStyle = { width: '100%', minWidth: 0, border: 0, outline: 0, background: 'transparent', color: '#0f172a', font: 'inherit' } as const
 const tableStyle = { width: '100%', borderCollapse: 'collapse', fontSize: 13 } as const
-const thStyle = { textAlign: 'left', padding: '12px 18px', color: '#475569', background: '#f8fafc', fontWeight: 900, borderBottom: '1px solid #e2e8f0' } as const
+const thStyle = { textAlign: 'left', padding: '12px 18px', color: '#000000', background: '#f8fafc', fontWeight: 900, borderBottom: '1px solid #e2e8f0' } as const
 const tdStyle = { padding: '14px 18px', borderBottom: '1px solid #e2e8f0', color: '#0f172a', verticalAlign: 'middle' } as const
 const trStyle = { background: '#fff' } as const
-const mutedLine = { display: 'block', color: '#64748b', marginTop: 4, fontSize: 12 } as const
+const mutedLine = { display: 'block', color: '#000000', marginTop: 4, fontSize: 12 } as const
 const avatarStyle = { width: 36, height: 36, borderRadius: '50%', objectFit: 'cover' } as const
 const avatarFallback = { width: 36, height: 36, borderRadius: '50%', display: 'grid', placeItems: 'center', background: '#dcfce7', color: '#15803d', fontWeight: 900 } as const
 const detailLinkStyle = { minHeight: 32, border: '1px solid #dbeafe', background: '#eff6ff', color: '#1d4ed8', borderRadius: 8, padding: '0 10px', display: 'inline-flex', alignItems: 'center', gap: 7, textDecoration: 'none', fontSize: 12, fontWeight: 900 } as const
 const financeLinkStyle = { minHeight: 38, border: '1px solid #bfdbfe', background: '#eff6ff', color: '#1d4ed8', borderRadius: 8, padding: '0 13px', display: 'inline-flex', alignItems: 'center', gap: 8, textDecoration: 'none', fontSize: 12, fontWeight: 900 } as const
+const analyticsButtonStyle = { ...financeLinkStyle, border: '1px solid #e2e8f0', background: '#ffffff', color: '#0f172a', cursor: 'pointer' } as const

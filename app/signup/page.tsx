@@ -71,10 +71,6 @@ function metadataText(input: unknown) {
   return typeof input === 'string' ? input.trim() : ''
 }
 
-function roleFromMetadata(input: unknown) {
-  return typeof input === 'string' ? authRoleForCompanyRole(input) as AccountRole : null
-}
-
 function authProviderForSupabaseUser(user: SupabaseSignupUser): AuthProvider {
   const provider = user.app_metadata?.provider || user.app_metadata?.providers?.[0]
   return provider === 'email' ? 'email' : 'gmail'
@@ -221,7 +217,7 @@ export default function SignupPage() {
       const supabaseInvite = findPendingCompanyInvitation(userEmail)
       const supabaseRole = (supabaseInvite
         ? authRoleForCompanyRole(supabaseInvite.member.role)
-        : roleFromMetadata(metadata.role) || 'Admin') as AccountRole
+        : 'Admin') as AccountRole
       const supabaseCompanyName = supabaseInvite?.company.name || metadataText(metadata.company_name) || userName || 'WiseFlow Company'
 
       if (hasAdminOwner(currentUsers) && !supabaseInvite) {
@@ -426,65 +422,66 @@ export default function SignupPage() {
   }
 
   return (
-    <main style={{ minHeight: '100vh', background: '#eef2f7', display: 'grid', gridTemplateColumns: 'minmax(320px, 0.9fr) minmax(360px, 1fr)', fontFamily: "var(--font-body)" }}>
-      <section style={{ background: '#111827', color: '#fff', padding: '56px', display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
+    <main className="signup-shell" style={{ minHeight: '100vh', background: '#f4f6f8', display: 'grid', gridTemplateColumns: 'minmax(360px, 0.9fr) minmax(420px, 1fr)', fontFamily: "var(--font-body)" }}>
+      <style>{signupCss}</style>
+      <section className="signup-visual" style={{ background: '#101828', color: '#fff', padding: '60px', display: 'flex', flexDirection: 'column', justifyContent: 'space-between', gap: 40 }}>
         <div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 80 }}>
-            <div style={{ width: 40, height: 40, borderRadius: 11, background: '#22c55e', color: '#191414', display: 'grid', placeItems: 'center', fontWeight: 600 }}>W</div>
-            <div style={{ fontSize: 20, fontWeight: 600 }}>WiseFlow</div>
+          <div className="signup-brand" style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 76 }}>
+            <div className="signup-logo-mark" style={{ width: 40, height: 40, borderRadius: 8, background: '#22c55e', color: '#101828', display: 'grid', placeItems: 'center', fontWeight: 700 }}>W</div>
+            <div className="signup-wordmark" style={{ fontSize: 20, fontWeight: 700 }}>WiseFlow</div>
           </div>
-          <h1 style={{ color: '#fff', fontSize: 42, lineHeight: 1.05, marginBottom: 18 }}>Create your construction command center.</h1>
-          <p style={{ color: '#cbd5e1', fontSize: 15, lineHeight: 1.7, maxWidth: 470 }}>Start with projects, opportunities, bills, inventory, suppliers, and team chat in one focused workspace.</p>
+          <h1 className="signup-hero-title" style={{ color: '#fff', fontSize: 42, lineHeight: 1.08, marginBottom: 18, maxWidth: 520 }}>Create your construction command center.</h1>
+          <p className="signup-hero-subtitle" style={{ color: '#d6dce5', fontSize: 15, lineHeight: 1.7, maxWidth: 500 }}>Start with projects, opportunities, bills, inventory, suppliers, and team chat in one focused workspace.</p>
         </div>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12 }}>
+        <div className="signup-feature-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12 }}>
           {['Clients', 'Budgets', 'Chat'].map(item => (
-            <div key={item} style={{ border: '1px solid rgba(255,255,255,0.14)', borderRadius: 12, padding: 14, color: '#e5e7eb', fontSize: 13, fontWeight: 600 }}>{item}</div>
+            <div className="signup-feature-card" key={item} style={{ border: '1px solid rgba(255,255,255,0.16)', borderRadius: 8, padding: 14, color: '#eef2f7', fontSize: 13, fontWeight: 700 }}>{item}</div>
           ))}
         </div>
       </section>
 
-      <section style={{ display: 'grid', placeItems: 'center', padding: '40px 24px' }}>
-        <div style={{ width: 'min(460px, 100%)', background: '#fff', border: '1px solid #e5e7eb', borderRadius: 18, padding: 28, boxShadow: '0 24px 70px rgba(15,23,42,0.12)' }}>
-          <div style={{ marginBottom: 22 }}>
-            <div style={{ fontSize: 26, color: '#111827', fontWeight: 600, marginBottom: 8 }}>{pendingInvite ? 'Accept invitation' : 'Create account'}</div>
-            <div style={{ fontSize: 13, color: '#64748b', lineHeight: 1.6 }}>{pendingInvite ? `Join ${pendingInvite.company.name} as ${pendingInvite.member.role}.` : 'Create the secure Admin owner account first. HR and Finance accounts should be invited or assigned by Admin.'}</div>
+      <section className="signup-form-panel" style={{ display: 'grid', placeItems: 'center', padding: '48px 28px' }}>
+        <div className="signup-card" style={{ width: 'min(468px, 100%)', background: '#fff', border: '1px solid #d6dde8', borderRadius: 8, padding: 30, boxShadow: '0 22px 54px rgba(16,24,40,0.13)' }}>
+          <div className="signup-card-header" style={{ marginBottom: 22 }}>
+            <div className="signup-card-title" style={{ fontSize: 28, color: '#101828', fontWeight: 700, lineHeight: 1.18, marginBottom: 8 }}>{pendingInvite ? 'Accept invitation' : 'Create account'}</div>
+            <div className="signup-card-subtitle" style={{ fontSize: 13, color: '#667085', lineHeight: 1.6 }}>{pendingInvite ? `Join ${pendingInvite.company.name} as ${pendingInvite.member.role}.` : 'Create the secure Admin owner account first. HR and Finance accounts should be invited or assigned by Admin.'}</div>
           </div>
 
-          <form onSubmit={signup} style={{ display: 'grid', gap: 14 }}>
+          <form className="signup-form" onSubmit={signup} style={{ display: 'grid', gap: 14 }}>
             {error && <div style={alertStyle}>{error}</div>}
-            <Field icon={<User size={17} color="#64748b" />} label="Name"><input value={name} onChange={event => setName(event.target.value)} placeholder="Your name" required style={inputStyle} /></Field>
-            <Field icon={<Building2 size={17} color="#64748b" />} label="Company"><input value={pendingInvite?.company.name || company} onChange={event => setCompany(event.target.value)} placeholder="Company name" required={!pendingInvite} readOnly={Boolean(pendingInvite)} style={inputStyle} /></Field>
-            <Field icon={<Mail size={17} color="#64748b" />} label="Gmail address"><input value={email} onChange={event => setEmail(event.target.value)} type="email" placeholder="you@gmail.com" required style={inputStyle} /></Field>
-            <label style={fieldGroupStyle}>
+            <Field icon={<User size={17} color="#000000" />} label="Name"><input value={name} onChange={event => setName(event.target.value)} placeholder="Your name" required style={inputStyle} /></Field>
+            <Field icon={<Building2 size={17} color="#000000" />} label="Company"><input value={pendingInvite?.company.name || company} onChange={event => setCompany(event.target.value)} placeholder="Company name" required={!pendingInvite} readOnly={Boolean(pendingInvite)} style={inputStyle} /></Field>
+            <Field icon={<Mail size={17} color="#000000" />} label="Gmail address"><input value={email} onChange={event => setEmail(event.target.value)} type="email" placeholder="you@gmail.com" required style={inputStyle} /></Field>
+            <label className="signup-field" style={fieldGroupStyle}>
               <span style={labelStyle}>Workspace role</span>
-              <div style={inputWrapStyle}>
-                <ShieldCheck size={17} color="#64748b" />
+              <div className="signup-input-wrap" style={inputWrapStyle}>
+                <ShieldCheck size={17} color="#000000" />
                 <input value={pendingInvite ? pendingInvite.member.role : 'Admin owner'} readOnly style={inputStyle} />
               </div>
               <span style={hintStyle}>{pendingInvite ? 'This role comes from your pending invitation.' : 'Finance and HR are sensitive roles. Admin assigns them after workspace setup.'}</span>
             </label>
-            <label style={fieldGroupStyle}>
+            <label className="signup-field" style={fieldGroupStyle}>
               <span style={labelStyle}>Password</span>
-              <div style={inputWrapStyle}>
-                <Lock size={17} color="#64748b" />
+              <div className="signup-input-wrap" style={inputWrapStyle}>
+                <Lock size={17} color="#000000" />
                 <input value={password} onChange={event => setPassword(event.target.value)} type={showPassword ? 'text' : 'password'} placeholder="12+ chars, Aa, 1, symbol" required style={inputStyle} />
-                <button type="button" onClick={() => setShowPassword(!showPassword)} style={ghostIconButtonStyle}>{showPassword ? <EyeOff size={17} /> : <Eye size={17} />}</button>
+                <button className="signup-eye-button" type="button" onClick={() => setShowPassword(!showPassword)} style={ghostIconButtonStyle}>{showPassword ? <EyeOff size={17} /> : <Eye size={17} />}</button>
               </div>
               <span style={hintStyle}>Use uppercase, lowercase, number, and symbol. Do not use your name or email.</span>
             </label>
-            <Field icon={<Lock size={17} color="#64748b" />} label="Confirm password"><input value={confirmPassword} onChange={event => setConfirmPassword(event.target.value)} type={showPassword ? 'text' : 'password'} placeholder="Repeat password" required style={inputStyle} /></Field>
-            <button type="submit" style={primaryButtonStyle}>{pendingInvite ? 'Accept invitation' : 'Create account'}</button>
+            <Field icon={<Lock size={17} color="#000000" />} label="Confirm password"><input value={confirmPassword} onChange={event => setConfirmPassword(event.target.value)} type={showPassword ? 'text' : 'password'} placeholder="Repeat password" required style={inputStyle} /></Field>
+            <button className="signup-primary-button" type="submit" style={primaryButtonStyle}>{pendingInvite ? 'Accept invitation' : 'Create account'}</button>
           </form>
 
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr auto 1fr', gap: 12, alignItems: 'center', margin: '20px 0', color: '#94a3b8', fontSize: 12, fontWeight: 600 }}>
+          <div className="signup-divider" style={{ display: 'grid', gridTemplateColumns: '1fr auto 1fr', gap: 12, alignItems: 'center', margin: '20px 0', color: '#98a2b3', fontSize: 12, fontWeight: 700 }}>
             <span style={{ height: 1, background: '#e5e7eb' }} /> OR <span style={{ height: 1, background: '#e5e7eb' }} />
           </div>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
-            <button type="button" onClick={() => socialSignup('gmail')} style={socialButtonStyle}><span style={{ color: '#dc2626', fontWeight: 600 }}>G</span>Sign up with Gmail</button>
-            <button type="button" onClick={() => socialSignup('facebook')} style={socialButtonStyle}><span style={{ color: '#2563eb', fontWeight: 600 }}>f</span>Facebook disabled</button>
+          <div className="signup-social-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+            <button className="signup-social-button" type="button" onClick={() => socialSignup('gmail')} style={socialButtonStyle}><span style={{ color: '#dc2626', fontWeight: 700 }}>G</span>Sign up with Gmail</button>
+            <button className="signup-social-button" type="button" onClick={() => socialSignup('facebook')} style={socialButtonStyle}><span style={{ color: '#2563eb', fontWeight: 700 }}>f</span>Facebook disabled</button>
           </div>
 
-          <div style={{ textAlign: 'center', fontSize: 13, color: '#64748b', marginTop: 18 }}>
+          <div className="signup-login-line" style={{ textAlign: 'center', fontSize: 13, color: '#667085', marginTop: 18 }}>
             Already have an account? <Link href="/login" style={{ color: '#111827', fontWeight: 600, textDecoration: 'none' }}>Log in</Link>
           </div>
         </div>
@@ -495,19 +492,225 @@ export default function SignupPage() {
 
 function Field({ label, icon, children }: { label: string; icon: React.ReactNode; children: React.ReactNode }) {
   return (
-    <label style={fieldGroupStyle}>
+    <label className="signup-field" style={fieldGroupStyle}>
       <span style={labelStyle}>{label}</span>
-      <div style={inputWrapStyle}>{icon}{children}</div>
+      <div className="signup-input-wrap" style={inputWrapStyle}>{icon}{children}</div>
     </label>
   )
 }
 
 const fieldGroupStyle = { display: 'grid', gap: 7 }
-const labelStyle = { fontSize: 12, color: '#374151', fontWeight: 600 }
-const inputWrapStyle = { height: 44, border: '1px solid #e5e7eb', borderRadius: 10, display: 'flex', alignItems: 'center', gap: 9, padding: '0 12px', background: '#fff' }
+const labelStyle = { fontSize: 12, color: '#344054', fontWeight: 700 }
+const inputWrapStyle = { height: 46, border: '1px solid #cfd7e3', borderRadius: 8, display: 'flex', alignItems: 'center', gap: 10, padding: '0 12px', background: '#fff' }
 const inputStyle = { border: 'none', outline: 'none', flex: 1, minWidth: 0, fontSize: 14, color: '#111827', background: 'transparent' }
-const hintStyle = { color: '#64748b', fontSize: 11, lineHeight: 1.45 }
-const primaryButtonStyle = { border: 'none', borderRadius: 10, background: '#111827', color: '#fff', height: 44, fontSize: 14, fontWeight: 600, cursor: 'pointer' }
-const socialButtonStyle = { height: 42, border: '1px solid #e5e7eb', borderRadius: 10, background: '#fff', color: '#111827', fontSize: 13, fontWeight: 600, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 8 }
-const ghostIconButtonStyle = { border: 'none', background: 'transparent', color: '#64748b', cursor: 'pointer', display: 'inline-flex', padding: 0 }
-const alertStyle = { padding: '10px 12px', borderRadius: 10, background: '#fef2f2', color: '#dc2626', fontSize: 13, fontWeight: 600 }
+const hintStyle = { color: '#667085', fontSize: 12, lineHeight: 1.45 }
+const primaryButtonStyle = { border: 'none', borderRadius: 8, background: '#101828', color: '#fff', height: 46, fontSize: 14, fontWeight: 700, cursor: 'pointer' }
+const socialButtonStyle = { height: 44, border: '1px solid #cfd7e3', borderRadius: 8, background: '#fff', color: '#101828', fontSize: 13, fontWeight: 700, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 8 }
+const ghostIconButtonStyle = { border: 'none', background: 'transparent', color: '#667085', cursor: 'pointer', display: 'inline-flex', padding: 0, minWidth: 28, minHeight: 28, alignItems: 'center', justifyContent: 'center' }
+const alertStyle = { padding: '10px 12px', borderRadius: 8, background: '#fef2f2', color: '#b42318', fontSize: 13, fontWeight: 700, lineHeight: 1.45 }
+
+const signupCss = `
+  .signup-shell * {
+    box-sizing: border-box;
+  }
+
+  html[data-theme] body main.signup-shell .signup-visual,
+  .signup-visual {
+    background: #101828 !important;
+    color: #ffffff !important;
+  }
+
+  html[data-theme] body main.signup-shell .signup-logo-mark,
+  .signup-logo-mark {
+    background: #22c55e !important;
+    color: #101828 !important;
+  }
+
+  html[data-theme] body main.signup-shell .signup-wordmark,
+  html[data-theme] body main.signup-shell .signup-hero-title,
+  .signup-wordmark,
+  .signup-hero-title {
+    color: #ffffff !important;
+  }
+
+  html[data-theme] body main.signup-shell .signup-hero-subtitle,
+  .signup-hero-subtitle {
+    color: #d6dce5 !important;
+  }
+
+  html[data-theme] body main.signup-shell .signup-feature-card,
+  .signup-feature-card {
+    background: rgba(255, 255, 255, 0.055) !important;
+    border-color: rgba(255, 255, 255, 0.16) !important;
+    color: #eef2f7 !important;
+  }
+
+  html[data-theme] body main.signup-shell .signup-card,
+  html[data-theme] body main.signup-shell .signup-input-wrap,
+  html[data-theme] body main.signup-shell .signup-social-button,
+  .signup-card,
+  .signup-input-wrap,
+  .signup-social-button {
+    background: #ffffff !important;
+  }
+
+  html[data-theme] body main.signup-shell .signup-input-wrap input,
+  .signup-input-wrap input {
+    min-height: 0 !important;
+    padding: 0 !important;
+    border: 0 !important;
+    background: transparent !important;
+    box-shadow: none !important;
+    color: #101828 !important;
+  }
+
+  html[data-theme] body main.signup-shell .signup-input-wrap input::placeholder,
+  .signup-input-wrap input::placeholder {
+    color: #667085 !important;
+  }
+
+  html[data-theme] body main.signup-shell .signup-primary-button,
+  .signup-primary-button {
+    background: #101828 !important;
+    color: #ffffff !important;
+  }
+
+  .signup-input-wrap {
+    transition: border-color 160ms ease, box-shadow 160ms ease, background 160ms ease;
+  }
+
+  .signup-input-wrap:focus-within {
+    border-color: #16a34a !important;
+    box-shadow: 0 0 0 3px rgba(22, 163, 74, 0.14);
+  }
+
+  .signup-primary-button,
+  .signup-social-button,
+  .signup-eye-button {
+    transition: background 160ms ease, border-color 160ms ease, color 160ms ease, transform 160ms ease, box-shadow 160ms ease;
+  }
+
+  .signup-primary-button:hover {
+    background: #0b1220 !important;
+    transform: translateY(-1px);
+    box-shadow: 0 12px 20px rgba(16, 24, 40, 0.18);
+  }
+
+  .signup-social-button:hover {
+    background: #f8fafc !important;
+    border-color: #98a2b3 !important;
+  }
+
+  .signup-eye-button:hover {
+    color: #101828 !important;
+  }
+
+  .signup-login-line a:hover {
+    color: #166534 !important;
+  }
+
+  @media (max-width: 920px) {
+    .signup-shell {
+      grid-template-columns: 1fr !important;
+      min-height: auto !important;
+    }
+
+    .signup-visual {
+      padding: 34px 24px 30px !important;
+      gap: 30px !important;
+    }
+
+    .signup-brand {
+      margin-bottom: 40px !important;
+    }
+
+    .signup-hero-title {
+      font-size: 32px !important;
+      line-height: 1.12 !important;
+      max-width: 680px !important;
+    }
+
+    .signup-hero-subtitle {
+      max-width: 720px !important;
+    }
+
+    .signup-feature-grid {
+      grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+    }
+
+    .signup-form-panel {
+      padding: 30px 20px 40px !important;
+    }
+  }
+
+  @media (max-width: 560px) {
+    .signup-visual {
+      padding: 26px 18px 24px !important;
+      gap: 24px !important;
+    }
+
+    .signup-brand {
+      margin-bottom: 30px !important;
+    }
+
+    .signup-logo-mark {
+      width: 36px !important;
+      height: 36px !important;
+    }
+
+    .signup-wordmark {
+      font-size: 18px !important;
+    }
+
+    .signup-hero-title {
+      font-size: 26px !important;
+      line-height: 1.16 !important;
+      margin-bottom: 12px !important;
+    }
+
+    .signup-hero-subtitle {
+      font-size: 14px !important;
+      line-height: 1.6 !important;
+    }
+
+    .signup-feature-grid {
+      gap: 8px !important;
+    }
+
+    .signup-feature-card {
+      padding: 10px 8px !important;
+      text-align: center;
+      font-size: 12px !important;
+    }
+
+    .signup-form-panel {
+      padding: 16px 14px 28px !important;
+    }
+
+    .signup-card {
+      width: 100% !important;
+      padding: 22px 18px !important;
+      box-shadow: 0 14px 34px rgba(16, 24, 40, 0.12) !important;
+    }
+
+    .signup-card-header {
+      margin-bottom: 18px !important;
+    }
+
+    .signup-card-title {
+      font-size: 24px !important;
+    }
+
+    .signup-form {
+      gap: 12px !important;
+    }
+
+    .signup-social-grid {
+      grid-template-columns: 1fr !important;
+    }
+
+    .signup-divider {
+      margin: 18px 0 !important;
+    }
+  }
+`

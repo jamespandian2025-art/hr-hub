@@ -4,6 +4,8 @@ Last updated: 2026-06-02
 
 This runbook is for a closed beta launch, not a full public paid launch. Online checkout is not active yet, so billing should be handled manually until Stripe, PayPal, or another subscription provider is added.
 
+Before inviting beta users, review `docs/launch-scope.md` and `docs/owner-launch-checklist.md`. The sidebar marks unfinished launch areas as `Beta` and internal team tooling as `Internal`.
+
 ## Owner Tasks
 
 1. Choose the launch domain.
@@ -14,6 +16,7 @@ This runbook is for a closed beta launch, not a full public paid launch. Online 
 6. Confirm the legal/business name shown as `NEXT_PUBLIC_LEGAL_NAME`.
 7. Decide if customers will be manually invoiced during beta.
 8. Use `docs/domain-vercel-setup.md` after the domain is purchased.
+9. Review `docs/owner-launch-checklist.md` before inviting beta users.
 
 ## Required Production Environment Variables
 

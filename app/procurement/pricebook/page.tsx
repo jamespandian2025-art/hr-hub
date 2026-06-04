@@ -1,6 +1,6 @@
 'use client'
 
-import { FormEvent, useEffect, useMemo, useState } from 'react'
+import { ChangeEvent, FormEvent, useEffect, useMemo, useState } from 'react'
 import {
   Boxes,
   CheckCircle2,
@@ -8,11 +8,13 @@ import {
   Filter,
   MoreHorizontal,
   PackagePlus,
+  ImagePlus,
   Plus,
   Search,
   Trash2,
   X,
 } from 'lucide-react'
+import { AnalyticsToggleButton, CollapsibleAnalytics, useAnalyticsDisclosure } from '@/components/AnalyticsDisclosure'
 import { companyChangeEvent, companyScopedKey, getActiveCompany } from '@/lib/tenant/company'
 
 const font = 'var(--font-body)'
@@ -36,6 +38,8 @@ type PricebookItem = {
   reorderPoint: number
   status: ItemStatus
   notes: string
+  photoDataUrl?: string
+  photoName?: string
 }
 
 type SupplierOption = {
@@ -55,6 +59,8 @@ type PricebookForm = {
   reorderPoint: string
   status: ItemStatus
   notes: string
+  photoDataUrl: string
+  photoName: string
 }
 
 const emptyForm: PricebookForm = {
@@ -69,6 +75,8 @@ const emptyForm: PricebookForm = {
   reorderPoint: '',
   status: 'Active',
   notes: '',
+  photoDataUrl: '',
+  photoName: '',
 }
 
 const itemTypes: ItemType[] = ['Material', 'Labor', 'Equipment', 'Service', 'Other']
@@ -85,6 +93,7 @@ export default function ProcurementPricebookPage() {
   const [editingId, setEditingId] = useState('')
   const [openActionId, setOpenActionId] = useState('')
   const [form, setForm] = useState<PricebookForm>(emptyForm)
+  const analytics = useAnalyticsDisclosure('wiseflow:analytics:procurement-pricebook')
 
   useEffect(() => {
     const load = () => {
@@ -168,6 +177,8 @@ export default function ProcurementPricebookPage() {
       reorderPoint: String(item.reorderPoint || ''),
       status: item.status,
       notes: item.notes,
+      photoDataUrl: item.photoDataUrl || '',
+      photoName: item.photoName || '',
     })
     setEditingId(item.id)
     setShowCreate(true)
@@ -211,6 +222,8 @@ export default function ProcurementPricebookPage() {
       reorderPoint: numberValue(form.reorderPoint),
       status: form.status,
       notes: form.notes.trim(),
+      photoDataUrl: form.photoDataUrl,
+      photoName: form.photoName,
       updatedAt: now.toISOString(),
       createdAt: editingId ? undefined : now.toISOString(),
     }
@@ -234,6 +247,14 @@ export default function ProcurementPricebookPage() {
     setOpenActionId('')
   }
 
+  async function handlePhotoUpload(event: ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0]
+    event.target.value = ''
+    if (!file || !file.type.startsWith('image/')) return
+    const photoDataUrl = await imageFileToDataUrl(file)
+    setForm(previous => ({ ...previous, photoDataUrl, photoName: file.name }))
+  }
+
   return (
     <main className="pricebook-page" style={{ fontFamily: font }}>
       <style>{pricebookCss}</style>
@@ -249,24 +270,21 @@ export default function ProcurementPricebookPage() {
             </div>
           </div>
         </div>
-        <button type="button" className="pricebook-primary-button" onClick={openCreate}><Plus size={17} /> Add Item</button>
-      </section>
-
-      <section className="pricebook-kpis" aria-label="Pricebook summary">
-        <Kpi title="Total Items" value={String(stats.total)} helper="All records" />
-        <Kpi title="Active Items" value={String(stats.active)} helper="Ready for procurement" />
-        <Kpi title="Average Markup" value={`${stats.averageMarkup}%`} helper="Across pricebook" />
-        <Kpi title="Cost Value" value={formatCurrency(stats.totalCost)} helper="Base cost total" />
-        <Kpi title="Selling Value" value={formatCurrency(stats.totalPrice)} helper="Price total" />
-      </section>
-
-      <section className="pricebook-guide-strip">
-        <span><PackagePlus size={22} /></span>
-        <div>
-          <strong>How to add items here</strong>
-          <p>Click <b>Add Item</b>, enter the item name, SKU, unit, base cost, markup, selling price, and preferred supplier, then save. Purchase orders can then select these records from the pricebook.</p>
+        <div className="pricebook-header-actions">
+          <AnalyticsToggleButton open={analytics.open} onToggle={analytics.toggle} panelId={analytics.panelId} className="pricebook-secondary-button" />
+          <button type="button" className="pricebook-primary-button" onClick={openCreate}><Plus size={17} /> Add Item</button>
         </div>
       </section>
+
+      <CollapsibleAnalytics open={analytics.open} id={analytics.panelId}>
+        <section className="pricebook-kpis" aria-label="Pricebook summary">
+          <Kpi title="Total Items" value={String(stats.total)} helper="All records" />
+          <Kpi title="Active Items" value={String(stats.active)} helper="Ready for procurement" />
+          <Kpi title="Average Markup" value={`${stats.averageMarkup}%`} helper="Across pricebook" />
+          <Kpi title="Cost Value" value={formatCurrency(stats.totalCost)} helper="Base cost total" />
+          <Kpi title="Selling Value" value={formatCurrency(stats.totalPrice)} helper="Price total" />
+        </section>
+      </CollapsibleAnalytics>
 
       <section className="pricebook-tabs" aria-label="Pricebook status tabs">
         {tabs.map(tab => (
@@ -319,7 +337,16 @@ export default function ProcurementPricebookPage() {
               <tbody>
                 {filteredItems.map(item => (
                   <tr key={item.id}>
-                    <td data-label="Item"><strong>{item.name}</strong><small>{item.sku || 'No SKU'}</small></td>
+                    <td data-label="Item">
+                      <div className="pricebook-item-cell">
+                        {item.photoDataUrl ? (
+                          <img src={item.photoDataUrl} alt="" />
+                        ) : (
+                          <span><PackagePlus size={16} /></span>
+                        )}
+                        <div><strong>{item.name}</strong><small>{item.sku || 'No SKU'}</small></div>
+                      </div>
+                    </td>
                     <td data-label="Type">{item.itemType}</td>
                     <td data-label="Unit">{item.unit}</td>
                     <td data-label="Supplier">{item.vendor || '-'}</td>
@@ -386,6 +413,27 @@ export default function ProcurementPricebookPage() {
                 SKU
                 <input value={form.sku} onChange={event => setForm(previous => ({ ...previous, sku: event.target.value }))} placeholder={nextSku(items)} />
               </label>
+              <div className="wide pricebook-photo-field">
+                <span>Item Photo</span>
+                <div className="pricebook-photo-control">
+                  <div className="pricebook-photo-preview">
+                    {form.photoDataUrl ? <img src={form.photoDataUrl} alt="" /> : <ImagePlus size={24} />}
+                  </div>
+                  <div>
+                    <strong>{form.photoName || 'No photo selected'}</strong>
+                    <span>Upload a JPG, PNG, or WebP item photo for faster purchasing lookup.</span>
+                    <div className="pricebook-photo-actions">
+                      <label className="pricebook-secondary-button">
+                        Choose Photo
+                        <input type="file" accept="image/*" onChange={handlePhotoUpload} />
+                      </label>
+                      {form.photoDataUrl && (
+                        <button type="button" className="pricebook-secondary-button" onClick={() => setForm(previous => ({ ...previous, photoDataUrl: '', photoName: '' }))}>Remove</button>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </div>
               <label>
                 Item Type
                 <select value={form.itemType} onChange={event => setForm(previous => ({ ...previous, itemType: event.target.value as ItemType }))}>
@@ -484,6 +532,15 @@ function loadSuppliers(companyId: string): SupplierOption[] {
   }))
 }
 
+function imageFileToDataUrl(file: File) {
+  return new Promise<string>(resolve => {
+    const reader = new FileReader()
+    reader.onload = () => resolve(typeof reader.result === 'string' ? reader.result : '')
+    reader.onerror = () => resolve('')
+    reader.readAsDataURL(file)
+  })
+}
+
 function normalizeItem(row: StoredRow, index: number): PricebookItem | null {
   const name = textFrom(row.name || row.itemName || row.description)
   if (!name) return null
@@ -503,6 +560,8 @@ function normalizeItem(row: StoredRow, index: number): PricebookItem | null {
     reorderPoint: numberValue(row.reorderPoint || row.minimumStock || row.minStock),
     status: textFrom(row.status).toLowerCase() === 'inactive' ? 'Inactive' : 'Active',
     notes: textFrom(row.notes || row.description),
+    photoDataUrl: textFrom(row.photoDataUrl || row.imageDataUrl || row.photoUrl || row.imageUrl),
+    photoName: textFrom(row.photoName || row.imageName),
   }
 }
 
@@ -580,7 +639,6 @@ const pricebookCss = `
 .pricebook-header,
 .pricebook-title-row,
 .pricebook-toolbar,
-.pricebook-guide-strip,
 .pricebook-tabs {
   display: flex;
   align-items: center;
@@ -590,11 +648,17 @@ const pricebookCss = `
   gap: 18px;
   margin-bottom: 18px;
 }
+.pricebook-header-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  flex-wrap: wrap;
+}
 .pricebook-breadcrumb {
   display: flex;
   align-items: center;
   gap: 8px;
-  color: #64748b;
+  color: #000000;
   font-size: 13px;
   margin-bottom: 11px;
 }
@@ -604,8 +668,7 @@ const pricebookCss = `
 .pricebook-title-row {
   gap: 12px;
 }
-.pricebook-title-row > span,
-.pricebook-guide-strip > span {
+.pricebook-title-row > span {
   width: 44px;
   height: 44px;
   border-radius: 10px;
@@ -625,7 +688,7 @@ const pricebookCss = `
 }
 .pricebook-title-row p {
   margin: 7px 0 0;
-  color: #64748b;
+  color: #000000;
   font-size: 14px;
   line-height: 1.5;
 }
@@ -666,7 +729,6 @@ const pricebookCss = `
 }
 .pricebook-kpi,
 .pricebook-workspace,
-.pricebook-guide-strip,
 .pricebook-checklist,
 .pricebook-drawer {
   border: 1px solid #e5e7eb;
@@ -681,7 +743,7 @@ const pricebookCss = `
 .pricebook-kpi span,
 .pricebook-kpi small {
   display: block;
-  color: #64748b;
+  color: #000000;
   font-size: 12px;
 }
 .pricebook-kpi span {
@@ -691,24 +753,6 @@ const pricebookCss = `
   display: block;
   margin: 8px 0 7px;
   font-size: 22px;
-}
-.pricebook-guide-strip {
-  gap: 14px;
-  border-radius: 14px;
-  padding: 16px;
-  margin-bottom: 16px;
-}
-.pricebook-guide-strip strong {
-  font-size: 15px;
-}
-.pricebook-guide-strip p {
-  margin: 5px 0 0;
-  color: #64748b;
-  font-size: 13px;
-  line-height: 1.5;
-}
-.pricebook-guide-strip b {
-  color: #0f172a;
 }
 .pricebook-tabs {
   gap: 28px;
@@ -732,7 +776,7 @@ const pricebookCss = `
   border-color: #16a34a;
 }
 .pricebook-tabs span {
-  color: #64748b;
+  color: #000000;
   margin-left: 6px;
   font-size: 12px;
 }
@@ -741,28 +785,38 @@ const pricebookCss = `
   overflow: visible;
 }
 .pricebook-toolbar {
-  gap: 12px;
-  padding: 16px;
+  justify-content: flex-start;
+  gap: 10px;
+  padding: 14px 16px;
   border-bottom: 1px solid #e5e7eb;
+  background: #fff;
 }
 .pricebook-search,
 .pricebook-select {
-  height: 42px;
-  border: 1px solid #e5e7eb;
-  border-radius: 10px;
+  height: 40px;
+  border: 1px solid #d6dee8;
+  border-radius: 9px;
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 9px;
   padding: 0 12px;
-  color: #64748b;
+  color: #000000;
   background: #fff;
+  box-shadow: inset 0 1px 0 rgba(15, 23, 42, 0.03);
 }
 .pricebook-search {
-  min-width: 240px;
-  flex: 1;
+  flex: 1 1 520px;
+  min-width: 280px;
+  max-width: 760px;
 }
 .pricebook-select {
-  min-width: 150px;
+  flex: 0 0 160px;
+  min-width: 160px;
+}
+.pricebook-toolbar .pricebook-secondary-button {
+  flex: 0 0 auto;
+  min-height: 40px;
+  padding: 0 16px;
 }
 .pricebook-search input,
 .pricebook-select select,
@@ -790,7 +844,7 @@ const pricebookCss = `
   height: 104px;
   border-radius: 999px;
   background: #eff6ff;
-  color: #64748b;
+  color: #000000;
   display: grid;
   place-items: center;
   margin-bottom: 16px;
@@ -801,7 +855,7 @@ const pricebookCss = `
 }
 .pricebook-empty p {
   max-width: 420px;
-  color: #64748b;
+  color: #000000;
   font-size: 13px;
   line-height: 1.55;
 }
@@ -824,7 +878,7 @@ const pricebookCss = `
 }
 .pricebook-table th {
   background: #f8fafc;
-  color: #475569;
+  color: #000000;
   text-transform: uppercase;
   font-size: 10px;
   letter-spacing: 0;
@@ -835,7 +889,37 @@ const pricebookCss = `
 .pricebook-table td small {
   display: block;
   margin-top: 4px;
+  color: #000000;
+}
+.pricebook-item-cell {
+  display: grid;
+  grid-template-columns: 42px minmax(0, 1fr);
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+.pricebook-item-cell > img,
+.pricebook-item-cell > span {
+  width: 42px;
+  height: 42px;
+  border: 1px solid #e5e7eb;
+  border-radius: 10px;
+  background: #f8fafc;
   color: #64748b;
+  object-fit: cover;
+}
+.pricebook-item-cell > span {
+  display: grid;
+  place-items: center;
+}
+.pricebook-item-cell > div {
+  min-width: 0;
+}
+.pricebook-item-cell strong,
+.pricebook-item-cell small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .pricebook-badge {
   min-height: 24px;
@@ -853,7 +937,7 @@ const pricebookCss = `
 }
 .pricebook-badge.inactive {
   background: #f1f5f9;
-  color: #475569;
+  color: #000000;
 }
 .pricebook-row-actions {
   position: relative;
@@ -950,7 +1034,7 @@ const pricebookCss = `
 }
 .pricebook-drawer-head p {
   margin: 8px 0 0;
-  color: #64748b;
+  color: #000000;
   font-size: 13px;
 }
 .pricebook-form-grid {
@@ -966,8 +1050,67 @@ const pricebookCss = `
   font-size: 12px;
   font-weight: 900;
 }
-.pricebook-form-grid label.wide {
+.pricebook-form-grid label.wide,
+.pricebook-form-grid .wide {
   grid-column: 1 / -1;
+}
+.pricebook-photo-field {
+  display: grid;
+  gap: 8px;
+  color: #334155;
+  font-size: 12px;
+  font-weight: 900;
+}
+.pricebook-photo-control {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: 92px minmax(0, 1fr);
+  gap: 14px;
+  align-items: center;
+  padding: 12px;
+  border: 1px solid #d1d5db;
+  border-radius: 12px;
+  background: #f8fafc;
+}
+.pricebook-photo-preview {
+  width: 92px;
+  height: 92px;
+  border: 1px dashed #cbd5e1;
+  border-radius: 12px;
+  background: #fff;
+  color: #64748b;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+}
+.pricebook-photo-preview img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.pricebook-photo-control strong,
+.pricebook-photo-control span {
+  display: block;
+}
+.pricebook-photo-control strong {
+  color: #0f172a;
+  font-size: 13px;
+}
+.pricebook-photo-control span {
+  margin-top: 4px;
+  color: #475569;
+  font-size: 12px;
+  line-height: 1.4;
+  font-weight: 700;
+}
+.pricebook-photo-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 10px;
+}
+.pricebook-photo-actions input {
+  display: none;
 }
 .pricebook-form-grid input,
 .pricebook-form-grid select,
@@ -1000,7 +1143,7 @@ const pricebookCss = `
   gap: 12px;
 }
 .pricebook-drawer-footer span {
-  color: #64748b;
+  color: #000000;
   font-size: 12px;
 }
 .pricebook-drawer-footer strong {
@@ -1027,6 +1170,8 @@ const pricebookCss = `
   }
   .pricebook-toolbar > * {
     flex: 1 1 100%;
+    max-width: none;
+    min-width: 0;
   }
   .pricebook-table-wrap {
     border: 0;
@@ -1057,7 +1202,7 @@ const pricebookCss = `
     content: attr(data-label);
     display: inline-block;
     min-width: 104px;
-    color: #64748b;
+    color: #000000;
     font-size: 11px;
     font-weight: 900;
   }
@@ -1066,6 +1211,9 @@ const pricebookCss = `
     border-radius: 18px 18px 0 0;
     height: calc(100% - 20px);
     margin-top: 20px;
+  }
+  .pricebook-photo-control {
+    grid-template-columns: 1fr;
   }
   .pricebook-drawer-footer,
   .pricebook-drawer-footer > div {

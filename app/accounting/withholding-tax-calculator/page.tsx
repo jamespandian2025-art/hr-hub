@@ -337,7 +337,7 @@ const withholdingTaxCss = `
 .withholding-page { min-height: calc(100dvh - 76px); padding: 28px 28px 42px; background: transparent; color: #0f172a; }
 .withholding-header { display: flex; justify-content: space-between; align-items: flex-start; gap: 18px; margin-bottom: 20px; }
 .withholding-header h1 { margin: 0; color: #0f172a; font-size: 28px; line-height: 1.08; font-weight: 950; letter-spacing: 0; }
-.withholding-header p { margin: 8px 0 0; color: #475569; font-size: 13.5px; font-weight: 750; }
+.withholding-header p { margin: 8px 0 0; color: #000000; font-size: 13.5px; font-weight: 750; }
 .withholding-actions { display: flex; gap: 10px; flex-wrap: wrap; justify-content: flex-end; }
 .withholding-actions button { min-height: 38px; border-radius: 8px; border: 1px solid #e8edf4; background: #fff; color: #0f172a; display: inline-flex; align-items: center; justify-content: center; gap: 8px; padding: 0 12px; font-size: 12.5px; font-weight: 900; cursor: pointer; box-shadow: 0 1px 2px rgba(15, 23, 42, .03); }
 .withholding-actions button:hover { border-color: #cbd5e1; background: #f8fafc; }
@@ -347,7 +347,7 @@ const withholdingTaxCss = `
 .withholding-card { background: #fff; border: 1px solid #e8edf4; border-radius: 8px; padding: 18px; box-shadow: 0 1px 2px rgba(15, 23, 42, .03); color: #0f172a; min-width: 0; }
 .withholding-metric { min-height: 100px; display: flex; align-items: center; gap: 13px; }
 .withholding-metric-icon { width: 44px; height: 44px; border-radius: 8px; display: grid; place-items: center; flex: 0 0 auto; }
-.withholding-metric span span { display: block; color: #475569; font-size: 12px; font-weight: 850; line-height: 1.25; }
+.withholding-metric span span { display: block; color: #000000; font-size: 12px; font-weight: 850; line-height: 1.25; }
 .withholding-metric strong { display: block; margin-top: 8px; color: #111827; font-size: clamp(18px, 1.12vw, 22px); line-height: 1.08; white-space: normal; overflow-wrap: anywhere; }
 .withholding-grid { display: grid; grid-template-columns: minmax(420px, 1fr) minmax(300px, .62fr); gap: 16px; align-items: start; }
 .withholding-breakdown { grid-column: 1 / -1; }
@@ -359,14 +359,14 @@ const withholdingTaxCss = `
 .withholding-form label { display: grid; gap: 7px; min-width: 0; }
 .withholding-form label span { color: #334155; font-size: 12px; font-weight: 850; line-height: 1.35; }
 .withholding-form input, .withholding-form select { width: 100%; min-height: 40px; border: 1px solid #cbd5e1; border-radius: 8px; background: #fff; color: #0f172a; font: inherit; font-size: 13px; font-weight: 800; padding: 0 11px; outline: none; box-shadow: inset 0 1px 1px rgba(15, 23, 42, .02); }
-.withholding-form input::placeholder { color: #94a3b8; }
+.withholding-form input::placeholder { color: #000000; }
 .withholding-form input:focus, .withholding-form select:focus { border-color: #16a34a; box-shadow: 0 0 0 3px rgba(22, 163, 74, .14); }
 .withholding-field-group { border-top: 1px solid #eef2f7; padding-top: 15px; margin-top: 2px; }
 .withholding-field-group > div { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 .withholding-field-group h3 { margin: 0; color: #111827; font-size: 14px; font-weight: 950; letter-spacing: 0; }
 .withholding-field-group strong { display: inline-flex; align-items: center; min-height: 22px; border-radius: 6px; background: #ecfdf3; color: #15803d; padding: 0 8px; font-size: 11.5px; font-weight: 900; white-space: nowrap; }
 .withholding-results, .withholding-breakdown { display: grid; gap: 0; }
-.withholding-amount, .withholding-fact { display: flex; justify-content: space-between; gap: 16px; align-items: center; border-top: 1px solid #eef2f7; padding: 11px 0; color: #475569; font-size: 13px; line-height: 1.35; }
+.withholding-amount, .withholding-fact { display: flex; justify-content: space-between; gap: 16px; align-items: center; border-top: 1px solid #eef2f7; padding: 11px 0; color: #000000; font-size: 13px; line-height: 1.35; }
 .withholding-amount:first-of-type, .withholding-fact:first-child { border-top: 0; }
 .withholding-amount strong, .withholding-fact strong { color: #111827; text-align: right; white-space: nowrap; }
 .withholding-amount.is-large { min-height: 68px; align-items: flex-start; flex-direction: column; gap: 7px; border: 1px solid #eef2f7; border-radius: 8px; padding: 13px 14px; margin-bottom: 10px; background: #f8fafc; }

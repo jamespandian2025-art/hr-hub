@@ -112,7 +112,7 @@ export default function AppearancePage() {
     <div style={{ fontFamily: font, maxWidth: 900 }}>
       {/* Breadcrumb */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 20 }}>
-        <Link href="/settings" style={{ display: 'inline-flex', alignItems: 'center', gap: 5, color: '#6b7280', textDecoration: 'none', fontSize: 13 }}>
+        <Link href="/settings" style={{ display: 'inline-flex', alignItems: 'center', gap: 5, color: '#000000', textDecoration: 'none', fontSize: 13 }}>
           <ArrowLeft size={14} />
           Settings
         </Link>
@@ -123,7 +123,7 @@ export default function AppearancePage() {
       <div style={{ marginBottom: 6 }}>
         <div style={{ fontSize: 22, fontWeight: 700, color: '#111827' }}>Appearance</div>
       </div>
-      <div style={{ fontSize: 13, color: '#6b7280', marginBottom: 28 }}>
+      <div style={{ fontSize: 13, color: '#000000', marginBottom: 28 }}>
         Theme switching is paused while the workspace flow is being finalized.
       </div>
 
@@ -137,7 +137,7 @@ export default function AppearancePage() {
         ))}
       </div>
 
-      <div style={{ marginTop: 32, padding: '16px 20px', background: '#f9fafb', border: '1px solid #e5e7eb', borderRadius: 10, fontSize: 12, color: '#6b7280' }}>
+      <div style={{ marginTop: 32, padding: '16px 20px', background: '#f9fafb', border: '1px solid #e5e7eb', borderRadius: 10, fontSize: 12, color: '#000000' }}>
         <strong style={{ color: '#374151' }}>Current theme:</strong> Light is locked in for now.
       </div>
     </div>

@@ -6,6 +6,7 @@ import {
   CalendarDays, CheckCircle2, Clock3, Download, FileText, Filter,
   MoreHorizontal, Plane, Search, Upload, Users, Wifi, XCircle,
 } from 'lucide-react'
+import { AnalyticsToggleButton, CollapsibleAnalytics, useAnalyticsDisclosure } from '@/components/AnalyticsDisclosure'
 import {
   AttendanceRecord, AttendanceRow, AttendanceStatus, attendanceHours, attendanceKey,
   buildRows, downloadText, employeeKey, Employee, formatClock, formatDate, fullName,
@@ -13,6 +14,21 @@ import {
   todayInput, upsertRecord,
 } from './attendanceData'
 import { secureId } from '@/lib/security/random'
+import { createHrRecord, deleteHrRecord, listHrRecords, updateHrRecord } from '@/lib/hrms/client'
+
+// Merge server + local attendance by id, keeping whichever copy was updated last
+// so a portal clock-out (server) supersedes a stale local clock-in and vice versa.
+function mergeAttendanceById(rows: AttendanceRecord[]) {
+  const map = new Map<string, AttendanceRecord>()
+  for (const row of rows) {
+    if (!row?.id) continue
+    const existing = map.get(row.id)
+    if (!existing || new Date(row.updatedAt || 0).getTime() >= new Date(existing.updatedAt || 0).getTime()) {
+      map.set(row.id, row)
+    }
+  }
+  return Array.from(map.values())
+}
 
 const font = "var(--font-body)"
 const card = { background: '#fff', border: '1px solid #e5e7eb', borderRadius: 12, boxShadow: '0 1px 4px rgba(15,23,42,0.05)' }
@@ -38,6 +54,7 @@ export default function HrAttendancePage() {
   const [editingRecord, setEditingRecord] = useState<AttendanceRow | null>(null)
   const [deletingRecord, setDeletingRecord] = useState<AttendanceRow | null>(null)
   const [notice, setNotice] = useState('')
+  const analytics = useAnalyticsDisclosure('wiseflow:analytics:hr-attendance')
   const [draft, setDraft] = useState({
     employeeId: '',
     date: todayInput(),
@@ -51,11 +68,30 @@ export default function HrAttendancePage() {
   })
 
   useEffect(() => {
-    const timer = window.setTimeout(() => {
+    let cancelled = false
+    const load = async () => {
       setEmployees(loadStored<Employee[]>(employeeKey, []))
-      setRecords(loadStored<AttendanceRecord[]>(attendanceKey, []))
-    }, 0)
-    return () => window.clearTimeout(timer)
+      const local = loadStored<AttendanceRecord[]>(attendanceKey, [])
+      try {
+        const server = await listHrRecords<AttendanceRecord>('attendance', { 'x-hr-role': 'HR' })
+        const merged = mergeAttendanceById([...server, ...local])
+        if (!cancelled) setRecords(merged)
+      } catch {
+        if (!cancelled) setRecords(local)
+      }
+    }
+    load()
+    window.addEventListener('storage', load)
+    window.addEventListener('focus', load)
+    window.addEventListener('wiseflow:hr-data-changed', load)
+    const timer = window.setInterval(load, 2500)
+    return () => {
+      cancelled = true
+      window.removeEventListener('storage', load)
+      window.removeEventListener('focus', load)
+      window.removeEventListener('wiseflow:hr-data-changed', load)
+      window.clearInterval(timer)
+    }
   }, [])
 
   const allRows = useMemo(() => buildRows(employees, records), [employees, records])
@@ -134,7 +170,7 @@ export default function HrAttendancePage() {
     setMarkOpen(true)
   }
 
-  function saveAttendance() {
+  async function saveAttendance() {
     if (!draft.employeeId || !draft.date || !draft.status) {
       setNotice('Employee, date, and status are required.')
       return
@@ -159,6 +195,7 @@ export default function HrAttendancePage() {
       createdAt: editingRecord?.createdAt || new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     }
+    const isEdit = Boolean(editingRecord && !editingRecord.isVirtual)
     const nextRecords = upsertRecord(records, next)
     setRecords(nextRecords)
     saveStored(attendanceKey, nextRecords)
@@ -168,17 +205,35 @@ export default function HrAttendancePage() {
       saveStored(employeeKey, nextEmployees)
     }
     setMarkOpen(false)
+    // Persist to the shared HR store so the record is visible cross-device.
+    try {
+      if (isEdit) {
+        await updateHrRecord<AttendanceRecord>('attendance', next.id, next as unknown as Record<string, unknown>)
+      } else {
+        await createHrRecord<AttendanceRecord>('attendance', next as unknown as Record<string, unknown>)
+      }
+      window.dispatchEvent(new Event('wiseflow:hr-data-changed'))
+    } catch (error) {
+      setNotice(error instanceof Error ? `Saved locally, but HR sync failed: ${error.message}` : 'Saved locally, but HR sync failed.')
+    }
   }
 
-  function deleteRecord() {
+  async function deleteRecord() {
     if (!deletingRecord || deletingRecord.isVirtual) {
       setDeletingRecord(null)
       return
     }
-    const nextRecords = records.filter(record => record.id !== deletingRecord.id)
+    const targetId = deletingRecord.id
+    const nextRecords = records.filter(record => record.id !== targetId)
     setRecords(nextRecords)
     saveStored(attendanceKey, nextRecords)
     setDeletingRecord(null)
+    try {
+      await deleteHrRecord('attendance', targetId)
+      window.dispatchEvent(new Event('wiseflow:hr-data-changed'))
+    } catch (error) {
+      setNotice(error instanceof Error ? `Removed locally, but HR sync failed: ${error.message}` : 'Removed locally, but HR sync failed.')
+    }
   }
 
   function exportReport() {
@@ -224,7 +279,13 @@ export default function HrAttendancePage() {
       const nextRecords = cleaned.reduce((current, row) => upsertRecord(current, row), records)
       setRecords(nextRecords)
       saveStored(attendanceKey, nextRecords)
-      setNotice(`${cleaned.length} attendance record${cleaned.length === 1 ? '' : 's'} imported.`)
+      // Push imported rows to the shared HR store (best-effort, per row).
+      const results = await Promise.allSettled(cleaned.map(row => createHrRecord<AttendanceRecord>('attendance', row as unknown as Record<string, unknown>)))
+      const failed = results.filter(result => result.status === 'rejected').length
+      window.dispatchEvent(new Event('wiseflow:hr-data-changed'))
+      setNotice(failed
+        ? `${cleaned.length - failed} of ${cleaned.length} attendance records imported and synced; ${failed} saved locally only.`
+        : `${cleaned.length} attendance record${cleaned.length === 1 ? '' : 's'} imported.`)
     } catch {
       setNotice('Could not import that file. Use CSV or JSON attendance data.')
     } finally {
@@ -236,18 +297,24 @@ export default function HrAttendancePage() {
     <main style={{ fontFamily: font, padding: '0 20px 36px', minHeight: '100vh' }}>
       <input ref={importRef} type="file" accept=".csv,.json" onChange={importAttendance} style={{ display: 'none' }} />
 
-      <PageHeader onImport={() => importRef.current?.click()} onExport={exportReport} />
+      <PageHeader
+        analyticsToggle={<AnalyticsToggleButton open={analytics.open} onToggle={analytics.toggle} panelId={analytics.panelId} style={secondaryButton} />}
+        onImport={() => importRef.current?.click()}
+        onExport={exportReport}
+      />
       {notice && <div style={{ ...card, padding: '10px 14px', marginBottom: 14, color: notice.startsWith('Could') ? '#b91c1c' : '#15803d', fontSize: 12, fontWeight: 800 }}>{notice}</div>}
 
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(170px, 1fr))', gap: 12, marginBottom: 16 }}>
-        <Metric label="Attendance Rate" value={`${stats.rate}%`} sub="Based on today's employees" icon={<CheckCircle2 />} color="#16a34a" bg="#dcfce7" />
-        <Metric label="Present" value={stats.present} sub="Checked in today" icon={<CalendarDays />} color="#16a34a" bg="#dcfce7" />
-        <Metric label="Late" value={stats.late} sub="After shift start" icon={<Clock3 />} color="#f59e0b" bg="#fef3c7" />
-        <Metric label="Absent" value={stats.absent} sub="No attendance" icon={<XCircle />} color="#ef4444" bg="#fee2e2" />
-        <Metric label="On Leave" value={stats.onLeave} sub="Approved leave" icon={<Plane />} color="#3b82f6" bg="#dbeafe" />
-        <Metric label="Total Employees" value={stats.total} sub="Active HR records" icon={<Users />} color="#7c3aed" bg="#ede9fe" />
-        <Metric label="Remote Logs" value={todayRows.filter(row => row.remoteLog || row.workLocation === 'Remote').length} sub="Tagged WFH / remote" icon={<Wifi />} color="#0891b2" bg="#cffafe" />
-      </div>
+      <CollapsibleAnalytics open={analytics.open} id={analytics.panelId}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(170px, 1fr))', gap: 12, marginBottom: 16 }}>
+          <Metric label="Attendance Rate" value={`${stats.rate}%`} sub="Based on today's employees" icon={<CheckCircle2 />} color="#16a34a" bg="#dcfce7" />
+          <Metric label="Present" value={stats.present} sub="Checked in today" icon={<CalendarDays />} color="#16a34a" bg="#dcfce7" />
+          <Metric label="Late" value={stats.late} sub="After shift start" icon={<Clock3 />} color="#f59e0b" bg="#fef3c7" />
+          <Metric label="Absent" value={stats.absent} sub="No attendance" icon={<XCircle />} color="#ef4444" bg="#fee2e2" />
+          <Metric label="On Leave" value={stats.onLeave} sub="Approved leave" icon={<Plane />} color="#3b82f6" bg="#dbeafe" />
+          <Metric label="Total Employees" value={stats.total} sub="Active HR records" icon={<Users />} color="#7c3aed" bg="#ede9fe" />
+          <Metric label="Remote Logs" value={todayRows.filter(row => row.remoteLog || row.workLocation === 'Remote').length} sub="Tagged WFH / remote" icon={<Wifi />} color="#0891b2" bg="#cffafe" />
+        </div>
+      </CollapsibleAnalytics>
 
       <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1.25fr) minmax(420px, 1fr)', gap: 16, marginBottom: 16 }}>
         <section style={{ ...card, padding: 20 }}>
@@ -271,7 +338,7 @@ export default function HrAttendancePage() {
           <div style={{ display: 'grid', gridTemplateColumns: '220px 1fr', gap: 20, alignItems: 'center' }}>
             <Donut value={stats.total} />
             <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
-              <thead><tr style={{ color: '#6b7280' }}>{['Department', 'Present', 'Late', 'Absent', 'Rate'].map(header => <th key={header} style={{ textAlign: 'left', padding: '8px 6px' }}>{header}</th>)}</tr></thead>
+              <thead><tr style={{ color: '#000000' }}>{['Department', 'Present', 'Late', 'Absent', 'Rate'].map(header => <th key={header} style={{ textAlign: 'left', padding: '8px 6px' }}>{header}</th>)}</tr></thead>
               <tbody>{departmentRows.map((row, index) => (
                 <tr key={row.name}>
                   <td style={{ padding: '8px 6px', color: '#111827', fontWeight: 700 }}><span style={{ display: 'inline-block', width: 8, height: 8, borderRadius: '50%', background: chartColors[index % chartColors.length], marginRight: 8 }} />{row.name}</td>
@@ -297,7 +364,7 @@ export default function HrAttendancePage() {
                 <div style={{ ...inputStyle, color: '#374151' }}>{monthRangeLabel()}</div>
                 <select value={department} onChange={event => setDepartment(event.target.value)} style={inputStyle}>{departments.map(item => <option key={item}>{item}</option>)}</select>
                 <select value={status} onChange={event => setStatus(event.target.value)} style={inputStyle}><option>All Status</option>{statuses.map(item => <option key={item}>{item}</option>)}</select>
-                <label style={{ ...inputStyle, display: 'flex', alignItems: 'center', gap: 8 }}><Search size={15} color="#9ca3af" /><input value={query} onChange={event => setQuery(event.target.value)} placeholder="Search employee..." style={{ border: 'none', outline: 'none', width: '100%' }} /></label>
+                <label style={{ ...inputStyle, display: 'flex', alignItems: 'center', gap: 8 }}><Search size={15} color="#000000" /><input value={query} onChange={event => setQuery(event.target.value)} placeholder="Search employee..." style={{ border: 'none', outline: 'none', width: '100%' }} /></label>
                 <button type="button" style={{ border: '1px solid #e5e7eb', background: '#fff', borderRadius: 8, display: 'grid', placeItems: 'center' }}><Filter size={15} /></button>
               </div>
               <AttendanceTable rows={filteredRows} rowMenuId={rowMenuId} setRowMenuId={setRowMenuId} menuPosition={rowMenuPosition} setMenuPosition={setRowMenuPosition} onEdit={openMarkAttendance} onDelete={setDeletingRecord} />
@@ -369,14 +436,15 @@ function parseCsv(text: string, employees: Employee[]) {
   })
 }
 
-function PageHeader({ onImport, onExport }: { onImport: () => void; onExport: () => void }) {
+function PageHeader({ analyticsToggle, onImport, onExport }: { analyticsToggle?: React.ReactNode; onImport: () => void; onExport: () => void }) {
   return (
     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', padding: '20px 0 18px', gap: 16, flexWrap: 'wrap' }}>
       <div>
         <h1 style={{ margin: 0, color: '#0f172a', fontSize: 28, fontWeight: 900 }}>Attendance</h1>
-        <p style={{ margin: '6px 0 0', color: '#475569', fontSize: 14 }}>Track and manage employee attendance, clock-ins, work hours, and exceptions.</p>
+        <p style={{ margin: '6px 0 0', color: '#000000', fontSize: 14 }}>Track and manage employee attendance, clock-ins, work hours, and exceptions.</p>
       </div>
-      <div style={{ display: 'flex', gap: 10 }}>
+      <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+        {analyticsToggle}
         <button type="button" onClick={onImport} style={secondaryButton}><Upload size={14} /> Import Attendance</button>
         <button type="button" onClick={onExport} style={primaryButton}><Download size={14} /> Export Report</button>
       </div>
@@ -389,7 +457,7 @@ function Metric({ label, value, sub, icon, color, bg }: { label: string; value: 
     <div style={{ ...card, padding: 18, display: 'flex', gap: 14, alignItems: 'center' }}>
       <div style={{ width: 48, height: 48, borderRadius: '50%', background: bg, color, display: 'grid', placeItems: 'center' }}>{icon}</div>
       <div>
-        <div style={{ color: '#6b7280', fontSize: 12, marginBottom: 4 }}>{label}</div>
+        <div style={{ color: '#000000', fontSize: 12, marginBottom: 4 }}>{label}</div>
         <div style={{ color: '#111827', fontSize: 24, fontWeight: 900 }}>{value}</div>
         <div style={{ color, fontSize: 11, fontWeight: 800, marginTop: 4 }}>{sub}</div>
       </div>
@@ -400,7 +468,7 @@ function Metric({ label, value, sub, icon, color, bg }: { label: string; value: 
 const chartColors = ['#16a34a', '#3b82f6', '#8b5cf6', '#f59e0b', '#14b8a6', '#ef4444']
 
 function MiniLegend({ label, value, color }: { label: string; value: string; color: string }) {
-  return <div><span style={{ display: 'inline-block', width: 8, height: 8, borderRadius: '50%', background: color, marginRight: 8 }} /><span style={{ color: '#6b7280', fontSize: 12 }}>{label}</span><strong style={{ display: 'block', marginLeft: 16, color: '#111827' }}>{value}</strong></div>
+  return <div><span style={{ display: 'inline-block', width: 8, height: 8, borderRadius: '50%', background: color, marginRight: 8 }} /><span style={{ color: '#000000', fontSize: 12 }}>{label}</span><strong style={{ display: 'block', marginLeft: 16, color: '#111827' }}>{value}</strong></div>
 }
 
 function LineOverview({ rows }: { rows: AttendanceRow[] }) {
@@ -420,7 +488,7 @@ function LineOverview({ rows }: { rows: AttendanceRow[] }) {
 }
 
 function Donut({ value }: { value: number }) {
-  return <div style={{ width: 190, height: 190, borderRadius: '50%', background: 'conic-gradient(#16a34a 0 38%, #14b8a6 38% 56%, #f59e0b 56% 74%, #3b82f6 74% 88%, #8b5cf6 88% 100%)', display: 'grid', placeItems: 'center' }}><div style={{ width: 118, height: 118, borderRadius: '50%', background: '#fff', display: 'grid', placeItems: 'center', textAlign: 'center' }}><strong style={{ fontSize: 25, color: '#111827' }}>{value}</strong><span style={{ color: '#6b7280', fontSize: 12 }}>Employees</span></div></div>
+  return <div style={{ width: 190, height: 190, borderRadius: '50%', background: 'conic-gradient(#16a34a 0 38%, #14b8a6 38% 56%, #f59e0b 56% 74%, #3b82f6 74% 88%, #8b5cf6 88% 100%)', display: 'grid', placeItems: 'center' }}><div style={{ width: 118, height: 118, borderRadius: '50%', background: '#fff', display: 'grid', placeItems: 'center', textAlign: 'center' }}><strong style={{ fontSize: 25, color: '#111827' }}>{value}</strong><span style={{ color: '#000000', fontSize: 12 }}>Employees</span></div></div>
 }
 
 function AttendanceTable({ rows, rowMenuId, setRowMenuId, menuPosition, setMenuPosition, onEdit, onDelete }: { rows: AttendanceRow[]; rowMenuId: string | null; setRowMenuId: (id: string | null) => void; menuPosition: FloatingMenuPosition; setMenuPosition: (position: FloatingMenuPosition) => void; onEdit: (row: AttendanceRow) => void; onDelete: (row: AttendanceRow) => void }) {
@@ -441,13 +509,13 @@ function AttendanceTable({ rows, rowMenuId, setRowMenuId, menuPosition, setMenuP
   return (
     <div style={{ overflowX: 'auto' }}>
       <table style={{ width: '100%', minWidth: 860, borderCollapse: 'collapse', fontSize: 12 }}>
-        <thead><tr style={{ color: '#6b7280', background: '#f9fafb' }}>{['Employee', 'Department', 'Date', 'Status', 'Location', 'Check In', 'Check Out', 'Work Hours', 'Actions'].map(header => <th key={header} style={{ textAlign: 'left', padding: '10px 16px' }}>{header}</th>)}</tr></thead>
+        <thead><tr style={{ color: '#000000', background: '#f9fafb' }}>{['Employee', 'Department', 'Date', 'Status', 'Location', 'Check In', 'Check Out', 'Work Hours', 'Actions'].map(header => <th key={header} style={{ textAlign: 'left', padding: '10px 16px' }}>{header}</th>)}</tr></thead>
         <tbody>
-          {rows.length === 0 ? <tr><td colSpan={9} style={{ padding: 40, textAlign: 'center', color: '#6b7280' }}>No attendance records found.</td></tr> : rows.slice(0, 10).map(row => {
+          {rows.length === 0 ? <tr><td colSpan={9} style={{ padding: 40, textAlign: 'center', color: '#000000' }}>No attendance records found.</td></tr> : rows.slice(0, 10).map(row => {
             const tone = statusTone(row.status)
             return (
               <tr key={row.id} style={{ borderTop: '1px solid #f3f4f6' }}>
-                <td style={{ padding: '12px 16px' }}><Link href={`/hr/attendance/${row.employeeId}`} style={{ display: 'flex', alignItems: 'center', gap: 10, textDecoration: 'none' }}><Avatar name={row.employeeName} photo={row.photo} /><span><strong style={{ display: 'block', color: '#111827' }}>{row.employeeName}</strong><span style={{ color: '#6b7280' }}>{row.employeeCode}</span></span></Link></td>
+                <td style={{ padding: '12px 16px' }}><Link href={`/hr/attendance/${row.employeeId}`} style={{ display: 'flex', alignItems: 'center', gap: 10, textDecoration: 'none' }}><Avatar name={row.employeeName} photo={row.photo} /><span><strong style={{ display: 'block', color: '#111827' }}>{row.employeeName}</strong><span style={{ color: '#000000' }}>{row.employeeCode}</span></span></Link></td>
                 <td style={{ padding: '12px 16px', color: '#374151' }}>{row.department}</td>
                 <td style={{ padding: '12px 16px', color: '#374151' }}>{formatDate(row.date)}</td>
                 <td style={{ padding: '12px 16px' }}><span style={{ borderRadius: 999, background: tone.bg, color: tone.text, padding: '4px 8px', fontWeight: 800 }}>{row.status}</span></td>
@@ -461,7 +529,7 @@ function AttendanceTable({ rows, rowMenuId, setRowMenuId, menuPosition, setMenuP
           })}
         </tbody>
       </table>
-      <div style={{ padding: '12px 16px', color: '#6b7280', fontSize: 12 }}>Showing {Math.min(rows.length, 10)} of {rows.length} results</div>
+      <div style={{ padding: '12px 16px', color: '#000000', fontSize: 12 }}>Showing {Math.min(rows.length, 10)} of {rows.length} results</div>
     </div>
   )
 }
@@ -476,7 +544,7 @@ function QuickButton({ label, icon, onClick }: { label: string; icon: React.Reac
 }
 
 function TabSummary({ tab, rows, onMark }: { tab: string; rows: AttendanceRow[]; onMark: () => void }) {
-  return <div style={{ padding: 22, minHeight: 260 }}><h2 style={{ margin: '0 0 8px', color: '#111827', fontSize: 18 }}>{tab}</h2><p style={{ margin: '0 0 18px', color: '#6b7280', fontSize: 13 }}>This view is calculated from the same attendance records table.</p><AttendanceTable rows={rows} rowMenuId={null} setRowMenuId={() => undefined} menuPosition={{ top: 0, left: 0 }} setMenuPosition={() => undefined} onEdit={() => onMark()} onDelete={() => undefined} /></div>
+  return <div style={{ padding: 22, minHeight: 260 }}><h2 style={{ margin: '0 0 8px', color: '#111827', fontSize: 18 }}>{tab}</h2><p style={{ margin: '0 0 18px', color: '#000000', fontSize: 13 }}>This view is calculated from the same attendance records table.</p><AttendanceTable rows={rows} rowMenuId={null} setRowMenuId={() => undefined} menuPosition={{ top: 0, left: 0 }} setMenuPosition={() => undefined} onEdit={() => onMark()} onDelete={() => undefined} /></div>
 }
 
 const fieldWrap = { display: 'grid', gap: 7, fontSize: 12, fontWeight: 800, color: '#374151' }

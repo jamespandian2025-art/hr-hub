@@ -20,6 +20,7 @@ const publicPaths = new Set([
 
 function isPublicPath(pathname: string) {
   return publicPaths.has(pathname)
+    || pathname.startsWith('/rfq-response')
     || pathname.startsWith('/_next/')
     || pathname.startsWith('/favicon')
     || pathname.startsWith('/sounds/')

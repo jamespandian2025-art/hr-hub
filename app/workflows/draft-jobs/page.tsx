@@ -3,9 +3,7 @@
 import Link from 'next/link'
 import { useMemo, useState } from 'react'
 import { FileText, Pencil, Search, Trash2 } from 'lucide-react'
-import { loadWorkflowProjects, loadWorkflowTasks } from '../workflow-ui'
-
-const tasksStorageKey = 'flowsys-assigned-tasks'
+import { loadWorkflowProjects, loadWorkflowTasks, saveWorkflowTasks } from '@/lib/workflows/data'
 
 type DraftJob = ReturnType<typeof loadWorkflowTasks>[number]
 
@@ -24,8 +22,7 @@ export default function DraftJobsPage() {
   function deleteDraft(task: DraftJob) {
     const next = tasks.filter(item => String(item.id) !== String(task.id))
     setTasks(next)
-    window.localStorage.setItem(tasksStorageKey, JSON.stringify(next.filter(item => typeof item.id === 'number' || !String(item.id).startsWith('tsk-'))))
-    window.dispatchEvent(new Event('storage'))
+    saveWorkflowTasks(next)
   }
 
   return (
@@ -90,7 +87,7 @@ const draftJobsCss = `
 }
 .wf-drafts-page p {
   margin: 7px 0 0;
-  color: #64748b;
+  color: #000000;
   font-size: 14px;
 }
 .wf-drafts-page label {
@@ -102,7 +99,7 @@ const draftJobsCss = `
   align-items: center;
   gap: 8px;
   padding: 0 12px;
-  color: #64748b;
+  color: #000000;
 }
 .wf-drafts-page input {
   border: 0;
@@ -138,7 +135,7 @@ const draftJobsCss = `
 }
 .wf-drafts-page small {
   display: block;
-  color: #64748b;
+  color: #000000;
   margin-top: 5px;
 }
 .wf-drafts-page a,
@@ -170,7 +167,7 @@ const draftJobsCss = `
   place-items: center;
   align-content: center;
   text-align: center;
-  color: #64748b;
+  color: #000000;
   gap: 8px;
 }
 .wf-drafts-page .empty strong {

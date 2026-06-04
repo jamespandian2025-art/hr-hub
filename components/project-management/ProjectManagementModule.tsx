@@ -22,16 +22,16 @@ import {
   WalletCards,
   X,
 } from 'lucide-react'
-import { budgetSummary, formatDate, formatMoney, projectStats } from '@/lib/project-management/metrics'
+import { AnalyticsToggleButton, CollapsibleAnalytics, useAnalyticsDisclosure } from '@/components/AnalyticsDisclosure'
+import { budgetSummary, formatMoney, projectStats } from '@/lib/project-management/metrics'
 import type { DocumentType, ProjectManagementState, ProjectRecord, ProjectTask, TaskPriority, TaskStatus } from '@/lib/project-management/types'
 import type { TaskAttachmentDraft } from '@/lib/project-management/service'
 import { companyChangeEvent } from '@/lib/tenant/company'
+import { useVoiceIntent } from '@/lib/voice/intent'
 import { uploadFileObject } from '@/lib/uploads/client'
 import {
   type ProjectManagementTab,
   projectManagementPathToTab,
-  projectManagementTabs,
-  projectManagementTabToPath,
   projectManagementViewToTab,
 } from './projectManagementNav'
 import { useProjectManagement } from './useProjectManagement'
@@ -41,7 +41,6 @@ import {
   KpiCard,
   ProjectDetails,
   Select,
-  TabBar,
   TaskCollaborationPanel,
   TaskDescriptionEditor,
 } from './ProjectManagementComponents'
@@ -53,6 +52,8 @@ import { ProjectsTab } from './tabs/ProjectsTab'
 
 const detailTabs = ['Overview', 'Tasks', 'Kanban', 'Files', 'Team', 'Budget', 'Schedule', 'Reports', 'Settings']
 const statusOptions = ['All', 'Planning', 'Active', 'In Progress', 'On Hold', 'Completed', 'Cancelled']
+const projectStatusFilterTabs = ['All', 'Pending', 'Ongoing', 'Completed', 'With issue'] as const
+type ProjectStatusFilterTab = typeof projectStatusFilterTabs[number]
 type TaskRecurrence = 'None' | 'Daily' | 'Weekly' | 'Monthly'
 const priorityOptions = ['All', 'Low', 'Medium', 'High', 'Critical']
 const projectDepartmentOptions = ['Delivery', 'Operations', 'Construction', 'Engineering', 'Design', 'Procurement', 'Finance', 'HR', 'Administration']
@@ -269,18 +270,55 @@ function numericDraftValue(value: string) {
   return Number(value.replace(/,/g, '')) || 0
 }
 
+function matchesProjectStatusFilter(project: ProjectRecord, tab: ProjectStatusFilterTab) {
+  if (tab === 'All') return !project.archivedAt
+  if (project.archivedAt) return false
+  if (tab === 'Pending') return project.status === 'Planning'
+  if (tab === 'Ongoing') return project.status === 'Active' || project.status === 'In Progress'
+  if (tab === 'Completed') return project.status === 'Completed'
+  return project.status === 'On Hold' || project.status === 'Cancelled' || project.health === 'At Risk' || project.health === 'Delayed'
+}
+
+function ProjectStatusFilterTabs({ active, tabs, onChange }: { active: ProjectStatusFilterTab; tabs: Array<{ label: ProjectStatusFilterTab; count: number }>; onChange: (tab: ProjectStatusFilterTab) => void }) {
+  return (
+    <nav className="pm-status-filter-tabs" aria-label="Project status filters">
+      {tabs.map(tab => (
+        <button key={tab.label} type="button" className={active === tab.label ? 'active' : undefined} onClick={() => onChange(tab.label)}>
+          <span>{tab.label}</span>
+          <strong data-tone={tab.label.toLowerCase().replace(/\s+/g, '-')}>{tab.count}</strong>
+        </button>
+      ))}
+    </nav>
+  )
+}
+
 export default function ProjectManagementModule({ initialTab }: { initialTab?: ProjectManagementTab }) {
   const pathname = usePathname()
   const router = useRouter()
   const searchParams = useSearchParams()
+  const requestedView = searchParams.get('view') || 'overview'
+  const requestedProjectId = searchParams.get('project') || ''
+  const requestedDetailTab = searchParams.get('detail') || ''
+  const createRequested = searchParams.get('new') === '1'
+  const requestedClientId = searchParams.get('clientId') || searchParams.get('client') || ''
+  const requestedClientName = searchParams.get('clientName') || searchParams.get('company') || ''
+  const requestedProjectName = searchParams.get('projectName') || ''
+  const requestedProjectAddress = searchParams.get('address') || ''
   const store = useProjectManagement()
   const { state, filters, setFilters, filteredProjects, filteredState } = store
-  const { activeTab, setActiveTab, detailTab, setDetailTab } = store
+  const { activeTab, setActiveTab, detailTab, setDetailTab, selectedProjectId, setSelectedProjectId } = store
+  const requestedInitialClient = state.clients.find(client =>
+    client.id.toLowerCase() === requestedClientId.trim().toLowerCase() ||
+    client.name.toLowerCase() === requestedClientId.trim().toLowerCase() ||
+    client.name.toLowerCase() === requestedClientName.trim().toLowerCase()
+  )
+  const requestedInitialClientId = requestedClientId || requestedInitialClient?.id || state.clients[0]?.id || ''
+  const requestedInitialManagerId = state.members[0]?.id || ''
   const [currency, setCurrency] = useState('PHP')
-  const [showCreate, setShowCreate] = useState(false)
+  const [showCreate, setShowCreate] = useState(createRequested)
   const [showCreateTask, setShowCreateTask] = useState(false)
+  const [projectStatusFilter, setProjectStatusFilter] = useState<ProjectStatusFilterTab>('All')
   const [filtersOpen, setFiltersOpen] = useState(false)
-  const [projectAlertsOpen, setProjectAlertsOpen] = useState(false)
   const [actionModal, setActionModal] = useState<'task' | 'time' | 'document' | null>(null)
   const [editingTaskId, setEditingTaskId] = useState<string | null>(null)
   const [taskCommentDraft, setTaskCommentDraft] = useState('')
@@ -292,13 +330,19 @@ export default function ProjectManagementModule({ initialTab }: { initialTab?: P
   const [taskAttachmentNote, setTaskAttachmentNote] = useState('')
   const [taskEvidenceMode, setTaskEvidenceMode] = useState(false)
   const [draggedTask, setDraggedTask] = useState<string | null>(null)
-  const [draft, setDraft] = useState(() => defaultProjectDraft(state.clients[0]?.id || '', state.members[0]?.id || ''))
-  const [teamMemberPick, setTeamMemberPick] = useState(state.members[0]?.id || '')
+  const analytics = useAnalyticsDisclosure('wiseflow:analytics:project-management-overview')
+  const [draft, setDraft] = useState(() => createRequested ? {
+    ...defaultProjectDraft(requestedInitialClientId, requestedInitialManagerId),
+    clientId: requestedInitialClientId,
+    name: requestedProjectName || (requestedClientName ? `${requestedClientName} Project` : ''),
+    description: requestedClientName ? `Project for ${requestedClientName}.` : '',
+    address: requestedProjectAddress,
+  } : defaultProjectDraft(state.clients[0]?.id || '', state.members[0]?.id || ''))
+  const [teamMemberPick, setTeamMemberPick] = useState(requestedInitialManagerId)
   const [taskDraft, setTaskDraft] = useState(() => defaultTaskDraft(state))
   const [timeDraft, setTimeDraft] = useState(() => defaultTimeDraft(state))
   const [documentDraft, setDocumentDraft] = useState(() => defaultDocumentDraft(state))
   const filterPanelRef = useRef<HTMLElement | null>(null)
-  const projectAlertsRef = useRef<HTMLElement | null>(null)
   const headerActionsRef = useRef<HTMLDivElement | null>(null)
   const newTaskFileInputRef = useRef<HTMLInputElement | null>(null)
   const stats = projectStats(filteredState)
@@ -337,6 +381,18 @@ export default function ProjectManagementModule({ initialTab }: { initialTab?: P
     [state.members, taskDraft.team, taskProject],
   )
   const editingTask = editingTaskId ? state.tasks.find(task => task.id === editingTaskId) || null : null
+  const projectStatusTabs = useMemo(
+    () => projectStatusFilterTabs.map(label => ({ label, count: state.projects.filter(project => matchesProjectStatusFilter(project, label)).length })),
+    [state.projects],
+  )
+  const statusFilteredProjects = useMemo(
+    () => state.projects.filter(project => matchesProjectStatusFilter(project, projectStatusFilter)),
+    [projectStatusFilter, state.projects],
+  )
+  const statusFilteredState = useMemo<ProjectManagementState>(
+    () => ({ ...state, projects: statusFilteredProjects }),
+    [state, statusFilteredProjects],
+  )
   const dateRangeLabel = filters.dateFrom || filters.dateTo ? `${filters.dateFrom || 'Start'} - ${filters.dateTo || 'End'}` : 'All project dates'
   const hasAnyActiveProjects = state.projects.some(project => !project.archivedAt)
   const activeFilterCount = [
@@ -347,43 +403,43 @@ export default function ProjectManagementModule({ initialTab }: { initialTab?: P
     filters.department !== 'All',
     Boolean(filters.dateFrom || filters.dateTo),
   ].filter(Boolean).length
-  const changeMainTab = (tab: string) => {
-    const nextTab = tab as ProjectManagementTab
+
+  const writeProjectDetailUrl = (projectId: string | null, tab = 'Overview', mode: 'push' | 'replace' = 'push') => {
+    if (typeof window === 'undefined') return
+    const params = new URLSearchParams(searchParams.toString())
+    if (projectId) params.set('project', projectId)
+    else params.delete('project')
+    if (projectId && tab !== 'Overview') params.set('detail', tab)
+    else params.delete('detail')
+
+    const query = params.toString()
+    const nextUrl = `${pathname}${query ? `?${query}` : ''}`
+    const currentUrl = `${window.location.pathname}${window.location.search}`
+    if (nextUrl === currentUrl) return
+    window.history[mode === 'replace' ? 'replaceState' : 'pushState'](null, '', nextUrl)
+  }
+
+  const openProjectDetail = (projectId: string, tab = 'Overview', mode: 'push' | 'replace' = 'push') => {
+    store.setSelectedProjectId(projectId)
+    store.setDetailTab(tab)
+    writeProjectDetailUrl(projectId, tab, mode)
+  }
+
+  const changeProjectDetailTab = (tab: string) => {
+    const nextTab = detailTabs.includes(tab) ? tab : 'Overview'
+    store.setDetailTab(nextTab)
+    const projectId = store.selectedProjectId || requestedProjectId
+    if (projectId) writeProjectDetailUrl(projectId, nextTab, 'replace')
+  }
+
+  const changeProjectStatusFilter = (tab: ProjectStatusFilterTab) => {
+    setProjectStatusFilter(tab)
     store.setSelectedProjectId(null)
-    store.setActiveTab(nextTab)
-    const nextPath = projectManagementTabToPath[nextTab]
-    // Update the URL without a full route navigation so the tab content swaps
-    // instantly (client-side) instead of remounting the module. pushState is
-    // synced with usePathname/useSearchParams by the Next.js App Router.
-    if (nextPath && nextPath !== pathname) window.history.pushState(null, '', nextPath)
   }
   const closeProjectDetail = () => {
     store.setSelectedProjectId(null)
-    if (!searchParams.has('project')) return
-    const params = new URLSearchParams(searchParams.toString())
-    params.delete('project')
-    params.delete('detail')
-    const query = params.toString()
-    router.replace(`${pathname}${query ? `?${query}` : ''}`)
+    writeProjectDetailUrl(null, 'Overview', 'replace')
   }
-  const projectAlerts = [
-    ...filteredState.milestones.slice(0, 2).map(milestone => {
-      const project = filteredState.projects.find(item => item.id === milestone.projectId)
-      return {
-        title: milestone.title,
-        detail: `${project?.name || 'Unassigned project'} due ${formatDate(milestone.dueDate)}`,
-        action: () => changeMainTab('Overview'),
-      }
-    }),
-    ...filteredState.tasks.filter(task => task.status !== 'Done').slice(0, 2).map(task => ({
-      title: task.title,
-      detail: `${task.status} task due ${formatDate(task.dueDate)}`,
-      action: () => {
-        store.setSelectedProjectId(task.projectId)
-        store.setDetailTab('Tasks')
-      },
-    })),
-  ]
   const isArchivedDirectory = store.activeTab === 'Archived'
   const isProjectDirectory = store.activeTab === 'Projects' || isArchivedDirectory
   const pageTitle = store.activeTab === 'Projects' ? 'Projects' : isArchivedDirectory ? 'Archived' : 'Project Management'
@@ -416,40 +472,47 @@ export default function ProjectManagementModule({ initialTab }: { initialTab?: P
     // Prefer the live pathname (kept in sync by pushState) over the static
     // initialTab prop, so a client-side tab switch isn't reverted to the
     // tab the route was first rendered with.
-    const nextTab = projectManagementPathToTab[pathname] || projectManagementViewToTab[searchParams.get('view') || 'overview'] || initialTab
+    const nextTab = pathname === '/project-management'
+      ? 'Overview'
+      : projectManagementPathToTab[pathname] || projectManagementViewToTab[requestedView] || initialTab
     if (nextTab && nextTab !== activeTab) setActiveTab(nextTab)
-  }, [activeTab, initialTab, pathname, searchParams, setActiveTab])
+  }, [activeTab, initialTab, pathname, requestedView, setActiveTab])
 
   useEffect(() => {
-    const projectId = searchParams.get('project')
-    if (!projectId || store.selectedProjectId === projectId) return
-    if (!state.projects.some(project => project.id === projectId)) return
-    store.setSelectedProjectId(projectId)
-  }, [searchParams, state.projects, store])
+    if (!requestedProjectId || selectedProjectId === requestedProjectId) return
+    if (!state.projects.some(project => project.id === requestedProjectId)) return
+    setSelectedProjectId(requestedProjectId)
+  }, [requestedProjectId, selectedProjectId, setSelectedProjectId, state.projects])
 
   useEffect(() => {
-    const requestedDetailTab = searchParams.get('detail')
-    if (!requestedDetailTab) return
-    const nextDetailTab = detailTabs.find(tab => tab.toLowerCase() === requestedDetailTab.toLowerCase())
+    if (pathname !== '/project-management' || requestedProjectId) return
+    if (selectedProjectId) setSelectedProjectId(null)
+    if (detailTab !== 'Overview') setDetailTab('Overview')
+  }, [detailTab, pathname, requestedProjectId, selectedProjectId, setDetailTab, setSelectedProjectId])
+
+  useEffect(() => {
+    const nextDetailTab = requestedDetailTab
+      ? detailTabs.find(tab => tab.toLowerCase() === requestedDetailTab.toLowerCase())
+      : requestedProjectId
+        ? 'Overview'
+        : ''
     if (nextDetailTab && nextDetailTab !== detailTab) setDetailTab(nextDetailTab)
-  }, [detailTab, searchParams, setDetailTab])
+  }, [detailTab, requestedDetailTab, requestedProjectId, setDetailTab])
 
   useEffect(() => {
-    if (!filtersOpen && !projectAlertsOpen) return
+    if (!filtersOpen) return
 
     const closeOnOutsideTap = (event: PointerEvent) => {
       const target = event.target as Node | null
       if (!target) return
       if (filterPanelRef.current?.contains(target)) return
-      if (projectAlertsRef.current?.contains(target)) return
       if (headerActionsRef.current?.contains(target)) return
       setFiltersOpen(false)
-      setProjectAlertsOpen(false)
     }
 
     document.addEventListener('pointerdown', closeOnOutsideTap)
     return () => document.removeEventListener('pointerdown', closeOnOutsideTap)
-  }, [filtersOpen, projectAlertsOpen])
+  }, [filtersOpen])
 
   const setDatePreset = (preset: 'all' | 'month' | 'next30' | 'quarter') => {
     const today = new Date()
@@ -481,10 +544,16 @@ export default function ProjectManagementModule({ initialTab }: { initialTab?: P
 
   const openCreateProject = () => {
     setFiltersOpen(false)
-    setProjectAlertsOpen(false)
     store.setSelectedProjectId(null)
     setShowCreateTask(false)
     setShowCreate(true)
+  }
+
+  useVoiceIntent('new-project', openCreateProject)
+
+  const closeCreateProject = () => {
+    setShowCreate(false)
+    if (createRequested) router.replace(pathname)
   }
 
   const openCreateTaskPage = (projectId?: string) => {
@@ -492,7 +561,6 @@ export default function ProjectManagementModule({ initialTab }: { initialTab?: P
     const nextProjectId = projectId || store.selectedProjectId || defaultDraft.projectId
     const project = state.projects.find(item => item.id === nextProjectId)
     setFiltersOpen(false)
-    setProjectAlertsOpen(false)
     setActionModal(null)
     setShowCreate(false)
     setEditingTaskId(null)
@@ -560,6 +628,7 @@ export default function ProjectManagementModule({ initialTab }: { initialTab?: P
     store.createProject({
       name: draft.name.trim() || 'Untitled Project',
       clientId: draft.clientId || state.clients[0]?.id || 'client-local',
+      clientName: requestedClientName || state.clients.find(client => client.id === draft.clientId)?.name,
       description: draft.description,
       budget: totalDraftBudget,
       startDate: draft.startDate,
@@ -589,7 +658,7 @@ export default function ProjectManagementModule({ initialTab }: { initialTab?: P
       opportunitySource: opportunityLink.opportunitySource,
     })
     setDraft(defaultProjectDraft(state.clients[0]?.id || '', state.members[0]?.id || ''))
-    setShowCreate(false)
+    closeCreateProject()
   }
 
   const submitTask = (event: FormEvent) => {
@@ -621,8 +690,7 @@ export default function ProjectManagementModule({ initialTab }: { initialTab?: P
     setNewTaskChecklistItems([])
     setNewTaskAttachments([])
     setTaskAdvancedOpen(false)
-    store.setSelectedProjectId(payload.projectId)
-    store.setDetailTab('Tasks')
+    openProjectDetail(payload.projectId, 'Tasks', 'replace')
   }
 
   const addTaskComment = (event: FormEvent) => {
@@ -762,7 +830,7 @@ export default function ProjectManagementModule({ initialTab }: { initialTab?: P
   const showWorkspaceChrome = !store.selectedProject && !showCreate && !showCreateTask
   const heroToneClass = `pm-hero-tab-${store.activeTab.toLowerCase().replace(/\s+/g, '-')}`
   const showHeroKpis = store.activeTab === 'Overview' && hasAnyActiveProjects
-  const heroDensityClass = showHeroKpis ? 'has-kpis' : 'is-compact'
+  const heroDensityClass = showHeroKpis && analytics.open ? 'has-kpis' : 'is-compact'
 
   return (
     <div className="pm-shell">
@@ -778,12 +846,15 @@ export default function ProjectManagementModule({ initialTab }: { initialTab?: P
                 </div>
                 <div className="pm-page-tools" ref={headerActionsRef}>
                   {isProjectDirectory ? (
-                    <button type="button" className="pm-primary pm-new-project-button pm-projects-primary" onClick={openCreateProject}><Plus size={16} /> New Project <ChevronDown size={13} /></button>
+                    <>
+                      {showHeroKpis && <AnalyticsToggleButton open={analytics.open} onToggle={analytics.toggle} panelId={analytics.panelId} className="pm-control" />}
+                      <button type="button" className="pm-primary pm-new-project-button pm-projects-primary" onClick={openCreateProject}><Plus size={16} /> New Project <ChevronDown size={13} /></button>
+                    </>
                   ) : (
                     <>
+                      {showHeroKpis && <AnalyticsToggleButton open={analytics.open} onToggle={analytics.toggle} panelId={analytics.panelId} className="pm-control" />}
                       <button type="button" className="pm-primary pm-new-project-button" onClick={openCreateProject}><Plus size={16} /> New Project <ChevronDown size={13} /></button>
-                      <button type="button" className="pm-control pm-filter-control" onClick={() => { setFiltersOpen(open => !open); setProjectAlertsOpen(false) }} aria-expanded={filtersOpen} aria-controls="pm-filter-panel"><Filter size={15} /> Filters{activeFilterCount ? <span>{activeFilterCount}</span> : null}</button>
-                      <button type="button" className="pm-control pm-bell-control" onClick={() => { setProjectAlertsOpen(open => !open); setFiltersOpen(false) }} aria-label="Project notifications" aria-expanded={projectAlertsOpen} aria-controls="pm-project-alerts"><Bell size={15} /></button>
+                      <button type="button" className="pm-control pm-filter-control" onClick={() => setFiltersOpen(open => !open)} aria-expanded={filtersOpen} aria-controls="pm-filter-panel"><Filter size={15} /> Filters{activeFilterCount ? <span>{activeFilterCount}</span> : null}</button>
                     </>
                   )}
                 </div>
@@ -826,33 +897,18 @@ export default function ProjectManagementModule({ initialTab }: { initialTab?: P
                 </section>
               )}
 
-              {projectAlertsOpen && (
-                <section className="pm-card pm-alert-panel" id="pm-project-alerts" aria-label="Project notifications" ref={projectAlertsRef}>
-                  <div className="pm-alert-head">
-                    <strong>Project notifications</strong>
-                    <button type="button" onClick={() => setProjectAlertsOpen(false)} aria-label="Close project notifications"><X size={14} /></button>
-                  </div>
-                  {projectAlerts.length ? projectAlerts.map(alert => (
-                    <button key={`${alert.title}-${alert.detail}`} type="button" onClick={() => { alert.action(); setProjectAlertsOpen(false) }}>
-                      <Bell size={15} />
-                      <span><strong>{alert.title}</strong><small>{alert.detail}</small></span>
-                    </button>
-                  )) : (
-                    <div className="pm-alert-empty"><strong>No project alerts</strong><small>Create projects, tasks, or milestones and alerts will appear here.</small></div>
-                  )}
-                </section>
-              )}
-
-              <TabBar
-                tabs={projectManagementTabs}
-                active={store.activeTab}
-                onChange={changeMainTab}
+              <ProjectStatusFilterTabs
+                active={projectStatusFilter}
+                tabs={projectStatusTabs}
+                onChange={changeProjectStatusFilter}
               />
 
               {showHeroKpis && (
-                <section className="pm-kpis">
-                  {kpis.map(kpi => <KpiCard key={kpi.title} {...kpi} />)}
-                </section>
+                <CollapsibleAnalytics open={analytics.open} id={analytics.panelId}>
+                  <section className="pm-kpis">
+                    {kpis.map(kpi => <KpiCard key={kpi.title} {...kpi} />)}
+                  </section>
+                </CollapsibleAnalytics>
               )}
             </div>
           </section>
@@ -863,9 +919,9 @@ export default function ProjectManagementModule({ initialTab }: { initialTab?: P
           <form className="pm-create-page" onSubmit={createProject} aria-labelledby="pm-create-title">
             <nav className="pm-create-crumbs" aria-label="New project breadcrumb">
               <Home size={15} />
-              <button type="button" onClick={() => setShowCreate(false)}>Project Mgmt</button>
+              <button type="button" onClick={closeCreateProject}>Project Mgmt</button>
               <ChevronRight size={13} />
-              <button type="button" onClick={() => setShowCreate(false)}>Projects</button>
+              <button type="button" onClick={closeCreateProject}>Projects</button>
               <ChevronRight size={13} />
               <span>New Project</span>
             </nav>
@@ -1032,7 +1088,7 @@ export default function ProjectManagementModule({ initialTab }: { initialTab?: P
                 </section>
 
                 <div className="pm-create-actions">
-                  <button type="button" className="pm-control" onClick={() => setShowCreate(false)}>Cancel</button>
+                  <button type="button" className="pm-control" onClick={closeCreateProject}>Cancel</button>
                   <button type="submit" className="pm-primary"><FileCheck2 size={15} /> Create Project</button>
                 </div>
               </aside>
@@ -1284,7 +1340,7 @@ export default function ProjectManagementModule({ initialTab }: { initialTab?: P
               opportunities={store.opportunities}
               project={store.selectedProject}
               active={store.detailTab}
-              onTab={store.setDetailTab}
+              onTab={changeProjectDetailTab}
               onClose={closeProjectDetail}
               onAddTask={openProjectTaskModal}
               onUpdate={store.updateProject}
@@ -1292,16 +1348,20 @@ export default function ProjectManagementModule({ initialTab }: { initialTab?: P
               onEditTask={openEditTaskModal}
               onArchiveTask={store.archiveTask}
               onDeleteTask={store.deleteTask}
+              onUpdateTaskStatus={store.updateTaskStatus}
+              onQuickAddTask={(projectId, status, title) => store.createTask({ projectId, title, description: '', assigneeId: '', priority: 'Medium', status, dueDate: '' })}
               onDragTask={setDraggedTask}
               onDropTask={onDropTask}
               onArchive={projectId => {
                 store.archiveProject(projectId)
                 store.setSelectedProjectId(null)
+                writeProjectDetailUrl(null, 'Overview', 'replace')
               }}
               onRestore={store.restoreProject}
               onDelete={projectId => {
                 store.deleteProject(projectId)
                 store.setSelectedProjectId(null)
+                writeProjectDetailUrl(null, 'Overview', 'replace')
               }}
               onAddNote={store.addProjectNote}
               onCreateMilestone={store.createMilestone}
@@ -1313,15 +1373,14 @@ export default function ProjectManagementModule({ initialTab }: { initialTab?: P
             <>
               {store.activeTab === 'Overview' && (
                 <OverviewTab
-                  state={filteredState}
+                  state={statusFilteredState}
                   opportunities={store.opportunities}
-                  projects={filteredProjects}
+                  projects={statusFilteredProjects}
                   budget={budget}
                   hasAnyProjects={hasAnyActiveProjects}
-                  onOpen={store.setSelectedProjectId}
+                  onOpen={projectId => openProjectDetail(projectId)}
                   onEdit={projectId => {
-                    store.setSelectedProjectId(projectId)
-                    store.setDetailTab('Settings')
+                    openProjectDetail(projectId, 'Settings')
                   }}
                   onArchive={store.archiveProject}
                   onDelete={store.deleteProject}
@@ -1330,13 +1389,12 @@ export default function ProjectManagementModule({ initialTab }: { initialTab?: P
               )}
               {store.activeTab === 'Projects' && (
                 <ProjectsTab
-                  state={state}
+                  state={statusFilteredState}
                   opportunities={store.opportunities}
                   currency={currency}
-                  onOpen={store.setSelectedProjectId}
+                  onOpen={projectId => openProjectDetail(projectId)}
                   onEdit={projectId => {
-                    store.setSelectedProjectId(projectId)
-                    store.setDetailTab('Settings')
+                    openProjectDetail(projectId, 'Settings')
                   }}
                   onUpdate={store.updateProject}
                   onArchive={store.archiveProject}
@@ -1349,10 +1407,9 @@ export default function ProjectManagementModule({ initialTab }: { initialTab?: P
                   state={state}
                   opportunities={store.opportunities}
                   currency={currency}
-                  onOpen={store.setSelectedProjectId}
+                  onOpen={projectId => openProjectDetail(projectId)}
                   onEdit={projectId => {
-                    store.setSelectedProjectId(projectId)
-                    store.setDetailTab('Settings')
+                    openProjectDetail(projectId, 'Settings')
                   }}
                   onUpdate={store.updateProject}
                   onArchive={store.archiveProject}
@@ -1379,8 +1436,9 @@ export default function ProjectManagementModule({ initialTab }: { initialTab?: P
               <button type="button" onClick={closeActionModal}>Close</button>
             </div>
             {actionModal === 'task' && (
+              <>
               <div className="pm-task-editor-body">
-                <form className="pm-form pm-modal-form pm-task-modal-form" onSubmit={submitTask}>
+                <form id="pm-task-editor-form" className="pm-form pm-modal-form pm-task-modal-form" onSubmit={submitTask}>
                   <section className="pm-task-form-section pm-task-form-main">
                     <h3>Task</h3>
                     <div className="pm-task-form-grid">
@@ -1401,7 +1459,6 @@ export default function ProjectManagementModule({ initialTab }: { initialTab?: P
                     </div>
                   </section>
 
-                  <div className="pm-form-actions"><button type="submit" className="pm-primary" disabled={!state.projects.filter(project => !project.archivedAt).length}>{editingTaskId ? 'Save Task' : 'Assign Task'}</button></div>
                 </form>
                 {editingTask && (
                   <TaskCollaborationPanel
@@ -1424,6 +1481,11 @@ export default function ProjectManagementModule({ initialTab }: { initialTab?: P
                   />
                 )}
               </div>
+              <div className="pm-task-editor-footer">
+                <button type="button" className="pm-control" onClick={closeActionModal}>Cancel</button>
+                <button type="submit" form="pm-task-editor-form" className="pm-primary" disabled={!state.projects.filter(project => !project.archivedAt).length}>{editingTaskId ? 'Save Task' : 'Assign Task'}</button>
+              </div>
+              </>
             )}
             {actionModal === 'time' && (
               <form className="pm-form pm-modal-form" onSubmit={submitTime}>

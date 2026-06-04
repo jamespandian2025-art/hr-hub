@@ -299,8 +299,8 @@ const PAGE_META: { match: string; label: string; icon: React.ComponentType<{ siz
   { match: '/resources',          label: 'Docs',             icon: FileText        },
   { match: '/chat',               label: 'Messages',         icon: MessageCircle   },
   { match: '/client-portal',      label: 'Webforms',         icon: ClipboardCheck  },
-  { match: '/tasks',              label: 'Workflows',        icon: ClipboardList   },
-  { match: '/to-do',              label: 'Workflows',        icon: ClipboardList   },
+  { match: '/workflows',          label: 'Workflows',        icon: ClipboardList   },
+  { match: '/account',            label: 'Account',          icon: Settings        },
   { match: '/settings',           label: 'Settings',         icon: Settings        },
 ]
 
@@ -693,7 +693,7 @@ export default function Header({ onMenuClick, compactWorkspace = false }: Header
       age: `${Math.max(0, Math.floor((nowMs - new Date(item.createdAt).getTime()) / 86400000))} days ago`,
       mentioned: item.relatedType === 'Chat',
       priority: item.relatedType === 'Workflow',
-      target: item.target || (item.relatedType === 'Chat' ? '/chat' : '/tasks'),
+      target: item.target || (item.relatedType === 'Chat' ? '/chat' : '/workflows/my-jobs'),
       type: item.relatedType || 'Notification',
       detail: item.message,
       tone: item.relatedType === 'Workflow' ? '#159aa6' : '#64748b',
@@ -783,7 +783,7 @@ export default function Header({ onMenuClick, compactWorkspace = false }: Header
   const notificationItems = actualNotificationItems.length
     ? unreadNotificationItems
     : [
-      { id: 1, title: '[WORKFLOWS] Welcome to WiseFlow notifications', lines: ['Workflow updates, stage changes, and tagged notes will appear here.', 'Click any notification to open its related work.', 'Use filters above to narrow the list.'], time: '10:19', date: 'Monday, Dec 15, 2025', age: 'today', mentioned: true, priority: false, target: '/tasks', type: 'Workflows', detail: 'Workflow updates, stage changes, and tagged notes will appear here.', tone: '#159aa6', sortTime: '2025-12-15T10:19:00' },
+      { id: 1, title: '[WORKFLOWS] Welcome to WiseFlow notifications', lines: ['Workflow updates, stage changes, and tagged notes will appear here.', 'Click any notification to open its related work.', 'Use filters above to narrow the list.'], time: '10:19', date: 'Monday, Dec 15, 2025', age: 'today', mentioned: true, priority: false, target: '/workflows/my-jobs', type: 'Workflows', detail: 'Workflow updates, stage changes, and tagged notes will appear here.', tone: '#159aa6', sortTime: '2025-12-15T10:19:00' },
     ]
   const notificationBadgeCount = unreadNotificationItems.length
   const reminderTasks = tasks.filter(task => task.dueDate && task.status !== 'Completed' && !task.markedDone)
@@ -895,10 +895,10 @@ export default function Header({ onMenuClick, compactWorkspace = false }: Header
       const target = task.reminderUrl.trim()
       if (target.startsWith('/')) router.push(target)
       else if (/^https?:\/\//i.test(target)) window.open(target, '_blank', 'noopener,noreferrer')
-      else router.push(`/tasks?task=${encodeURIComponent(target)}`)
+      else router.push(`/workflows/my-jobs?task=${encodeURIComponent(target)}`)
       return
     }
-    router.push(`/tasks?task=${task.id}`)
+    router.push(`/workflows/my-jobs?task=${task.id}`)
   }
 
   const pageMeta = getPageMeta(pathname)
@@ -989,7 +989,7 @@ export default function Header({ onMenuClick, compactWorkspace = false }: Header
                 <X size={13} />
               </button>
             ) : null}
-            <kbd className="header-search-kbd" style={{ flexShrink: 0, display: 'inline-flex', alignItems: 'center', gap: 2, background: isApplicationsHeader ? '#050505' : '#f3f4f6', border: `1px solid ${compactHeaderColors.searchBorder}`, borderRadius: 5, padding: '1px 6px', fontSize: 11, color: isApplicationsHeader ? '#c8c8c8' : '#6b7280', fontFamily: "var(--font-body)", letterSpacing: '0.01em' }}>Ctrl K</kbd>
+            <kbd className="header-search-kbd" style={{ flexShrink: 0, display: 'inline-flex', alignItems: 'center', gap: 2, background: isApplicationsHeader ? '#050505' : '#f3f4f6', border: `1px solid ${compactHeaderColors.searchBorder}`, borderRadius: 5, padding: '1px 6px', fontSize: 11, color: isApplicationsHeader ? '#c8c8c8' : '#000000', fontFamily: "var(--font-body)", letterSpacing: '0.01em' }}>Ctrl K</kbd>
           </label>
           <GlobalSearchPanel
             open={globalSearchOpen}
@@ -1047,7 +1047,7 @@ export default function Header({ onMenuClick, compactWorkspace = false }: Header
             <div className="header-help-menu" role="menu" aria-label="Help menu" style={{ position: 'absolute', top: 52, right: 88, width: 260, background: '#fff', border: '1px solid #eef2f7', borderRadius: 12, boxShadow: '0 24px 70px rgba(15,23,42,0.18)', padding: 10, zIndex: 105, display: 'grid', gap: 6 }}>
               <div style={{ padding: '8px 10px 6px' }}>
                 <strong style={{ display: 'block', fontSize: 13, color: '#111827' }}>Help & support</strong>
-                <span style={{ display: 'block', marginTop: 3, fontSize: 12, color: '#64748b', lineHeight: 1.35 }}>Open guidance for your workspace.</span>
+                <span style={{ display: 'block', marginTop: 3, fontSize: 12, color: '#000000', lineHeight: 1.35 }}>Open guidance for your workspace.</span>
               </div>
               {[
                 { label: 'Open dashboard guide', href: '/dashboard' },
@@ -1099,8 +1099,8 @@ export default function Header({ onMenuClick, compactWorkspace = false }: Header
               <div style={{ padding: '24px 26px 18px', textAlign: 'center', borderBottom: '1px solid #e8e8e8' }}>
                 <span style={{ width: 44, height: 44, borderRadius: 14, background: '#1769aa', color: '#fff', display: 'grid', placeItems: 'center', fontSize: 17, fontWeight: 900, margin: '0 auto 12px' }}>{initials}</span>
                 <div style={{ fontSize: 16, fontWeight: 800, color: '#111' }}>{displayName}</div>
-                <div style={{ fontSize: 12, color: '#6b7280', marginTop: 4 }}>{account.email}</div>
-                <div style={{ fontSize: 11, color: '#6b7280', marginTop: 8 }}>Standard account in <strong style={{ color: '#111827' }}>{activeCompany?.name || account.company}</strong></div>
+                <div style={{ fontSize: 12, color: '#000000', marginTop: 4 }}>{account.email}</div>
+                <div style={{ fontSize: 11, color: '#000000', marginTop: 8 }}>Standard account in <strong style={{ color: '#111827' }}>{activeCompany?.name || account.company}</strong></div>
               </div>
               <div style={{ padding: '14px 26px', display: 'grid', gap: 0, borderBottom: '1px solid #e8e8e8' }}>
                 <div style={{ ...tinyLabelStyle, marginBottom: 8 }}>Choose an account</div>
@@ -1109,7 +1109,7 @@ export default function Header({ onMenuClick, compactWorkspace = false }: Header
                     <span style={{ width: 34, height: 34, borderRadius: '50%', background: activeCompany?.id === company.id ? '#1a73e8' : '#eef0ff', color: activeCompany?.id === company.id ? '#fff' : '#6b6eea', display: 'grid', placeItems: 'center', fontSize: 12, fontWeight: 900 }}>{company.name.slice(0, 2).toUpperCase()}</span>
                     <span style={{ minWidth: 0 }}>
                       <span style={{ display: 'block', fontSize: 13, fontWeight: 800, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{company.name}</span>
-                      <span style={{ display: 'block', fontSize: 12, color: '#6b7280', marginTop: 3 }}>{company.type}</span>
+                      <span style={{ display: 'block', fontSize: 12, color: '#000000', marginTop: 3 }}>{company.type}</span>
                     </span>
                     <span style={{ color: '#16a34a', fontSize: 12, fontWeight: 800 }}>Active</span>
                   </button>
@@ -1364,7 +1364,7 @@ export default function Header({ onMenuClick, compactWorkspace = false }: Header
                     {panel === 'preferences' && 'Preferences'}
                     {panel === 'logout' && 'Logout'}
                   </div>
-                  <div style={{ fontSize: 12, color: '#6b7280', marginTop: 3 }}>{account.email}</div>
+                  <div style={{ fontSize: 12, color: '#000000', marginTop: 3 }}>{account.email}</div>
                 </div>
                 <button onClick={() => setPanel(null)} style={modalIconButtonStyle}><X size={18} /></button>
               </div>
@@ -1398,7 +1398,7 @@ export default function Header({ onMenuClick, compactWorkspace = false }: Header
                       <div key={member.id} style={inviteRowStyle}>
                         <div>
                           <div style={{ fontSize: 13, color: '#111827', fontWeight: 600 }}>{member.email}</div>
-                          <div style={{ fontSize: 12, color: '#6b7280', marginTop: 3 }}>{member.role}</div>
+                          <div style={{ fontSize: 12, color: '#000000', marginTop: 3 }}>{member.role}</div>
                         </div>
                         <span style={{ fontSize: 11, color: '#d97706', background: '#fef3c7', borderRadius: 20, padding: '4px 9px', fontWeight: 600 }}>{member.status}</span>
                         <button onClick={() => removeTenantInvite(member.id)} style={dangerIconButtonStyle}><Trash2 size={15} /></button>
@@ -1422,7 +1422,7 @@ export default function Header({ onMenuClick, compactWorkspace = false }: Header
                           <div key={member.id} style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) auto', gap: 10, alignItems: 'center' }}>
                             <div style={{ minWidth: 0 }}>
                               <div style={{ fontSize: 13, fontWeight: 700, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{member.name || member.email}</div>
-                              <div style={{ fontSize: 11, color: '#64748b' }}>{member.role} · {member.permissions.join(', ')}</div>
+                              <div style={{ fontSize: 11, color: '#000000' }}>{member.role} · {member.permissions.join(', ')}</div>
                             </div>
                             <span style={permissionPillStyle}>{member.status}</span>
                           </div>
@@ -1479,7 +1479,7 @@ export default function Header({ onMenuClick, compactWorkspace = false }: Header
             onFocus={e => { (e.currentTarget as HTMLLabelElement).style.borderColor = '#22c55e'; (e.currentTarget as HTMLLabelElement).style.boxShadow = '0 0 0 3px rgba(34,197,94,0.12)' }}
             onBlur={e => { (e.currentTarget as HTMLLabelElement).style.borderColor = '#e5e7eb'; (e.currentTarget as HTMLLabelElement).style.boxShadow = 'none' }}
           >
-            <Search size={14} color="#9ca3af" style={{ flexShrink: 0 }} />
+            <Search size={14} color="#000000" style={{ flexShrink: 0 }} />
             <input
               ref={searchInputRef}
               value={globalSearch}
@@ -1490,7 +1490,7 @@ export default function Header({ onMenuClick, compactWorkspace = false }: Header
               style={{ flex: 1, border: 'none', outline: 'none', background: 'transparent', color: '#111827', fontSize: 13, fontFamily: 'inherit' }}
             />
             {globalSearch && (
-              <button type="button" onMouseDown={event => event.preventDefault()} onClick={() => handleGlobalSearchChange('')} aria-label="Clear search" style={{ border: 'none', background: 'transparent', cursor: 'pointer', color: '#9ca3af', display: 'grid', placeItems: 'center', padding: 0 }}>
+              <button type="button" onMouseDown={event => event.preventDefault()} onClick={() => handleGlobalSearchChange('')} aria-label="Clear search" style={{ border: 'none', background: 'transparent', cursor: 'pointer', color: '#000000', display: 'grid', placeItems: 'center', padding: 0 }}>
                 <X size={13} />
               </button>
             )}
@@ -1534,8 +1534,8 @@ export default function Header({ onMenuClick, compactWorkspace = false }: Header
             <div style={{ padding: '24px 26px 18px', textAlign: 'center', borderBottom: '1px solid #e8e8e8' }}>
               <span style={{ width: 44, height: 44, borderRadius: 14, background: '#1769aa', color: '#fff', display: 'grid', placeItems: 'center', fontSize: 17, fontWeight: 900, margin: '0 auto 12px' }}>{initials}</span>
               <div style={{ fontSize: 16, fontWeight: 800, color: '#111' }}>{displayName}</div>
-              <div style={{ fontSize: 12, color: '#6b7280', marginTop: 4 }}>{account.email}</div>
-              <div style={{ fontSize: 11, color: '#6b7280', marginTop: 8 }}>Standard account in <strong style={{ color: '#111827' }}>{activeCompany?.name || account.company}</strong></div>
+              <div style={{ fontSize: 12, color: '#000000', marginTop: 4 }}>{account.email}</div>
+              <div style={{ fontSize: 11, color: '#000000', marginTop: 8 }}>Standard account in <strong style={{ color: '#111827' }}>{activeCompany?.name || account.company}</strong></div>
             </div>
             <div style={{ padding: '14px 26px', display: 'grid', gap: 0, borderBottom: '1px solid #e8e8e8' }}>
               <div style={{ ...tinyLabelStyle, marginBottom: 8 }}>Choose an account</div>
@@ -1544,7 +1544,7 @@ export default function Header({ onMenuClick, compactWorkspace = false }: Header
                   <span style={{ width: 34, height: 34, borderRadius: '50%', background: activeCompany?.id === company.id ? '#1a73e8' : '#eef0ff', color: activeCompany?.id === company.id ? '#fff' : '#6b6eea', display: 'grid', placeItems: 'center', fontSize: 12, fontWeight: 900 }}>{company.name.slice(0, 2).toUpperCase()}</span>
                   <span style={{ minWidth: 0 }}>
                     <span style={{ display: 'block', fontSize: 13, fontWeight: 800, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{company.name}</span>
-                    <span style={{ display: 'block', fontSize: 12, color: '#6b7280', marginTop: 3 }}>{company.type}</span>
+                    <span style={{ display: 'block', fontSize: 12, color: '#000000', marginTop: 3 }}>{company.type}</span>
                   </span>
                   <span style={{ color: '#16a34a', fontSize: 12, fontWeight: 800 }}>Active</span>
                 </button>
@@ -1588,7 +1588,7 @@ export default function Header({ onMenuClick, compactWorkspace = false }: Header
                   {panel === 'preferences' && 'Preferences'}
                   {panel === 'logout' && 'Logout'}
                 </div>
-                <div style={{ fontSize: 12, color: '#6b7280', marginTop: 3 }}>{account.email}</div>
+                <div style={{ fontSize: 12, color: '#000000', marginTop: 3 }}>{account.email}</div>
               </div>
               <button onClick={() => setPanel(null)} style={modalIconButtonStyle}><X size={18} /></button>
             </div>
@@ -1639,13 +1639,13 @@ export default function Header({ onMenuClick, compactWorkspace = false }: Header
                   </div>
                   <div style={infoCardStyle}><div style={tinyLabelStyle}>Permissions for {inviteRole}</div><div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 8 }}>{rolePermissions(inviteRole).map(permission => <span key={permission} style={permissionPillStyle}>{permission}</span>)}</div></div>
                   {(activeCompany?.members || []).filter(member => member.status === 'Pending').length === 0 && account.invitations.length === 0 ? (
-                    <div style={{ padding: 24, textAlign: 'center', color: '#9ca3af', border: '1px dashed #e5e7eb', borderRadius: 12 }}>No invitations yet.</div>
+                    <div style={{ padding: 24, textAlign: 'center', color: '#000000', border: '1px dashed #e5e7eb', borderRadius: 12 }}>No invitations yet.</div>
                   ) : null}
                   {(activeCompany?.members || []).filter(member => member.status === 'Pending').map(member => (
                     <div key={member.id} style={inviteRowStyle}>
                       <div>
                         <div style={{ fontSize: 13, color: '#111827', fontWeight: 600 }}>{member.email}</div>
-                        <div style={{ fontSize: 12, color: '#6b7280', marginTop: 3 }}>{member.role}</div>
+                        <div style={{ fontSize: 12, color: '#000000', marginTop: 3 }}>{member.role}</div>
                       </div>
                       <span style={{ fontSize: 11, color: '#d97706', background: '#fef3c7', borderRadius: 20, padding: '4px 9px', fontWeight: 600 }}>{member.status}</span>
                       <button onClick={() => removeTenantInvite(member.id)} style={dangerIconButtonStyle}><Trash2 size={15} /></button>
@@ -1655,7 +1655,7 @@ export default function Header({ onMenuClick, compactWorkspace = false }: Header
                     <div key={invitation.id} style={inviteRowStyle}>
                       <div>
                         <div style={{ fontSize: 13, color: '#111827', fontWeight: 600 }}>{invitation.email}</div>
-                        <div style={{ fontSize: 12, color: '#6b7280', marginTop: 3 }}>{invitation.role}</div>
+                        <div style={{ fontSize: 12, color: '#000000', marginTop: 3 }}>{invitation.role}</div>
                       </div>
                       <span style={{ fontSize: 11, color: '#d97706', background: '#fef3c7', borderRadius: 20, padding: '4px 9px', fontWeight: 600 }}>{invitation.status}</span>
                       <button onClick={() => removeInvite(invitation.id)} style={dangerIconButtonStyle}><Trash2 size={15} /></button>
@@ -1680,7 +1680,7 @@ export default function Header({ onMenuClick, compactWorkspace = false }: Header
                         <div key={member.id} style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) auto', gap: 10, alignItems: 'center' }}>
                           <div style={{ minWidth: 0 }}>
                             <div style={{ fontSize: 13, fontWeight: 700, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{member.name || member.email}</div>
-                            <div style={{ fontSize: 11, color: '#64748b' }}>{member.role} · {member.permissions.join(', ')}</div>
+                            <div style={{ fontSize: 11, color: '#000000' }}>{member.role} · {member.permissions.join(', ')}</div>
                           </div>
                           <span style={permissionPillStyle}>{member.status}</span>
                         </div>
@@ -1754,19 +1754,19 @@ function GlobalSearchPanel({
   const trimmed = query.trim()
   const colors = dark
     ? {
-        bg: '#050505',
-        border: '#262626',
-        text: '#f9fafb',
-        muted: '#9ca3af',
-        item: '#0b0b0b',
-        hover: '#111',
-        badge: '#161616',
+        bg: '#ffffff',
+        border: '#d4d4d4',
+        text: '#000000',
+        muted: '#000000',
+        item: '#ffffff',
+        hover: '#f3f4f6',
+        badge: '#f3f4f6',
       }
     : {
         bg: '#fff',
         border: '#e5e7eb',
-        text: '#111827',
-        muted: '#6b7280',
+        text: '#000000',
+        muted: '#000000',
         item: '#fff',
         hover: '#f9fafb',
         badge: '#f3f4f6',
@@ -1924,7 +1924,7 @@ const menuButtonStyle = {
 
 const fieldGroupStyle = { display: 'grid', gap: 7 }
 const labelStyle = { fontSize: 12, color: '#374151', fontWeight: 600 }
-const tinyLabelStyle = { fontSize: 12, color: '#6b7280', fontWeight: 600, marginBottom: 6 }
+const tinyLabelStyle = { fontSize: 12, color: '#000000', fontWeight: 600, marginBottom: 6 }
 const fieldStyle = { width: '100%', border: '1px solid #e5e7eb', borderRadius: 9, padding: '10px 12px', fontSize: 13, color: '#111827', outline: 'none', background: '#fff' }
 const primaryButtonStyle = { border: 'none', borderRadius: 9, background: '#111827', color: '#fff', padding: '10px 14px', fontSize: 13, fontWeight: 600, cursor: 'pointer' }
 const secondaryButtonStyle = { border: '1px solid #e5e7eb', borderRadius: 9, background: '#fff', color: '#374151', padding: '10px 14px', fontSize: 13, fontWeight: 600, cursor: 'pointer' }

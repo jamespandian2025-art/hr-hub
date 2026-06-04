@@ -215,7 +215,7 @@ export default function InvoicesPage() {
         <div
           style={{
             fontSize: '13px',
-            color: '#9ca3af',
+            color: '#000000',
             marginBottom: '32px',
             display: 'flex',
             alignItems: 'center',
@@ -234,7 +234,7 @@ export default function InvoicesPage() {
             <div
               style={{
                 fontSize: '12px',
-                color: '#6b7280',
+                color: '#000000',
                 fontWeight: 500,
                 marginBottom: '6px',
               }}
@@ -342,7 +342,7 @@ export default function InvoicesPage() {
               />
 
               <div>
-                <div style={{ fontSize: '11px', color: '#6b7280', fontWeight: 500, marginBottom: '4px' }}>
+                <div style={{ fontSize: '11px', color: '#000000', fontWeight: 500, marginBottom: '4px' }}>
                   Date created
                 </div>
                 <input
@@ -363,7 +363,7 @@ export default function InvoicesPage() {
               </div>
 
               <div>
-                <div style={{ fontSize: '11px', color: '#6b7280', fontWeight: 500, marginBottom: '4px' }}>
+                <div style={{ fontSize: '11px', color: '#000000', fontWeight: 500, marginBottom: '4px' }}>
                   Due date
                 </div>
                 <input
@@ -397,7 +397,7 @@ export default function InvoicesPage() {
                         textAlign: 'left',
                         fontSize: '12px',
                         fontWeight: 600,
-                        color: '#6b7280',
+                        color: '#000000',
                         textTransform: 'uppercase',
                         letterSpacing: '0.5px',
                       }}
@@ -644,7 +644,7 @@ export default function InvoicesPage() {
       <div
         style={{
           fontSize: '13px',
-          color: '#9ca3af',
+          color: '#000000',
           marginBottom: '16px',
           display: 'flex',
           alignItems: 'center',
@@ -697,7 +697,7 @@ export default function InvoicesPage() {
                 cursor: 'pointer',
                 fontSize: '13px',
                 fontWeight: activeTab === tab ? 700 : 500,
-                color: activeTab === tab ? '#111827' : '#6b7280',
+                color: activeTab === tab ? '#111827' : '#000000',
                 borderBottom:
                   activeTab === tab ? '2px solid #111827' : '2px solid transparent',
                 marginBottom: '-1.5px',
@@ -710,7 +710,7 @@ export default function InvoicesPage() {
                   padding: '1px 7px',
                   borderRadius: '20px',
                   background: activeTab === tab ? '#111827' : '#f3f4f6',
-                  color: activeTab === tab ? '#fff' : '#6b7280',
+                  color: activeTab === tab ? '#fff' : '#000000',
                   fontWeight: 600,
                 }}
               >
@@ -730,7 +730,7 @@ export default function InvoicesPage() {
           }}
         >
           <div style={{ padding: '24px', borderRight: '1px solid #f3f4f6' }}>
-            <div style={{ fontSize: '13px', color: '#6b7280', fontWeight: 500, marginBottom: '8px' }}>
+            <div style={{ fontSize: '13px', color: '#000000', fontWeight: 500, marginBottom: '8px' }}>
               Total Invoices
             </div>
             <div style={{ fontSize: '26px', fontWeight: 600, color: '#111827', marginBottom: '6px' }}>
@@ -742,7 +742,7 @@ export default function InvoicesPage() {
           </div>
 
           <div style={{ padding: '24px', borderRight: '1px solid #f3f4f6' }}>
-            <div style={{ fontSize: '13px', color: '#6b7280', fontWeight: 500, marginBottom: '8px' }}>
+            <div style={{ fontSize: '13px', color: '#000000', fontWeight: 500, marginBottom: '8px' }}>
               Paid Invoices
             </div>
             <div style={{ fontSize: '26px', fontWeight: 600, color: '#111827', marginBottom: '6px' }}>
@@ -786,7 +786,7 @@ export default function InvoicesPage() {
                   justifyContent: 'center',
                 }}
               >
-                <div style={{ fontSize: '9px', fontWeight: 600, color: '#6b7280' }}>
+                <div style={{ fontSize: '9px', fontWeight: 600, color: '#000000' }}>
                   TOTAL
                 </div>
                 <div style={{ fontSize: '10px', fontWeight: 600, color: '#111827' }}>
@@ -844,7 +844,7 @@ export default function InvoicesPage() {
               background: '#fafafa',
             }}
           >
-            <span style={{ color: '#9ca3af' }}>??</span>
+            <span style={{ color: '#000000' }}>??</span>
             <input
               type="text"
               placeholder="Search..."
@@ -899,7 +899,7 @@ export default function InvoicesPage() {
               borderRadius: '8px',
               background: '#fafafa',
               cursor: 'pointer',
-              color: '#9ca3af',
+              color: '#000000',
             }}
           >
             ?
@@ -918,7 +918,7 @@ export default function InvoicesPage() {
             }}
           >
             <div style={{ fontSize: '40px', opacity: 0.2 }}>??</div>
-            <div style={{ fontSize: '14px', fontWeight: 600, color: '#9ca3af' }}>
+            <div style={{ fontSize: '14px', fontWeight: 600, color: '#000000' }}>
               No invoices yet — click + Invoice to create one
             </div>
           </div>
@@ -938,7 +938,7 @@ export default function InvoicesPage() {
                         textAlign: 'left',
                         fontSize: '12px',
                         fontWeight: 600,
-                        color: '#6b7280',
+                        color: '#000000',
                         textTransform: 'uppercase',
                         letterSpacing: '0.5px',
                       }}
@@ -975,10 +975,10 @@ export default function InvoicesPage() {
                     <td style={{ padding: '16px', fontSize: '13px', color: '#374151', fontWeight: 500 }}>
                       {inv.recipient}
                     </td>
-                    <td style={{ padding: '16px', fontSize: '13px', color: '#6b7280' }}>
+                    <td style={{ padding: '16px', fontSize: '13px', color: '#000000' }}>
                       {inv.dateCreated}
                     </td>
-                    <td style={{ padding: '16px', fontSize: '13px', color: '#6b7280' }}>
+                    <td style={{ padding: '16px', fontSize: '13px', color: '#000000' }}>
                       {inv.dueDate}
                     </td>
                     <td style={{ padding: '16px', fontSize: '13px', fontWeight: 600, color: '#111827' }}>
@@ -998,7 +998,7 @@ export default function InvoicesPage() {
                         {invoiceDisplayStatus(inv)}
                       </span>
                     </td>
-                    <td style={{ padding: '16px', color: '#9ca3af', cursor: 'pointer', fontSize: '18px' }}>
+                    <td style={{ padding: '16px', color: '#000000', cursor: 'pointer', fontSize: '18px' }}>
                       ?
                     </td>
                   </tr>
@@ -1048,7 +1048,7 @@ export default function InvoicesPage() {
                 borderRadius: '6px',
                 background: '#fafafa',
                 cursor: 'pointer',
-                color: '#9ca3af',
+                color: '#000000',
               }}
             >
               ‹
@@ -1060,7 +1060,7 @@ export default function InvoicesPage() {
                 borderRadius: '6px',
                 background: '#fafafa',
                 cursor: 'pointer',
-                color: '#9ca3af',
+                color: '#000000',
               }}
             >
               ›

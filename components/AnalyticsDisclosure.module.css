@@ -1,0 +1,30 @@
+.panel {
+  display: grid;
+  grid-template-rows: 0fr;
+  min-width: 0;
+  opacity: 0;
+  transform: translateY(-6px);
+  transition:
+    grid-template-rows 240ms ease,
+    opacity 180ms ease,
+    transform 240ms ease;
+}
+
+.panel.open {
+  grid-template-rows: 1fr;
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.inner {
+  min-height: 0;
+  min-width: 0;
+  overflow: hidden;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .panel {
+    transition: none;
+    transform: none;
+  }
+}

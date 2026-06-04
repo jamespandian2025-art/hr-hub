@@ -42,7 +42,7 @@ export default function SettingsPage() {
       <div
         style={{
           fontSize: '13px',
-          color: '#9ca3af',
+          color: '#000000',
           marginBottom: '24px',
           display: 'flex',
           alignItems: 'center',
@@ -77,7 +77,7 @@ export default function SettingsPage() {
               <div style={{ fontSize: '15px', fontWeight: 600, color: '#111827', marginBottom: '8px' }}>
                 {item.title}
               </div>
-              <div style={{ fontSize: '13px', color: '#6b7280', lineHeight: 1.6 }}>
+              <div style={{ fontSize: '13px', color: '#000000', lineHeight: 1.6 }}>
                 {item.description}
               </div>
             </div>

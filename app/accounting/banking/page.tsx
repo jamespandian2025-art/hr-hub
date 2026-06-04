@@ -20,6 +20,7 @@ import {
   SlidersHorizontal,
 } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
+import { AnalyticsToggleButton, CollapsibleAnalytics, useAnalyticsDisclosure } from '@/components/AnalyticsDisclosure'
 import { createAccountingTransaction, emptyAccountingData, formatDate, loadAccountingData, monthlySeries, money, saveAccountingBankAccounts, subscribeAccountingData, updateAccountingTransactionStatus } from '@/lib/accounting/data'
 import { canAccessBanking } from '@/lib/security/rbac'
 
@@ -84,6 +85,7 @@ export default function BankingPage() {
   const [accountForm, setAccountForm] = useState(initialAccountForm)
   const [paymentForm, setPaymentForm] = useState(initialPaymentForm)
   const [transferForm, setTransferForm] = useState(initialTransferForm)
+  const analytics = useAnalyticsDisclosure('wiseflow:analytics:accounting-banking')
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
@@ -328,29 +330,32 @@ export default function BankingPage() {
         </div>
         <div className="banking-header-actions">
           <label className="banking-search">
-            <Search size={16} color="#64748b" />
+            <Search size={16} color="#000000" />
             <input value={search} onChange={event => setSearch(event.target.value)} placeholder="Search accounts, transactions..." />
           </label>
+          <AnalyticsToggleButton open={analytics.open} onToggle={analytics.toggle} panelId={analytics.panelId} className="banking-toolbar-button" />
           <button type="button" className="banking-primary-button" onClick={() => openModal('add-account')}><Plus size={15} /> Add Account <ChevronDown size={13} /></button>
         </div>
       </div>
       {notice && <div className="banking-notice" role="status">{notice}</div>}
 
-      <section className="banking-metrics">
-        {metrics.map(metric => {
-          const Icon = metric.icon
-          return (
-            <div key={metric.title} className="banking-card banking-metric-card">
-              <span className="banking-metric-icon" style={{ background: `${metric.tone}12`, color: metric.tone }}><Icon size={23} /></span>
-              <span>
-                <span className="banking-card-label">{metric.title}</span>
-                <strong className="banking-card-value">{metric.value}</strong>
-                <small className="banking-card-detail" style={{ color: metric.up ? '#16a34a' : '#334155' }}>{metric.up ? 'Up ' : ''}{metric.detail}</small>
-              </span>
-            </div>
-          )
-        })}
-      </section>
+      <CollapsibleAnalytics open={analytics.open} id={analytics.panelId}>
+        <section className="banking-metrics">
+          {metrics.map(metric => {
+            const Icon = metric.icon
+            return (
+              <div key={metric.title} className="banking-card banking-metric-card">
+                <span className="banking-metric-icon" style={{ background: `${metric.tone}12`, color: metric.tone }}><Icon size={23} /></span>
+                <span>
+                  <span className="banking-card-label">{metric.title}</span>
+                  <strong className="banking-card-value">{metric.value}</strong>
+                  <small className="banking-card-detail" style={{ color: metric.up ? '#16a34a' : '#334155' }}>{metric.up ? 'Up ' : ''}{metric.detail}</small>
+                </span>
+              </div>
+            )
+          })}
+        </section>
+      </CollapsibleAnalytics>
 
       <nav className="banking-tabs" aria-label="Banking sections" role="tablist">
         {bankingTabs.map(tab => (
@@ -628,13 +633,13 @@ const bankingCss = `
 .banking-card { background: #fff; border: 1px solid #e8edf4; border-radius: 8px; padding: 18px; box-shadow: 0 1px 2px rgba(15, 23, 42, .03); }
 .banking-metric-card { min-height: 100px; display: flex; align-items: center; }
 .banking-metric-icon { width: 54px; height: 54px; border-radius: 9px; display: grid; place-items: center; margin-right: 16px; flex: 0 0 auto; }
-.banking-card-label { display: block; color: #475569; font-size: 12px; font-weight: 850; }
+.banking-card-label { display: block; color: #000000; font-size: 12px; font-weight: 850; }
 .banking-card-value { display: block; color: #0f172a; font-size: 23px; margin-top: 8px; white-space: nowrap; }
 .banking-card-detail { display: block; color: #334155; font-size: 11.5px; font-weight: 900; margin-top: 8px; }
 .banking-tabs { display: flex; align-items: center; gap: 32px; border-bottom: 1px solid #e8edf4; padding-left: 14px; overflow-x: auto; }
 .banking-tabs button { border: 0; border-bottom: 2px solid transparent; background: transparent; color: #0f172a; min-height: 48px; padding: 0; font-size: 12.5px; font-weight: 900; cursor: pointer; white-space: nowrap; display: inline-flex; align-items: center; gap: 7px; }
 .banking-tabs button.is-active { color: #16a34a; border-bottom-color: #16a34a; }
-.banking-tabs span { min-width: 21px; min-height: 21px; border-radius: 999px; background: #f1f5f9; color: #475569; display: grid; place-items: center; font-size: 11px; }
+.banking-tabs span { min-width: 21px; min-height: 21px; border-radius: 999px; background: #f1f5f9; color: #000000; display: grid; place-items: center; font-size: 11px; }
 .banking-tabs button.is-active span { background: #dcfce7; color: #15803d; }
 .banking-grid { display: grid; grid-template-columns: minmax(0, 1fr) 420px; gap: 16px; margin-top: 0; }
 .banking-lower-grid { margin-top: 16px; }
@@ -644,15 +649,15 @@ const bankingCss = `
 .banking-panel-header a, .banking-add-link { color: #2563eb; font-size: 12px; font-weight: 900; text-decoration: none; }
 .banking-panel-header strong { font-size: 13px; }
 .banking-panel-header strong span { color: #16a34a; }
-.banking-panel-header small { display: flex; align-items: center; gap: 8px; color: #64748b; font-size: 12px; }
+.banking-panel-header small { display: flex; align-items: center; gap: 8px; color: #000000; font-size: 12px; }
 .banking-table-wrap { overflow-x: auto; }
 .banking-table { width: 100%; min-width: 780px; border-collapse: collapse; }
 .banking-transactions-table { min-width: 920px; }
-.banking-table th { text-align: left; padding: 12px 14px; color: #64748b; font-size: 11px; font-weight: 900; }
+.banking-table th { text-align: left; padding: 12px 14px; color: #000000; font-size: 11px; font-weight: 900; }
 .banking-table td { padding: 13px 14px; border-top: 1px solid #eef2f7; color: #0f172a; font-size: 13px; vertical-align: middle; }
 .banking-table td:first-child { display: flex; align-items: center; gap: 12px; }
 .banking-table td strong { display: block; color: #0f172a; }
-.banking-table td small { display: block; color: #64748b; margin-top: 3px; }
+.banking-table td small { display: block; color: #000000; margin-top: 3px; }
 .bank-logo { width: 34px; height: 34px; border-radius: 8px; color: #fff; display: grid; place-items: center; font-size: 10px; font-weight: 950; flex: 0 0 auto; }
 .banking-status-pill { display: inline-flex; min-height: 24px; align-items: center; border-radius: 7px; background: #dcfce7; color: #15803d; padding: 0 9px; font-size: 11.5px; font-weight: 900; }
 .banking-icon-button { width: 32px; height: 32px; border: 1px solid #e8edf4; border-radius: 7px; background: #fff; color: #0f172a; display: grid; place-items: center; cursor: pointer; }
@@ -671,13 +676,13 @@ const bankingCss = `
 .banking-select-filter { min-height: 38px; border-radius: 8px; border: 1px solid #e8edf4; background: #fff; color: #0f172a; display: flex; align-items: center; gap: 8px; padding: 0 12px; font-size: 12.5px; font-weight: 850; }
 .banking-select-filter select { appearance: none; border: 0; outline: 0; background: transparent; color: #0f172a; font: inherit; font-weight: 850; cursor: pointer; min-width: 120px; }
 .banking-showing { display: block; color: #0f172a; font-size: 12.5px; margin-top: 16px; }
-.banking-empty { padding: 26px !important; text-align: center; color: #64748b !important; font-weight: 850; display: table-cell !important; }
+.banking-empty { padding: 26px !important; text-align: center; color: #000000 !important; font-weight: 850; display: table-cell !important; }
 .banking-reconcile-button { min-height: 28px; border: 0; border-radius: 7px; background: #dcfce7; color: #15803d; padding: 0 10px; font-size: 11.5px; font-weight: 900; cursor: pointer; }
 .banking-feeds { display: grid; gap: 18px; margin-top: 22px; }
 .banking-feeds div { display: grid; grid-template-columns: 14px minmax(0, 1fr) auto; align-items: center; gap: 12px; font-size: 13px; }
 .feed-dot { width: 9px; height: 9px; border-radius: 999px; }
 .banking-feeds em { color: #16a34a; font-style: normal; font-size: 12px; font-weight: 900; }
-.banking-feed-empty { margin: 0; color: #64748b; font-size: 12.5px; font-weight: 850; }
+.banking-feed-empty { margin: 0; color: #000000; font-size: 12.5px; font-weight: 850; }
 .banking-modal-backdrop { position: fixed; inset: 0; z-index: 80; background: rgba(15, 23, 42, .36); display: grid; place-items: center; padding: 20px; }
 .banking-modal { width: min(560px, 100%); max-height: min(760px, calc(100dvh - 40px)); overflow: auto; background: #fff; border-radius: 12px; border: 1px solid #e8edf4; box-shadow: 0 24px 80px rgba(15, 23, 42, .24); padding: 20px; }
 .banking-form { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
@@ -722,7 +727,7 @@ html[data-theme='dark'] .banking-page .banking-table td { background: #101010 !i
   .banking-table thead { display: none; }
   .banking-table tr { border: 1px solid #eef2f7; border-radius: 8px; margin-bottom: 12px; background: #fff; overflow: hidden; }
   .banking-table td, .banking-table td:first-child { border-top: 0; display: grid; grid-template-columns: 120px minmax(0, 1fr); gap: 10px; padding: 10px 12px; font-size: 12.5px; align-items: center; }
-  .banking-table td::before { content: attr(data-label); color: #64748b; font-size: 11px; font-weight: 900; text-transform: uppercase; }
+  .banking-table td::before { content: attr(data-label); color: #000000; font-size: 11px; font-weight: 900; text-transform: uppercase; }
   .bank-logo { display: none; }
   .banking-filter-row { display: grid; grid-template-columns: 1fr; }
   .banking-select-filter { width: 100%; justify-content: space-between; }

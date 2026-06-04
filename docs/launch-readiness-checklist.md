@@ -7,6 +7,7 @@ Last scan: 2026-06-02
 - Internal demo: ready with caution.
 - Closed beta: ready after staging Supabase/env/PITR setup is confirmed with fake data.
 - Production launch: repo-side P0 gates are complete; do not enter real customer or payroll data until the deployment notes below are completed in the real production environment.
+- Launch scope: see `docs/launch-scope.md`; the app sidebar now marks Sales, Procurement, Supplier Database, Workflows, and Datasets as `Beta`, and Design System as `Internal`.
 
 ## Scan Evidence
 

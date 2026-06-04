@@ -24,6 +24,7 @@ import {
   X,
 } from 'lucide-react'
 import CompanySwitcher from '@/components/CompanySwitcher'
+import { AnalyticsToggleButton, CollapsibleAnalytics, useAnalyticsDisclosure } from '@/components/AnalyticsDisclosure'
 import StateFeedback from '@/components/StateFeedback'
 import { companyChangeEvent, companyScopedKey, getActiveCompany } from '@/lib/tenant/company'
 
@@ -129,6 +130,7 @@ export default function SupplierDatabasePage() {
   const [showCreate, setShowCreate] = useState(false)
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [form, setForm] = useState<SupplierForm>(emptyForm)
+  const analytics = useAnalyticsDisclosure('wiseflow:analytics:supplier-database')
 
   useEffect(() => {
     const load = () => {
@@ -293,17 +295,22 @@ export default function SupplierDatabasePage() {
             <input value={search} onChange={event => setSearch(event.target.value)} placeholder="Search suppliers..." aria-label="Search suppliers" />
           </label>
           <CompanySwitcher className="supplier-company-switcher" />
+          {activeSection === 'Overview' && (
+            <AnalyticsToggleButton open={analytics.open} onToggle={analytics.toggle} panelId={analytics.panelId} className="supplier-secondary" />
+          )}
           <button type="button" className="supplier-primary" onClick={() => setShowCreate(true)}><Plus size={16} /> New Supplier</button>
         </header>
 
         {activeSection === 'Overview' && (
           <section className="supplier-section">
-            <div className="supplier-kpis">
-              <KpiCard title="Total Suppliers" value={String(stats.total)} icon={UsersRound} helper="Company supplier records" />
-              <KpiCard title="Active Suppliers" value={String(stats.active)} icon={BadgeCheck} helper="Approved for purchasing" />
-              <KpiCard title="Pending Suppliers" value={String(stats.pending)} icon={ClipboardCheck} helper="Awaiting review" />
-              <KpiCard title="Total Spend" value={formatCurrency(stats.spend)} icon={PackageSearch} helper="From linked purchase orders" />
-            </div>
+            <CollapsibleAnalytics open={analytics.open} id={analytics.panelId}>
+              <div className="supplier-kpis">
+                <KpiCard title="Total Suppliers" value={String(stats.total)} icon={UsersRound} helper="Company supplier records" />
+                <KpiCard title="Active Suppliers" value={String(stats.active)} icon={BadgeCheck} helper="Approved for purchasing" />
+                <KpiCard title="Pending Suppliers" value={String(stats.pending)} icon={ClipboardCheck} helper="Awaiting review" />
+                <KpiCard title="Total Spend" value={formatCurrency(stats.spend)} icon={PackageSearch} helper="From linked purchase orders" />
+              </div>
+            </CollapsibleAnalytics>
 
             <div className="supplier-dashboard-grid">
               <Panel title="Recent Suppliers">
@@ -760,6 +767,9 @@ const supplierCss = `
   gap: 10px;
   padding: 0 6px 4px;
 }
+.supplier-brand div {
+  min-width: 0;
+}
 .supplier-brand > span {
   width: 38px;
   height: 38px;
@@ -776,11 +786,17 @@ const supplierCss = `
 }
 .supplier-brand strong {
   font-size: 16px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .supplier-brand small {
   color: #a1a1a1;
   font-size: 12px;
   margin-top: 3px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .supplier-sidebar-close {
   display: none;
@@ -850,12 +866,12 @@ const supplierCss = `
 /* Supplier sidebar — light theme */
 .supplier-sidebar { background: #ffffff; color: #0f172a; border-right: 1px solid #e5e7eb; }
 .supplier-brand > span { background: #0f172a; color: #ffffff; }
-.supplier-brand small { color: #64748b; }
+.supplier-brand small { color: #000000; }
 .supplier-back { border-color: #e5e7eb; background: #f8fafc; color: #0f172a; }
 .supplier-back:hover { background: #f1f5f9; }
-.supplier-nav-label { color: #64748b; }
+.supplier-nav-label { color: #000000; }
 .supplier-sidebar nav button { color: #334155 !important; }
-.supplier-sidebar nav button svg { color: #64748b !important; }
+.supplier-sidebar nav button svg { color: #000000 !important; }
 .supplier-sidebar nav button:not(.active):hover { background: #f1f5f9 !important; color: #0f172a !important; }
 .supplier-sidebar nav button:not(.active):hover svg { color: #334155 !important; }
 .supplier-main {
@@ -878,7 +894,7 @@ const supplierCss = `
 }
 .supplier-header p {
   margin: 6px 0 0;
-  color: #64748b;
+  color: #000000;
   font-size: 14px;
 }
 .supplier-search {
@@ -890,7 +906,7 @@ const supplierCss = `
   gap: 10px;
   background: #fff;
   padding: 0 13px;
-  color: #64748b;
+  color: #000000;
 }
 .supplier-search input {
   width: 100%;
@@ -963,7 +979,7 @@ const supplierCss = `
 .supplier-kpi small,
 .supplier-kpi em {
   display: block;
-  color: #64748b;
+  color: #000000;
   font-size: 12px;
   font-style: normal;
   font-weight: 800;
@@ -998,7 +1014,7 @@ const supplierCss = `
 }
 .supplier-card-head p {
   margin: 4px 0 0;
-  color: #64748b;
+  color: #000000;
   font-size: 12px;
 }
 .supplier-mini-row,
@@ -1043,7 +1059,7 @@ const supplierCss = `
 }
 .supplier-mini-row small,
 .supplier-top-row small {
-  color: #64748b;
+  color: #000000;
   font-size: 12px;
   margin-top: 3px;
 }
@@ -1066,7 +1082,7 @@ const supplierCss = `
 }
 .supplier-table th {
   background: #f8fafc;
-  color: #475569;
+  color: #000000;
   text-transform: uppercase;
   font-size: 10px;
 }
@@ -1097,7 +1113,7 @@ const supplierCss = `
 .supplier-badge.green { background: #dcfce7; color: #15803d; }
 .supplier-badge.orange { background: #ffedd5; color: #f97316; }
 .supplier-badge.red { background: #fee2e2; color: #ef4444; }
-.supplier-badge.gray { background: #f1f5f9; color: #475569; }
+.supplier-badge.gray { background: #f1f5f9; color: #000000; }
 .supplier-profile {
   display: flex;
   align-items: center;
@@ -1120,7 +1136,7 @@ const supplierCss = `
 }
 .supplier-profile p {
   margin: 5px 0 8px;
-  color: #64748b;
+  color: #000000;
 }
 .supplier-facts {
   display: grid;
@@ -1148,7 +1164,7 @@ const supplierCss = `
   white-space: nowrap;
 }
 .supplier-fact small {
-  color: #64748b;
+  color: #000000;
   font-size: 11px;
   margin-bottom: 3px;
 }
@@ -1186,7 +1202,7 @@ const supplierCss = `
 }
 .supplier-transaction-row small,
 .supplier-document-row small {
-  color: #64748b;
+  color: #000000;
   font-size: 12px;
   margin-top: 3px;
 }
@@ -1214,7 +1230,7 @@ const supplierCss = `
   align-content: center;
   gap: 8px;
   text-align: center;
-  color: #64748b;
+  color: #000000;
   border: 1px dashed #cbd5e1;
   border-radius: 14px;
   padding: 24px;
@@ -1260,7 +1276,7 @@ const supplierCss = `
 }
 .supplier-modal-head p {
   margin: 5px 0 0;
-  color: #64748b;
+  color: #000000;
   font-size: 13px;
 }
 .supplier-modal-head button {
@@ -1302,7 +1318,7 @@ const supplierCss = `
   background: #fff;
 }
 .supplier-form-grid input::placeholder {
-  color: #94a3b8;
+  color: #000000;
 }
 .supplier-form-grid input:focus,
 .supplier-form-grid select:focus {
@@ -1316,7 +1332,7 @@ const supplierCss = `
   padding: 14px 20px;
   border-top: 1px solid #e5e7eb;
 }
-@media (max-width: 1024px) {
+@media (max-width: 1180px) {
   .supplier-workspace {
     grid-template-columns: 82px minmax(0, 1fr);
   }
@@ -1344,7 +1360,7 @@ const supplierCss = `
     grid-column: 1 / -1;
   }
 }
-@media (max-width: 760px) {
+@media (max-width: 900px) {
   .supplier-workspace {
     display: block;
     height: auto;
@@ -1399,14 +1415,14 @@ const supplierCss = `
     line-height: 1.1;
   }
   .supplier-mobile-brand small {
-    color: #64748b;
+    color: #000000;
     font-size: 11px;
     margin-top: 2px;
   }
   .supplier-mobile-backdrop {
     position: fixed;
     inset: 0;
-    z-index: 70;
+    z-index: 110;
     display: block;
     opacity: 0;
     pointer-events: none;
@@ -1419,13 +1435,13 @@ const supplierCss = `
     pointer-events: auto;
   }
   .supplier-sidebar {
-    width: min(278px, calc(100vw - 64px));
+    width: min(86vw, 300px);
     min-height: 100dvh;
     height: 100dvh;
     position: fixed;
     top: 0;
     left: 0;
-    z-index: 80;
+    z-index: 120;
     padding: 20px 10px 16px;
     flex-direction: column;
     gap: 14px;
@@ -1451,10 +1467,11 @@ const supplierCss = `
     width: 34px;
     height: 34px;
     margin-left: auto;
-    border: 1px solid #242424;
+    flex: 0 0 auto;
+    border: 1px solid #e5e7eb;
     border-radius: 10px;
-    background: #0b0b0b;
-    color: #ededed;
+    background: #ffffff;
+    color: #0f172a;
     display: grid;
     place-items: center;
     cursor: pointer;
@@ -1523,7 +1540,7 @@ const supplierCss = `
   }
   .supplier-table td::before {
     content: attr(data-label);
-    color: #64748b;
+    color: #000000;
     font-size: 11px;
     font-weight: 900;
     text-transform: uppercase;

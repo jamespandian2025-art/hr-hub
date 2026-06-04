@@ -5,7 +5,7 @@ import styles from '../page.module.css'
 const cards = [
   ['One operating system', 'Replace scattered spreadsheets and disconnected tools with one workspace for people, money, purchasing, stock, and work.'],
   ['Built for adoption', 'Start with the daily workflows teams already understand, then add approvals, reporting, portals, and automation as the company matures.'],
-  ['Beta-ready launch', 'Offer guided access with manual billing first, then add online checkout when payment processing is approved.'],
+  ['Launch-ready access', 'Offer guided access with manual billing first, then add online checkout when payment processing is approved.'],
 ]
 
 export default function WhyWiseFlowPage() {

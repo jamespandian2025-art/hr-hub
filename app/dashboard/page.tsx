@@ -12,11 +12,6 @@ import {
   Target, TrendingDown, TrendingUp,
   UserPlus, UsersRound, Wallet, Warehouse, Zap,
 } from 'lucide-react'
-import {
-  Area, AreaChart, Bar, BarChart, CartesianGrid, Cell,
-  Line, LineChart, Pie, PieChart,
-  ReferenceLine, ResponsiveContainer, Tooltip, XAxis, YAxis,
-} from 'recharts'
 import { listBusinessRecords, replaceBusinessCollection } from '@/lib/business/client'
 import type { BusinessCollection } from '@/lib/business/collections'
 import { loadAccountingData, refreshAccountingData } from '@/lib/accounting/data'
@@ -722,7 +717,7 @@ export default function Dashboard() {
       { name: 'Unpaid',      value: unpaid, color: '#ef4444' },
       { name: 'In Progress', value: inProg, color: '#3b82f6' },
       { name: 'On Hold',     value: onHold, color: '#f59e0b' },
-      { name: 'Cancelled',   value: canc,   color: '#9ca3af' },
+      { name: 'Cancelled',   value: canc,   color: '#000000' },
     ].filter(d => d.value > 0)
   }, [projects])
 
@@ -748,7 +743,7 @@ export default function Dashboard() {
     invoices.filter(i => (i.paid || 0) > 0).forEach(i => { const d = parseDate(i.createdAt || i.issueDate); if (d) items.push({ id: `i${i.id}`, type: 'payment', description: `Invoice paid${i.customer ? ` by ${i.customer}` : ''}`, subtext: money(i.paid || 0), date: d }) })
     bills.filter(b => norm(b.status) === 'paid').forEach(b => { const d = parseDate(b.date || b.createdAt); if (d) items.push({ id: `b${b.id}`, type: 'payment', description: `Payment received${b.associated ? ` for ${b.associated}` : ''}`, subtext: money(b.amount || 0), date: d }) })
     opps.forEach(o => { const d = parseDate(o.createdAt || o.startDate); if (d) items.push({ id: `o${o.id}`, type: 'opportunity', description: `Quote "${o.name || 'Untitled'}" added`, subtext: 'Sales', date: d }) })
-    return items.sort((a, b) => b.date.getTime() - a.date.getTime()).slice(0, 6)
+    return items.sort((a, b) => b.date.getTime() - a.date.getTime())
   }, [projects, tasks, clients, suppliers, invoices, bills, opps])
 
   // -- Upcoming tasks --------------------------------------------------------
@@ -776,7 +771,7 @@ export default function Dashboard() {
     ? [{ key: 'pipeline', name: 'Pipeline', color: '#f59e0b' }, { key: 'project', name: 'Won', color: '#22c55e' }]
     : tab === 'Financials'
     ? [{ key: 'expenses', name: 'Expenses', color: '#ef4444' }, { key: 'profit', name: 'Profit', color: '#22c55e' }]
-    : [{ key: 'project', name: 'Project Value', color: '#22c55e' }, { key: 'expenses', name: 'Expenses', color: '#6b7280' }]
+    : [{ key: 'project', name: 'Project Value', color: '#22c55e' }, { key: 'expenses', name: 'Expenses', color: '#000000' }]
 
   // -- Date range ------------------------------------------------------------
   const dateRange = useMemo(() => {
@@ -829,7 +824,7 @@ export default function Dashboard() {
       Referral:     { color: '#3b82f6', count: 0 },
       Website:      { color: '#f59e0b', count: 0 },
       'Social Media':{ color: '#8b5cf6', count: 0 },
-      Other:        { color: '#9ca3af', count: 0 },
+      Other:        { color: '#000000', count: 0 },
     }
     opps.forEach(o => {
       const src = (o as { source?: string }).source
@@ -858,7 +853,7 @@ export default function Dashboard() {
       { name: 'Marketing',  color: '#f59e0b', value: 0 },
       { name: 'HR & Admin', color: '#ec4899', value: employees.length },
       { name: 'IT & Software', color: '#8b5cf6', value: 0 },
-      { name: 'Others',     color: '#9ca3af', value: billsVal },
+      { name: 'Others',     color: '#000000', value: billsVal },
     ]
     const alerts: { level: 'error'|'warning'|'info'; title: string; msg: string }[] = []
     if (outstandingInvoices.length > 0) alerts.push({ level: 'error',   title: 'Outstanding Invoices',  msg: `You have ${outstandingInvoices.length} invoice${outstandingInvoices.length > 1 ? 's' : ''} with balances due.` })
@@ -904,8 +899,15 @@ export default function Dashboard() {
 
   const filteredTimeline = useMemo(() => {
     const yr = new Date().getFullYear()
-    if (salesPeriod === 'This Year')  return timeline.data.filter(d => d.key.startsWith(String(yr)))
-    if (salesPeriod === 'Last Year')  return timeline.data.filter(d => d.key.startsWith(String(yr - 1)))
+    const yearRows = (year: number) => {
+      const existing = new Map(timeline.data.map(row => [row.key, row]))
+      return Array.from({ length: 12 }, (_, index) => {
+        const key = `${year}-${String(index + 1).padStart(2, '0')}`
+        return existing.get(key) || { key, month: monthLabel(key), project: 0, pipeline: 0, expenses: 0, profit: 0, projectCount: 0 }
+      })
+    }
+    if (salesPeriod === 'This Year')  return yearRows(yr)
+    if (salesPeriod === 'Last Year')  return yearRows(yr - 1)
     return timeline.data
   }, [timeline, salesPeriod])
 
@@ -974,13 +976,14 @@ export default function Dashboard() {
     { title: 'Procurement',           href: '/procurement',        icon: ShoppingCart,  color: '#f97316', stat: activeProcurementCount, label: 'active requests' },
     { title: 'Supplier Database',     href: '/supplier-database',  icon: Package,       color: '#6366f1', stat: suppliers.length, label: 'suppliers' },
     { title: 'Warehouse / Inventory', href: '/warehouse-inventory',icon: Warehouse,     color: '#0ea5e9', stat: warehouses.length,label: 'inventory alerts' },
-    { title: 'Workflows',             href: '/tasks',              icon: ClipboardList, color: '#22c55e', stat: tasks.filter(t => norm(t.status) !== 'completed').length, label: 'active workflows' },
-    { title: 'To Do',                 href: '/to-do',              icon: Boxes,         color: '#64748b', stat: tasks.filter(t => norm(t.status) === 'open').length, label: 'open tasks' },
+    { title: 'Workflows',             href: '/workflows/my-jobs',  icon: ClipboardList, color: '#22c55e', stat: tasks.filter(t => norm(t.status) !== 'completed').length, label: 'active workflows' },
+    { title: 'To Do',                 href: '/workflows/my-to-dos', icon: Boxes,         color: '#000000', stat: tasks.filter(t => norm(t.status) === 'open').length, label: 'open tasks' },
   ]
 
   // -- Render ----------------------------------------------------------------
   return (
     <main className={`dashboard-page dashboard-tab-${tab.toLowerCase()}`} style={{ fontFamily: font }}>
+      <style>{dashboardHierarchyCss}</style>
       <section className="dashboard-hero">
         <div className="dashboard-inner">
 
@@ -990,7 +993,7 @@ export default function Dashboard() {
           <h1 style={{ margin: 0, fontSize: 30, fontWeight: 700, color: '#111827', fontFamily: display, letterSpacing: '-0.3px' }}>
             Dashboard
           </h1>
-          <p style={{ margin: '3px 0 0', fontSize: 14, color: '#6b7280' }}>
+          <p style={{ margin: '3px 0 0', fontSize: 14, color: '#000000' }}>
             {greeting()}, {firstName}! 👋 Here&apos;s what&apos;s happening across your business today.
           </p>
         </div>
@@ -1002,7 +1005,7 @@ export default function Dashboard() {
               onClick={() => setDateOpen(v => !v)}
               style={{ border: '1px solid #e5e7eb', background: '#fff', borderRadius: 6, padding: '6px 12px', fontSize: 12, color: '#374151', fontWeight: 500, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 5 }}
             >
-              <CalendarDays size={13} style={{ color: '#6b7280' }} /> {dateRange} <ChevronDown size={12} style={{ transition: 'transform 150ms', transform: dateOpen ? 'rotate(180deg)' : 'none' }} />
+              <CalendarDays size={13} style={{ color: '#000000' }} /> {dateRange} <ChevronDown size={12} style={{ transition: 'transform 150ms', transform: dateOpen ? 'rotate(180deg)' : 'none' }} />
             </button>
             {dateOpen && (
               <div style={{ position: 'absolute', top: 'calc(100% + 6px)', right: 0, width: 170, background: '#fff', border: '1px solid #e5e7eb', borderRadius: 6, boxShadow: '0 8px 24px rgba(0,0,0,0.1)', zIndex: 60, overflow: 'hidden' }}>
@@ -1027,7 +1030,7 @@ export default function Dashboard() {
               <div style={{ position: 'absolute', top: 'calc(100% + 6px)', right: 0, width: 200, background: '#fff', border: '1px solid #e5e7eb', borderRadius: 6, boxShadow: '0 8px 24px rgba(0,0,0,0.12)', zIndex: 60, overflow: 'hidden' }}>
                 {([
                   { label: 'New Project',     href: '/project-management', icon: FolderKanban,    color: '#8b5cf6' },
-                  { label: 'New Task',        href: '/tasks',              icon: ClipboardList,   color: '#06b6d4' },
+                  { label: 'New Task',        href: '/workflows/my-jobs',  icon: ClipboardList,   color: '#06b6d4' },
                   { label: 'New Client',      href: '/client-database',    icon: UsersRound,      color: '#10b981' },
                   { label: 'New Opportunity', href: '/sales',              icon: BadgeDollarSign, color: '#f59e0b' },
                   { label: 'New Bill',        href: '/financial',          icon: Receipt,         color: '#f97316' },
@@ -1055,7 +1058,7 @@ export default function Dashboard() {
       {/* Tabs */}
       <div className="dashboard-tabs" style={{ display: 'flex', gap: 2, borderBottom: '1px solid #e5e7eb', marginBottom: 26 }}>
         {['Projects', 'Sales', 'Financials', 'Operations'].map(t => (
-          <button key={t} className={tab === t ? 'is-active' : undefined} onClick={() => setTab(t)} style={{ border: 'none', borderBottom: `2px solid ${tab === t ? '#111827' : 'transparent'}`, background: 'transparent', color: tab === t ? '#111827' : '#6b7280', borderRadius: 0, padding: '8px 16px', fontSize: 13, fontWeight: 700, cursor: 'pointer', transition: 'border-color 150ms ease, color 150ms ease' }}>{t}</button>
+          <button key={t} className={tab === t ? 'is-active' : undefined} onClick={() => setTab(t)} style={{ border: 'none', borderBottom: `2px solid ${tab === t ? '#111827' : 'transparent'}`, background: 'transparent', color: tab === t ? '#111827' : '#000000', borderRadius: 0, padding: '8px 16px', fontSize: 13, fontWeight: 700, cursor: 'pointer', transition: 'border-color 150ms ease, color 150ms ease' }}>{t}</button>
         ))}
       </div>
 
@@ -1102,15 +1105,7 @@ export default function Dashboard() {
           </ChartCard>
           <ChartCard title="Yearly Sales" sub="Balance statistics over time" filter={salesPeriod} filterOptions={['This Year','Last Year','All Time']} onFilterChange={setSalesPeriod}>
             <div style={{ height: 152, marginTop: 4 }}>
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={filteredTimeline} barGap={3} barSize={10}>
-                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f3f4f6" />
-                  <XAxis dataKey="month" axisLine={false} tickLine={false} tick={{ fill: '#9ca3af', fontSize: 10 }} />
-                  <YAxis axisLine={false} tickLine={false} tick={{ fill: '#9ca3af', fontSize: 10 }} tickFormatter={v => `${Math.round(Number(v)/1000)}k`} width={32} />
-                  <Tooltip formatter={v => money(Number(v))} contentStyle={{ borderRadius: 6, border: '1px solid #e5e7eb', fontSize: 12, fontFamily: font }} />
-                  {series.map(s => <Bar key={s.key} dataKey={s.key} name={s.name} fill={s.color} radius={[4,4,0,0]} />)}
-                </BarChart>
-              </ResponsiveContainer>
+              <DashboardBarChart data={filteredTimeline} series={series} height={152} />
             </div>
           </ChartCard>
           <ChartCard title="Project Health" sub={`${projects.length} projects across all statuses`} filter={healthFilter} filterOptions={['All Projects','On Track','At Risk','Delayed']} onFilterChange={setHealthFilter}>
@@ -1128,28 +1123,40 @@ export default function Dashboard() {
               <FinBlock icon={Wallet}      iconColor="#3b82f6" label="Net Profit"     value={money(finStats.profit)}   t={trends.profit} divider />
             </div>
           </ChartCard>
-          <ChartCard title="Recent Activity" sub="">
-            {activity.length === 0 ? <EmptyBox msg="No recent activity" sub="Activity from across your workspace will appear here." /> : (
-              <div style={{ display: 'flex', flexDirection: 'column', marginTop: 2 }}>
-                {activity.slice(0, 4).map((item, i) => <ActivityRow key={item.id} item={item} divider={i > 0} />)}
-                <Link href="/project-management" style={{ fontSize: 12, color: '#22c55e', fontWeight: 500, textDecoration: 'none', marginTop: 12 }}>View all activity →</Link>
-              </div>
-            )}
+          <ChartCard title="Recent Activity" sub="" className="dashboard-recent-activity-card">
+            <div className="dashboard-recent-activity-body">
+              {activity.length === 0 ? (
+                <div className="dashboard-recent-activity-empty">
+                  <EmptyBox msg="No recent activity" sub="Activity from across your workspace will appear here." />
+                </div>
+              ) : (
+                <div
+                  className={`dashboard-recent-activity-list${activity.length > 3 ? ' is-scrollable' : ''}`}
+                  aria-label="Recent activity history"
+                  tabIndex={activity.length > 3 ? 0 : undefined}
+                >
+                  {activity.map((item, i) => (
+                    <ActivityRow key={item.id} item={item} divider={i > 0} className="dashboard-activity-row dashboard-recent-activity-row" />
+                  ))}
+                </div>
+              )}
+              <Link href="/project-management" className="dashboard-recent-activity-link" style={{ fontSize: 12, color: '#22c55e', fontWeight: 500, textDecoration: 'none', marginTop: 12 }}>View all activity →</Link>
+            </div>
           </ChartCard>
-          <ChartCard title="Upcoming Tasks" sub="" action={<Link href="/tasks" style={{ fontSize: 12, color: '#22c55e', fontWeight: 500, textDecoration: 'none' }}>View all</Link>}>
+          <ChartCard title="Upcoming Tasks" sub="" className="dashboard-upcoming-tasks-card" action={<Link href="/workflows/my-jobs" className="dashboard-card-action-link" style={{ fontSize: 12, color: '#22c55e', fontWeight: 500, textDecoration: 'none' }}>View all</Link>}>
             {upcoming.length === 0 ? <EmptyBox msg="No tasks scheduled" sub="Tasks and to-dos assigned to you will appear here." /> : (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 4 }}>
+              <div className="dashboard-upcoming-task-list" style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 4 }}>
                 {upcoming.slice(0, 4).map(t => (
-                  <div key={t.id} style={{ display: 'flex', gap: 9, alignItems: 'flex-start' }}>
-                    <div role="checkbox" aria-checked={false} tabIndex={0} onClick={() => completeTask(t.id)} onKeyDown={e => e.key === 'Enter' && completeTask(t.id)}
+                  <div key={t.id} className="dashboard-task-row" style={{ display: 'flex', gap: 9, alignItems: 'flex-start' }}>
+                    <div className="dashboard-task-check" role="checkbox" aria-checked={false} tabIndex={0} onClick={() => completeTask(t.id)} onKeyDown={e => e.key === 'Enter' && completeTask(t.id)}
                       style={{ width: 14, height: 14, borderRadius: 4, border: '1.5px solid #d1d5db', flexShrink: 0, marginTop: 2, cursor: 'pointer' }} />
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ fontSize: 12, fontWeight: 500, color: '#111827', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{t.title || 'Untitled'}</div>
-                      <div style={{ fontSize: 11, color: '#9ca3af', marginTop: 1 }}>{t.projectName || 'No project'}</div>
+                    <div className="dashboard-task-copy" style={{ flex: 1, minWidth: 0 }}>
+                      <div className="dashboard-task-title" style={{ fontSize: 12, fontWeight: 500, color: '#111827', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{t.title || 'Untitled'}</div>
+                      <div className="dashboard-task-project" style={{ fontSize: 11, color: '#000000', marginTop: 1 }}>{t.projectName || 'No project'}</div>
                     </div>
-                    <div style={{ flexShrink: 0, textAlign: 'right' }}>
-                      {t.dueDate && <div style={{ fontSize: 11, color: '#6b7280', marginBottom: 1 }}>{new Date(`${t.dueDate}T00:00:00`).toLocaleDateString('en-PH', { month: 'short', day: 'numeric' })}</div>}
-                      {t.urge && <span style={{ fontSize: 10, fontWeight: 600, padding: '1px 6px', borderRadius: 4, background: t.urge==='High'?'#fef2f2':t.urge==='Medium'?'#fffbeb':'#f0fdf4', color: t.urge==='High'?'#ef4444':t.urge==='Medium'?'#f59e0b':'#22c55e' }}>{t.urge}</span>}
+                    <div className="dashboard-task-meta" style={{ flexShrink: 0, textAlign: 'right' }}>
+                      {t.dueDate && <div className="dashboard-task-date" style={{ fontSize: 11, color: '#000000', marginBottom: 1 }}>{new Date(`${t.dueDate}T00:00:00`).toLocaleDateString('en-PH', { month: 'short', day: 'numeric' })}</div>}
+                      {t.urge && <span className="dashboard-task-priority" data-priority={t.urge.toLowerCase()} style={{ fontSize: 10, fontWeight: 600, padding: '1px 6px', borderRadius: 4, background: t.urge==='High'?'#fef2f2':t.urge==='Medium'?'#fffbeb':'#f0fdf4', color: t.urge==='High'?'#ef4444':t.urge==='Medium'?'#f59e0b':'#22c55e' }}>{t.urge}</span>}
                     </div>
                   </div>
                 ))}
@@ -1168,7 +1175,7 @@ export default function Dashboard() {
             <div style={{ display: 'flex', gap: 14, alignItems: 'center', marginTop: 8 }}>
               <SalesFunnel data={salesData.pipeline} />
               <div style={{ display: 'flex', flexDirection: 'column', gap: 6, minWidth: 110, flexShrink: 0 }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, fontSize: 10, fontWeight: 700, color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, fontSize: 10, fontWeight: 700, color: '#000000', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
                   <span>Stage</span><span>Deals</span>
                 </div>
                 {salesData.pipeline.map(d => (
@@ -1176,7 +1183,7 @@ export default function Dashboard() {
                     <span style={{ display: 'flex', alignItems: 'center', gap: 5, color: '#374151' }}>
                       <span style={{ width: 7, height: 7, borderRadius: '50%', background: d.color, flexShrink: 0 }} />{d.stage}
                     </span>
-                    <span style={{ color: '#9ca3af', whiteSpace: 'nowrap' }}>{d.count} ({pct(d.count, Math.max(salesData.pipeline.reduce((s,x)=>s+x.count,0),1))}%)</span>
+                    <span style={{ color: '#000000', whiteSpace: 'nowrap' }}>{d.count} ({pct(d.count, Math.max(salesData.pipeline.reduce((s,x)=>s+x.count,0),1))}%)</span>
                   </div>
                 ))}
               </div>
@@ -1186,21 +1193,19 @@ export default function Dashboard() {
 
           <ChartCard title="Revenue Trend" sub="Opportunities tracked over time" filter={revTrendFilter} filterOptions={['This Month','This Quarter','This Year']} onFilterChange={setRevTrendFilter}>
             <div style={{ height: 148, marginTop: 4 }}>
-              <ResponsiveContainer width="100%" height="100%">
-                <LineChart data={filteredTimeline}>
-                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f3f4f6" />
-                  <XAxis dataKey="month" axisLine={false} tickLine={false} tick={{ fill: '#9ca3af', fontSize: 10 }} />
-                  <YAxis axisLine={false} tickLine={false} tick={{ fill: '#9ca3af', fontSize: 10 }} tickFormatter={v => `${Math.round(Number(v)/1000)}k`} width={32} />
-                  <Tooltip formatter={v => money(Number(v))} contentStyle={{ borderRadius: 6, border: '1px solid #e5e7eb', fontSize: 12, fontFamily: font }} />
-                  <Line type="monotone" dataKey="project"  name="Revenue"      stroke="#22c55e" strokeWidth={2} dot={false} />
-                  <Line type="monotone" dataKey="pipeline" name="Quotations"   stroke="#3b82f6" strokeWidth={2} dot={false} />
-                  <Line type="monotone" dataKey="profit"   name="Closed Deals" stroke="#8b5cf6" strokeWidth={2} dot={false} />
-                </LineChart>
-              </ResponsiveContainer>
+              <DashboardLineChart
+                data={filteredTimeline}
+                series={[
+                  { key: 'project', name: 'Revenue', color: '#22c55e' },
+                  { key: 'pipeline', name: 'Quotations', color: '#3b82f6' },
+                  { key: 'profit', name: 'Closed Deals', color: '#8b5cf6' },
+                ]}
+                height={148}
+              />
             </div>
             <div style={{ display: 'flex', gap: 12, marginTop: 6, flexWrap: 'wrap' }}>
               {[{l:'Revenue',c:'#22c55e'},{l:'Quotations',c:'#3b82f6'},{l:'Closed Deals',c:'#8b5cf6'}].map(x => (
-                <span key={x.l} style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 11, color: '#6b7280' }}>
+                <span key={x.l} style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 11, color: '#000000' }}>
                   <span style={{ width: 16, height: 2, background: x.c, display: 'inline-block', borderRadius: 1 }} />{x.l}
                 </span>
               ))}
@@ -1212,7 +1217,7 @@ export default function Dashboard() {
               <div style={{ marginTop: 8 }}>
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr auto auto auto auto', gap: '3px 8px', marginBottom: 6, alignItems: 'center' }}>
                   {['Deal / Client','Value','Stage','Close Date',''].map(h => (
-                    <span key={h} style={{ fontSize: 10, fontWeight: 600, color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '0.04em', whiteSpace: 'nowrap' }}>{h}</span>
+                    <span key={h} style={{ fontSize: 10, fontWeight: 600, color: '#000000', textTransform: 'uppercase', letterSpacing: '0.04em', whiteSpace: 'nowrap' }}>{h}</span>
                   ))}
                 </div>
                 {salesData.topDeals.map(deal => {
@@ -1224,7 +1229,7 @@ export default function Dashboard() {
                       </div>
                       <span style={{ fontSize: 12, fontWeight: 600, color: '#111827', whiteSpace: 'nowrap' }}>{money(deal.quotation||deal.approvedBudget||0)}</span>
                       <span style={{ fontSize: 10, fontWeight: 700, padding: '2px 7px', borderRadius: 99, background: sc.bg, color: sc.text, whiteSpace: 'nowrap' }}>{deal.status || 'Lead'}</span>
-                      <span style={{ fontSize: 11, color: '#6b7280', whiteSpace: 'nowrap' }}>{deal.startDate ? new Date(`${deal.startDate}T00:00:00`).toLocaleDateString('en-PH', { month: 'short', day: 'numeric', year: '2-digit' }) : '—'}</span>
+                      <span style={{ fontSize: 11, color: '#000000', whiteSpace: 'nowrap' }}>{deal.startDate ? new Date(`${deal.startDate}T00:00:00`).toLocaleDateString('en-PH', { month: 'short', day: 'numeric', year: '2-digit' }) : '—'}</span>
                       <div style={{ width: 24, height: 24, borderRadius: '50%', background: '#1A73E8', color: '#fff', display: 'grid', placeItems: 'center', fontSize: 9, fontWeight: 700 }}>JP</div>
                     </div>
                   )
@@ -1257,7 +1262,7 @@ export default function Dashboard() {
                     <span style={{ display: 'flex', alignItems: 'center', gap: 6, color: '#374151' }}>
                       <span style={{ width: 7, height: 7, borderRadius: '50%', background: d.color, flexShrink: 0 }} />{d.name}
                     </span>
-                    <span style={{ color: '#9ca3af', whiteSpace: 'nowrap' }}>{d.value} ({pct(d.value, Math.max(opps.length,1))}%)</span>
+                    <span style={{ color: '#000000', whiteSpace: 'nowrap' }}>{d.value} ({pct(d.value, Math.max(opps.length,1))}%)</span>
                   </div>
                 ))}
               </div>
@@ -1271,7 +1276,7 @@ export default function Dashboard() {
                 { label: 'Add New Lead',        href: '/sales',           icon: UserPlus,        color: '#3b82f6' },
                 { label: 'Create Quotation',    href: '/sales',           icon: FileText,        color: '#6366f1' },
                 { label: 'Add Client',          href: '/client-database', icon: UsersRound,      color: '#f59e0b' },
-                { label: 'Schedule Follow-up',  href: '/tasks',           icon: CalendarDays,    color: '#f97316' },
+                { label: 'Schedule Follow-up',  href: '/workflows/my-jobs', icon: CalendarDays,    color: '#f97316' },
                 { label: 'Import Leads',        href: '/sales',           icon: Package,         color: '#8b5cf6' },
               ] as const).map(a => (
                 <Link key={a.label} href={a.href} style={{ textDecoration: 'none' }}>
@@ -1312,32 +1317,21 @@ export default function Dashboard() {
           <ChartCard title="Income vs Expense" sub="" filter={incExpFilter} filterOptions={['This Month','This Quarter','This Year','All Time']} onFilterChange={setIncExpFilter}>
             <div style={{ display: 'flex', gap: 10, marginBottom: 8, marginTop: 6 }}>
               {[{l:'Income',c:'#22c55e'},{l:'Expense',c:'#ef4444'}].map(x => (
-                <span key={x.l} style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 11, color: '#6b7280' }}>
+                <span key={x.l} style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 11, color: '#000000' }}>
                   <span style={{ width: 8, height: 8, borderRadius: '50%', background: x.c }} />{x.l}
                 </span>
               ))}
             </div>
             <div style={{ height: 140 }}>
-              <ResponsiveContainer width="100%" height="100%">
-                <AreaChart data={filteredTimeline}>
-                  <defs>
-                    <linearGradient id="gradIncome" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%"  stopColor="#22c55e" stopOpacity={0.18} />
-                      <stop offset="95%" stopColor="#22c55e" stopOpacity={0} />
-                    </linearGradient>
-                    <linearGradient id="gradExpense" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%"  stopColor="#ef4444" stopOpacity={0.14} />
-                      <stop offset="95%" stopColor="#ef4444" stopOpacity={0} />
-                    </linearGradient>
-                  </defs>
-                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f3f4f6" />
-                  <XAxis dataKey="month" axisLine={false} tickLine={false} tick={{ fill: '#9ca3af', fontSize: 10 }} />
-                  <YAxis axisLine={false} tickLine={false} tick={{ fill: '#9ca3af', fontSize: 10 }} tickFormatter={v => `${Math.round(Number(v)/1000)}k`} width={32} />
-                  <Tooltip formatter={v => money(Number(v))} contentStyle={{ borderRadius: 6, border: '1px solid #e5e7eb', fontSize: 12, fontFamily: font }} />
-                  <Area type="monotone" dataKey="project"  name="Income"  stroke="#22c55e" fill="url(#gradIncome)"  strokeWidth={2} />
-                  <Area type="monotone" dataKey="expenses" name="Expense" stroke="#ef4444" fill="url(#gradExpense)" strokeWidth={2} />
-                </AreaChart>
-              </ResponsiveContainer>
+              <DashboardLineChart
+                data={filteredTimeline}
+                series={[
+                  { key: 'project', name: 'Income', color: '#22c55e', opacity: 0.18 },
+                  { key: 'expenses', name: 'Expense', color: '#ef4444', opacity: 0.14 },
+                ]}
+                height={140}
+                area
+              />
             </div>
             <Link href="/financial" style={{ fontSize: 12, color: '#22c55e', fontWeight: 500, textDecoration: 'none', display: 'block', marginTop: 'auto', paddingTop: 14 }}>View full report →</Link>
           </ChartCard>
@@ -1345,27 +1339,25 @@ export default function Dashboard() {
           <ChartCard title="Cash Flow Overview" sub="" filter={cashFlowFilter} filterOptions={['This Month','This Quarter','This Year','All Time']} onFilterChange={setCashFlowFilter}>
             <div style={{ marginBottom: 6, marginTop: 4 }}>
               <div style={{ fontSize: 20, fontWeight: 700, color: '#111827', letterSpacing: '-0.3px' }}>{money(Math.abs(finTabData.cashFlow))}</div>
-              <div style={{ fontSize: 12, color: '#9ca3af' }}>Net Cash Flow</div>
+              <div style={{ fontSize: 12, color: '#000000' }}>Net Cash Flow</div>
             </div>
             <div style={{ display: 'flex', gap: 10, marginBottom: 6 }}>
               {[{l:'Inflow',c:'#22c55e'},{l:'Outflow',c:'#ef4444'}].map(x => (
-                <span key={x.l} style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 11, color: '#6b7280' }}>
+                <span key={x.l} style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 11, color: '#000000' }}>
                   <span style={{ width: 8, height: 8, borderRadius: '50%', background: x.c }} />{x.l}
                 </span>
               ))}
             </div>
             <div style={{ height: 110 }}>
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={filteredTimeline.map(d => ({ ...d, cashFlow: d.project - d.expenses, inflow: d.project, outflow: -d.expenses }))} barGap={2} barSize={8}>
-                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f3f4f6" />
-                  <XAxis dataKey="month" axisLine={false} tickLine={false} tick={{ fill: '#9ca3af', fontSize: 9 }} />
-                  <YAxis axisLine={false} tickLine={false} tick={{ fill: '#9ca3af', fontSize: 9 }} tickFormatter={v => `${Math.round(Number(v)/1000)}k`} width={28} />
-                  <ReferenceLine y={0} stroke="#e5e7eb" strokeWidth={1} />
-                  <Tooltip formatter={v => money(Math.abs(Number(v)))} contentStyle={{ borderRadius: 6, border: '1px solid #e5e7eb', fontSize: 12, fontFamily: font }} />
-                  <Bar dataKey="inflow"  name="Inflow"  fill="#22c55e" fillOpacity={0.75} radius={[3,3,0,0]} />
-                  <Bar dataKey="outflow" name="Outflow" fill="#ef4444" fillOpacity={0.65} radius={[3,3,0,0]} />
-                </BarChart>
-              </ResponsiveContainer>
+              <DashboardBarChart
+                data={filteredTimeline.map(d => ({ ...d, cashFlow: d.project - d.expenses, inflow: d.project, outflow: -d.expenses }))}
+                series={[
+                  { key: 'inflow', name: 'Inflow', color: '#22c55e', opacity: 0.75 },
+                  { key: 'outflow', name: 'Outflow', color: '#ef4444', opacity: 0.65 },
+                ]}
+                height={110}
+                allowNegative
+              />
             </div>
             <Link href="/financial" style={{ fontSize: 12, color: '#22c55e', fontWeight: 500, textDecoration: 'none', display: 'block', marginTop: 'auto', paddingTop: 14 }}>View cash flow statement →</Link>
           </ChartCard>
@@ -1379,7 +1371,7 @@ export default function Dashboard() {
                     <span style={{ display: 'flex', alignItems: 'center', gap: 6, color: '#374151' }}>
                       <span style={{ width: 7, height: 7, borderRadius: '50%', background: d.color, flexShrink: 0 }} />{d.name}
                     </span>
-                    <span style={{ color: '#9ca3af', whiteSpace: 'nowrap' }}>{pct(d.value, Math.max(stats.expenses,1))}%</span>
+                    <span style={{ color: '#000000', whiteSpace: 'nowrap' }}>{pct(d.value, Math.max(stats.expenses,1))}%</span>
                   </div>
                 ))}
               </div>
@@ -1395,17 +1387,17 @@ export default function Dashboard() {
               <div style={{ marginTop: 8 }}>
                 <div style={{ display: 'grid', gridTemplateColumns: 'auto 1fr auto auto auto', gap: '3px 8px', marginBottom: 6 }}>
                   {['Invoice #','Client','Amount','Due Date','Status'].map(h => (
-                    <span key={h} style={{ fontSize: 10, fontWeight: 600, color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '0.04em', whiteSpace: 'nowrap' }}>{h}</span>
+                    <span key={h} style={{ fontSize: 10, fontWeight: 600, color: '#000000', textTransform: 'uppercase', letterSpacing: '0.04em', whiteSpace: 'nowrap' }}>{h}</span>
                   ))}
                 </div>
                 {finTabData.recentInvoices.map((inv, i) => {
                   const sc = statusBadgeColor(norm(inv.status || ''))
                   return (
                     <div key={inv.id} style={{ display: 'grid', gridTemplateColumns: 'auto 1fr auto auto auto', gap: '3px 8px', padding: '7px 0', borderTop: '1px solid #f3f4f6', alignItems: 'center' }}>
-                      <span style={{ fontSize: 12, color: '#6b7280', whiteSpace: 'nowrap' }}>#{String(inv.id).padStart(4,'0')}</span>
+                      <span style={{ fontSize: 12, color: '#000000', whiteSpace: 'nowrap' }}>#{String(inv.id).padStart(4,'0')}</span>
                       <span style={{ fontSize: 12, color: '#374151', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{inv.customer || `Client ${i+1}`}</span>
                       <span style={{ fontSize: 12, fontWeight: 600, color: '#111827', whiteSpace: 'nowrap' }}>{money(inv.amount||0)}</span>
-                      <span style={{ fontSize: 11, color: '#6b7280', whiteSpace: 'nowrap' }}>{(inv.dueDate || inv.issueDate) ? new Date(`${inv.dueDate || inv.issueDate}T00:00:00`).toLocaleDateString('en-PH', { month: 'short', day: 'numeric', year: 'numeric' }) : '—'}</span>
+                      <span style={{ fontSize: 11, color: '#000000', whiteSpace: 'nowrap' }}>{(inv.dueDate || inv.issueDate) ? new Date(`${inv.dueDate || inv.issueDate}T00:00:00`).toLocaleDateString('en-PH', { month: 'short', day: 'numeric', year: 'numeric' }) : '—'}</span>
                       <span style={{ fontSize: 10, fontWeight: 700, padding: '2px 7px', borderRadius: 99, background: sc.bg, color: sc.text, whiteSpace: 'nowrap' }}>{inv.status || 'Pending'}</span>
                     </div>
                   )
@@ -1419,17 +1411,17 @@ export default function Dashboard() {
               <div style={{ marginTop: 8 }}>
                 <div style={{ display: 'grid', gridTemplateColumns: 'auto 1fr auto auto auto', gap: '3px 8px', marginBottom: 6 }}>
                   {['Request #','Requested By','Amount','Date','Status'].map(h => (
-                    <span key={h} style={{ fontSize: 10, fontWeight: 600, color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '0.04em', whiteSpace: 'nowrap' }}>{h}</span>
+                    <span key={h} style={{ fontSize: 10, fontWeight: 600, color: '#000000', textTransform: 'uppercase', letterSpacing: '0.04em', whiteSpace: 'nowrap' }}>{h}</span>
                   ))}
                 </div>
                 {bills.slice(0,4).map((b, i) => {
                   const sc = statusBadgeColor(norm(b.status || ''))
                   return (
                     <div key={b.id} style={{ display: 'grid', gridTemplateColumns: 'auto 1fr auto auto auto', gap: '3px 8px', padding: '7px 0', borderTop: '1px solid #f3f4f6', alignItems: 'center' }}>
-                      <span style={{ fontSize: 12, color: '#6b7280', whiteSpace: 'nowrap' }}>#{String(b.id).padStart(4,'0')}</span>
+                      <span style={{ fontSize: 12, color: '#000000', whiteSpace: 'nowrap' }}>#{String(b.id).padStart(4,'0')}</span>
                       <span style={{ fontSize: 12, color: '#374151', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{b.name || `Request ${i+1}`}</span>
                       <span style={{ fontSize: 12, fontWeight: 600, color: '#111827', whiteSpace: 'nowrap' }}>{money(b.amount||0)}</span>
-                      <span style={{ fontSize: 11, color: '#6b7280', whiteSpace: 'nowrap' }}>{b.date ? new Date(`${b.date}T00:00:00`).toLocaleDateString('en-PH', { month: 'short', day: 'numeric', year: 'numeric' }) : '—'}</span>
+                      <span style={{ fontSize: 11, color: '#000000', whiteSpace: 'nowrap' }}>{b.date ? new Date(`${b.date}T00:00:00`).toLocaleDateString('en-PH', { month: 'short', day: 'numeric', year: 'numeric' }) : '—'}</span>
                       <span style={{ fontSize: 10, fontWeight: 700, padding: '2px 7px', borderRadius: 99, background: sc.bg, color: sc.text, whiteSpace: 'nowrap' }}>{b.status || 'Pending'}</span>
                     </div>
                   )
@@ -1476,12 +1468,12 @@ export default function Dashboard() {
             <div style={{ display: 'flex', gap: 12, alignItems: 'center', marginTop: 4 }}>
               <Donut data={opsData.workflowActivity.length ? opsData.workflowActivity : [{name:'None',value:1,color:'#e5e7eb'}]} center={String(tasks.length)} />
               <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 7 }}>
-                {opsData.workflowActivity.length === 0 ? <div style={{ fontSize: 12, color: '#9ca3af' }}>No workflow data yet.</div> : opsData.workflowActivity.map(d => (
+                {opsData.workflowActivity.length === 0 ? <div style={{ fontSize: 12, color: '#000000' }}>No workflow data yet.</div> : opsData.workflowActivity.map(d => (
                   <div key={d.name} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12 }}>
                     <span style={{ display: 'flex', alignItems: 'center', gap: 6, color: '#374151' }}>
                       <span style={{ width: 7, height: 7, borderRadius: '50%', background: d.color, flexShrink: 0 }} />{d.name}
                     </span>
-                    <span style={{ color: '#9ca3af' }}>{d.value} ({pct(d.value, Math.max(tasks.length,1))}%)</span>
+                    <span style={{ color: '#000000' }}>{d.value} ({pct(d.value, Math.max(tasks.length,1))}%)</span>
                   </div>
                 ))}
               </div>
@@ -1490,17 +1482,13 @@ export default function Dashboard() {
 
           <ChartCard title="Task Status Overview" sub="" filter={taskFilter} filterOptions={['This Week','This Month','All Time']} onFilterChange={setTaskFilter}>
             <div style={{ height: 158, marginTop: 4 }}>
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={opsData.taskStatusBars} barSize={28}>
-                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f3f4f6" />
-                  <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fill: '#9ca3af', fontSize: 10 }} />
-                  <YAxis axisLine={false} tickLine={false} tick={{ fill: '#9ca3af', fontSize: 10 }} width={24} />
-                  <Tooltip contentStyle={{ borderRadius: 6, border: '1px solid #e5e7eb', fontSize: 12, fontFamily: font }} />
-                  <Bar dataKey="value" name="Tasks" radius={[4,4,0,0]}>
-                    {opsData.taskStatusBars.map((entry, index) => <Cell key={index} fill={entry.fill} />)}
-                  </Bar>
-                </BarChart>
-              </ResponsiveContainer>
+              <DashboardBarChart
+                data={opsData.taskStatusBars}
+                series={[{ key: 'value', name: 'Tasks', color: '#22c55e' }]}
+                labelKey="name"
+                height={158}
+                useDatumColor
+              />
             </div>
           </ChartCard>
 
@@ -1518,7 +1506,7 @@ export default function Dashboard() {
                       <div style={{ flex: 1, minWidth: 0 }}>
                         <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 3 }}>
                           <span style={{ fontSize: 12, fontWeight: 500, color: '#111827' }}>{assignee}</span>
-                          <span style={{ fontSize: 11, color: '#9ca3af' }}>{done}/{assigned.length} tasks</span>
+                          <span style={{ fontSize: 11, color: '#000000' }}>{done}/{assigned.length} tasks</span>
                         </div>
                         <div style={{ height: 5, borderRadius: 3, background: '#f3f4f6', overflow: 'hidden' }}>
                           <div style={{ height: '100%', width: `${loadPct}%`, background: loadPct > 80 ? '#ef4444' : loadPct > 60 ? '#f59e0b' : '#22c55e', borderRadius: 3 }} />
@@ -1528,7 +1516,7 @@ export default function Dashboard() {
                     </div>
                   )
                 })}
-                <Link href="/tasks" style={{ fontSize: 12, color: '#22c55e', fontWeight: 500, textDecoration: 'none', marginTop: 2 }}>View all team workload →</Link>
+                <Link href="/workflows/my-jobs" style={{ fontSize: 12, color: '#22c55e', fontWeight: 500, textDecoration: 'none', marginTop: 2 }}>View all team workload →</Link>
               </div>
             )}
           </ChartCard>
@@ -1549,7 +1537,7 @@ export default function Dashboard() {
                         <ShoppingCart size={14} color="#f59e0b" />
                         <div style={{ flex: 1, minWidth: 0 }}>
                           <div style={{ fontSize: 12, fontWeight: 600, color: '#111827', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{row.name || row.id}</div>
-                          <div style={{ fontSize: 11, color: '#9ca3af' }}>{row.amount ? money(row.amount) : 'Procurement record'}</div>
+                          <div style={{ fontSize: 11, color: '#000000' }}>{row.amount ? money(row.amount) : 'Procurement record'}</div>
                         </div>
                         <span style={{ fontSize: 10, fontWeight: 700, padding: '2px 7px', borderRadius: 99, background: sc.bg, color: sc.text, whiteSpace: 'nowrap' }}>{row.status || 'Pending'}</span>
                       </div>
@@ -1570,7 +1558,7 @@ export default function Dashboard() {
                     </div>
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <div style={{ fontSize: 12, fontWeight: 500, color: '#111827', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{wh.name || `Inventory ${i + 1}`}</div>
-                      <div style={{ fontSize: 11, color: '#9ca3af' }}>Minimum {wh.minLevel ?? 0}</div>
+                      <div style={{ fontSize: 11, color: '#000000' }}>Minimum {wh.minLevel ?? 0}</div>
                     </div>
                     <span style={{ fontSize: 11, fontWeight: 600, color: '#ef4444', whiteSpace: 'nowrap' }}>{wh.stock ?? wh.total ?? wh.amount ?? 0} units</span>
                   </div>
@@ -1580,18 +1568,18 @@ export default function Dashboard() {
             )}
           </ChartCard>
 
-          <ChartCard title="Upcoming Tasks" sub="" action={<Link href="/tasks" style={{ fontSize: 12, color: '#22c55e', fontWeight: 500, textDecoration: 'none' }}>View all</Link>}>
+          <ChartCard title="Upcoming Tasks" sub="" className="dashboard-upcoming-tasks-card" action={<Link href="/workflows/my-jobs" className="dashboard-card-action-link" style={{ fontSize: 12, color: '#22c55e', fontWeight: 500, textDecoration: 'none' }}>View all</Link>}>
             {upcoming.length === 0 ? <EmptyBox msg="No tasks scheduled" sub="Tasks assigned to you will appear here." /> : (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 4 }}>
+              <div className="dashboard-upcoming-task-list" style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 4 }}>
                 {upcoming.slice(0, 5).map(t => (
-                  <div key={t.id} style={{ display: 'flex', gap: 9, alignItems: 'flex-start' }}>
-                    <div role="checkbox" aria-checked={false} tabIndex={0} onClick={() => completeTask(t.id)} onKeyDown={e => e.key === 'Enter' && completeTask(t.id)}
+                  <div key={t.id} className="dashboard-task-row" style={{ display: 'flex', gap: 9, alignItems: 'flex-start' }}>
+                    <div className="dashboard-task-check" role="checkbox" aria-checked={false} tabIndex={0} onClick={() => completeTask(t.id)} onKeyDown={e => e.key === 'Enter' && completeTask(t.id)}
                       style={{ width: 14, height: 14, borderRadius: 4, border: '1.5px solid #d1d5db', flexShrink: 0, marginTop: 2, cursor: 'pointer' }} />
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ fontSize: 12, fontWeight: 500, color: '#111827', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{t.title || 'Untitled'}</div>
-                      <div style={{ fontSize: 11, color: '#9ca3af' }}>{t.projectName || 'Operations'}</div>
+                    <div className="dashboard-task-copy" style={{ flex: 1, minWidth: 0 }}>
+                      <div className="dashboard-task-title" style={{ fontSize: 12, fontWeight: 500, color: '#111827', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{t.title || 'Untitled'}</div>
+                      <div className="dashboard-task-project" style={{ fontSize: 11, color: '#000000' }}>{t.projectName || 'Operations'}</div>
                     </div>
-                    {t.dueDate && <div style={{ fontSize: 11, color: '#6b7280', flexShrink: 0, whiteSpace: 'nowrap' }}>{new Date(`${t.dueDate}T00:00:00`).toLocaleDateString('en-PH', { month: 'short', day: 'numeric' })}</div>}
+                    {t.dueDate && <div className="dashboard-task-date" style={{ fontSize: 11, color: '#000000', flexShrink: 0, whiteSpace: 'nowrap' }}>{new Date(`${t.dueDate}T00:00:00`).toLocaleDateString('en-PH', { month: 'short', day: 'numeric' })}</div>}
                   </div>
                 ))}
               </div>
@@ -1600,10 +1588,10 @@ export default function Dashboard() {
         </div>
 
         <TabModules title="Operations modules" subtitle="Quick access to key operations areas." modules={[
-          { title: 'Workflows',   href: '/tasks',              icon: Zap,          color: '#22c55e', stat: opsData.active,        label: 'active workflows' },
+          { title: 'Workflows',   href: '/workflows/my-jobs',  icon: Zap,          color: '#22c55e', stat: opsData.active,        label: 'active workflows' },
           { title: 'Procurement', href: '/procurement',        icon: ShoppingCart, color: '#f59e0b', stat: activeProcurementCount, label: 'active requests' },
           { title: 'Warehouse',   href: '/warehouse-inventory',icon: Warehouse,    color: '#0ea5e9', stat: warehouses.length,      label: 'inventory alerts' },
-          { title: 'Tasks',       href: '/tasks',              icon: ClipboardList,color: '#8b5cf6', stat: opsData.openT,          label: 'open tasks' },
+          { title: 'Tasks',       href: '/workflows/my-jobs',  icon: ClipboardList,color: '#8b5cf6', stat: opsData.openT,          label: 'open tasks' },
           { title: 'Team Workload',href: '/hr',                icon: UsersRound,   color: '#ef4444', stat: activeEmployeeCount || Array.from(new Set(tasks.map(t=>t.assignee).filter(Boolean))).length, label: 'team members' },
         ]} />
       </>}
@@ -1612,11 +1600,157 @@ export default function Dashboard() {
   )
 }
 
+const dashboardHierarchyCss = `
+.dashboard-page .data-grid {
+  align-items: stretch;
+}
+.dashboard-page .dashboard-card {
+  min-height: 0;
+}
+.dashboard-page .dashboard-card-header {
+  min-height: 34px;
+  align-items: center !important;
+  padding-bottom: 10px;
+  border-bottom: 1px solid #eef2f7;
+}
+.dashboard-page .dashboard-card-header h3 {
+  color: #0f172a !important;
+  font-size: 15px !important;
+  line-height: 1.2;
+  font-weight: 750 !important;
+}
+.dashboard-page .dashboard-card-action-link,
+.dashboard-page .dashboard-recent-activity-link {
+  color: #16a34a !important;
+  font-size: 12px !important;
+  font-weight: 700 !important;
+}
+.dashboard-page .dashboard-recent-activity-card,
+.dashboard-page .dashboard-upcoming-tasks-card {
+  padding-bottom: 16px !important;
+}
+.dashboard-page .dashboard-recent-activity-body {
+  min-height: 0;
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+}
+.dashboard-page .dashboard-recent-activity-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+.dashboard-page .dashboard-recent-activity-list.is-scrollable {
+  max-height: 206px;
+  padding-right: 8px;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: #cbd5e1 transparent;
+}
+.dashboard-page .dashboard-recent-activity-row {
+  padding: 12px 0 !important;
+  gap: 12px !important;
+}
+.dashboard-page .dashboard-recent-activity-row:first-child {
+  padding-top: 2px !important;
+}
+.dashboard-page .dashboard-activity-description {
+  color: #0f172a !important;
+  font-size: 12.5px !important;
+  line-height: 1.35 !important;
+  font-weight: 750 !important;
+}
+.dashboard-page .dashboard-activity-subtext {
+  color: #475569 !important;
+  font-size: 11px !important;
+  line-height: 1.35 !important;
+  font-weight: 500 !important;
+}
+.dashboard-page .dashboard-activity-time {
+  color: #334155 !important;
+  font-size: 11px !important;
+  font-weight: 650 !important;
+}
+.dashboard-page .dashboard-upcoming-task-list {
+  gap: 10px !important;
+  margin-top: 2px !important;
+}
+.dashboard-page .dashboard-task-row {
+  min-height: 40px;
+  gap: 10px !important;
+  padding: 2px 0 10px;
+  border-bottom: 1px solid #f1f5f9;
+}
+.dashboard-page .dashboard-task-row:last-child {
+  border-bottom: 0;
+}
+.dashboard-page .dashboard-task-check {
+  width: 15px !important;
+  height: 15px !important;
+  margin-top: 3px !important;
+  border-color: #cbd5e1 !important;
+  background: #ffffff;
+}
+.dashboard-page .dashboard-task-title {
+  color: #0f172a !important;
+  font-size: 12.5px !important;
+  line-height: 1.35 !important;
+  font-weight: 750 !important;
+  white-space: normal !important;
+  overflow: visible !important;
+  text-overflow: clip !important;
+}
+.dashboard-page .dashboard-task-project {
+  margin-top: 3px !important;
+  color: #475569 !important;
+  font-size: 11px !important;
+  line-height: 1.3 !important;
+  font-weight: 500 !important;
+}
+.dashboard-page .dashboard-task-meta {
+  min-width: 54px;
+}
+.dashboard-page .dashboard-task-date {
+  color: #334155 !important;
+  font-size: 11px !important;
+  line-height: 1.2 !important;
+  font-weight: 650 !important;
+}
+.dashboard-page .dashboard-task-priority {
+  display: inline-flex;
+  align-items: center;
+  min-height: 18px;
+  padding: 1px 6px !important;
+  border-radius: 999px !important;
+  font-size: 10px !important;
+  font-weight: 750 !important;
+}
+.dashboard-page .dashboard-task-priority[data-priority='medium'] {
+  background: #fef3c7 !important;
+  color: #92400e !important;
+}
+.dashboard-page .dashboard-task-priority[data-priority='high'] {
+  background: #fee2e2 !important;
+  color: #b91c1c !important;
+}
+.dashboard-page .dashboard-task-priority[data-priority='low'] {
+  background: #dcfce7 !important;
+  color: #166534 !important;
+}
+@media (max-width: 1100px) {
+  .dashboard-page .data-grid,
+  .dashboard-page .charts-grid {
+    grid-template-columns: 1fr !important;
+  }
+}
+`
+
 // --- Sub-components ----------------------------------------------------------
 
-function ChartCard({ title, sub, children, action, filter, filterOptions, onFilterChange }: {
+function ChartCard({ title, sub, children, action, filter, filterOptions, onFilterChange, className }: {
   title: string; sub: string; children: ReactNode; action?: ReactNode
   filter?: string; filterOptions?: string[]; onFilterChange?: (v: string) => void
+  className?: string
 }) {
   const [dropOpen, setDropOpen] = useState(false)
   const dropRef = useRef<HTMLDivElement>(null)
@@ -1629,7 +1763,7 @@ function ChartCard({ title, sub, children, action, filter, filterOptions, onFilt
   }, [dropOpen])
 
   return (
-    <div className="dashboard-card" style={{ background: '#fff', borderRadius: 6, border: '1px solid #e5e7eb', padding: '18px 20px 20px', boxShadow: '0 1px 4px rgba(0,0,0,0.05)', display: 'flex', flexDirection: 'column' }}>
+    <div className={`dashboard-card${className ? ` ${className}` : ''}`} style={{ background: '#fff', borderRadius: 6, border: '1px solid #e5e7eb', padding: '18px 20px 20px', boxShadow: '0 1px 4px rgba(0,0,0,0.05)', display: 'flex', flexDirection: 'column' }}>
       <div className="dashboard-card-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: sub ? 2 : 12 }}>
         <h3 style={{ margin: 0, fontSize: 14.5, fontWeight: 600, color: '#111827', letterSpacing: '-0.1px' }}>{title}</h3>
         {filter ? (
@@ -1658,7 +1792,7 @@ function ChartCard({ title, sub, children, action, filter, filterOptions, onFilt
           </div>
         ) : action}
       </div>
-      {sub && <p style={{ margin: '4px 0 14px', fontSize: 12, color: '#9ca3af' }}>{sub}</p>}
+      {sub && <p style={{ margin: '4px 0 14px', fontSize: 12, color: '#000000' }}>{sub}</p>}
       {children}
     </div>
   )
@@ -1672,6 +1806,164 @@ function Sparkline({ data, color }: { data: number[]; color: string }) {
   return (
     <svg width={w} height={h} style={{ display: 'block' }}>
       <polyline points={pts} fill="none" stroke={color} strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  )
+}
+
+type DashboardChartDatum = Record<string, string | number | undefined>
+type DashboardChartSeries = { key: string; name: string; color: string; opacity?: number }
+
+function chartNumber(value: unknown) {
+  return typeof value === 'number' && Number.isFinite(value) ? value : 0
+}
+
+function chartLabel(value: number) {
+  const abs = Math.abs(value)
+  if (abs >= 1000000) return `${value < 0 ? '-' : ''}${Math.round(abs / 1000000)}m`
+  if (abs >= 1000) return `${value < 0 ? '-' : ''}${Math.round(abs / 1000)}k`
+  return String(Math.round(value))
+}
+
+function niceChartMax(value: number) {
+  if (value <= 0) return 1
+  const magnitude = 10 ** Math.floor(Math.log10(value))
+  const normalized = (value * 1.12) / magnitude
+  const step = [1, 2, 3, 4, 5, 6, 8, 10].find(candidate => normalized <= candidate) || 10
+  return step * magnitude
+}
+
+function chartRows(data: DashboardChartDatum[], series: DashboardChartSeries[], labelKey: string) {
+  if (data.length) return data
+  return [{ [labelKey]: 'No data', ...Object.fromEntries(series.map(item => [item.key, 0])) }]
+}
+
+function chartRange(rows: DashboardChartDatum[], series: DashboardChartSeries[], allowNegative = false) {
+  const values = rows.flatMap(row => series.map(item => chartNumber(row[item.key])))
+  const maxValue = niceChartMax(Math.max(1, ...values, allowNegative ? 0 : 1))
+  const minValue = allowNegative ? Math.min(0, ...values) : 0
+  if (maxValue === minValue) return { min: 0, max: maxValue + 1 }
+  return { min: minValue, max: maxValue }
+}
+
+function DashboardBarChart({
+  data,
+  series,
+  labelKey = 'month',
+  height = 152,
+  allowNegative = false,
+  useDatumColor = false,
+}: {
+  data: DashboardChartDatum[]
+  series: DashboardChartSeries[]
+  labelKey?: string
+  height?: number
+  allowNegative?: boolean
+  useDatumColor?: boolean
+}) {
+  const rows = chartRows(data, series, labelKey)
+  const width = 520
+  const left = 36
+  const right = 10
+  const top = 8
+  const bottom = 24
+  const plotW = width - left - right
+  const plotH = height - top - bottom
+  const range = chartRange(rows, series, allowNegative)
+  const scaleY = (value: number) => top + ((range.max - value) / (range.max - range.min)) * plotH
+  const baseline = scaleY(0)
+  const groupW = plotW / Math.max(rows.length, 1)
+  const maxBarW = series.length === 1 ? 24 : 16
+  const barW = Math.max(5, Math.min(maxBarW, (groupW * 0.66) / Math.max(series.length, 1)))
+  const totalBarW = barW * series.length
+  const labelEvery = Math.max(1, Math.ceil(rows.length / 6))
+  const ticks = allowNegative && range.min < 0 ? [range.max, 0, range.min] : [range.max, range.max / 2, 0]
+
+  return (
+    <svg viewBox={`0 0 ${width} ${height}`} width="100%" height="100%" preserveAspectRatio="none" role="img" aria-label="Dashboard bar chart" style={{ display: 'block', overflow: 'visible' }}>
+      {ticks.map((tick, index) => {
+        const y = scaleY(tick)
+        return (
+          <g key={`${tick}-${index}`}>
+            <line x1={left} x2={width - right} y1={y} y2={y} stroke="#eef2f7" strokeDasharray="3 3" />
+            <text x={left - 8} y={y + 3} textAnchor="end" fontSize="10" fill="#000000">{chartLabel(tick)}</text>
+          </g>
+        )
+      })}
+      {rows.map((row, rowIndex) => {
+        const groupX = left + rowIndex * groupW + groupW / 2
+        return (
+          <g key={`${String(row[labelKey] || rowIndex)}-${rowIndex}`}>
+            {series.map((item, seriesIndex) => {
+              const value = chartNumber(row[item.key])
+              const y = Math.min(scaleY(value), baseline)
+              const barH = Math.max(0, Math.abs(scaleY(value) - baseline))
+              const x = groupX - totalBarW / 2 + seriesIndex * barW
+              const color = useDatumColor && typeof row.fill === 'string' ? row.fill : item.color
+              return <rect key={item.key} x={x} y={y} width={Math.max(2, barW - 2)} height={barH} rx={3} fill={color} opacity={item.opacity ?? 1} />
+            })}
+            {rowIndex % labelEvery === 0 && (
+              <text x={groupX} y={height - 6} textAnchor="middle" fontSize="10" fill="#000000">{String(row[labelKey] || '')}</text>
+            )}
+          </g>
+        )
+      })}
+      {allowNegative && <line x1={left} x2={width - right} y1={baseline} y2={baseline} stroke="#dbe3ef" />}
+    </svg>
+  )
+}
+
+function DashboardLineChart({
+  data,
+  series,
+  labelKey = 'month',
+  height = 148,
+  area = false,
+}: {
+  data: DashboardChartDatum[]
+  series: DashboardChartSeries[]
+  labelKey?: string
+  height?: number
+  area?: boolean
+}) {
+  const rows = chartRows(data, series, labelKey)
+  const width = 520
+  const left = 36
+  const right = 10
+  const top = 8
+  const bottom = 24
+  const plotW = width - left - right
+  const plotH = height - top - bottom
+  const range = chartRange(rows, series)
+  const scaleY = (value: number) => top + ((range.max - value) / (range.max - range.min)) * plotH
+  const scaleX = (index: number) => rows.length <= 1 ? left + plotW / 2 : left + (index / (rows.length - 1)) * plotW
+  const labelEvery = Math.max(1, Math.ceil(rows.length / 6))
+  const ticks = [range.max, range.max / 2, 0]
+
+  return (
+    <svg viewBox={`0 0 ${width} ${height}`} width="100%" height="100%" preserveAspectRatio="none" role="img" aria-label="Dashboard line chart" style={{ display: 'block', overflow: 'visible' }}>
+      {ticks.map((tick, index) => {
+        const y = scaleY(tick)
+        return (
+          <g key={`${tick}-${index}`}>
+            <line x1={left} x2={width - right} y1={y} y2={y} stroke="#eef2f7" strokeDasharray="3 3" />
+            <text x={left - 8} y={y + 3} textAnchor="end" fontSize="10" fill="#000000">{chartLabel(tick)}</text>
+          </g>
+        )
+      })}
+      {series.map(item => {
+        const points = rows.map((row, index) => ({ x: scaleX(index), y: scaleY(chartNumber(row[item.key])) }))
+        const linePath = points.map((point, index) => `${index === 0 ? 'M' : 'L'} ${point.x} ${point.y}`).join(' ')
+        const areaPath = `${linePath} L ${points[points.length - 1].x} ${scaleY(0)} L ${points[0].x} ${scaleY(0)} Z`
+        return (
+          <g key={item.key}>
+            {area && <path d={areaPath} fill={item.color} opacity={item.opacity ?? 0.14} />}
+            <path d={linePath} fill="none" stroke={item.color} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
+          </g>
+        )
+      })}
+      {rows.map((row, index) => index % labelEvery === 0 && (
+        <text key={`${String(row[labelKey] || index)}-${index}`} x={scaleX(index)} y={height - 6} textAnchor="middle" fontSize="10" fill="#000000">{String(row[labelKey] || '')}</text>
+      ))}
     </svg>
   )
 }
@@ -1696,16 +1988,16 @@ function KpiCard({ label, value, t, neg = false, icon: Icon, iconColor, sparkDat
           <Icon size={15} color={iconColor} />
         </div>
         <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ fontSize: 13, color: '#9ca3af', fontWeight: 500, marginBottom: 3, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{label}</div>
+          <div style={{ fontSize: 13, color: '#000000', fontWeight: 500, marginBottom: 3, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{label}</div>
           <div style={{ fontSize: 20, fontWeight: 700, color: '#111827', fontFamily: display, letterSpacing: '-0.4px', marginBottom: 4 }}>{value}</div>
           {showForecast ? (
             <div style={{ display: 'grid', gap: 2, marginBottom: 4 }}>
-              <div style={{ fontSize: 11, color: '#6b7280', fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{money(forecast)} Forecast</div>
+              <div style={{ fontSize: 11, color: '#000000', fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{money(forecast)} Forecast</div>
               {showDelta ? <div style={{ fontSize: 11, color: delta > 0 ? '#f59e0b' : '#22c55e', fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{money(Math.abs(delta))} Delta</div> : null}
             </div>
           ) : null}
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 4 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 3, fontSize: 10, color: t.zero ? '#9ca3af' : positive ? '#22c55e' : '#ef4444', fontWeight: 500, minWidth: 0 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 3, fontSize: 10, color: t.zero ? '#000000' : positive ? '#22c55e' : '#ef4444', fontWeight: 500, minWidth: 0 }}>
               {!t.zero && (t.up ? <TrendingUp size={10} /> : <TrendingDown size={10} />)}
               <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{t.text}</span>
             </div>
@@ -1718,14 +2010,53 @@ function KpiCard({ label, value, t, neg = false, icon: Icon, iconColor, sparkDat
 }
 
 function Donut({ data, center }: { data: Array<{ name: string; value: number; color: string }>; center: string }) {
+  const total = data.reduce((sum, item) => sum + Math.max(item.value, 0), 0) || 1
+  const radius = 52
+  const circumference = 2 * Math.PI * radius
+  const segments = data.reduce<{
+    offset: number
+    items: Array<{ item: { name: string; value: number; color: string }; dash: string; dashOffset: number }>
+  }>((acc, item) => {
+    const value = Math.max(item.value, 0)
+    const length = (value / total) * circumference
+    return {
+      offset: acc.offset + length,
+      items: [
+        ...acc.items,
+        {
+          item,
+          dash: `${Math.max(0, length - (data.length > 1 ? 2 : 0))} ${circumference}`,
+          dashOffset: -acc.offset,
+        },
+      ],
+    }
+  }, { offset: 0, items: [] }).items
+
   return (
     <div style={{ position: 'relative', width: 130, height: 130, flexShrink: 0 }}>
-      <ResponsiveContainer width="100%" height="100%">
-        <PieChart><Pie data={data} innerRadius={40} outerRadius={62} dataKey="value" strokeWidth={0}>{data.map(d => <Cell key={d.name} fill={d.color} />)}</Pie></PieChart>
-      </ResponsiveContainer>
+      <svg viewBox="0 0 130 130" width="130" height="130" role="img" aria-label="Dashboard donut chart" style={{ display: 'block' }}>
+        <circle cx="65" cy="65" r={radius} fill="none" stroke="#eef2f7" strokeWidth="20" />
+        {segments.map(({ item, dash, dashOffset }) => {
+          return (
+            <circle
+              key={item.name}
+              cx="65"
+              cy="65"
+              r={radius}
+              fill="none"
+              stroke={item.color}
+              strokeWidth="20"
+              strokeDasharray={dash}
+              strokeDashoffset={dashOffset}
+              strokeLinecap="butt"
+              transform="rotate(-90 65 65)"
+            />
+          )
+        })}
+      </svg>
       <div style={{ position: 'absolute', inset: 0, display: 'grid', placeItems: 'center', textAlign: 'center' }}>
         <div>
-          <div style={{ fontSize: 9, color: '#9ca3af', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.6px' }}>Total</div>
+          <div style={{ fontSize: 9, color: '#000000', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.6px' }}>Total</div>
           <div style={{ fontSize: 20, fontWeight: 700, color: '#111827', fontFamily: display }}>{center}</div>
         </div>
       </div>
@@ -1734,7 +2065,7 @@ function Donut({ data, center }: { data: Array<{ name: string; value: number; co
 }
 
 function DonutLegend({ data, total }: { data: Array<{ name: string; value: number; color: string }>; total: number }) {
-  if (!data.length) return <div style={{ fontSize: 12, color: '#9ca3af' }}>No data yet.</div>
+  if (!data.length) return <div style={{ fontSize: 12, color: '#000000' }}>No data yet.</div>
   return (
     <div style={{ flex: 1, display: 'grid', gap: 7 }}>
       {data.map(d => (
@@ -1742,7 +2073,7 @@ function DonutLegend({ data, total }: { data: Array<{ name: string; value: numbe
           <span style={{ display: 'flex', alignItems: 'center', gap: 6, color: '#374151' }}>
             <span style={{ width: 7, height: 7, borderRadius: '50%', background: d.color, flexShrink: 0 }} />{d.name}
           </span>
-          <span style={{ color: '#9ca3af', whiteSpace: 'nowrap' }}>{d.value} ({pct(d.value, total)}%)</span>
+          <span style={{ color: '#000000', whiteSpace: 'nowrap' }}>{d.value} ({pct(d.value, total)}%)</span>
         </div>
       ))}
     </div>
@@ -1761,11 +2092,11 @@ function FinBlock({ icon: Icon, iconColor, label, value, t, divider = false }: {
         <div style={{ width: 38, height: 38, borderRadius: 6, background: `${iconColor}18`, color: iconColor, display: 'grid', placeItems: 'center', flexShrink: 0 }}>
           <Icon size={18} color={iconColor} />
         </div>
-        <div style={{ fontSize: 13, color: '#6b7280', fontWeight: 500, lineHeight: 1.3 }}>{label}</div>
+        <div style={{ fontSize: 13, color: '#000000', fontWeight: 500, lineHeight: 1.3 }}>{label}</div>
       </div>
       <div style={{ textAlign: 'right', flexShrink: 0 }}>
         <div style={{ fontSize: 17, fontWeight: 700, color: '#111827', fontFamily: display, letterSpacing: '-0.2px', whiteSpace: 'nowrap' }}>{value}</div>
-        <div style={{ fontSize: 11, color: t.zero ? '#9ca3af' : t.up ? iconColor : '#ef4444', marginTop: 2 }}>{t.text}</div>
+        <div style={{ fontSize: 11, color: t.zero ? '#000000' : t.up ? iconColor : '#ef4444', marginTop: 2 }}>{t.text}</div>
       </div>
     </div>
   )
@@ -1780,19 +2111,19 @@ const activityIcons = {
   supplier:    { icon: Package,        bg: '#f0f9ff', color: '#6366f1' },
 } as const
 
-function ActivityRow({ item, divider = false }: { item: ActivityItem; divider?: boolean }) {
+function ActivityRow({ item, divider = false, className }: { item: ActivityItem; divider?: boolean; className?: string }) {
   const cfg = activityIcons[item.type]
   const Icon = cfg.icon
   return (
-    <div style={{ display: 'flex', gap: 12, alignItems: 'flex-start', padding: '12px 0', borderTop: divider ? '1px solid #f1f3f5' : 'none' }}>
+    <div className={className} style={{ display: 'flex', gap: 12, alignItems: 'flex-start', padding: '12px 0', borderTop: divider ? '1px solid #f1f3f5' : 'none' }}>
       <div style={{ width: 34, height: 34, borderRadius: 6, background: cfg.bg, color: cfg.color, display: 'grid', placeItems: 'center', flexShrink: 0 }}>
         <Icon size={15} />
       </div>
-      <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{ fontSize: 12.5, fontWeight: 500, color: '#374151', lineHeight: 1.4 }}>{item.description}</div>
-        <div style={{ fontSize: 11, color: '#9ca3af', marginTop: 2 }}>{item.subtext}</div>
+      <div className="dashboard-activity-copy" style={{ flex: 1, minWidth: 0 }}>
+        <div className="dashboard-activity-description" style={{ fontSize: 12.5, fontWeight: 500, color: '#374151', lineHeight: 1.4 }}>{item.description}</div>
+        <div className="dashboard-activity-subtext" style={{ fontSize: 11, color: '#000000', marginTop: 2 }}>{item.subtext}</div>
       </div>
-      <div style={{ fontSize: 11, color: '#9ca3af', flexShrink: 0, whiteSpace: 'nowrap', paddingTop: 1 }}>{timeAgo(item.date)}</div>
+      <div className="dashboard-activity-time" style={{ fontSize: 11, color: '#000000', flexShrink: 0, whiteSpace: 'nowrap', paddingTop: 1 }}>{timeAgo(item.date)}</div>
     </div>
   )
 }
@@ -1800,8 +2131,8 @@ function ActivityRow({ item, divider = false }: { item: ActivityItem; divider?: 
 function EmptyBox({ msg, sub }: { msg: string; sub: string }) {
   return (
     <div style={{ textAlign: 'center', padding: '16px 8px' }}>
-      <div style={{ fontSize: 13, fontWeight: 500, color: '#6b7280', marginBottom: 4 }}>{msg}</div>
-      <div style={{ fontSize: 12, color: '#9ca3af' }}>{sub}</div>
+      <div style={{ fontSize: 13, fontWeight: 500, color: '#000000', marginBottom: 4 }}>{msg}</div>
+      <div style={{ fontSize: 12, color: '#000000' }}>{sub}</div>
     </div>
   )
 }
@@ -1816,7 +2147,7 @@ function ModuleCard({ m }: { m: { title: string; href: string; icon: ComponentTy
         </div>
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ fontSize: 12, fontWeight: 600, color: '#111827', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{m.title}</div>
-          <div style={{ fontSize: 11, color: '#9ca3af', marginTop: 1 }}>
+          <div style={{ fontSize: 11, color: '#000000', marginTop: 1 }}>
             <span style={{ fontWeight: 600, color: m.color }}>{m.stat}</span> {m.label}
           </div>
         </div>
@@ -1838,8 +2169,8 @@ function stageBadgeColor(status: string): { bg: string; text: string } {
     case 'awarded':
     case 'won':         return { bg: '#dcfce7', text: '#15803d' }
     case 'closed':
-    case 'won / closed':return { bg: '#f1f5f9', text: '#475569' }
-    default:            return { bg: '#f3f4f6', text: '#6b7280' }
+    case 'won / closed':return { bg: '#f1f5f9', text: '#000000' }
+    default:            return { bg: '#f3f4f6', text: '#000000' }
   }
 }
 
@@ -1855,7 +2186,7 @@ function statusBadgeColor(status: string): { bg: string; text: string } {
     case 'partially paid':
     case 'unpaid':   return { bg: '#fff7ed', text: '#9a3412' }
     case 'overdue':  return { bg: '#fef2f2', text: '#991b1b' }
-    default:         return { bg: '#f3f4f6', text: '#6b7280' }
+    default:         return { bg: '#f3f4f6', text: '#000000' }
   }
 }
 
@@ -1895,8 +2226,8 @@ function TabModules({ title, subtitle, modules }: { title: string; subtitle: str
     <div>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
         <div>
-          <div style={{ fontSize: 12, fontWeight: 700, color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.06em' }}>{title}</div>
-          {subtitle && <div style={{ fontSize: 12.5, color: '#9ca3af', marginTop: 3 }}>{subtitle}</div>}
+          <div style={{ fontSize: 12, fontWeight: 700, color: '#000000', textTransform: 'uppercase', letterSpacing: '0.06em' }}>{title}</div>
+          {subtitle && <div style={{ fontSize: 12.5, color: '#000000', marginTop: 3 }}>{subtitle}</div>}
         </div>
       </div>
       <div className="modules-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(5, minmax(0, 1fr))', gap: 12 }}>

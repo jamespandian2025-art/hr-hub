@@ -6,6 +6,8 @@ import {
   AlertTriangle, ArrowLeft, CalendarDays, CheckCircle2, ChevronRight, Download, Eye,
   FileText, Pencil, Plus, Search, Users, Wallet, X,
 } from 'lucide-react'
+import { AnalyticsToggleButton, CollapsibleAnalytics, useAnalyticsDisclosure } from '@/components/AnalyticsDisclosure'
+import { createHrRecord, listHrRecords, updateHrRecord } from '@/lib/hrms/client'
 import { loadLoanRequests, LoanRequest, loanScheduledDeduction, saveLoanRequests } from '../loan-requests/loanData'
 import { allowanceRequestKey, AllowanceRequest, appendAuditLog, appendFinanceNotification, employeeExportName, loadStored as loadEnterpriseStored, numericExport, saveStored as saveEnterpriseStored } from '../enterpriseData'
 import { resolvePayrollLoanDeduction } from './loanDeductionRules'
@@ -92,6 +94,11 @@ type PayrollRecord = {
   source?: 'payroll-run'
   paidAt?: string
   createdAt: string
+  updatedAt?: string
+  // Employee code (e.g. EMP-0001) carried so the portal can read a payslip
+  // server-side: ownership is matched against the session employeeId, and the
+  // server's record-owner keys include employeeCode. Not used in any calculation.
+  employeeCode?: string
 }
 
 type PayrollRow = PayrollRecord & {
@@ -210,6 +217,19 @@ function cleanPayrollRecords(employees: Employee[], records: PayrollRecord[]) {
   return records.filter(record => record.source === 'payroll-run' && employeeIds.has(record.employeeId))
 }
 
+// Merge server + local payroll records by id, keeping whichever was updated last
+// so a Finance release on the server supersedes a stale local copy and vice versa.
+function mergePayrollById(rows: PayrollRecord[]) {
+  const map = new Map<string, PayrollRecord>()
+  for (const row of rows) {
+    if (!row?.id) continue
+    const existing = map.get(row.id)
+    const stamp = (record: PayrollRecord) => new Date(record.updatedAt || record.createdAt || 0).getTime()
+    if (!existing || stamp(row) >= stamp(existing)) map.set(row.id, row)
+  }
+  return Array.from(map.values())
+}
+
 function initials(name?: string) {
   return (name || 'HR').split(' ').filter(Boolean).map(part => part[0]).join('').slice(0, 2).toUpperCase() || 'HR'
 }
@@ -237,7 +257,7 @@ function badgeTone(status?: string) {
   if (status === 'Approved' || status === 'Generated') return { bg: '#dbeafe', text: '#1d4ed8' }
   if (status === 'Processing') return { bg: '#dbeafe', text: '#1d4ed8' }
   if (status === 'Pending') return { bg: '#fef3c7', text: '#d97706' }
-  return { bg: '#f1f5f9', text: '#64748b' }
+  return { bg: '#f1f5f9', text: '#000000' }
 }
 
 function roundPeso(value: number) {
@@ -526,14 +546,26 @@ export default function HrPayrollPage() {
   const [detail, setDetail] = useState<DetailView>(null)
   const [notice, setNotice] = useState('')
   const [accountRole, setAccountRole] = useState('')
+  const analytics = useAnalyticsDisclosure('wiseflow:analytics:hr-payroll')
 
   useEffect(() => {
-    const load = () => {
+    let cancelled = false
+    const load = async () => {
       const storedEmployees = loadStored<Employee[]>(employeeKey, [])
       const storedAttendance = loadStored<PayrollAttendanceRecord[]>(attendanceKey, [])
       const storedRecords = loadStored<PayrollRecord[]>(payrollKey, [])
       const storedSchedule = { ...defaultPayrollSchedule, ...loadStored<Partial<PayrollScheduleSettings>>(payrollScheduleKey, {}) }
-      const cleanedRecords = cleanPayrollRecords(storedEmployees, storedRecords)
+      // Pull server payroll so runs/releases made on another device show up here.
+      // Merge happens before the existing recalc pipeline, which is unchanged.
+      let baseRecords = storedRecords
+      try {
+        const server = await listHrRecords<PayrollRecord>('payroll-records', { 'x-hr-role': 'HR' })
+        baseRecords = mergePayrollById([...server, ...storedRecords])
+      } catch {
+        baseRecords = storedRecords
+      }
+      if (cancelled) return
+      const cleanedRecords = cleanPayrollRecords(storedEmployees, baseRecords)
       const taxReadyRecords = recalculatePayrollTaxes(storedEmployees, cleanedRecords, storedSchedule.frequency, storedAttendance)
       setEmployees(storedEmployees)
       setAttendanceRecords(storedAttendance)
@@ -547,7 +579,16 @@ export default function HrPayrollPage() {
     }
     load()
     window.addEventListener('storage', load)
-    return () => window.removeEventListener('storage', load)
+    window.addEventListener('focus', load)
+    window.addEventListener('wiseflow:hr-data-changed', load)
+    const timer = window.setInterval(load, 4000)
+    return () => {
+      cancelled = true
+      window.removeEventListener('storage', load)
+      window.removeEventListener('focus', load)
+      window.removeEventListener('wiseflow:hr-data-changed', load)
+      window.clearInterval(timer)
+    }
   }, [])
 
   const activeEmployees = useMemo(
@@ -722,6 +763,7 @@ export default function HrPayrollPage() {
         return {
           id: `payroll_${employee.id}_${createdAt}`,
           employeeId: employee.id,
+          employeeCode: employee.employeeId || employee.id,
           period: periodNow,
           gross: grossWithAllowances,
           deductions: deductionValue,
@@ -742,6 +784,14 @@ export default function HrPayrollPage() {
     const next = [...nextRecords, ...records]
     setRecords(next)
     saveStored(payrollKey, next)
+    // Persist the run to the shared HR store. HR may create payroll only as
+    // Pending/Processing (server enforces this); Finance approves/releases later.
+    void Promise.allSettled(nextRecords.map(record => createHrRecord<PayrollRecord>('payroll-records', record as unknown as Record<string, unknown>)))
+      .then(results => {
+        window.dispatchEvent(new Event('wiseflow:hr-data-changed'))
+        const failed = results.filter(result => result.status === 'rejected').length
+        if (failed) setNotice(`Payslips created, but ${failed} could not sync to HR records and are saved locally only.`)
+      })
     if (loanAllocations.size) {
       const nextLoanRequests = loanRequests.map(request => {
         const paidThisRun = loanAllocations.get(request.id) || 0
@@ -790,11 +840,17 @@ export default function HrPayrollPage() {
   }
 
   function updateRecordStatus(row: PayrollRow, status: PayrollStatus, patch: Partial<PayrollRecord> = {}) {
+    const updatedAt = new Date().toISOString()
     const next = records.map(record =>
-      record.id === row.id ? { ...record, ...patch, status } : record,
+      record.id === row.id ? { ...record, ...patch, status, updatedAt } : record,
     )
     setRecords(next)
     saveStored(payrollKey, next)
+    // Sync the Finance decision (approve/release) to the shared HR store so it is
+    // authoritative cross-device. payroll-records update is Finance/Admin only.
+    void updateHrRecord<PayrollRecord>('payroll-records', row.id, { ...patch, status, updatedAt })
+      .then(() => window.dispatchEvent(new Event('wiseflow:hr-data-changed')))
+      .catch(error => setNotice(error instanceof Error ? `Saved locally, but HR sync failed: ${error.message}` : 'Saved locally, but HR sync failed.'))
   }
 
   function approvePayslip(row: PayrollRow) {
@@ -893,6 +949,7 @@ export default function HrPayrollPage() {
         </div>
         <div style={payrollHeaderActionsStyle}>
           <SearchBox value={query} onChange={setQuery} placeholder="Search employees, payroll, payslips..." />
+          <AnalyticsToggleButton open={analytics.open} onToggle={analytics.toggle} panelId={analytics.panelId} style={secondaryButtonStyle} />
           <button onClick={() => setShowSchedule(true)} style={secondaryButtonStyle}><CalendarDays size={15} /> Payroll Settings</button>
           <button onClick={() => setShowRunChecklist(true)} style={primaryButtonStyle}><Plus size={15} /> Run Payroll</button>
         </div>
@@ -919,12 +976,14 @@ export default function HrPayrollPage() {
         </div>
       )}
 
-      <div style={metricGridStyle}>
+      <CollapsibleAnalytics open={analytics.open} id={analytics.panelId}>
+        <div style={metricGridStyle}>
         <Metric icon={Wallet} label="Total Payroll" value={money(totals.net)} sub={`${latestPeriod} · ${latestRows.length ? `${latestRows.length} payslip${latestRows.length === 1 ? '' : 's'}` : 'No payroll records'}`} color="#16a34a" bg="#dcfce7" />
         <Metric icon={Users} label="Employees Paid" value={totals.paid} sub="Paid records" color="#2563eb" bg="#dbeafe" />
         <Metric icon={CalendarDays} label="Current Payroll" value={periodNow} sub={`Run: ${formatDate(`${currentRun.runDate}T00:00:00`)} · Pay: ${formatDate(currentRun.payDate.toISOString())}`} color="#d97706" bg="#fef3c7" />
         <Metric icon={FileText} label="Needs Review / Release" value={totals.needsAction} sub={`${totals.pending} pending, ${totals.approved} approved`} color="#7c3aed" bg="#ede9fe" />
-      </div>
+        </div>
+      </CollapsibleAnalytics>
 
       <div style={workspaceSurfaceStyle}>
         <div style={tabsStyle}>
@@ -1087,7 +1146,7 @@ function PayslipDetail({ row, history, onExport }: { row: PayrollRow; history: P
             <div style={tableHeaderStyle}>
               <div>
                 <strong style={{ display: 'block', color: '#0f172a', fontSize: 16 }}>Payment History</strong>
-                <span style={{ display: 'block', color: '#64748b', fontSize: 13, marginTop: 4 }}>All saved payslips for this employee.</span>
+                <span style={{ display: 'block', color: '#000000', fontSize: 13, marginTop: 4 }}>All saved payslips for this employee.</span>
               </div>
               <button onClick={onExport} style={secondaryButtonStyle}><Download size={15} /> Download</button>
             </div>
@@ -1201,8 +1260,8 @@ function CycleDetail({ cycle, rows, onGenerateReport }: { cycle: CycleSummary; r
 
           <div style={cardStyle}>
             <SectionTitle title="Payroll Notes" />
-            <p style={{ margin: 0, color: '#64748b', fontSize: 13 }}>Notes are not stored for this payroll cycle yet.</p>
-            {(paidDays > 0 || absentDays > 0 || unrecordedDays > 0) && <p style={{ margin: '8px 0 0', color: '#64748b', fontSize: 13 }}>Attendance basis: {formatAttendanceCount(paidDays)} worked/paid day{paidDays === 1 ? '' : 's'}, {formatAttendanceCount(absentDays)} absent day{absentDays === 1 ? '' : 's'}, and {formatAttendanceCount(unrecordedDays)} unrecorded unpaid day{unrecordedDays === 1 ? '' : 's'}.</p>}
+            <p style={{ margin: 0, color: '#000000', fontSize: 13 }}>Notes are not stored for this payroll cycle yet.</p>
+            {(paidDays > 0 || absentDays > 0 || unrecordedDays > 0) && <p style={{ margin: '8px 0 0', color: '#000000', fontSize: 13 }}>Attendance basis: {formatAttendanceCount(paidDays)} worked/paid day{paidDays === 1 ? '' : 's'}, {formatAttendanceCount(absentDays)} absent day{absentDays === 1 ? '' : 's'}, and {formatAttendanceCount(unrecordedDays)} unrecorded unpaid day{unrecordedDays === 1 ? '' : 's'}.</p>}
           </div>
         </div>
 
@@ -1215,7 +1274,7 @@ function CycleDetail({ cycle, rows, onGenerateReport }: { cycle: CycleSummary; r
                   <span style={timelineDotStyle(step.done)}>{step.done ? <CheckCircle2 size={15} /> : index + 1}</span>
                   <span>
                     <strong style={{ display: 'block', color: '#0f172a', fontSize: 13 }}>{step.label}</strong>
-                    <small style={{ display: 'block', color: '#64748b', marginTop: 4 }}>{step.value}</small>
+                    <small style={{ display: 'block', color: '#000000', marginTop: 4 }}>{step.value}</small>
                   </span>
                 </div>
               ))}
@@ -1293,7 +1352,7 @@ function ItemDetail({ item, kind }: { item: PayrollItem; kind: NonNullable<Detai
 
           <div style={cardStyle}>
             <SectionTitle title="Notes" />
-            <p style={{ margin: 0, color: '#64748b', fontSize: 13 }}>
+            <p style={{ margin: 0, color: '#000000', fontSize: 13 }}>
               This record is derived from saved employee profile salary fields. No separate salary component table is used.
             </p>
           </div>
@@ -1330,7 +1389,7 @@ function ItemDetail({ item, kind }: { item: PayrollItem; kind: NonNullable<Detai
 
       <div style={cardStyle}>
         <SectionTitle title="Audit Trail" />
-        <p style={{ margin: 0, color: '#64748b', fontSize: 13 }}>No audit trail saved for this component.</p>
+        <p style={{ margin: 0, color: '#000000', fontSize: 13 }}>No audit trail saved for this component.</p>
       </div>
     </div>
   )
@@ -1343,7 +1402,7 @@ function PayslipDetailModal({ row, history, onClose, onExport }: { row: PayrollR
         <div style={modalHeaderStyle}>
           <div>
             <h2 style={{ margin: 0, color: '#0f172a', fontSize: 20, fontWeight: 900 }}>Payslip Details</h2>
-            <p style={{ margin: '6px 0 0', color: '#64748b', fontSize: 13 }}>{row.employeeName} - {row.period}</p>
+            <p style={{ margin: '6px 0 0', color: '#000000', fontSize: 13 }}>{row.employeeName} - {row.period}</p>
           </div>
           <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
             <button type="button" onClick={onExport} style={secondaryButtonStyle}><Download size={15} /> Export</button>
@@ -1524,7 +1583,7 @@ function PayslipsTable({ rows, onOpen, onApprove, onPaid, showControls = true }:
               }
             } : undefined}
           >
-            <Td><div style={{ display: 'flex', alignItems: 'center', gap: 10 }}><Avatar row={row} size={34} /><span><strong style={{ display: 'block' }}>{row.employeeName}</strong><small style={{ color: '#64748b' }}>{row.jobTitle}</small></span></div></Td>
+            <Td><div style={{ display: 'flex', alignItems: 'center', gap: 10 }}><Avatar row={row} size={34} /><span><strong style={{ display: 'block' }}>{row.employeeName}</strong><small style={{ color: '#000000' }}>{row.jobTitle}</small></span></div></Td>
             <Td>{row.employeeCode}</Td>
             <Td>{row.period}</Td>
             <Td>{periodRange(row.period)}</Td>
@@ -1632,7 +1691,7 @@ function PayrollScheduleModal({ settings, currentRun, open, onClose, onChange }:
             <span style={cycleIconStyle}><CalendarDays size={22} color="#16a34a" /></span>
             <span>
               <strong style={{ display: 'block', color: '#0f172a', fontSize: 17 }}>Payroll Settings</strong>
-              <small style={{ display: 'block', color: '#64748b', marginTop: 4 }}>
+              <small style={{ display: 'block', color: '#000000', marginTop: 4 }}>
                 Salary schedule, cutoff dates, and pay date preview.
               </small>
             </span>
@@ -1703,11 +1762,11 @@ function TableShell({ title, subtitle, empty, count, children }: { title: string
             <strong style={{ display: 'block', color: '#0f172a', fontSize: 17 }}>{title}</strong>
             <span style={countBadgeStyle}>{count}</span>
           </div>
-          {subtitle && <span style={{ display: 'block', color: '#64748b', fontSize: 13, lineHeight: 1.45, marginTop: 7, maxWidth: 980 }}>{subtitle}</span>}
+          {subtitle && <span style={{ display: 'block', color: '#000000', fontSize: 13, lineHeight: 1.45, marginTop: 7, maxWidth: 980 }}>{subtitle}</span>}
         </div>
       </div>
       <div style={tableScrollStyle}>{children}</div>
-      {count === 0 && <div style={{ padding: 24, color: '#64748b', fontSize: 13 }}>{empty}</div>}
+      {count === 0 && <div style={{ padding: 24, color: '#000000', fontSize: 13 }}>{empty}</div>}
     </div>
   )
 }
@@ -1789,7 +1848,7 @@ function SelectFilter({ value, onChange, options }: { value: string; onChange: (
 function SearchBox({ value, onChange, placeholder, compact }: { value: string; onChange: (value: string) => void; placeholder: string; compact?: boolean }) {
   return (
     <label style={{ ...inputStyle, minWidth: compact ? 260 : 330, display: 'flex', alignItems: 'center', gap: 8 }}>
-      <Search size={15} color="#94a3b8" />
+      <Search size={15} color="#000000" />
       <input value={value} onChange={event => onChange(event.target.value)} placeholder={placeholder} style={plainInputStyle} />
     </label>
   )
@@ -1810,7 +1869,7 @@ function PayrollReadinessPanel({ currentRun, activeEmployees, salaryReady, missi
       <div>
         <span style={panelEyebrowStyle}>RUN READINESS</span>
         <strong style={{ display: 'block', color: '#0f172a', fontSize: 18, marginTop: 4 }}>Payroll run checklist</strong>
-        <span style={{ display: 'block', marginTop: 5, color: '#64748b', fontSize: 13 }}>
+        <span style={{ display: 'block', marginTop: 5, color: '#000000', fontSize: 13 }}>
           Current run: {currentRun.range} · Generation date: {formatDate(`${currentRun.runDate}T00:00:00`)} · Pay date: {formatDate(currentRun.payDate.toISOString())}
         </span>
         <button type="button" onClick={onRunPayroll} style={{ ...primaryButtonStyle, marginTop: 14 }}>
@@ -1836,7 +1895,7 @@ function ReadinessItem({ label, value, ok, warn }: { label: string; value: numbe
       <span style={{ ...readinessDotStyle, background: bg, color }}>{ok ? <CheckCircle2 size={15} /> : warn ? <AlertTriangle size={15} /> : value}</span>
       <span>
         <strong style={{ display: 'block', color: '#0f172a', fontSize: 13 }}>{value}</strong>
-        <small style={{ color: '#64748b', fontSize: 12 }}>{label}</small>
+        <small style={{ color: '#000000', fontSize: 12 }}>{label}</small>
       </span>
     </div>
   )
@@ -1846,7 +1905,7 @@ function Metric({ icon: Icon, label, value, sub, color, bg }: { icon: ComponentT
   return (
     <div style={metricCardStyle}>
       <span style={{ width: 52, height: 52, borderRadius: 14, background: bg, display: 'grid', placeItems: 'center', flexShrink: 0 }}><Icon size={22} color={color} /></span>
-      <span style={{ minWidth: 0 }}><div style={{ color: '#475569', fontSize: 13, fontWeight: 700 }}>{label}</div><strong style={{ display: 'block', marginTop: 7, color: '#0f172a', fontSize: 21, lineHeight: 1.1 }}>{value}</strong><small style={{ display: 'block', marginTop: 7, color: '#64748b', lineHeight: 1.35 }}>{sub}</small></span>
+      <span style={{ minWidth: 0 }}><div style={{ color: '#000000', fontSize: 13, fontWeight: 700 }}>{label}</div><strong style={{ display: 'block', marginTop: 7, color: '#0f172a', fontSize: 21, lineHeight: 1.1 }}>{value}</strong><small style={{ display: 'block', marginTop: 7, color: '#000000', lineHeight: 1.35 }}>{sub}</small></span>
     </div>
   )
 }
@@ -1856,9 +1915,9 @@ function CycleMetric({ icon: Icon, label, value, sub, color, bg }: { icon: Compo
     <div style={cycleMetricStyle}>
       <span style={{ width: 46, height: 46, borderRadius: 14, background: bg, display: 'grid', placeItems: 'center' }}><Icon size={21} color={color} /></span>
       <span>
-        <small style={{ color: '#64748b', fontSize: 12 }}>{label}</small>
+        <small style={{ color: '#000000', fontSize: 12 }}>{label}</small>
         <strong style={{ display: 'block', marginTop: 6, color: '#0f172a', fontSize: 18 }}>{value}</strong>
-        {sub && <small style={{ display: 'block', color: '#64748b', marginTop: 5 }}>{sub}</small>}
+        {sub && <small style={{ display: 'block', color: '#000000', marginTop: 5 }}>{sub}</small>}
       </span>
     </div>
   )
@@ -1878,7 +1937,7 @@ function SectionTitle({ title }: { title: string }) {
 }
 
 function Fact({ label, value }: { label: string; value: string }) {
-  return <div style={factStyle}><span style={{ color: '#64748b' }}>{label}</span><strong style={{ textAlign: 'right' }}>{value}</strong></div>
+  return <div style={factStyle}><span style={{ color: '#000000' }}>{label}</span><strong style={{ textAlign: 'right' }}>{value}</strong></div>
 }
 
 function AmountLine({ label, value, strong, large, positive, negative }: { label: string; value: number; strong?: boolean; large?: boolean; positive?: boolean; negative?: boolean }) {
@@ -1909,7 +1968,7 @@ const pageHeaderStyle = { display: 'grid', gridTemplateColumns: 'repeat(auto-fit
 const panelEyebrowStyle = { display: 'block', color: '#16a34a', fontSize: 11, fontWeight: 900, letterSpacing: 0 }
 const payrollTitleStyle = { margin: 0, color: '#0f172a', fontSize: 28, lineHeight: 1.12, fontWeight: 900 }
 const pageTitleStyle = { margin: 0, color: '#0f172a', fontSize: 30, lineHeight: 1.05, fontWeight: 900 }
-const pageSubtitleStyle = { margin: '8px 0 0', color: '#475569', fontSize: 14, lineHeight: 1.5 }
+const pageSubtitleStyle = { margin: '8px 0 0', color: '#000000', fontSize: 14, lineHeight: 1.5 }
 const toolbarStyle = { display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 10, flexWrap: 'wrap' as const }
 const metricGridStyle = { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(245px, 1fr))', gap: 14 }
 const metricCardStyle = { background: '#fff', border: '1px solid #e5e7eb', borderRadius: 14, boxShadow: '0 12px 30px rgba(15,23,42,0.045)', padding: 18, display: 'flex', alignItems: 'center', gap: 16, minHeight: 110 }
@@ -1953,18 +2012,18 @@ const payslipModalCardStyle = { width: 'min(1100px, 100%)', maxHeight: 'calc(100
 const modalHeaderStyle = { padding: 18, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 14 }
 const modalFooterStyle = { borderTop: '1px solid #f1f5f9', padding: 18, display: 'flex', justifyContent: 'flex-end', gap: 10 }
 const fieldStyle = { display: 'grid', gap: 7, color: '#0f172a', fontSize: 13, fontWeight: 800 }
-const labelStyle = { color: '#475569', fontSize: 12, fontWeight: 800 }
+const labelStyle = { color: '#000000', fontSize: 12, fontWeight: 800 }
 const selectStyle = { width: '100%', minHeight: 40, border: '1px solid #e5e7eb', borderRadius: 8, background: '#fff', color: '#0f172a', padding: '0 12px', fontSize: 13, fontFamily: font }
 const schedulePreviewStyle = { border: '1px solid #bbf7d0', background: '#f0fdf4', borderRadius: 10, padding: 14, display: 'grid', gap: 7, color: '#166534', fontSize: 12, lineHeight: 1.45 }
 const iconButtonStyle = { width: 34, height: 34, border: '1px solid #e5e7eb', borderRadius: 8, background: '#fff', color: '#0f172a', display: 'inline-grid', placeItems: 'center', cursor: 'pointer' }
 const tableHeaderStyle = { display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 14, padding: '20px 22px', borderBottom: '1px solid #f1f5f9', flexWrap: 'wrap' as const, background: '#fff' }
-const countBadgeStyle = { borderRadius: 999, background: '#f1f5f9', color: '#475569', padding: '3px 9px', fontSize: 11, fontWeight: 900 }
+const countBadgeStyle = { borderRadius: 999, background: '#f1f5f9', color: '#000000', padding: '3px 9px', fontSize: 11, fontWeight: 900 }
 const tableScrollStyle = { overflowX: 'auto' as const, width: '100%' }
 const tableStyle = { width: '100%', borderCollapse: 'collapse' as const, minWidth: 860 }
-const thStyle = { textAlign: 'left' as const, padding: '14px 18px', color: '#475569', fontSize: 11, fontWeight: 900, background: '#f8fafc', whiteSpace: 'nowrap' as const, borderBottom: '1px solid #eaf0f7' }
+const thStyle = { textAlign: 'left' as const, padding: '14px 18px', color: '#000000', fontSize: 11, fontWeight: 900, background: '#f8fafc', whiteSpace: 'nowrap' as const, borderBottom: '1px solid #eaf0f7' }
 const tdStyle = { padding: '15px 18px', borderTop: '1px solid #f1f5f9', color: '#0f172a', fontSize: 12, verticalAlign: 'middle' as const, lineHeight: 1.45 }
 const trStyle = { background: '#fff' }
 const clickableTrStyle = { ...trStyle, cursor: 'pointer' }
-const mutedLineStyle = { display: 'block', color: '#64748b', fontSize: 12, marginTop: 5, lineHeight: 1.35 }
+const mutedLineStyle = { display: 'block', color: '#000000', fontSize: 12, marginTop: 5, lineHeight: 1.35 }
 const factStyle = { display: 'flex', justifyContent: 'space-between', gap: 18, padding: '10px 0', color: '#334155', fontSize: 13 }
 const amountLineStyle = { display: 'flex', justifyContent: 'space-between', padding: '11px 0', borderTop: '1px solid #f1f5f9' }

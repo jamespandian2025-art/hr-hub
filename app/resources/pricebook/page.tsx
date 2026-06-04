@@ -47,7 +47,7 @@ const labelStyle = {
 
 const helpTextStyle = {
   fontSize: '12px',
-  color: '#6b7280',
+  color: '#000000',
   lineHeight: 1.45,
 }
 
@@ -303,7 +303,7 @@ export default function PricebookPage() {
         <div style={{ fontSize: '24px', fontWeight: 600, color: '#111827', marginBottom: '6px' }}>
           {editingId ? 'Edit Pricebook Item' : 'Create Pricebook Item'}
         </div>
-        <div style={{ fontSize: '13px', color: '#9ca3af', marginBottom: '28px', display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+        <div style={{ fontSize: '13px', color: '#000000', marginBottom: '28px', display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
           <span style={{ color: '#6c63ff', fontWeight: 600 }}>Resources</span>
           <span>/</span>
           <span style={{ color: '#6c63ff', fontWeight: 600 }}>Pricebook</span>
@@ -316,7 +316,7 @@ export default function PricebookPage() {
             <div style={{ fontSize: '15px', fontWeight: 600, color: '#111827', marginBottom: '8px' }}>
               Item Details
             </div>
-            <div style={{ fontSize: '13px', color: '#6b7280', lineHeight: 1.6 }}>
+            <div style={{ fontSize: '13px', color: '#000000', lineHeight: 1.6 }}>
               Add reusable labor, material, equipment, or service prices for estimates and budgets.
             </div>
           </div>
@@ -382,7 +382,7 @@ export default function PricebookPage() {
             <div style={{ display: 'flex', justifyContent: 'space-between', gap: '12px', alignItems: 'center', flexWrap: 'wrap', padding: '12px 14px', background: '#f9fafb', borderRadius: '10px', border: '1px solid #f3f4f6' }}>
               <div>
                 <div style={{ fontSize: '13px', color: '#374151', fontWeight: 600 }}>Estimated margin</div>
-                <div style={{ fontSize: '12px', color: '#6b7280', marginTop: '3px' }}>Selling price minus base cost.</div>
+                <div style={{ fontSize: '12px', color: '#000000', marginTop: '3px' }}>Selling price minus base cost.</div>
               </div>
               <div style={{ fontSize: '15px', color: price >= cost ? '#059669' : '#ef4444', fontWeight: 600 }}>
                 {money(price - cost)}
@@ -412,7 +412,7 @@ export default function PricebookPage() {
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '16px', marginBottom: '8px', flexWrap: 'wrap' }}>
         <div>
           <div style={{ fontSize: '24px', fontWeight: 600, color: '#111827', marginBottom: '6px' }}>Pricebook</div>
-          <div style={{ fontSize: '13px', color: '#9ca3af', display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+          <div style={{ fontSize: '13px', color: '#000000', display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
             <span style={{ color: '#6c63ff', fontWeight: 600 }}>Resources</span>
             <span>/</span>
             <span>Pricebook</span>
@@ -446,9 +446,9 @@ export default function PricebookPage() {
           ['Average Markup', `${summary.averageMarkup}%`, 'Across all items'],
         ].map(([label, value, detail]) => (
           <div key={label} style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: '12px', padding: '18px' }}>
-            <div style={{ fontSize: '12px', color: '#6b7280', fontWeight: 600, marginBottom: '8px' }}>{label}</div>
+            <div style={{ fontSize: '12px', color: '#000000', fontWeight: 600, marginBottom: '8px' }}>{label}</div>
             <div style={{ fontSize: '20px', color: '#111827', fontWeight: 600, wordBreak: 'break-word' }}>{value}</div>
-            <div style={{ fontSize: '12px', color: '#9ca3af', fontWeight: 600, marginTop: '5px' }}>{detail}</div>
+            <div style={{ fontSize: '12px', color: '#000000', fontWeight: 600, marginTop: '5px' }}>{detail}</div>
           </div>
         ))}
       </div>
@@ -467,7 +467,7 @@ export default function PricebookPage() {
                 border: 'none',
                 borderBottom: activeTab === tab ? '2px solid #111827' : '2px solid transparent',
                 background: 'transparent',
-                color: activeTab === tab ? '#111827' : '#6b7280',
+                color: activeTab === tab ? '#111827' : '#000000',
                 fontSize: '13px',
                 fontWeight: activeTab === tab ? 800 : 600,
                 cursor: 'pointer',
@@ -475,7 +475,7 @@ export default function PricebookPage() {
               }}
             >
               {tab}
-              <span style={{ fontSize: '11px', padding: '1px 7px', borderRadius: '99px', background: activeTab === tab ? '#111827' : '#f3f4f6', color: activeTab === tab ? '#fff' : '#6b7280' }}>
+              <span style={{ fontSize: '11px', padding: '1px 7px', borderRadius: '99px', background: activeTab === tab ? '#111827' : '#f3f4f6', color: activeTab === tab ? '#fff' : '#000000' }}>
                 {tabCount(tab)}
               </span>
             </button>
@@ -493,7 +493,7 @@ export default function PricebookPage() {
           </select>
 
           <div style={{ flex: 1, minWidth: '220px', display: 'flex', alignItems: 'center', gap: '8px', padding: '8px 14px', border: '1px solid #e5e7eb', borderRadius: '8px', background: '#fafafa' }}>
-            <span style={{ color: '#9ca3af', fontSize: '13px', fontWeight: 600 }}>Search</span>
+            <span style={{ color: '#000000', fontSize: '13px', fontWeight: 600 }}>Search</span>
             <input
               value={search}
               onChange={event => setSearch(event.target.value)}
@@ -504,7 +504,7 @@ export default function PricebookPage() {
         </div>
 
         {filtered.length === 0 ? (
-          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '70px 24px', color: '#9ca3af', textAlign: 'center', gap: '12px' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '70px 24px', color: '#000000', textAlign: 'center', gap: '12px' }}>
             <div style={{ fontSize: '15px', fontWeight: 600 }}>No pricebook items yet</div>
             <div style={{ fontSize: '13px', fontWeight: 600 }}>Click + Add item to create reusable prices for budgets and estimates.</div>
           </div>
@@ -514,7 +514,7 @@ export default function PricebookPage() {
               <thead>
                 <tr style={{ background: '#fafafa' }}>
                   {['Item', 'Type', 'Unit', 'Cost', 'Markup', 'Price', 'Vendor', 'Status', ''].map(header => (
-                    <th key={header} style={{ padding: '12px 16px', textAlign: 'left', fontSize: '12px', fontWeight: 600, color: '#6b7280', textTransform: 'uppercase' }}>
+                    <th key={header} style={{ padding: '12px 16px', textAlign: 'left', fontSize: '12px', fontWeight: 600, color: '#000000', textTransform: 'uppercase' }}>
                       {header}
                     </th>
                   ))}
@@ -525,7 +525,7 @@ export default function PricebookPage() {
                   <tr key={item.id} style={{ borderTop: '1px solid #f3f4f6' }}>
                     <td style={{ padding: '15px 16px' }}>
                       <div style={{ fontSize: '13px', fontWeight: 600, color: '#111827' }}>{item.name}</div>
-                      {item.notes && <div style={{ fontSize: '12px', color: '#9ca3af', marginTop: '4px' }}>{item.notes}</div>}
+                      {item.notes && <div style={{ fontSize: '12px', color: '#000000', marginTop: '4px' }}>{item.notes}</div>}
                     </td>
                     <td style={cellStyle}>{item.itemType}</td>
                     <td style={cellStyle}>{item.unit}</td>
@@ -534,7 +534,7 @@ export default function PricebookPage() {
                     <td style={{ ...cellStyle, fontWeight: 600, color: '#111827' }}>{money(item.price)}</td>
                     <td style={cellStyle}>{item.vendor}</td>
                     <td style={{ padding: '15px 16px' }}>
-                      <span style={{ padding: '4px 10px', borderRadius: '99px', background: item.status === 'Active' ? '#d1fae5' : '#f3f4f6', color: item.status === 'Active' ? '#059669' : '#6b7280', fontSize: '11px', fontWeight: 600 }}>
+                      <span style={{ padding: '4px 10px', borderRadius: '99px', background: item.status === 'Active' ? '#d1fae5' : '#f3f4f6', color: item.status === 'Active' ? '#059669' : '#000000', fontSize: '11px', fontWeight: 600 }}>
                         {item.status.toUpperCase()}
                       </span>
                     </td>

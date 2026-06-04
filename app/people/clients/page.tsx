@@ -4,6 +4,7 @@ import Link from 'next/link'
 import type { ChangeEvent, ReactNode } from 'react'
 import { CheckCircle2, ChevronDown, CircleDollarSign, Copy, ExternalLink, Filter, Grid3X3, LayoutList, Mail, MoreHorizontal, Plus, Search, Trash2, Upload, UserCheck, UserMinus, UserPlus, UsersRound, X } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { AnalyticsToggleButton, CollapsibleAnalytics, useAnalyticsDisclosure } from '@/components/AnalyticsDisclosure'
 import { buildEmptyClient, ClientRecord, deleteClient, formatPeso, getInitials, loadClients, saveClient, slugify } from './clientData'
 import { companyScopedKey } from '@/lib/tenant/company'
 
@@ -50,6 +51,7 @@ export default function ClientsPage() {
   const [importMessage, setImportMessage] = useState<ImportMessage | null>(null)
   const [datasetImportOpen, setDatasetImportOpen] = useState(false)
   const [datasetsForImport, setDatasetsForImport] = useState<ClientImportDataset[]>([])
+  const analytics = useAnalyticsDisclosure('wiseflow:analytics:people-clients')
 
   useEffect(() => {
     let mounted = true
@@ -220,12 +222,20 @@ export default function ClientsPage() {
           <PageHeader
             title="Client Database"
             subtitle="Manage and monitor all your clients and their details."
-            actions={<ClientHeaderActions onCsvImport={importClientsFromCsv} onDatasetImport={openDatasetImport} />}
+            actions={(
+              <ClientHeaderActions
+                analyticsToggle={<AnalyticsToggleButton open={analytics.open} onToggle={analytics.toggle} panelId={analytics.panelId} style={{ ...secondaryButton, fontFamily: font }} />}
+                onCsvImport={importClientsFromCsv}
+                onDatasetImport={openDatasetImport}
+              />
+            )}
           />
 
-          <div style={statGrid}>
-            {stats.map(stat => <StatCard key={stat.label} {...stat} />)}
-          </div>
+          <CollapsibleAnalytics open={analytics.open} id={analytics.panelId}>
+            <div style={statGrid}>
+              {stats.map(stat => <StatCard key={stat.label} {...stat} />)}
+            </div>
+          </CollapsibleAnalytics>
         </div>
       </section>
 
@@ -347,9 +357,10 @@ function ClientDatabaseEmptyState({ importMessage, onCsvImport, onDatasetImport 
   )
 }
 
-function ClientHeaderActions({ onCsvImport, onDatasetImport }: { onCsvImport: (file?: File) => void | Promise<void>; onDatasetImport: () => void }) {
+function ClientHeaderActions({ analyticsToggle, onCsvImport, onDatasetImport }: { analyticsToggle?: ReactNode; onCsvImport: (file?: File) => void | Promise<void>; onDatasetImport: () => void }) {
   return (
     <>
+      {analyticsToggle}
       <ClientImportMenu onCsvImport={onCsvImport} onDatasetImport={onDatasetImport} />
       <Link href="/people/clients/new" style={primaryLink}><Plus size={16} /> Add Client <ChevronDown size={14} /></Link>
     </>
@@ -737,7 +748,7 @@ function PageHeader({ crumb, title, subtitle, actions }: { crumb?: string; title
 function StatCard({ label, value, detail, icon: Icon, color }: { label: string; value: string; detail: string; icon: typeof UsersRound; color: string }) {
   return (
     <div className="client-stat-card" style={statCard}>
-      <div style={softIcon(color)}><Icon size={24} /></div>
+      <div style={softIcon(color)}><Icon size={20} /></div>
       <div>
         <div style={statLabel}>{label}</div>
         <div style={statValue}>{value}</div>
@@ -1206,19 +1217,19 @@ const datasetModalBackdrop = { position: 'fixed' as const, inset: 0, zIndex: 100
 const datasetModal = { width: 'min(1040px, calc(100vw - 56px))', maxHeight: 'calc(100vh - 56px)', overflow: 'auto', borderRadius: 10, background: '#ffffff', boxShadow: '0 24px 70px rgba(15, 23, 42, 0.28)', color: '#0f172a' }
 const datasetModalHeader = { minHeight: 76, padding: '18px 22px', borderBottom: '1px solid #e2e8f0', display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 18 }
 const datasetModalTitle = { margin: 0, fontSize: 20, lineHeight: 1.2, fontWeight: 700, color: '#0f172a' }
-const datasetModalSubtitle = { margin: '6px 0 0', fontSize: 13, color: '#64748b', lineHeight: 1.45 }
+const datasetModalSubtitle = { margin: '6px 0 0', fontSize: 13, color: '#000000', lineHeight: 1.45 }
 const datasetModalClose = { width: 34, height: 34, border: '1px solid #e2e8f0', borderRadius: 8, background: '#ffffff', color: '#334155', display: 'grid', placeItems: 'center', cursor: 'pointer' }
 const datasetImportBody = { display: 'grid', gridTemplateColumns: '260px minmax(0, 1fr)', minHeight: 480 }
 const datasetPickerPanel = { padding: 18, borderRight: '1px solid #e2e8f0', background: '#f8fafc', display: 'grid', alignContent: 'start', gap: 14 }
 const datasetImportMain = { padding: 18, display: 'grid', gap: 16, alignContent: 'start' }
 const datasetImportLabel = { display: 'grid', gap: 7, color: '#334155', fontSize: 12, fontWeight: 700 }
 const datasetImportSelect = { width: '100%', height: 38, border: '1px solid #cbd5e1', borderRadius: 7, background: '#ffffff', color: '#0f172a', padding: '0 10px', fontSize: 13, fontWeight: 500 }
-const datasetImportHint = { color: '#64748b', fontSize: 12, fontWeight: 500, lineHeight: 1.35 }
+const datasetImportHint = { color: '#000000', fontSize: 12, fontWeight: 500, lineHeight: 1.35 }
 const datasetImportMeta = { border: '1px solid #e2e8f0', borderRadius: 8, background: '#ffffff', padding: 14, display: 'grid', gap: 4 }
 const mappingGrid = { display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 12 }
 const datasetPreviewPanel = { border: '1px solid #e2e8f0', borderRadius: 8, overflow: 'hidden', background: '#ffffff' }
 const datasetPreviewHeader = { minHeight: 44, padding: '0 14px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: '1px solid #e2e8f0', background: '#f8fafc', color: '#0f172a', fontSize: 13 }
-const datasetSelectAll = { display: 'inline-flex', alignItems: 'center', gap: 7, color: '#475569', fontSize: 12, fontWeight: 700 }
+const datasetSelectAll = { display: 'inline-flex', alignItems: 'center', gap: 7, color: '#000000', fontSize: 12, fontWeight: 700 }
 const datasetPreviewRows = { display: 'grid' }
 const datasetPreviewRow = { minHeight: 58, padding: '10px 14px', display: 'grid', gridTemplateColumns: '18px 34px minmax(0, 1fr)', alignItems: 'center', gap: 11, borderBottom: '1px solid #f1f5f9', color: '#0f172a', fontSize: 13 }
 const datasetPreviewAvatar = (photo: string) => ({
@@ -1235,34 +1246,34 @@ const datasetPreviewAvatar = (photo: string) => ({
   overflow: 'hidden' as const,
 })
 const datasetPreviewText = { display: 'grid', gap: 2, minWidth: 0 }
-const datasetPreviewEmpty = { padding: 22, color: '#64748b', fontSize: 13, textAlign: 'center' as const }
-const datasetModalEmpty = { minHeight: 320, display: 'grid', alignContent: 'center', justifyItems: 'center', gap: 8, padding: 32, color: '#64748b', textAlign: 'center' as const }
+const datasetPreviewEmpty = { padding: 22, color: '#000000', fontSize: 13, textAlign: 'center' as const }
+const datasetModalEmpty = { minHeight: 320, display: 'grid', alignContent: 'center', justifyItems: 'center', gap: 8, padding: 32, color: '#000000', textAlign: 'center' as const }
 const datasetModalFooter = { minHeight: 66, padding: '14px 22px', borderTop: '1px solid #e2e8f0', display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 10, background: '#f8fafc' }
 const datasetCancelButton = { height: 38, padding: '0 15px', border: '1px solid #cbd5e1', borderRadius: 7, background: '#ffffff', color: '#334155', fontSize: 13, fontWeight: 700, cursor: 'pointer' }
 const datasetPrimaryButton = { height: 38, padding: '0 16px', border: '1px solid #0f9f52', borderRadius: 7, background: '#0f9f52', color: '#ffffff', fontSize: 13, fontWeight: 800, cursor: 'pointer' }
 const emptyContent = { minHeight: 'calc(100dvh - 230px)', padding: '28px 0 72px', display: 'grid', placeItems: 'center', background: '#f3f4f6' }
-const loadingState = { color: '#475569', fontSize: 14, fontWeight: 500 }
+const loadingState = { color: '#000000', fontSize: 14, fontWeight: 500 }
 const emptyStateShell = { width: 'min(680px, calc(100% - 32px))', display: 'grid', justifyItems: 'center', gap: 24, textAlign: 'center' as const }
 const emptyTextStack = { display: 'grid', gap: 12, justifyItems: 'center' }
 const emptyHeadline = { margin: 0, color: '#0f172a', fontSize: 30, lineHeight: 1.16, fontWeight: 650, letterSpacing: 0 }
-const emptyDescription = { margin: 0, color: '#475569', fontSize: 15, lineHeight: 1.68, fontWeight: 400 }
+const emptyDescription = { margin: 0, color: '#000000', fontSize: 15, lineHeight: 1.68, fontWeight: 400 }
 const emptyActions = { display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 12, flexWrap: 'wrap' as const }
 const primaryEmptyCta = { display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 9, width: 186, height: 48, padding: '0 18px', borderRadius: 8, border: '1px solid #0f9f52', background: '#0f9f52', color: '#ffffff', textDecoration: 'none', fontSize: 15, fontWeight: 650, boxShadow: '0 14px 28px rgba(15, 159, 82, 0.18)' }
 const helperSection = { marginTop: 10, display: 'grid', gap: 16, justifyItems: 'center' }
 const helperTitle = { margin: 0, color: '#0f172a', fontSize: 14, lineHeight: 1.3, fontWeight: 650 }
 const helperList = { display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: '10px 22px', textAlign: 'left' as const }
-const helperItem = { display: 'flex', alignItems: 'center', gap: 9, minWidth: 0, color: '#475569', fontSize: 14, fontWeight: 500 }
+const helperItem = { display: 'flex', alignItems: 'center', gap: 9, minWidth: 0, color: '#000000', fontSize: 14, fontWeight: 500 }
 const emptyIllustration = { position: 'relative' as const, width: 164, height: 136, display: 'grid', placeItems: 'center' }
 const illustrationCore = { width: 118, height: 118, borderRadius: 999, display: 'grid', placeItems: 'center', border: '1px solid #cfe4d8', background: 'linear-gradient(180deg, #f2f9e6 0%, #ecf8f1 100%)', color: '#0f172a', boxShadow: '0 22px 42px rgba(15, 23, 42, 0.08)' }
 const illustrationBadge = { position: 'absolute' as const, right: 26, bottom: 20, width: 34, height: 34, borderRadius: 999, display: 'grid', placeItems: 'center', border: '3px solid #f3f4f6', background: '#84cc16', color: '#ffffff', boxShadow: '0 10px 20px rgba(132, 204, 22, 0.22)' }
 const illustrationPanel = { position: 'absolute' as const, width: 58, height: 42, borderRadius: 8, border: '1px solid #dbe3ef', background: 'rgba(255,255,255,0.78)', boxShadow: '0 12px 26px rgba(15,23,42,0.07)', display: 'grid', alignContent: 'center', gap: 7, padding: '0 11px' }
 const illustrationLineWide = { display: 'block', width: 32, height: 4, borderRadius: 999, background: '#cbd5e1' }
 const illustrationLineShort = { display: 'block', width: 22, height: 4, borderRadius: 999, background: '#e2e8f0' }
-const statGrid = { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(190px, 1fr))', gap: 16 }
-const statCard = { minHeight: 136, background: 'linear-gradient(145deg, rgba(255,255,255,0.055), rgba(255,255,255,0.012))', border: '1px solid var(--border)', borderRadius: 8, boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.035)', padding: 18, display: 'grid', gridTemplateColumns: '54px minmax(0, 1fr)', gap: 18, alignItems: 'center' }
-const statLabel = { color: '#334155', fontSize: 14, fontWeight: 400 }
-const statValue = { color: 'var(--foreground)', fontSize: 31, fontWeight: 600, marginTop: 8 }
-const statDetail = { color: '#475569', fontSize: 14, fontWeight: 400, marginTop: 13 }
+const statGrid = { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 12 }
+const statCard = { minHeight: 108, background: 'linear-gradient(145deg, rgba(255,255,255,0.055), rgba(255,255,255,0.012))', border: '1px solid var(--border)', borderRadius: 8, boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.035)', padding: 14, display: 'grid', gridTemplateColumns: '44px minmax(0, 1fr)', gap: 14, alignItems: 'center' }
+const statLabel = { color: '#334155', fontSize: 13, fontWeight: 400 }
+const statValue = { color: 'var(--foreground)', fontSize: 28, fontWeight: 600, marginTop: 5, lineHeight: 1.05 }
+const statDetail = { color: '#000000', fontSize: 13, fontWeight: 400, marginTop: 8 }
 const filterBar = { display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' as const, marginTop: 14 }
 const searchBox = { height: 46, minWidth: 320, flex: '1 1 360px', maxWidth: 430, display: 'flex', alignItems: 'center', gap: 10, padding: '0 14px', border: '1px solid var(--border)', borderRadius: 8, background: '#ffffff' }
 const inputBare = { border: 'none', outline: 'none', flex: 1, background: 'transparent', fontSize: 13, color: 'var(--foreground)' }
@@ -1272,26 +1283,26 @@ const th = { padding: '21px 24px', color: '#334155', fontSize: 13, fontWeight: 5
 const td = { padding: '16px 24px', color: 'var(--foreground)', fontSize: 13, fontWeight: 400, borderTop: '1px solid var(--border)', whiteSpace: 'nowrap' as const }
 const row = { background: 'transparent' }
 const clientNameCell = { display: 'flex', alignItems: 'center', gap: 10, textDecoration: 'none', color: 'var(--foreground)' }
-const tableFooter = { minHeight: 66, padding: '14px 24px', borderTop: '1px solid var(--border)', color: '#475569', fontSize: 13, fontWeight: 400, display: 'flex', alignItems: 'center', flexWrap: 'wrap' as const, gap: 12 }
+const tableFooter = { minHeight: 66, padding: '14px 24px', borderTop: '1px solid var(--border)', color: '#000000', fontSize: 13, fontWeight: 400, display: 'flex', alignItems: 'center', flexWrap: 'wrap' as const, gap: 12 }
 const ghostIcon = { width: 34, height: 34, border: 'none', borderRadius: 8, background: 'transparent', color: 'var(--muted-foreground)', cursor: 'pointer' }
 const actionCell = { position: 'relative' as const, display: 'inline-flex', justifyContent: 'flex-end' }
 const actionMenu = { position: 'absolute' as const, top: 'calc(100% + 8px)', right: 0, zIndex: 30, minWidth: 178, padding: 6, border: '1px solid var(--border)', borderRadius: 8, background: 'var(--popover)', color: 'var(--popover-foreground)', boxShadow: '0 14px 32px rgba(15, 23, 42, 0.14)', display: 'grid', gap: 2 }
 const actionMenuItem = { width: '100%', minHeight: 34, border: 'none', borderRadius: 6, background: 'transparent', color: 'var(--popover-foreground)', display: 'flex', alignItems: 'center', gap: 9, padding: '0 10px', fontSize: 13, fontWeight: 500, textAlign: 'left' as const, textDecoration: 'none', cursor: 'pointer', fontFamily: font }
 const actionMenuDangerItem = { ...actionMenuItem, color: '#dc2626' }
-const gridCards = { display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: 16 }
+const gridCards = { display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: 16, marginTop: 18 }
 const gridCard = { display: 'grid', gap: 18, minHeight: 180, padding: 18, background: '#ffffff', border: '1px solid var(--border)', borderRadius: 8, boxShadow: 'none', textDecoration: 'none' }
 const emptyState = { minHeight: 380, display: 'grid', placeItems: 'center', alignContent: 'center', justifyItems: 'center', gap: 12, padding: 48, textAlign: 'center' as const, color: 'var(--foreground)' }
 const emptyIcon = { width: 74, height: 74, borderRadius: 999, border: '1px solid var(--border)', background: 'radial-gradient(circle at 50% 10%, rgba(255,255,255,0.08), rgba(255,255,255,0.01))', display: 'grid', placeItems: 'center', color: 'var(--foreground)' }
 const emptyTitle = { margin: '4px 0 0', color: 'var(--foreground)', fontSize: 22, fontWeight: 600 }
-const emptyCopy = { margin: '-2px 0 8px', color: '#475569', fontSize: 14, fontWeight: 400 }
+const emptyCopy = { margin: '-2px 0 8px', color: '#000000', fontSize: 14, fontWeight: 400 }
 const paginationWrap = { marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 10 }
-const pageButton = { minWidth: 76, height: 36, borderRadius: 8, border: '1px solid var(--border)', background: 'rgba(255,255,255,0.015)', color: '#71717a', padding: '0 14px', fontSize: 13, fontWeight: 400 }
+const pageButton = { minWidth: 76, height: 36, borderRadius: 8, border: '1px solid var(--border)', background: 'rgba(255,255,255,0.015)', color: '#000000', padding: '0 14px', fontSize: 13, fontWeight: 400 }
 const pageButtonActive = { background: 'rgba(255,255,255,0.09)', color: 'var(--foreground)' }
 
 const softIcon = (color: string) => ({
-  width: 56,
-  height: 56,
-  borderRadius: 14,
+  width: 44,
+  height: 44,
+  borderRadius: 11,
   background: 'var(--secondary)',
   border: '1px solid var(--border)',
   color,

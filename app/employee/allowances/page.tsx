@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Car, Plus, ReceiptText, Upload, Utensils } from 'lucide-react'
 import EmployeeEmptyPage from '@/components/employee/EmployeeEmptyPage'
+import StatusChip from '@/components/employee/StatusChip'
 import { allowanceRequestKey, AllowanceRequest, appendAuditLog, isFuelEligible, loadStored, saveStored } from '@/app/hr/enterpriseData'
 import { matchesEmployeeId, useEmployeePortalData } from '../employeeData'
 import { createHrRecord, listHrRecords } from '@/lib/hrms/client'
@@ -96,7 +97,8 @@ export default function EmployeeAllowancesPage() {
       const now = new Date().toISOString()
       const request: AllowanceRequest = {
         id: `ALW-${Date.now()}`,
-        employeeId: employee.id,
+        // Server scopes ownership by session employeeId; use it so the write isn't rejected.
+        employeeId: employee.employeeId || employee.id,
         employeeName,
         employeeCode: employee.employeeId,
         department: employee.department,
@@ -183,8 +185,8 @@ export default function EmployeeAllowancesPage() {
         <div style={panelHeader}><h2 style={{ margin: 0, fontSize: 17 }}>Allowance History</h2></div>
         <div style={{ overflowX: 'auto' }}>
           <table style={{ width: '100%', minWidth: 820, borderCollapse: 'collapse' }}>
-            <thead style={{ background: '#f8fafc', color: '#475569', fontSize: 12, textAlign: 'left' }}><tr>{['Type', 'Date', 'Amount', 'Purpose / Reason', 'Receipt', 'Status'].map(item => <th key={item} style={cell}>{item}</th>)}</tr></thead>
-            <tbody>{myRequests.length ? myRequests.map(item => <tr key={item.id} style={{ borderTop: '1px solid #eef2f7' }}><td style={cell}>{item.type === 'Fuel' ? <Car size={14} /> : <Utensils size={14} />} {item.customType || item.type}</td><td style={cell}>{item.date}</td><td style={cell}>PHP {item.amount.toLocaleString('en-PH', { minimumFractionDigits: 2 })}</td><td style={cell}>{item.purpose || item.reason || '-'}</td><td style={cell}>{item.attachmentName ? item.attachmentDataUrl ? <a href={item.attachmentDataUrl} download={item.attachmentName} style={receiptLinkStyle}><ReceiptText size={14} /> {item.attachmentName}</a> : <span style={receiptTextStyle}><ReceiptText size={14} /> {item.attachmentName}</span> : '-'}</td><td style={cell}>{item.status}</td></tr>) : <tr><td colSpan={6} style={{ ...cell, textAlign: 'center', color: '#64748b', padding: 42 }}>No allowance requests yet.</td></tr>}</tbody>
+            <thead style={{ background: '#f8fafc', color: '#000000', fontSize: 12, textAlign: 'left' }}><tr>{['Type', 'Date', 'Amount', 'Purpose / Reason', 'Receipt', 'Status'].map(item => <th key={item} style={cell}>{item}</th>)}</tr></thead>
+            <tbody>{myRequests.length ? myRequests.map(item => <tr key={item.id} style={{ borderTop: '1px solid #eef2f7' }}><td style={cell}>{item.type === 'Fuel' ? <Car size={14} /> : <Utensils size={14} />} {item.customType || item.type}</td><td style={cell}>{item.date}</td><td style={cell}>PHP {item.amount.toLocaleString('en-PH', { minimumFractionDigits: 2 })}</td><td style={cell}>{item.purpose || item.reason || '-'}</td><td style={cell}>{item.attachmentName ? item.attachmentDataUrl ? <a href={item.attachmentDataUrl} download={item.attachmentName} style={receiptLinkStyle}><ReceiptText size={14} /> {item.attachmentName}</a> : <span style={receiptTextStyle}><ReceiptText size={14} /> {item.attachmentName}</span> : '-'}</td><td style={cell}><StatusChip value={item.status} /></td></tr>) :<tr><td colSpan={6} style={{ ...cell, textAlign: 'center', color: '#000000', padding: 42 }}>No allowance requests yet.</td></tr>}</tbody>
           </table>
         </div>
       </section>

@@ -166,7 +166,7 @@ export default function SuppliersPage() {
           Back
         </button>
         <div style={{ fontSize: '24px', fontWeight: 600, color: '#111827', marginBottom: '6px' }}>{editingId ? 'Edit Supplier' : 'Add Supplier'}</div>
-        <div style={{ fontSize: '13px', color: '#9ca3af', marginBottom: '28px', display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+        <div style={{ fontSize: '13px', color: '#000000', marginBottom: '28px', display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
           <span style={{ color: '#6c63ff', fontWeight: 600 }}>Resources</span>
           <span>/</span>
           <span style={{ color: '#6c63ff', fontWeight: 600 }}>Suppliers</span>
@@ -177,7 +177,7 @@ export default function SuppliersPage() {
         <div style={{ display: 'grid', gridTemplateColumns: 'minmax(220px, 260px) minmax(0, 1fr)', gap: '32px' }}>
           <div>
             <div style={{ fontSize: '15px', fontWeight: 600, color: '#111827', marginBottom: '8px' }}>Supplier Details</div>
-            <div style={{ fontSize: '13px', color: '#6b7280', lineHeight: 1.6 }}>
+            <div style={{ fontSize: '13px', color: '#000000', lineHeight: 1.6 }}>
               Add supplier contact details, then open the supplier to list the items they can provide.
             </div>
           </div>
@@ -223,7 +223,7 @@ export default function SuppliersPage() {
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '16px', marginBottom: '8px', flexWrap: 'wrap' }}>
         <div>
           <div style={{ fontSize: '24px', fontWeight: 600, color: '#111827', marginBottom: '6px' }}>Suppliers</div>
-          <div style={{ fontSize: '13px', color: '#9ca3af', display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+          <div style={{ fontSize: '13px', color: '#000000', display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
             <span style={{ color: '#6c63ff', fontWeight: 600 }}>Resources</span>
             <span>/</span>
             <span>Suppliers</span>
@@ -237,7 +237,7 @@ export default function SuppliersPage() {
       </div>
 
       {filtered.length === 0 ? (
-        <div style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: '16px', textAlign: 'center', padding: '60px 24px', color: '#9ca3af', fontSize: '14px', fontWeight: 600 }}>
+        <div style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: '16px', textAlign: 'center', padding: '60px 24px', color: '#000000', fontSize: '14px', fontWeight: 600 }}>
           No suppliers yet. Add a supplier to start building a supply catalog.
         </div>
       ) : (
@@ -251,11 +251,11 @@ export default function SuppliersPage() {
                   </div>
                   <div>
                     <div style={{ fontSize: '15px', fontWeight: 600, color: '#111827' }}>{supplier.name}</div>
-                    <div style={{ fontSize: '12px', color: '#6b7280', marginTop: '4px' }}>{supplier.supplies.length} supplies listed</div>
+                    <div style={{ fontSize: '12px', color: '#000000', marginTop: '4px' }}>{supplier.supplies.length} supplies listed</div>
                   </div>
                 </div>
               </Link>
-              <div style={{ fontSize: '13px', color: '#6b7280', lineHeight: 1.5 }}>
+              <div style={{ fontSize: '13px', color: '#000000', lineHeight: 1.5 }}>
                 <div>Contact: {supplier.contact}</div>
                 <div>Email: {supplier.email}</div>
               </div>

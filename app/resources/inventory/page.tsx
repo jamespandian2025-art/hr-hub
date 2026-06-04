@@ -175,7 +175,7 @@ export default function InventoryPage() {
         <div style={{ fontSize: '24px', fontWeight: 600, color: '#111827', marginBottom: '6px' }}>
           {editingId ? 'Edit Warehouse' : 'Create Warehouse'}
         </div>
-        <div style={{ fontSize: '13px', color: '#9ca3af', marginBottom: '28px', display: 'flex', gap: '6px' }}>
+        <div style={{ fontSize: '13px', color: '#000000', marginBottom: '28px', display: 'flex', gap: '6px' }}>
           <span style={{ color: '#6c63ff', fontWeight: 500 }}>Resources</span>
           <span>/</span>
           <span style={{ color: '#6c63ff', fontWeight: 500 }}>Inventory</span>
@@ -188,7 +188,7 @@ export default function InventoryPage() {
             <div style={{ fontSize: '15px', fontWeight: 600, color: '#111827', marginBottom: '6px' }}>
               Warehouse Details
             </div>
-            <div style={{ fontSize: '13px', color: '#6b7280', lineHeight: 1.6 }}>
+            <div style={{ fontSize: '13px', color: '#000000', lineHeight: 1.6 }}>
               Add the warehouse name, location, manager, and notes.
             </div>
           </div>
@@ -217,7 +217,7 @@ export default function InventoryPage() {
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'center',
-                    color: '#6b7280',
+                    color: '#000000',
                     fontSize: '22px',
                     fontWeight: 600,
                   }}
@@ -331,7 +331,7 @@ export default function InventoryPage() {
         </button>
       </div>
 
-      <div style={{ fontSize: '13px', color: '#9ca3af', marginBottom: '24px', display: 'flex', gap: '6px' }}>
+      <div style={{ fontSize: '13px', color: '#000000', marginBottom: '24px', display: 'flex', gap: '6px' }}>
         <span style={{ color: '#6c63ff', fontWeight: 500 }}>Resources</span>
         <span>/</span>
         <span>Inventory</span>
@@ -352,7 +352,7 @@ export default function InventoryPage() {
           maxWidth: '500px',
         }}
       >
-        <span style={{ color: '#9ca3af', fontSize: '15px' }}>??</span>
+        <span style={{ color: '#000000', fontSize: '15px' }}>??</span>
         <input
           type="text"
           placeholder="Search warehouses..."
@@ -370,7 +370,7 @@ export default function InventoryPage() {
             borderRadius: '16px',
             textAlign: 'center',
             padding: '60px',
-            color: '#9ca3af',
+            color: '#000000',
             fontSize: '14px',
             fontWeight: 600,
           }}
@@ -416,10 +416,10 @@ export default function InventoryPage() {
                   <div style={{ fontSize: '15px', fontWeight: 600, color: '#111827', marginBottom: '6px' }}>
                     {warehouse.name}
                   </div>
-                  <div style={{ fontSize: '13px', color: '#6b7280', fontWeight: 400, marginBottom: '6px' }}>
+                  <div style={{ fontSize: '13px', color: '#000000', fontWeight: 400, marginBottom: '6px' }}>
                     {warehouse.location}
                   </div>
-                  <div style={{ fontSize: '12px', color: '#9ca3af', fontWeight: 500 }}>
+                  <div style={{ fontSize: '12px', color: '#000000', fontWeight: 500 }}>
                     Manager: {warehouse.manager}
                   </div>
                 </div>
@@ -441,7 +441,7 @@ export default function InventoryPage() {
                   border: 'none',
                   borderRadius: '8px',
                   background: openMenu === warehouse.id ? '#f3f4f6' : 'transparent',
-                  color: '#6b7280',
+                  color: '#000000',
                   cursor: 'pointer',
                   fontSize: '18px',
                   fontWeight: 600,

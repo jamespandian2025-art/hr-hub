@@ -2,6 +2,7 @@
 
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
+import { useEffect, useState, type ReactNode } from 'react'
 import {
   ArrowLeft,
   Bell,
@@ -20,21 +21,58 @@ import {
   Sun,
   Workflow,
 } from 'lucide-react'
+import type { LucideIcon } from 'lucide-react'
 import CompanySwitcher from '@/components/CompanySwitcher'
+import {
+  accountStorageKey,
+  companyChangeEvent,
+  loadStored,
+  loadWorkflowProjects,
+  loadWorkflowTasks,
+  workflowDataChangedEvent,
+  type AccountRecord,
+  type AssignedTask,
+} from '@/lib/workflows/data'
 
-const workflowNavGroups = [
+type WorkflowBadgeCounts = {
+  myJobs: number
+  myTodos: number
+  draftJobs: number
+  myWorkflows: number
+}
+
+type WorkflowBadgeKey = keyof WorkflowBadgeCounts
+
+type WorkflowNavGroup = {
+  label: string
+  items: Array<{
+    label: string
+    href: string
+    icon: LucideIcon
+    badgeKey?: WorkflowBadgeKey
+  }>
+}
+
+const emptyWorkflowBadgeCounts: WorkflowBadgeCounts = {
+  myJobs: 0,
+  myTodos: 0,
+  draftJobs: 0,
+  myWorkflows: 0,
+}
+
+const workflowNavGroups: WorkflowNavGroup[] = [
   {
     label: 'Jobs',
     items: [
-      { label: 'My Jobs', href: '/workflows/my-jobs', icon: ClipboardList, badge: '12' },
-      { label: 'My To-dos', href: '/workflows/my-to-dos', icon: CheckCircle2, badge: '4' },
-      { label: 'Draft Jobs', href: '/workflows/draft-jobs', icon: FileClock, badge: '2' },
+      { label: 'My Jobs', href: '/workflows/my-jobs', icon: ClipboardList, badgeKey: 'myJobs' },
+      { label: 'My To-dos', href: '/workflows/my-to-dos', icon: CheckCircle2, badgeKey: 'myTodos' },
+      { label: 'Draft Jobs', href: '/workflows/draft-jobs', icon: FileClock, badgeKey: 'draftJobs' },
     ],
   },
   {
     label: 'Workflows',
     items: [
-      { label: 'My Workflows', href: '/workflows/my-workflows', icon: Workflow, badge: '6' },
+      { label: 'My Workflows', href: '/workflows/my-workflows', icon: Workflow, badgeKey: 'myWorkflows' },
       { label: 'All Workflows', href: '/workflows/all-workflows', icon: LayoutDashboard },
       { label: 'Create Workflow', href: '/workflows/create', icon: Plus },
     ],
@@ -47,6 +85,26 @@ const workflowNavGroups = [
     ],
   },
 ]
+
+function scopedTasksForAccount(tasks: AssignedTask[], account: AccountRecord) {
+  const currentUser = account.fullName || account.name || 'James Pandian'
+  const myTasks = tasks.filter(task => [task.assignee, ...(task.assignees || [])].filter(Boolean).includes(currentUser))
+  return myTasks.length ? myTasks : tasks
+}
+
+function loadWorkflowBadgeCounts(): WorkflowBadgeCounts {
+  const account = loadStored<AccountRecord>(accountStorageKey, {})
+  const tasks = loadWorkflowTasks()
+  const scopedTasks = scopedTasksForAccount(tasks, account)
+  const projects = loadWorkflowProjects()
+
+  return {
+    myJobs: scopedTasks.filter(task => !task.draft).length,
+    myTodos: scopedTasks.filter(task => task.status !== 'Completed' && !task.draft).length,
+    draftJobs: tasks.filter(task => task.draft).length,
+    myWorkflows: projects.filter(project => !project.deleted).length,
+  }
+}
 
 function isActive(pathname: string, href: string) {
   return pathname === href || pathname.startsWith(`${href}/`)
@@ -65,9 +123,23 @@ function pageTitle(pathname: string) {
   return 'My Workflows'
 }
 
-export default function WorkflowWorkspaceShell({ children }: { children: React.ReactNode }) {
+export default function WorkflowWorkspaceShell({ children }: { children: ReactNode }) {
   const pathname = usePathname()
   const title = pageTitle(pathname)
+  const [badgeCounts, setBadgeCounts] = useState<WorkflowBadgeCounts>(emptyWorkflowBadgeCounts)
+
+  useEffect(() => {
+    const reload = () => setBadgeCounts(loadWorkflowBadgeCounts())
+    reload()
+    window.addEventListener('storage', reload)
+    window.addEventListener(companyChangeEvent, reload)
+    window.addEventListener(workflowDataChangedEvent, reload)
+    return () => {
+      window.removeEventListener('storage', reload)
+      window.removeEventListener(companyChangeEvent, reload)
+      window.removeEventListener(workflowDataChangedEvent, reload)
+    }
+  }, [])
 
   return (
     <div className="workflow-workspace">
@@ -97,11 +169,12 @@ export default function WorkflowWorkspaceShell({ children }: { children: React.R
               <p>{group.label}</p>
               {group.items.map(item => {
                 const Icon = item.icon
+                const badge = item.badgeKey ? badgeCounts[item.badgeKey] : 0
                 return (
                   <Link href={item.href} key={item.href} className={isActive(pathname, item.href) ? 'active' : ''}>
                     <Icon size={17} />
                     <span>{item.label}</span>
-                    {'badge' in item && item.badge && <b>{item.badge}</b>}
+                    {badge > 0 && <b>{badge}</b>}
                   </Link>
                 )
               })}
@@ -464,20 +537,20 @@ const workflowWorkspaceCss = `
 }
 /* Workflow sidebar — light theme */
 .workflow-sidebar { background: #ffffff; color: #0f172a; border-right: 1px solid #e5e7eb; }
-.workflow-brand button { color: #64748b; }
+.workflow-brand button { color: #000000; }
 .workflow-workspace-card { border-color: #e5e7eb; background: #f8fafc; }
 .workflow-workspace-card strong { color: #0f172a; }
-.workflow-workspace-card small { color: #64748b; }
+.workflow-workspace-card small { color: #000000; }
 .workflow-back-link { border-color: #e5e7eb; background: #f8fafc; color: #334155; }
 .workflow-back-link:hover { background: #f1f5f9; color: #0f172a; }
 .workflow-nav section { border-bottom-color: #eef2f7; }
-.workflow-nav p { color: #64748b; }
+.workflow-nav p { color: #000000; }
 .workflow-nav a, .workflow-parent { color: #334155; }
 .workflow-nav a:hover, .workflow-parent:hover { background: #f1f5f9; color: #0f172a; }
 .workflow-nav a.active, .workflow-parent.active { background: #ecfdf5; color: #065f46; }
-.workflow-nav a b { background: #eef2f7; color: #475569; }
+.workflow-nav a b { background: #eef2f7; color: #000000; }
 .workflow-nav a.active b { background: #d1fae5; color: #065f46; }
 .workflow-profile { border-top-color: #eef2f7; }
 .workflow-profile strong { color: #0f172a; }
-.workflow-profile small { color: #64748b; }
+.workflow-profile small { color: #000000; }
 `

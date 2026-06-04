@@ -25,6 +25,7 @@ import {
   X,
 } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
+import { AnalyticsToggleButton, CollapsibleAnalytics, useAnalyticsDisclosure } from '@/components/AnalyticsDisclosure'
 import {
   emptyAccountingData,
   formatDate,
@@ -90,6 +91,7 @@ export default function AuditLogsPage() {
   const [actionNotice, setActionNotice] = useState('')
   const [currentPage, setCurrentPage] = useState(1)
   const [pageSize, setPageSize] = useState(10)
+  const analytics = useAnalyticsDisclosure('wiseflow:analytics:accounting-audit-logs')
 
   useEffect(() => {
     const load = () => setData(loadAccountingData())
@@ -212,25 +214,28 @@ export default function AuditLogsPage() {
           <p>Track system activities and changes across the platform for security and compliance.</p>
         </div>
         <div className="audit-actions">
+          <AnalyticsToggleButton open={analytics.open} onToggle={analytics.toggle} panelId={analytics.panelId} />
           <button type="button" onClick={() => exportEvents()}>Export <Download size={14} /></button>
         </div>
       </div>
 
-      <section className="audit-metrics">
-        {metrics.map(metric => {
-          const Icon = metric.icon
-          return (
-            <article key={metric.title} className="audit-card audit-metric">
-              <span style={{ color: metric.tone, background: `${metric.tone}12` }}><Icon size={22} /></span>
-              <div>
-                <small>{metric.title}</small>
-                <strong>{metric.value}</strong>
-                <em className={metric.trend}>{metric.trend === 'up' ? 'Up' : 'Down'} {metric.detail}</em>
-              </div>
-            </article>
-          )
-        })}
-      </section>
+      <CollapsibleAnalytics open={analytics.open} id={analytics.panelId}>
+        <section className="audit-metrics">
+          {metrics.map(metric => {
+            const Icon = metric.icon
+            return (
+              <article key={metric.title} className="audit-card audit-metric">
+                <span style={{ color: metric.tone, background: `${metric.tone}12` }}><Icon size={22} /></span>
+                <div>
+                  <small>{metric.title}</small>
+                  <strong>{metric.value}</strong>
+                  <em className={metric.trend}>{metric.trend === 'up' ? 'Up' : 'Down'} {metric.detail}</em>
+                </div>
+              </article>
+            )
+          })}
+        </section>
+      </CollapsibleAnalytics>
 
       <nav className="audit-tabs" aria-label="Audit log categories">
         {tabs.map(tab => (
@@ -251,7 +256,7 @@ export default function AuditLogsPage() {
 
       {filtersOpen && <section className="audit-filter-panel">
         <label className="audit-search">
-          <Search size={16} color="#64748b" />
+          <Search size={16} color="#000000" />
           <input value={query} onChange={event => { setQuery(event.target.value); setCurrentPage(1) }} placeholder="Search by user, action, module, IP..." />
         </label>
         <label className="audit-select">Module
@@ -331,7 +336,7 @@ export default function AuditLogsPage() {
                 ))}
                 {!searchedEvents.length && (
                   <tr>
-                    <td colSpan={8} style={{ padding: 28, textAlign: 'center', color: '#64748b', fontWeight: 800 }}>
+                    <td colSpan={8} style={{ padding: 28, textAlign: 'center', color: '#000000', fontWeight: 800 }}>
                       {auditEvents.length ? 'No audit events match these filters.' : 'No audit events yet. Finance, payroll, loan, allowance, and employee changes will appear here.'}
                     </td>
                   </tr>
@@ -424,7 +429,7 @@ const auditCss = `
 }
 .audit-header p {
   margin: 7px 0 0;
-  color: #475569;
+  color: #000000;
   font-size: 14px;
 }
 .audit-actions,
@@ -507,7 +512,7 @@ const auditCss = `
 .detail-note small,
 .changes small {
   display: block;
-  color: #475569;
+  color: #000000;
   font-size: 12px;
   font-weight: 850;
 }
@@ -652,7 +657,7 @@ const auditCss = `
   font-size: 13px;
 }
 .audit-table th {
-  color: #475569;
+  color: #000000;
   background: #fbfdff;
   font-size: 12px;
   font-weight: 900;
@@ -693,7 +698,7 @@ const auditCss = `
 .audit-user small {
   display: block;
   margin-top: 3px;
-  color: #64748b;
+  color: #000000;
   font-size: 12px;
   font-weight: 700;
 }
@@ -819,12 +824,12 @@ const auditCss = `
 }
 .audit-details-empty small {
   display: block;
-  color: #475569;
+  color: #000000;
   font-size: 12px;
   font-weight: 900;
 }
 .audit-details-empty p {
-  color: #64748b;
+  color: #000000;
 }
 .details-title {
   display: flex;
@@ -843,7 +848,7 @@ const auditCss = `
   height: 32px;
   border: 0;
   background: transparent;
-  color: #475569;
+  color: #000000;
   display: grid;
   place-items: center;
   cursor: pointer;
@@ -877,7 +882,7 @@ const auditCss = `
   display: flex;
   align-items: center;
   gap: 8px;
-  color: #475569;
+  color: #000000;
   font-size: 12px;
   font-weight: 850;
 }
@@ -915,7 +920,7 @@ const auditCss = `
   background: #f8fafc;
 }
 .changes span {
-  color: #475569;
+  color: #000000;
   font-size: 12px;
   font-weight: 800;
 }
@@ -932,7 +937,7 @@ const auditCss = `
   min-height: 48px;
   border-top: 1px solid #eef2f7;
   padding-top: 14px;
-  color: #475569;
+  color: #000000;
   text-decoration: none;
   font-size: 13px;
   font-weight: 850;
@@ -1112,7 +1117,7 @@ html[data-theme='dark'] .audit-page .audit-row-menu button:hover {
   }
   .audit-table td::before {
     content: attr(data-label);
-    color: #64748b;
+    color: #000000;
     font-size: 11px;
     font-weight: 900;
   }

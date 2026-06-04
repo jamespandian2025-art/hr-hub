@@ -2,7 +2,7 @@
 
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import { Camera, ChevronDown, CreditCard, FileText, Save, Trash2, UserPlus, UsersRound } from 'lucide-react'
+import { Camera, ChevronDown, CreditCard, FileText, Save, Trash2, UsersRound } from 'lucide-react'
 import type { ChangeEvent, FormEvent, ReactNode } from 'react'
 import { useEffect, useMemo, useState } from 'react'
 import { uploadFileObject } from '@/lib/uploads/client'
@@ -121,29 +121,6 @@ export default function AddClientPage() {
       website: clientType === 'Residential' ? '' : current.website,
     }))
     setError('')
-  }
-
-  const handleAddAccountManager = async () => {
-    const managerName = manualManagerName.trim()
-    if (!managerName) {
-      setManualManagerError('Enter the account manager name.')
-      return
-    }
-
-    try {
-      const savedName = await addAccountManagerRecord(managerName)
-      if (!savedName) {
-        setManualManagerError('Enter the account manager name.')
-        return
-      }
-
-      setAccountManagers(current => Array.from(new Set([...current, savedName])).sort((a, b) => a.localeCompare(b)))
-      setManualManagerName('')
-      setManualManagerError('')
-      update('accountManager', savedName)
-    } catch {
-      setManualManagerError('Could not add this manager to HR records. Select an existing manager or ask an admin to add them in HR.')
-    }
   }
 
   const handlePhotoUpload = async (event: ChangeEvent<HTMLInputElement>) => {
@@ -321,7 +298,7 @@ export default function AddClientPage() {
 
       <Section title="Account Details" icon={<CreditCard size={18} />}>
         <div style={formGrid3}>
-          <AccountManagerField value={form.accountManager} options={accountManagers} manualName={manualManagerName} manualError={manualManagerError} invalid={isFieldInvalid('accountManager')} errorMessage={getFieldError('accountManager')} onChange={value => update('accountManager', value)} onManualNameChange={value => { setManualManagerName(value); setManualManagerError('') }} onManualAdd={handleAddAccountManager} />
+          <AccountManagerField value={form.accountManager} options={accountManagers} manualName={manualManagerName} manualError={manualManagerError} invalid={isFieldInvalid('accountManager')} errorMessage={getFieldError('accountManager')} onChange={value => update('accountManager', value)} onManualNameChange={value => { setManualManagerName(value); setManualManagerError('') }} />
           <SelectField label="Default Currency" required value={form.defaultCurrency} onChange={value => update('defaultCurrency', value)} placeholder="Select currency" options={['PHP - Philippine Peso']} help="Select the default currency for transactions" />
           <SelectField label="Payment Terms" value={form.paymentTerms} onChange={value => update('paymentTerms', value)} placeholder="Select payment terms" options={paymentTerms} help="e.g. Net 15, Net 30, Net 60" />
         </div>
@@ -379,7 +356,7 @@ function ClientPhotoField({ photo, name, uploading, onUpload, onRemove }: { phot
   )
 }
 
-function AccountManagerField({ value, options, manualName, manualError, invalid, errorMessage, onChange, onManualNameChange, onManualAdd }: {
+function AccountManagerField({ value, options, manualName, manualError, invalid, errorMessage, onChange, onManualNameChange }: {
   value: string
   options: string[]
   manualName: string
@@ -388,7 +365,6 @@ function AccountManagerField({ value, options, manualName, manualError, invalid,
   errorMessage?: string
   onChange: (value: string) => void
   onManualNameChange: (value: string) => void
-  onManualAdd: () => void
 }) {
   if (options.length) {
     return (
@@ -415,24 +391,19 @@ function AccountManagerField({ value, options, manualName, manualError, invalid,
   return (
     <label style={fieldWrap} data-client-field="accountManager" data-client-invalid={invalid || manualError ? 'true' : undefined}>
       <span style={labelStyle}>Account Manager <b>*</b></span>
-      <div style={manualManagerRow}>
-        <input
-          id={fieldId}
-          type="text"
-          value={manualName}
-          onChange={event => onManualNameChange(event.target.value)}
-          placeholder="Type account manager name"
-          style={inputStyle}
-          aria-invalid={invalid || Boolean(manualError) || undefined}
-          aria-describedby={describedBy || undefined}
-        />
-        <button type="button" onClick={onManualAdd} style={manualManagerButton}>
-          <UserPlus size={15} /> Add
-        </button>
-      </div>
+      <input
+        id={fieldId}
+        type="text"
+        value={manualName}
+        onChange={event => onManualNameChange(event.target.value)}
+        placeholder="Type account manager name"
+        style={inputStyle}
+        aria-invalid={invalid || Boolean(manualError) || undefined}
+        aria-describedby={describedBy || undefined}
+      />
       {manualError ? <small id={manualErrorId} data-client-error-message="true" style={fieldErrorStyle}>{manualError}</small> : null}
       {invalid ? <small id={errorId} data-client-error-message="true" style={fieldErrorStyle}>{errorMessage || 'Account manager is required.'}</small> : null}
-      <small style={helpStyle}>No account managers found. Add one here to create the employee record and assign this client.</small>
+      <small style={helpStyle}>No account managers found. Type a name to assign this client.</small>
     </label>
   )
 }
@@ -483,7 +454,7 @@ function SelectField({ fieldKey, label, value, onChange, placeholder, required, 
           <option value="">{placeholder}</option>
           {options.map(option => <option key={option} value={option}>{option}</option>)}
         </select>
-        <ChevronDown size={16} style={{ position: 'absolute', right: 12, top: 13, color: '#64748b', pointerEvents: 'none' }} />
+        <ChevronDown size={16} style={{ position: 'absolute', right: 12, top: 13, color: '#000000', pointerEvents: 'none' }} />
       </span>
       {invalid ? <small id={errorId} data-client-error-message="true" style={fieldErrorStyle}>{errorMessage || 'This field is required.'}</small> : null}
       {help ? <small id={helpId} style={helpStyle}>{help}</small> : null}
@@ -607,8 +578,6 @@ const photoActions = { display: 'flex', alignItems: 'center', gap: 10, flexWrap:
 const photoUploadButton = { display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 8, minHeight: 36, padding: '0 12px', borderRadius: 8, border: '1px solid var(--border)', background: '#ffffff', color: '#0f172a', fontSize: 13, fontWeight: 600, cursor: 'pointer' }
 const photoRemoveButton = { display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 7, minHeight: 36, padding: '0 11px', borderRadius: 8, border: '1px solid #fecaca', background: '#fff1f2', color: '#be123c', fontSize: 13, fontWeight: 600, cursor: 'pointer' }
 const clientTypeFieldWrap = { maxWidth: 440 }
-const manualManagerRow = { display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) auto', gap: 8, alignItems: 'center' }
-const manualManagerButton = { display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 7, height: 40, padding: '0 13px', borderRadius: 8, border: '1px solid #0f9f52', background: '#0f9f52', color: '#ffffff', fontSize: 13, fontWeight: 700, cursor: 'pointer' }
 const formGrid = { display: 'grid', gridTemplateColumns: 'repeat(5, minmax(150px, 1fr))', gap: 22 }
 const formGridResidential = { display: 'grid', gridTemplateColumns: 'repeat(3, minmax(220px, 1fr))', gap: 22 }
 const formGrid3 = { display: 'grid', gridTemplateColumns: 'repeat(3, minmax(220px, 1fr))', gap: 24 }

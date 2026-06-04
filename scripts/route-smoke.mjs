@@ -1,11 +1,28 @@
 import { spawn } from 'node:child_process'
+import { existsSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 
 const port = Number(process.env.SMOKE_PORT || 3100)
-const baseUrl = `http://127.0.0.1:${port}`
+let baseUrl = `http://127.0.0.1:${port}`
+const existingDevBaseUrl = process.env.SMOKE_BASE_URL || `http://127.0.0.1:${Number(process.env.SMOKE_EXISTING_DEV_PORT || 3000)}`
 const nextBin = fileURLToPath(new URL('../node_modules/next/dist/bin/next', import.meta.url))
+const appRoot = fileURLToPath(new URL('..', import.meta.url))
+const hasProductionBuild = existsSync(new URL('../.next/BUILD_ID', import.meta.url))
 const publicRoutes = ['/', '/why-wiseflow', '/privacy', '/terms', '/refund-policy', '/security', '/login', '/signup', '/account-recovery', '/employee/login']
-const protectedRoutes = ['/dashboard', '/accounting', '/accounting/invoices', '/hr/employees', '/employee/dashboard', '/people/clients', '/project-management', '/warehouse', '/workflows/my-workflows']
+const accountRoutes = [
+  '/account/my-account',
+  '/account/account-security',
+  '/account/applications',
+  '/account/users',
+  '/account/guests',
+  '/account/user-groups',
+  '/account/general-info',
+  '/account/offices',
+  '/account/admin-roles',
+  '/account/customizations',
+  '/account/system-settings',
+]
+const protectedRoutes = ['/dashboard', '/accounting', '/accounting/invoices', '/hr/employees', '/employee/dashboard', '/people/clients', '/project-management', '/warehouse', '/workflows/my-workflows', ...accountRoutes]
 const failures = []
 
 function sleep(ms) {
@@ -17,6 +34,19 @@ async function fetchWithTimeout(path, timeoutMs = 8000) {
   const timer = setTimeout(() => controller.abort(), timeoutMs)
   try {
     return await fetch(`${baseUrl}${path}`, { redirect: 'manual', signal: controller.signal })
+  } finally {
+    clearTimeout(timer)
+  }
+}
+
+async function isServerReady(url) {
+  const controller = new AbortController()
+  const timer = setTimeout(() => controller.abort(), 1500)
+  try {
+    const response = await fetch(`${url}/login`, { redirect: 'manual', signal: controller.signal })
+    return response.status === 200
+  } catch {
+    return false
   } finally {
     clearTimeout(timer)
   }
@@ -49,21 +79,28 @@ async function checkRoute(path, expectedStatus, expectedLocationPart = '') {
   }
 }
 
-const server = spawn(process.execPath, [nextBin, 'start', '-p', String(port)], {
-  cwd: fileURLToPath(new URL('..', import.meta.url)),
-  stdio: ['ignore', 'pipe', 'pipe'],
-  env: { ...process.env, PORT: String(port) },
-})
+let server = null
 
-server.stdout.on('data', chunk => process.stdout.write(chunk))
-server.stderr.on('data', chunk => process.stderr.write(chunk))
+if (!hasProductionBuild && await isServerReady(existingDevBaseUrl)) {
+  baseUrl = existingDevBaseUrl
+  console.log(`Using existing Next dev server at ${baseUrl}`)
+} else {
+  server = spawn(process.execPath, [nextBin, hasProductionBuild ? 'start' : 'dev', '-p', String(port)], {
+    cwd: appRoot,
+    stdio: ['ignore', 'pipe', 'pipe'],
+    env: { ...process.env, PORT: String(port) },
+  })
+
+  server.stdout.on('data', chunk => process.stdout.write(chunk))
+  server.stderr.on('data', chunk => process.stderr.write(chunk))
+}
 
 try {
   await waitForServer()
   for (const route of publicRoutes) await checkRoute(route, 200)
   for (const route of protectedRoutes) await checkRoute(route, 307, route.startsWith('/employee') ? '/employee/login' : '/login')
 } finally {
-  server.kill('SIGTERM')
+  if (server) server.kill('SIGTERM')
 }
 
 if (failures.length) {

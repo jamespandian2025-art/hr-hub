@@ -78,7 +78,7 @@ export default function TeamsPage() {
       </div>
 
       {/* Breadcrumb */}
-      <div style={{ fontSize: '13px', color: '#9ca3af', marginBottom: '24px' }}>
+      <div style={{ fontSize: '13px', color: '#000000', marginBottom: '24px' }}>
         <span style={{ color: '#6c63ff', fontWeight: 500 }}>Teams</span> • List
       </div>
 
@@ -107,10 +107,10 @@ export default function TeamsPage() {
           <thead>
             <tr style={{ background: '#fafafa' }}>
               <th style={{ padding: '12px 24px' }}></th>
-              <th style={{ padding: '12px 16px', textAlign: 'left', fontSize: '12px', color: '#6b7280' }}>Team Name</th>
-              <th style={{ padding: '12px 16px', textAlign: 'left', fontSize: '12px', color: '#6b7280' }}>Department</th>
-              <th style={{ padding: '12px 16px', textAlign: 'left', fontSize: '12px', color: '#6b7280' }}>Members</th>
-              <th style={{ padding: '12px 16px', textAlign: 'center', fontSize: '12px', color: '#6b7280' }}>Total</th>
+              <th style={{ padding: '12px 16px', textAlign: 'left', fontSize: '12px', color: '#000000' }}>Team Name</th>
+              <th style={{ padding: '12px 16px', textAlign: 'left', fontSize: '12px', color: '#000000' }}>Department</th>
+              <th style={{ padding: '12px 16px', textAlign: 'left', fontSize: '12px', color: '#000000' }}>Members</th>
+              <th style={{ padding: '12px 16px', textAlign: 'center', fontSize: '12px', color: '#000000' }}>Total</th>
               <th style={{ padding: '12px 16px' }}></th>
             </tr>
           </thead>
@@ -168,7 +168,7 @@ export default function TeamsPage() {
                       </div>
                     ))}
                     {team.members.length > 3 && (
-                      <div style={{ fontSize: '12px', color: '#6b7280' }}>
+                      <div style={{ fontSize: '12px', color: '#000000' }}>
                         +{team.members.length - 3} more
                       </div>
                     )}
@@ -186,7 +186,7 @@ export default function TeamsPage() {
                     onClick={() =>
                       setActiveMenu(activeMenu === team.id ? null : team.id)
                     }
-                    style={{ cursor: 'pointer', fontSize: '18px', color: '#9ca3af' }}
+                    style={{ cursor: 'pointer', fontSize: '18px', color: '#000000' }}
                   >
                     ?
                   </div>
@@ -246,7 +246,7 @@ export default function TeamsPage() {
           padding: '16px 24px',
           borderTop: '1px solid #f3f4f6',
           fontSize: '13px',
-          color: '#6b7280'
+          color: '#000000'
         }}>
           {filtered.length} teams
         </div>

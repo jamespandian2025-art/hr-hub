@@ -1,11 +1,10 @@
 'use client'
 
-import { emptyProjectManagementState, mockProjectManagementState } from './mock-data'
+import { emptyProjectManagementState } from './mock-data'
 import type { DocumentType, MilestoneStatus, ProjectActivity, ProjectDocument, ProjectManagementState, ProjectMember, ProjectMilestone, ProjectOpportunitySource, ProjectRecord, ProjectStatus, ProjectTask, ProjectTaskAttachment, ProjectTaskChecklistItem, ProjectTaskComment, ProjectTimeLog, TaskStatus } from './types'
 import { clearLegacyBusinessRows, listBusinessRecords, replaceBusinessCollection } from '@/lib/business/client'
 import { companyScopedKey, getActiveCompany } from '@/lib/tenant/company'
 
-const storageKey = 'wiseflow-project-management-state'
 const legacyProjectsKey = 'flowsys-projects'
 const salesWorkspaceKey = 'wiseflow-sales-workspace'
 const legacyOpportunitiesKey = 'flowsys-opportunities'
@@ -14,14 +13,6 @@ const employeesKey = 'flowsys-hr-employees'
 const accountKey = 'flowsys-account'
 const authKey = 'flowsys-auth-session'
 
-const demoProjectIds = new Set(['prj-001', 'prj-002', 'prj-003', 'prj-004', 'prj-005', 'prj-006'])
-const demoClientIds = new Set(['client-abc', 'client-global', 'client-delta', 'client-summit', 'client-bright'])
-const demoMemberIds = new Set(['user-ec', 'user-ms', 'user-as', 'user-rb', 'user-jw'])
-const demoTaskIds = new Set(['tsk-001', 'tsk-002', 'tsk-003', 'tsk-004', 'tsk-005', 'tsk-006'])
-const demoMilestoneIds = new Set(['mil-001', 'mil-002', 'mil-003', 'mil-004', 'mil-005'])
-const demoLogIds = new Set(['log-001', 'log-002', 'log-003', 'log-004'])
-const demoDocumentIds = new Set(['doc-001', 'doc-002', 'doc-003', 'doc-004'])
-const demoActivityIds = new Set(['act-001', 'act-002', 'act-003'])
 const avatarColors = ['#2563eb', '#16a34a', '#f59e0b', '#8b5cf6', '#ef4444', '#0891b2']
 const maxPersistedInlineDataUrlChars = 300_000
 const projectAssetDbName = 'wiseflow-project-management-assets'
@@ -35,7 +26,7 @@ export type ProjectUpdateDraft = Partial<Pick<ProjectRecord,
   'name' | 'clientId' | 'description' | 'status' | 'health' | 'priority' | 'progress' | 'budget' | 'spent' | 'committed' | 'startDate' | 'dueDate' | 'managerId' | 'memberIds' | 'tags' | 'department' | 'code' | 'projectType' | 'contractType' | 'location' | 'budgetBreakdown' | 'settings' | 'thumbnailDataUrl' | 'thumbnailAssetId' | 'opportunityId' | 'opportunitySource'
 >>
 
-export type ProjectCreateDraft = Pick<ProjectRecord, 'name' | 'clientId' | 'description' | 'budget' | 'dueDate' | 'department'> & Partial<Pick<ProjectRecord, 'startDate' | 'managerId' | 'memberIds' | 'tags' | 'code' | 'projectType' | 'contractType' | 'location' | 'budgetBreakdown' | 'settings' | 'thumbnailDataUrl' | 'thumbnailAssetId' | 'opportunityId' | 'opportunitySource'>>
+export type ProjectCreateDraft = Pick<ProjectRecord, 'name' | 'clientId' | 'description' | 'budget' | 'dueDate' | 'department'> & Partial<Pick<ProjectRecord, 'startDate' | 'managerId' | 'memberIds' | 'tags' | 'code' | 'projectType' | 'contractType' | 'location' | 'budgetBreakdown' | 'settings' | 'thumbnailDataUrl' | 'thumbnailAssetId' | 'opportunityId' | 'opportunitySource'>> & { clientName?: string }
 
 export type ProjectSalesOpportunity = {
   id: string
@@ -47,6 +38,8 @@ export type ProjectSalesOpportunity = {
   expectedCloseDate?: string
   clientId?: string
 }
+
+type ProjectClient = ProjectManagementState['clients'][number]
 
 export type MilestoneDraft = Pick<ProjectMilestone, 'projectId' | 'title' | 'dueDate' | 'priority' | 'status'> & {
   phase?: string
@@ -175,6 +168,43 @@ function compactProjectManagementState(state: ProjectManagementState): ProjectMa
   }
 }
 
+function timestamp(value: unknown) {
+  if (typeof value !== 'string' || !value) return 0
+  const parsed = Date.parse(value)
+  return Number.isFinite(parsed) ? parsed : 0
+}
+
+function stateFreshness(state: ProjectManagementState | null | undefined) {
+  if (!state) return 0
+  const projects = Array.isArray(state.projects) ? state.projects : []
+  const tasks = Array.isArray(state.tasks) ? state.tasks : []
+  const milestones = Array.isArray(state.milestones) ? state.milestones : []
+  const documents = Array.isArray(state.documents) ? state.documents : []
+  const taskComments = Array.isArray(state.taskComments) ? state.taskComments : []
+  const taskAttachments = Array.isArray(state.taskAttachments) ? state.taskAttachments : []
+  const taskChecklists = Array.isArray(state.taskChecklists) ? state.taskChecklists : []
+  const activities = Array.isArray(state.activities) ? state.activities : []
+  return [
+    state.savedAt,
+    ...projects.map(project => project.updatedAt),
+    ...tasks.map(task => task.updatedAt),
+    ...milestones.map(milestone => milestone.completedAt),
+    ...documents.map(document => document.updatedAt),
+    ...taskComments.map(comment => comment.createdAt),
+    ...taskAttachments.map(attachment => attachment.uploadedAt),
+    ...taskChecklists.map(item => item.completedAt || item.createdAt),
+    ...activities.map(item => item.createdAt),
+  ].reduce((latest, value) => Math.max(latest, timestamp(value)), 0)
+}
+
+function newestProjectManagementState(states: Array<ProjectManagementState | null | undefined>) {
+  return states.reduce<ProjectManagementState | null>((latest, candidate) => {
+    if (!candidate) return latest
+    if (!latest) return candidate
+    return stateFreshness(candidate) > stateFreshness(latest) ? candidate : latest
+  }, null)
+}
+
 function text(row: Record<string, unknown>, keys: string[], fallback = '') {
   for (const key of keys) {
     const value = row[key]
@@ -182,6 +212,29 @@ function text(row: Record<string, unknown>, keys: string[], fallback = '') {
     if (typeof value === 'number') return String(value)
   }
   return fallback
+}
+
+function clientFromRow(row: Record<string, unknown>, index: number): ProjectClient {
+  const name = text(row, ['name', 'companyName', 'clientName', 'customerName', 'businessName', 'company'], `Client ${index + 1}`)
+  return {
+    id: text(row, ['id', 'clientId', 'customerId'], slugifyClientName(name, `client-${index + 1}`)),
+    name,
+  }
+}
+
+function slugifyClientName(value: string, fallback: string) {
+  return value.toLowerCase().trim().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 80) || fallback
+}
+
+function isKnownClientId(clientId: string, clients: ProjectClient[]) {
+  const normalized = clientId.trim().toLowerCase()
+  if (!normalized || normalized === 'client-local') return false
+  return clients.some(client => client.id.trim().toLowerCase() === normalized || client.name.trim().toLowerCase() === normalized)
+}
+
+function validProjectClientId(clientId: string | undefined, clients: ProjectClient[]) {
+  if (clientId && isKnownClientId(clientId, clients)) return clientId
+  return clients[0]?.id || 'client-local'
 }
 
 function number(row: Record<string, unknown>, keys: string[], fallback = 0) {
@@ -271,17 +324,15 @@ function uniqueById<T extends { id: string }>(items: T[]) {
   })
 }
 
-function isGeneratedPlaceholderTask(task: ProjectTask) {
-  return task.title === 'New project task' && task.description === 'Define scope, owner, and delivery target.'
-}
-
-function loadClients() {
+function loadLocalClients() {
   const companyId = currentCompanyId('')
   const rows = readJson<Array<Record<string, unknown>>>(companyScopedKey(clientsKey, companyId), [])
-  return uniqueById(rows.map((row, index) => ({
-    id: text(row, ['id', 'clientId', 'customerId'], `client-${index + 1}`),
-    name: text(row, ['name', 'companyName', 'clientName', 'customerName', 'businessName', 'company'], `Client ${index + 1}`),
-  })))
+  return uniqueById(rows.map(clientFromRow))
+}
+
+async function loadBusinessClients(companyId: string) {
+  const rows = await listBusinessRecords<Record<string, unknown>>('clients', companyId).catch(() => [])
+  return uniqueById(rows.map(clientFromRow))
 }
 
 function loadMembers(): ProjectMember[] {
@@ -365,9 +416,14 @@ function liveBaseState(): ProjectManagementState {
   return {
     ...emptyProjectManagementState,
     companyId: currentCompanyId('wiseflow-local'),
-    clients: loadClients(),
+    clients: loadLocalClients(),
     members: loadMembers(),
   }
+}
+
+async function liveBaseStateWithBusinessClients(base: ProjectManagementState): Promise<ProjectManagementState> {
+  const clients = await loadBusinessClients(base.companyId)
+  return clients.length ? { ...base, clients } : base
 }
 
 function mapLegacyProject(row: Record<string, unknown>, index: number): ProjectRecord {
@@ -398,43 +454,14 @@ function mapLegacyProject(row: Record<string, unknown>, index: number): ProjectR
   }
 }
 
-function stripDemoRecords(state: ProjectManagementState) {
-  const next: ProjectManagementState = {
-    ...state,
-    clients: state.clients.filter(client => !demoClientIds.has(client.id)),
-    members: state.members.filter(member => !demoMemberIds.has(member.id)),
-    projects: state.projects.filter(project => !demoProjectIds.has(project.id)),
-    tasks: state.tasks.filter(task => !demoTaskIds.has(task.id) && !demoProjectIds.has(task.projectId) && !isGeneratedPlaceholderTask(task)),
-    milestones: state.milestones.filter(milestone => !demoMilestoneIds.has(milestone.id) && !demoProjectIds.has(milestone.projectId)),
-    timeLogs: state.timeLogs.filter(log => !demoLogIds.has(log.id) && !demoProjectIds.has(log.projectId) && !demoTaskIds.has(log.taskId)),
-    documents: state.documents.filter(document => !demoDocumentIds.has(document.id) && !demoProjectIds.has(document.projectId)),
-    taskComments: (state.taskComments || []).filter(comment => !demoProjectIds.has(comment.projectId) && !demoTaskIds.has(comment.taskId)),
-    taskAttachments: (state.taskAttachments || []).filter(attachment => !demoProjectIds.has(attachment.projectId) && !demoTaskIds.has(attachment.taskId)),
-    taskChecklists: (state.taskChecklists || []).filter(item => !demoProjectIds.has(item.projectId) && !demoTaskIds.has(item.taskId)),
-    activities: state.activities.filter(activity => !demoActivityIds.has(activity.id) && !demoProjectIds.has(activity.projectId)),
-  }
-  const changed = next.clients.length !== state.clients.length
-    || next.members.length !== state.members.length
-    || next.projects.length !== state.projects.length
-    || next.tasks.length !== state.tasks.length
-    || next.milestones.length !== state.milestones.length
-    || next.timeLogs.length !== state.timeLogs.length
-    || next.documents.length !== state.documents.length
-    || next.taskComments.length !== (state.taskComments || []).length
-    || next.taskAttachments.length !== (state.taskAttachments || []).length
-    || next.taskChecklists.length !== (state.taskChecklists || []).length
-    || next.activities.length !== state.activities.length
-  return { state: next, changed }
-}
-
 function hydrateState(state: ProjectManagementState, base: ProjectManagementState): ProjectManagementState {
-  const clients = Array.isArray(state.clients) ? state.clients : []
   const members = Array.isArray(state.members) ? state.members : []
   return normalizeProjectManagementStateCompany({
     ...base,
     ...state,
+    savedAt: state.savedAt,
     companyId: base.companyId,
-    clients: uniqueById([...clients, ...base.clients]),
+    clients: base.clients,
     members: uniqueById([...members, ...base.members]),
     projects: Array.isArray(state.projects) ? state.projects : [],
     tasks: Array.isArray(state.tasks) ? state.tasks : [],
@@ -448,33 +475,14 @@ function hydrateState(state: ProjectManagementState, base: ProjectManagementStat
   }, base.companyId)
 }
 
-function withMockFallback(state: ProjectManagementState): ProjectManagementState {
-  if (state.projects.length || state.tasks.length || state.milestones.length || state.timeLogs.length || state.documents.length) return state
-  const mock = mockProjectManagementState(state.companyId)
-  return {
-    ...state,
-    clients: uniqueById([...state.clients, ...mock.clients]),
-    members: uniqueById([...state.members, ...mock.members]),
-    projects: mock.projects,
-    tasks: mock.tasks,
-    milestones: mock.milestones,
-    timeLogs: mock.timeLogs,
-    documents: mock.documents,
-    taskComments: mock.taskComments,
-    taskAttachments: mock.taskAttachments,
-    taskChecklists: mock.taskChecklists,
-    activities: mock.activities,
-  }
-}
-
 export function loadProjectManagementState(): ProjectManagementState {
   const base = liveBaseState()
   if (projectStateCache && projectStateHydratedCompanyId === base.companyId) {
-    return withMockFallback(projectStateCache)
+    return projectStateCache
   }
 
   if (typeof window !== 'undefined') void refreshProjectManagementState()
-  return withMockFallback(base)
+  return base
 }
 
 export async function refreshProjectManagementState(): Promise<ProjectManagementState> {
@@ -482,34 +490,35 @@ export async function refreshProjectManagementState(): Promise<ProjectManagement
   if (projectRefreshPromise?.companyId === base.companyId) return projectRefreshPromise.promise
 
   const promise = (async () => {
-    const rows = await listBusinessRecords<ProjectManagementState>(projectStateCollection, base.companyId).catch(() => [])
-    let state = rows[0] ? hydrateState(rows[0], base) : null
+    const liveBase = await liveBaseStateWithBusinessClients(base)
+    const rows = await listBusinessRecords<ProjectManagementState>(projectStateCollection, liveBase.companyId).catch(() => [])
+    let state = rows[0] ? hydrateState(rows[0], liveBase) : null
 
     if (!state) {
-      const stored = readJson<ProjectManagementState | null>(companyScopedKey(storageKey, base.companyId), null)
-      if (stored) state = hydrateState(stored, base)
-    }
-
-    if (!state) {
-      const legacy = readScopedLegacyRows<Record<string, unknown>>([legacyProjectsKey], base.companyId)
+      const legacy = readScopedLegacyRows<Record<string, unknown>>([legacyProjectsKey], liveBase.companyId)
       if (legacy.length) {
-        const managerId = base.members[0]?.id || ''
+        const managerId = liveBase.members[0]?.id || ''
         state = {
-          ...base,
+          ...liveBase,
           projects: legacy.map((project, index) => {
             const mapped = mapLegacyProject(project, index)
-            return { ...mapped, companyId: base.companyId, managerId, memberIds: managerId ? [managerId] : [] }
+            return { ...mapped, companyId: liveBase.companyId, managerId, memberIds: managerId ? [managerId] : [] }
           }),
         }
       }
     }
 
-    const stripped = stripDemoRecords(state || base)
-    const compacted = compactProjectManagementState(stripped.state)
-    projectStateCache = withMockFallback(compacted)
+    const compacted = compactProjectManagementState(state || liveBase)
+    const cached = projectStateCache && projectStateHydratedCompanyId === base.companyId
+      ? hydrateState(projectStateCache, liveBase)
+      : null
+    projectStateCache = newestProjectManagementState([
+      compacted,
+      cached,
+    ]) || compacted
     projectStateHydratedCompanyId = base.companyId
     await replaceBusinessCollection(projectStateCollection, [projectStateCache], base.companyId).catch(() => [])
-    clearLegacyBusinessRows([storageKey, legacyProjectsKey], base.companyId)
+    clearLegacyBusinessRows([legacyProjectsKey], base.companyId)
     if (typeof window !== 'undefined') window.dispatchEvent(new Event('wiseflow-project-management-refresh'))
     return projectStateCache
   })().finally(() => {
@@ -524,7 +533,7 @@ export async function refreshProjectManagementState(): Promise<ProjectManagement
 
 export function saveProjectManagementState(state: ProjectManagementState) {
   const companyId = currentCompanyId(state.companyId)
-  const persistedState = compactProjectManagementState({ ...state, companyId })
+  const persistedState = compactProjectManagementState({ ...state, companyId, savedAt: new Date().toISOString() })
   projectStateCache = persistedState
   projectStateHydratedCompanyId = companyId
   void replaceBusinessCollection(projectStateCollection, [persistedState], companyId).catch(() => undefined)
@@ -532,9 +541,7 @@ export function saveProjectManagementState(state: ProjectManagementState) {
 }
 
 export function createProjectRecord(state: ProjectManagementState, draft: ProjectCreateDraft): ProjectManagementState {
-  const fallbackClient = { id: 'client-local', name: 'Internal / Unassigned' }
-  const clients = state.clients.some(client => client.id === draft.clientId || client.id === fallbackClient.id) ? state.clients : [...state.clients, fallbackClient]
-  const clientId = draft.clientId || state.clients[0]?.id || fallbackClient.id
+  const clientId = validProjectClientId(draft.clientId, state.clients)
   const managerId = draft.managerId || state.members[0]?.id || ''
   const memberIds = draft.memberIds?.length ? draft.memberIds : state.members.slice(0, 2).map(member => member.id)
   const project: ProjectRecord = {
@@ -569,15 +576,17 @@ export function createProjectRecord(state: ProjectManagementState, draft: Projec
     updatedAt: new Date().toISOString(),
   }
   const actionText = project.opportunityId ? `Created project ${project.name} and linked sales opportunity` : `Created project ${project.name}`
-  return { ...state, clients, projects: [project, ...state.projects], activities: [activity(state, project.id, actionText), ...state.activities] }
+  return { ...state, projects: [project, ...state.projects], activities: [activity(state, project.id, actionText), ...state.activities] }
 }
 
 export function updateProjectRecord(state: ProjectManagementState, projectId: string, patch: ProjectUpdateDraft, action = 'Updated project details'): ProjectManagementState {
   const project = state.projects.find(item => item.id === projectId)
   if (!project) return state
+  const clientId = patch.clientId === undefined ? project.clientId : validProjectClientId(patch.clientId, state.clients)
   const nextProject: ProjectRecord = {
     ...project,
     ...patch,
+    clientId,
     progress: patch.progress === undefined ? project.progress : Math.max(0, Math.min(Number(patch.progress) || 0, 100)),
     budget: patch.budget === undefined ? project.budget : Number(patch.budget) || 0,
     spent: patch.spent === undefined ? project.spent : Number(patch.spent) || 0,

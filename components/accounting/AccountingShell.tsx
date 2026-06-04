@@ -241,7 +241,7 @@ export default function AccountingShell({ children }: { children: React.ReactNod
     background: isDarkTheme ? '#0a0a0a' : 'var(--acc-bg, #f7f9fc)',
     display: 'grid',
     fontFamily: font,
-    color: isDarkTheme ? '#fafafa' : 'var(--acc-text, #111827)',
+    color: isDarkTheme ? '#fafafa' : 'var(--acc-text, #000000)',
   }
   const sidebarStyle: React.CSSProperties = {
     minHeight: '100vh',
@@ -284,7 +284,7 @@ export default function AccountingShell({ children }: { children: React.ReactNod
           <span className="accounting-brand-mark" style={{ width: 36, height: 36, borderRadius: 10, background: '#0f172a', color: '#fff', display: 'grid', placeItems: 'center', fontWeight: 700, fontSize: 16 }}>W</span>
           <span className="accounting-brand-copy">
             <span style={{ display: 'block', fontSize: 16, fontWeight: 600, lineHeight: 1, color: '#0f172a' }}>Accounting</span>
-            <span style={{ display: 'block', fontSize: 12, color: '#64748b', marginTop: 4, fontWeight: 500 }}>Finance workspace</span>
+            <span style={{ display: 'block', fontSize: 12, color: '#000000', marginTop: 4, fontWeight: 500 }}>Finance workspace</span>
           </span>
         </div>
 
@@ -294,7 +294,7 @@ export default function AccountingShell({ children }: { children: React.ReactNod
         </Link>
 
         <nav className="accounting-sidebar-nav" style={{ display: 'grid', gap: 3, alignContent: 'start', flex: 1, overflowY: 'auto', paddingRight: 0 }} aria-label="Accounting workspace navigation">
-          <div className="accounting-nav-section-label" style={{ fontSize: 11, color: '#64748b', fontWeight: 500, padding: '0 10px 6px', textTransform: 'uppercase' }}>Workspace</div>
+          <div className="accounting-nav-section-label" style={{ fontSize: 11, color: '#000000', fontWeight: 500, padding: '0 10px 6px', textTransform: 'uppercase' }}>Workspace</div>
           {accountingNavItems.map(item => {
             const Icon = item.icon
             const active = activeMeta.href === item.href
@@ -331,12 +331,12 @@ export default function AccountingShell({ children }: { children: React.ReactNod
             <span className="accounting-route-icon" style={{ width: 38, height: 38, borderRadius: 11, background: '#ecfdf3', color: '#16a34a', display: 'grid', placeItems: 'center', flexShrink: 0 }}><ActiveIcon size={19} /></span>
             <span style={{ minWidth: 0 }}>
               <span style={{ display: 'block', fontSize: 15, fontWeight: 900, color: '#0f172a', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{activeMeta.label}</span>
-              <span style={{ display: 'block', fontSize: 12, color: '#64748b', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{activeMeta.description}</span>
+              <span style={{ display: 'block', fontSize: 12, color: '#000000', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{activeMeta.description}</span>
             </span>
           </div>
           <label className="accounting-header-search" style={{ height: 40, borderRadius: 8, background: 'var(--acc-input, #fff)', display: 'flex', alignItems: 'center', gap: 10, padding: '0 14px', border: '1px solid var(--acc-input-border, #e8edf4)', boxShadow: 'none' }}>
             <Search size={16} color="currentColor" />
-            <input placeholder="Search Finance" aria-label="Search Finance" style={{ flex: 1, border: 0, outline: 0, background: 'transparent', fontSize: 13, color: 'var(--acc-text, #0f172a)' }} />
+            <input placeholder="Search Finance" aria-label="Search Finance" style={{ flex: 1, border: 0, outline: 0, background: 'transparent', fontSize: 13, color: 'var(--acc-text, #000000)' }} />
           </label>
           <div className="accounting-header-actions" style={headerActionsStyle}>
             <CompanySwitcher compact />
@@ -351,7 +351,7 @@ export default function AccountingShell({ children }: { children: React.ReactNod
                 <div style={notificationPanelHeaderStyle}>
                   <span>
                     <strong style={{ display: 'block', color: '#0f172a', fontSize: 16 }}>Finance notifications</strong>
-                    <small style={{ color: '#64748b', fontWeight: 700 }}>{notificationBadgeCount ? `${notificationBadgeCount} employee request${notificationBadgeCount === 1 ? '' : 's'} waiting` : 'No employee requests waiting'}</small>
+                    <small style={{ color: '#000000', fontWeight: 700 }}>{notificationBadgeCount ? `${notificationBadgeCount} employee request${notificationBadgeCount === 1 ? '' : 's'} waiting` : 'No employee requests waiting'}</small>
                   </span>
                   <button type="button" aria-label="Close notifications" onClick={() => setNotificationsOpen(false)} style={smallIconButtonStyle}><X size={15} /></button>
                 </div>
@@ -459,7 +459,7 @@ export default function AccountingShell({ children }: { children: React.ReactNod
             </div>
           </div>
         </header>
-        <main className="accounting-scroll-content" style={{ background: isDarkTheme ? '#0a0a0a' : 'var(--acc-bg, #f8fafc)', color: isDarkTheme ? '#fafafa' : 'var(--acc-text, #0f172a)' }}>
+        <main className="accounting-scroll-content" style={{ background: isDarkTheme ? '#0a0a0a' : 'var(--acc-bg, #f8fafc)', color: isDarkTheme ? '#fafafa' : 'var(--acc-text, #000000)' }}>
           {children}
           <style>{accountingThemeOverrideCss}</style>
         </main>
@@ -708,7 +708,7 @@ const notificationDotStyle: React.CSSProperties = {
 
 const notificationMetaStyle: React.CSSProperties = {
   display: 'block',
-  color: '#64748b',
+  color: '#000000',
   fontSize: 11,
   fontWeight: 800,
   marginBottom: 3,
@@ -724,7 +724,7 @@ const notificationTitleStyle: React.CSSProperties = {
 
 const notificationDetailStyle: React.CSSProperties = {
   display: 'block',
-  color: '#475569',
+  color: '#000000',
   fontSize: 12,
   lineHeight: 1.35,
   marginTop: 4,
@@ -734,7 +734,7 @@ const notificationEmptyStyle: React.CSSProperties = {
   minHeight: 150,
   borderRadius: 12,
   background: '#f8fafc',
-  color: '#64748b',
+  color: '#000000',
   display: 'grid',
   placeItems: 'center',
   alignContent: 'center',
@@ -765,9 +765,9 @@ const accountingShellCss = `
   --acc-border-soft: #e8edf4;
   --acc-input: #ffffff;
   --acc-input-border: #cbd5e1;
-  --acc-text: #0f172a;
-  --acc-muted: #475569;
-  --acc-placeholder: #64748b;
+  --acc-text: #000000;
+  --acc-muted: #000000;
+  --acc-placeholder: #000000;
   display: grid !important;
   grid-template-columns: minmax(0, 1fr) !important;
   height: 100vh;
@@ -946,7 +946,7 @@ const accountingShellCss = `
   transition: background 120ms ease, color 120ms ease, box-shadow 120ms ease;
 }
 .accounting-nav-row svg {
-  color: #64748b;
+  color: #000000;
   flex-shrink: 0;
   transition: color 120ms ease;
 }
@@ -1134,10 +1134,10 @@ html[data-theme='dark'] .accounting-shell {
   --acc-input-border: #3a3a3a;
   --acc-text: #fafafa;
   --acc-muted: #c7c7cf;
-  --acc-placeholder: #9ca3af;
+  --acc-placeholder: #000000;
   --acc-sidebar: #ffffff;
-  --acc-sidebar-hover: #f1f5f9;
-  --acc-sidebar-active: #eef2f7;
+  --acc-sidebar-hover: #eeeeef;
+  --acc-sidebar-active: #0f7f86;
   --acc-positive: #86efac;
   --acc-warning: #fbbf24;
   --acc-danger: #fca5a5;
@@ -1152,12 +1152,12 @@ html[data-theme='light'] .accounting-shell {
   --acc-border-soft: #e8edf4;
   --acc-input: #ffffff;
   --acc-input-border: #cbd5e1;
-  --acc-text: #0f172a;
-  --acc-muted: #475569;
-  --acc-placeholder: #64748b;
+  --acc-text: #000000;
+  --acc-muted: #000000;
+  --acc-placeholder: #000000;
   --acc-sidebar: #ffffff;
-  --acc-sidebar-hover: #f1f5f9;
-  --acc-sidebar-active: #eef2f7;
+  --acc-sidebar-hover: #eeeeef;
+  --acc-sidebar-active: #0f7f86;
   --acc-positive: #15803d;
   --acc-warning: #b45309;
   --acc-danger: #b91c1c;
@@ -1245,24 +1245,44 @@ html[data-theme] .accounting-sidebar {
 }
 
 html[data-theme] .accounting-nav-row {
-  color: #334155 !important;
+  min-height: 36px !important;
+  border-radius: 4px !important;
+  color: #444a51 !important;
   background: transparent !important;
+  font-size: 13px !important;
+  font-weight: 650 !important;
+  line-height: 22px !important;
+  box-shadow: none !important;
 }
 
 html[data-theme] .accounting-nav-row svg {
-  color: currentColor !important;
+  color: #696f77 !important;
   stroke: currentColor !important;
 }
 
-html[data-theme] .accounting-nav-row:hover,
-html[data-theme] .accounting-nav-row.active {
+html[data-theme] .accounting-nav-row:hover {
   background: var(--acc-sidebar-hover) !important;
-  color: #0f172a !important;
+  color: #050505 !important;
+}
+
+html[data-theme] .accounting-nav-row:hover svg {
+  color: #050505 !important;
 }
 
 html[data-theme] .accounting-nav-row.active {
   background: var(--acc-sidebar-active) !important;
+  color: #ffffff !important;
+  font-weight: 850 !important;
+}
+
+html[data-theme] .accounting-nav-row.active {
   box-shadow: none !important;
+}
+
+html[data-theme] .accounting-nav-row.active,
+html[data-theme] .accounting-nav-row.active * {
+  color: #ffffff !important;
+  stroke: currentColor !important;
 }
 
 html[data-theme] .accounting-scroll-content h1,
@@ -1450,8 +1470,8 @@ html[data-theme='light'] .accounting-shell {
   --acc-border: #dbe2ea;
   --acc-border-soft: #e5e7eb;
   --acc-input-border: #d8dee7;
-  --acc-text: #0f172a;
-  --acc-muted: #64748b;
+  --acc-text: #000000;
+  --acc-muted: #000000;
 }
 
 @media (min-width: 901px) {
@@ -1534,7 +1554,7 @@ html[data-theme='light'] .accounting-shell .accounting-scroll-content :is(
   .audit-header p,
   .withholding-header p
 ) {
-  color: #64748b !important;
+  color: #000000 !important;
   font-size: 13.5px !important;
   font-weight: 400 !important;
   line-height: 1.45 !important;
@@ -1676,7 +1696,7 @@ html[data-theme='light'] .accounting-shell .accounting-scroll-content :is(
   .withholding-metric span span,
   .live-metric small
 ) {
-  color: #64748b !important;
+  color: #000000 !important;
   font-size: 12px !important;
   font-weight: 600 !important;
 }
@@ -1712,7 +1732,7 @@ html[data-theme='light'] .accounting-shell .accounting-scroll-content :is(
   padding-bottom: 12px !important;
   border-radius: 0 !important;
   background: transparent !important;
-  color: #475569 !important;
+  color: #000000 !important;
   font-size: 13px !important;
   font-weight: 500 !important;
 }
@@ -1790,7 +1810,7 @@ html[data-theme='light'] .accounting-shell .accounting-scroll-content :is(
 ) th,
 html[data-theme='light'] .accounting-shell .accounting-scroll-content table th {
   background: #f8fafc !important;
-  color: #475569 !important;
+  color: #000000 !important;
   font-size: 12px !important;
   font-weight: 700 !important;
   text-transform: uppercase;
@@ -1825,7 +1845,7 @@ html[data-theme='light'] .accounting-shell .accounting-scroll-content :is(
   border: 1px dashed #dbe2ea !important;
   border-radius: 8px !important;
   background: #ffffff !important;
-  color: #64748b !important;
+  color: #000000 !important;
   font-size: 13px !important;
   font-weight: 500 !important;
 }
@@ -1877,7 +1897,7 @@ html[data-theme='light'] .accounting-scroll-content :is([class*='pill'], [class*
 html[data-theme='light'] .accounting-scroll-content :is([class*='pill'], [class*='badge'], [class*='chip']):is([class*='draft'], [class*='recorded'], [class*='archived'], [class*='closed']) {
   background: #f1f5f9 !important;
   border-color: #e2e8f0 !important;
-  color: #475569 !important;
+  color: #000000 !important;
 }
 
 /* --- Dark theme (both triggers) --- */
@@ -1903,7 +1923,7 @@ html[data-theme='dark'] .accounting-scroll-content :is([class*='pill'], [class*=
 .accounting-theme-dark .accounting-scroll-content :is([class*='pill'], [class*='badge'], [class*='chip']):is([class*='draft'], [class*='recorded'], [class*='archived'], [class*='closed']) {
   background: rgba(148, 163, 184, 0.16) !important;
   border-color: rgba(148, 163, 184, 0.30) !important;
-  color: #cbd5e1 !important;
+  color: #000000 !important;
 }
 `
 
@@ -2018,7 +2038,7 @@ html[data-theme='light'] .accounting-shell .accounting-scroll-content :is(
   .withholding-header p
 ) {
   margin: 8px 0 0 !important;
-  color: #64748b !important;
+  color: #000000 !important;
   font-size: 14px !important;
   line-height: 1.45 !important;
   font-weight: 400 !important;
@@ -2109,7 +2129,7 @@ html[data-theme='light'] .accounting-shell .accounting-scroll-content :is(
 ) {
   min-height: 28px !important;
   display: block !important;
-  color: #64748b !important;
+  color: #000000 !important;
   font-size: 11.5px !important;
   line-height: 1.2 !important;
   font-weight: 650 !important;
@@ -2331,7 +2351,7 @@ html .accounting-shell.accounting-theme-dark {
   --acc-input-border: #3a3a3a;
   --acc-text: #fafafa;
   --acc-muted: #c7c7cf;
-  --acc-placeholder: #9ca3af;
+  --acc-placeholder: #000000;
   background: #101010 !important;
   background-color: #101010 !important;
   color: #fafafa !important;
@@ -2424,7 +2444,7 @@ html[data-theme='dark'] .accounting-shell {
   --acc-input-border: #3a3a3a;
   --acc-text: #fafafa;
   --acc-muted: #c7c7cf;
-  --acc-placeholder: #9ca3af;
+  --acc-placeholder: #000000;
 }
 
 html[data-theme='dark'] body:has(.accounting-shell),
@@ -2605,8 +2625,8 @@ html[data-theme='light'] .accounting-shell {
   --acc-border-soft: #e5e7eb;
   --acc-input: #ffffff;
   --acc-input-border: #d8dee7;
-  --acc-text: #0f172a;
-  --acc-muted: #64748b;
+  --acc-text: #000000;
+  --acc-muted: #000000;
   --acc-positive: #16a34a;
   --acc-blue: #2563eb;
   --acc-hero: #d5f6e5;
@@ -2647,20 +2667,22 @@ html[data-theme='light'] .accounting-shell .accounting-back-link {
 }
 
 html[data-theme='light'] .accounting-shell .accounting-nav-section-label {
-  color: #94a3b8 !important;
-  font-size: 10.5px !important;
-  font-weight: 800 !important;
-  letter-spacing: .08em !important;
+  color: #8b8f96 !important;
+  font-size: 10px !important;
+  font-weight: 850 !important;
+  letter-spacing: 0 !important;
 }
 
 html[data-theme='light'] .accounting-shell .accounting-nav-row {
   position: relative;
-  min-height: 38px !important;
-  border-radius: 8px !important;
-  padding: 0 10px 0 12px !important;
-  color: #475569 !important;
+  min-height: 36px !important;
+  border-radius: 4px !important;
+  padding: 0 10px !important;
+  color: #444a51 !important;
   font-size: 13px !important;
   font-weight: 650 !important;
+  line-height: 22px !important;
+  box-shadow: none !important;
 }
 
 html[data-theme='light'] .accounting-shell .accounting-nav-row::before {
@@ -2673,22 +2695,27 @@ html[data-theme='light'] .accounting-shell .accounting-nav-row::before {
 }
 
 html[data-theme='light'] .accounting-shell .accounting-nav-row:hover {
-  background: #f1f5f9 !important;
-  color: #0f172a !important;
+  background: #eeeeef !important;
+  color: #050505 !important;
 }
 
 html[data-theme='light'] .accounting-shell .accounting-nav-row.active {
-  background: #ecfdf3 !important;
-  color: #14532d !important;
-  font-weight: 760 !important;
+  background: #0f7f86 !important;
+  color: #ffffff !important;
+  font-weight: 850 !important;
 }
 
 html[data-theme='light'] .accounting-shell .accounting-nav-row.active::before {
-  background: #22c55e;
+  background: transparent;
 }
 
 html[data-theme='light'] .accounting-shell .accounting-nav-row.active svg {
-  color: #16a34a !important;
+  color: #ffffff !important;
+}
+
+html[data-theme='light'] .accounting-shell .accounting-nav-row.active * {
+  color: #ffffff !important;
+  stroke: currentColor !important;
 }
 
 html[data-theme='light'] .accounting-shell .accounting-sticky-header {
@@ -3031,7 +3058,7 @@ html[data-theme='light'] .accounting-shell .accounting-scroll-content :is(th) {
   height: 42px !important;
   padding: 0 12px !important;
   background: #f8fafc !important;
-  color: #475569 !important;
+  color: #000000 !important;
   font-size: 11.5px !important;
   font-weight: 760 !important;
   letter-spacing: 0 !important;
@@ -3124,6 +3151,22 @@ html[data-theme='light'] .accounting-shell .accounting-scroll-content :is(
 
   html[data-theme='light'] .accounting-shell .accounting-dashboard-hero {
     padding: 22px 0 38px !important;
+  }
+}
+
+@media (max-width: 900px) {
+  html[data-theme='light'] .accounting-shell .accounting-content-column {
+    grid-template-rows: auto minmax(0, 1fr) !important;
+  }
+
+  html[data-theme='light'] .accounting-shell .accounting-sticky-header {
+    height: auto !important;
+    min-height: 0 !important;
+    grid-template-columns: 1fr !important;
+    grid-template-rows: auto auto auto !important;
+    align-items: stretch !important;
+    gap: 10px !important;
+    padding: 10px 12px !important;
   }
 }
 `

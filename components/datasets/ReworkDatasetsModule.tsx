@@ -45,10 +45,13 @@ import {
   X,
 } from 'lucide-react'
 import Link from 'next/link'
-import { DragEvent, FormEvent, MouseEvent, ReactNode, useEffect, useMemo, useState } from 'react'
+import { CSSProperties, DragEvent, FormEvent, MouseEvent, ReactNode, useEffect, useMemo, useRef, useState } from 'react'
 import CompanySwitcher from '@/components/CompanySwitcher'
+import { AnalyticsToggleButton, CollapsibleAnalytics, useAnalyticsDisclosure } from '@/components/AnalyticsDisclosure'
 import StateFeedback from '@/components/StateFeedback'
 import { companyChangeEvent, companyScopedKey, getActiveCompany } from '@/lib/tenant/company'
+import { fetchDatasetWorkspace, saveDatasetWorkspace } from '@/lib/datasets/client'
+import { useVoiceIntent } from '@/lib/voice/intent'
 import { uploadFileObject } from '@/lib/uploads/client'
 import { listBusinessRecords } from '@/lib/business/client'
 import type { BusinessCollection } from '@/lib/business/collections'
@@ -74,8 +77,8 @@ type FilterRule = { id: string; fieldId: string; operator: FilterOperator; value
 type ExportCell = string | { text: string; html: string }
 
 type FieldType =
-  | 'Link to another record (beta)'
-  | 'Rollup (beta)'
+  | 'Link to another record'
+  | 'Rollup'
   | 'Simple text'
   | 'Number, integer'
   | 'Number, with decimal-points'
@@ -101,9 +104,9 @@ type FieldType =
   | 'Progress'
   | 'URL'
   | 'Link dataset record'
-  | 'Link service record (Beta)'
+  | 'Link service record'
   | 'Multiple files'
-  | 'Lookup (beta)'
+  | 'Lookup'
   | 'Text'
   | 'Long text'
   | 'Number'
@@ -295,8 +298,8 @@ const companySizeOptions = ['1 - 10 employees', '11 - 50 employees', '51 - 200 e
 const industryOptions = ['Technology', 'Construction', 'Residential', 'Consulting', 'IT Services', 'Logistics', 'Marketing', 'Healthcare', 'Finance']
 
 const fieldTypes: FieldType[] = [
-  'Link to another record (beta)',
-  'Rollup (beta)',
+  'Link to another record',
+  'Rollup',
   'Simple text',
   'Number, integer',
   'Number, with decimal-points',
@@ -322,14 +325,14 @@ const fieldTypes: FieldType[] = [
   'Progress',
   'URL',
   'Link dataset record',
-  'Link service record (Beta)',
+  'Link service record',
   'Multiple files',
-  'Lookup (beta)',
+  'Lookup',
 ]
 
 const fieldCards: Array<{ type: FieldType; description: string; tone: string; icon: ReactNode }> = [
-  { type: 'Link to another record (beta)', description: 'Link this field with other records in dataset', tone: 'blue', icon: <Link2 size={16} /> },
-  { type: 'Rollup (beta)', description: 'Aggregate values from linked records (count, sum, average, min, max)', tone: 'blue', icon: <Sigma size={16} /> },
+  { type: 'Link to another record', description: 'Link this field with other records in dataset', tone: 'blue', icon: <Link2 size={16} /> },
+  { type: 'Rollup', description: 'Aggregate values from linked records (count, sum, average, min, max)', tone: 'blue', icon: <Sigma size={16} /> },
   { type: 'Simple text', description: 'Single line of text', tone: 'cyan', icon: <Text size={16} /> },
   { type: 'Number, integer', description: 'Number, integer value', tone: 'green', icon: <Hash size={16} /> },
   { type: 'Number, with decimal-points', description: 'Number, with decimals', tone: 'green', icon: <Hash size={16} /> },
@@ -355,9 +358,9 @@ const fieldCards: Array<{ type: FieldType; description: string; tone: string; ic
   { type: 'Progress', description: 'Progress', tone: 'blue', icon: <Hash size={16} /> },
   { type: 'URL', description: 'URL Link', tone: 'cyan', icon: <Link2 size={16} /> },
   { type: 'Link dataset record', description: 'Link field to record in Dataset', tone: 'green', icon: <Database size={16} /> },
-  { type: 'Link service record (Beta)', description: 'Link field to record in Service', tone: 'orange', icon: <Link2 size={16} /> },
+  { type: 'Link service record', description: 'Link field to record in Service', tone: 'orange', icon: <Link2 size={16} /> },
   { type: 'Multiple files', description: 'Pick multiple files', tone: 'blue', icon: <Paperclip size={16} /> },
-  { type: 'Lookup (beta)', description: 'See values from a field in a linked record', tone: 'purple', icon: <Search size={16} /> },
+  { type: 'Lookup', description: 'See values from a field in a linked record', tone: 'purple', icon: <Search size={16} /> },
 ]
 const sourceDefinitions: SourceDefinition[] = [
   {
@@ -504,8 +507,12 @@ export default function ReworkDatasetsModule({ section = 'overview' }: { section
   const [showFoldersPage, setShowFoldersPage] = useState(false)
   const [sourceRows, setSourceRows] = useState<Record<string, StoredRow[]>>({})
   const [syncingSource, setSyncingSource] = useState('')
+  const [mobileNavOpen, setMobileNavOpen] = useState(false)
+  const serverSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   useEffect(() => {
+    let cancelled = false
+
     const load = () => {
       const activeCompanyId = getActiveCompany()?.id || ''
       const account = readAccount()
@@ -514,12 +521,45 @@ export default function ReworkDatasetsModule({ section = 'overview' }: { section
       setState(loaded)
       setSelectedDatasetId(previous => previous && loaded.datasets.some(dataset => dataset.id === previous) ? previous : loaded.datasets[0]?.id || '')
       setActiveViewId(previous => previous || loaded.datasets[0]?.views[0]?.id || '')
+      return { activeCompanyId, account, loaded }
     }
 
-    load()
+    // Hydrate from the server (the cross-device/cross-user source of truth) on
+    // first mount. Local storage already painted instantly above; if the server
+    // has a workspace we adopt it, otherwise we seed the server from local.
+    // Any failure (offline, auth) silently leaves the local copy in place.
+    const { activeCompanyId, account, loaded } = load()
+    void (async () => {
+      try {
+        const serverState = await fetchDatasetWorkspace(activeCompanyId)
+        if (cancelled) return
+        let adopted = false
+        if (serverState && Array.isArray((serverState as Partial<WorkspaceState>).datasets)) {
+          try {
+            const normalized = ensureClientImportTemplate(normalizeWorkspace(serverState as WorkspaceState, account.name), account.name)
+            if (cancelled) return
+            setState(normalized)
+            persistWorkspace(activeCompanyId, normalized)
+            setSelectedDatasetId(previous => previous && normalized.datasets.some(dataset => dataset.id === previous) ? previous : normalized.datasets[0]?.id || '')
+            setActiveViewId(previous => previous || normalized.datasets[0]?.views[0]?.id || '')
+            adopted = true
+          } catch {
+            // Stored doc is unusable (corrupt/partial) — fall through to re-seed.
+            adopted = false
+          }
+        }
+        // Server had nothing usable: seed it from the valid local workspace so
+        // it self-heals and future loads/devices read a good document.
+        if (!adopted && !cancelled) await saveDatasetWorkspace(activeCompanyId, loaded)
+      } catch {
+        // Server unavailable — keep working from the local copy.
+      }
+    })()
+
     window.addEventListener('storage', load)
     window.addEventListener(companyChangeEvent, load)
     return () => {
+      cancelled = true
       window.removeEventListener('storage', load)
       window.removeEventListener(companyChangeEvent, load)
     }
@@ -594,6 +634,17 @@ export default function ReworkDatasetsModule({ section = 'overview' }: { section
       : nextState
     setState(withHistory)
     persistWorkspace(companyId, withHistory)
+    scheduleServerSave(companyId, withHistory)
+  }
+
+  // Persist to the server after edits settle, so rapid edits collapse into one
+  // request. Local storage is always written synchronously above, so a failed
+  // or slow server save never blocks or loses the user's work.
+  function scheduleServerSave(targetCompanyId: string, nextState: WorkspaceState) {
+    if (serverSaveTimer.current) clearTimeout(serverSaveTimer.current)
+    serverSaveTimer.current = setTimeout(() => {
+      void saveDatasetWorkspace(targetCompanyId, nextState).catch(() => {})
+    }, 800)
   }
 
   function updateDataset(nextDataset: Dataset, action?: string) {
@@ -607,6 +658,7 @@ export default function ReworkDatasetsModule({ section = 'overview' }: { section
     setActiveViewId(dataset.views.find(view => view.default)?.id || dataset.views[0]?.id || '')
     setShowFoldersPage(false)
     setShowDatasetDetail(true)
+    setMobileNavOpen(false)
   }
 
   function openModal(name: ModalName, initial: Record<string, string> = {}) {
@@ -614,6 +666,8 @@ export default function ReworkDatasetsModule({ section = 'overview' }: { section
     if (name === 'fieldPicker') setAddFieldTab('new')
     setModal(name)
   }
+
+  useVoiceIntent('new-dataset', () => openModal('dataset'))
 
   function closeModal() {
     setModal(null)
@@ -700,6 +754,7 @@ export default function ReworkDatasetsModule({ section = 'overview' }: { section
 
   function deleteDataset(datasetId: string) {
     const dataset = state.datasets.find(item => item.id === datasetId)
+    if (!window.confirm(`Delete the "${dataset?.name || 'Untitled'}" dataset?\n\nThis permanently removes its records, and any relationships, automations, and quality rules that reference it. This cannot be undone.`)) return
     const nextDatasets = state.datasets.filter(item => item.id !== datasetId)
     save({
       ...state,
@@ -712,6 +767,39 @@ export default function ReworkDatasetsModule({ section = 'overview' }: { section
       setSelectedDatasetId(nextDatasets[0]?.id || '')
       setActiveViewId(nextDatasets[0]?.views[0]?.id || '')
     }
+  }
+
+  // Bulk delete used by the management list's selection bar. Confirmation is
+  // owned by the caller (one prompt for the whole batch) so we don't re-prompt
+  // per dataset the way the single-row deleteDataset does.
+  function deleteDatasets(datasetIds: string[]) {
+    if (!datasetIds.length) return
+    const idSet = new Set(datasetIds)
+    const nextDatasets = state.datasets.filter(item => !idSet.has(item.id))
+    save({
+      ...state,
+      datasets: nextDatasets,
+      relationships: state.relationships.filter(item => !idSet.has(item.fromDatasetId) && !idSet.has(item.toDatasetId)),
+      automations: state.automations.filter(item => !idSet.has(item.datasetId)),
+      qualityRules: state.qualityRules.filter(item => !idSet.has(item.datasetId)),
+    }, 'Deleted datasets', `${datasetIds.length} dataset${datasetIds.length === 1 ? '' : 's'}`)
+    if (idSet.has(selectedDatasetId)) {
+      setSelectedDatasetId(nextDatasets[0]?.id || '')
+      setActiveViewId(nextDatasets[0]?.views[0]?.id || '')
+    }
+  }
+
+  function exportDatasetById(datasetId: string) {
+    const dataset = state.datasets.find(item => item.id === datasetId)
+    if (!dataset) return
+    exportDatasetRecords(dataset, [])
+  }
+
+  function toggleDatasetStatus(datasetId: string) {
+    const dataset = state.datasets.find(item => item.id === datasetId)
+    if (!dataset) return
+    const nextStatus = dataset.status === 'ACTIVE' ? 'PAUSED' : 'ACTIVE'
+    updateDataset({ ...dataset, status: nextStatus, updatedAt: now() }, nextStatus === 'ACTIVE' ? 'Activated dataset' : 'Paused dataset')
   }
 
   function createField(event: FormEvent<HTMLFormElement>) {
@@ -737,8 +825,8 @@ export default function ReworkDatasetsModule({ section = 'overview' }: { section
       type,
       required: 'false',
       ...(type === 'Client dropdown' ? { label: 'Client' } : {}),
-      ...(type === 'Link to another record (beta)' ? { label: 'Link to another record', allowMultiple: 'false' } : {}),
-      ...(type === 'Rollup (beta)' ? { label: 'Rollup beta', aggregateFunction: 'Count', rollupConditions: 'false' } : {}),
+      ...(type === 'Link to another record' ? { label: 'Link to another record', allowMultiple: 'false' } : {}),
+      ...(type === 'Rollup' ? { label: 'Rollup', aggregateFunction: 'Count', rollupConditions: 'false' } : {}),
     })
     setModal('field')
   }
@@ -1156,6 +1244,11 @@ export default function ReworkDatasetsModule({ section = 'overview' }: { section
           onCreateDataset={() => openModal('dataset')}
           onChooseTemplate={() => openModal('template')}
           onOpenDataset={openDataset}
+          onDeleteDataset={deleteDataset}
+          onDeleteDatasets={deleteDatasets}
+          onExportDataset={exportDatasetById}
+          onToggleStatus={toggleDatasetStatus}
+          history={state.history}
         />
       )
     }
@@ -1190,8 +1283,9 @@ export default function ReworkDatasetsModule({ section = 'overview' }: { section
   }
 
   return (
-    <div className="rw-app">
+    <div className={`rw-app${mobileNavOpen ? ' rw-mobile-nav-open' : ''}`}>
       <style>{styles}</style>
+      <button type="button" className="rw-mobile-nav-backdrop" aria-label="Close navigation" onClick={() => setMobileNavOpen(false)} />
       <div className="rw-body">
         <aside className="rw-workspace-panel">
           <div className="rw-panel-brand">
@@ -1200,6 +1294,9 @@ export default function ReworkDatasetsModule({ section = 'overview' }: { section
               <strong>Datasets</strong>
               <small>Structured data</small>
             </div>
+            <button type="button" className="rw-mobile-nav-close" aria-label="Close navigation" onClick={() => setMobileNavOpen(false)}>
+              <X size={18} />
+            </button>
           </div>
           <Link href="/dashboard" className="rw-back-dashboard">
             <ArrowLeft size={15} />
@@ -1209,17 +1306,19 @@ export default function ReworkDatasetsModule({ section = 'overview' }: { section
             <Link href="/datasets" className={section === 'overview' && !showDatasetDetail && !showFoldersPage ? 'active' : undefined} onClick={() => {
               setShowFoldersPage(false)
               setShowDatasetDetail(false)
+              setMobileNavOpen(false)
             }}>
               <Database size={15} />
               Datasets
             </Link>
-            <Link href="/dashboard">
+            <Link href="/dashboard" onClick={() => setMobileNavOpen(false)}>
               <LayoutDashboard size={15} />
               Dashboard
             </Link>
             <button type="button" className={showFoldersPage ? 'active' : undefined} onClick={() => {
               setShowFoldersPage(true)
               setShowDatasetDetail(false)
+              setMobileNavOpen(false)
             }}>
               <Folder size={15} />
               Folders
@@ -1232,6 +1331,7 @@ export default function ReworkDatasetsModule({ section = 'overview' }: { section
                 <button type="button" className="rw-sidebar-folder-head" onClick={() => {
                   setShowFoldersPage(true)
                   setShowDatasetDetail(false)
+                  setMobileNavOpen(false)
                 }}>
                   <span><Folder size={14} />{group.name}</span>
                   <ChevronDown size={13} />
@@ -1252,18 +1352,21 @@ export default function ReworkDatasetsModule({ section = 'overview' }: { section
           </div>
         </aside>
         <main className="rw-main">
-          <header className="rw-topbar">
+          <header className={`rw-topbar${section === 'overview' ? ' rw-topbar--no-search' : ''}`}>
             <div className="rw-top-left">
+              <button type="button" className="rw-mobile-nav-toggle" aria-label="Open datasets navigation" aria-expanded={mobileNavOpen} onClick={() => setMobileNavOpen(true)}>
+                <AlignLeft size={18} />
+              </button>
               <span className="rw-product-mark"><Grid2X2 size={17} /></span>
               <div><strong>Datasets</strong><small>Structured workspace data</small></div>
             </div>
             <label className="rw-global-search">
               <Search size={17} />
-              <input value={query} onChange={event => setQuery(event.target.value)} placeholder="Search datasets" />
+              <input value={query} onChange={event => setQuery(event.target.value)} placeholder="Search datasets" aria-label="Search datasets" />
             </label>
             <div className="rw-top-actions">
               <CompanySwitcher compact />
-              <button type="button" className="rw-notification" aria-label="Notifications"><Bell size={18} /><em>14</em></button>
+              <button type="button" className="rw-notification" aria-label={state.history.length ? `Notifications: ${Math.min(state.history.length, 99)} recent changes` : 'Notifications'}><Bell size={18} />{state.history.length > 0 && <em>{Math.min(state.history.length, 99)}</em>}</button>
               <button type="button" className="rw-top-secondary" onClick={() => openModal('template')}><FileSpreadsheet size={15} /> Choose template</button>
               <button type="button" className="rw-top-primary" onClick={() => openModal('dataset')}><Plus size={15} /> New dataset</button>
               <span>{initials(account.name).slice(0, 2)}</span>
@@ -1319,6 +1422,11 @@ function DatasetManagementList({
   onCreateDataset,
   onChooseTemplate,
   onOpenDataset,
+  onDeleteDataset,
+  onDeleteDatasets,
+  onExportDataset,
+  onToggleStatus,
+  history,
 }: {
   datasets: Dataset[]
   query: string
@@ -1326,10 +1434,20 @@ function DatasetManagementList({
   onCreateDataset: () => void
   onChooseTemplate: () => void
   onOpenDataset: (datasetId: string) => void
+  onDeleteDataset: (datasetId: string) => void
+  onDeleteDatasets: (datasetIds: string[]) => void
+  onExportDataset: (datasetId: string) => void
+  onToggleStatus: (datasetId: string) => void
+  history: HistoryEvent[]
 }) {
   const [page, setPage] = useState(1)
   const [pageSize, setPageSize] = useState(10)
   const [referenceTime] = useState(() => Date.now())
+  const [statusFilter, setStatusFilter] = useState<'all' | 'ACTIVE' | 'PAUSED'>('all')
+  const [filterOpen, setFilterOpen] = useState(false)
+  const [selectedIds, setSelectedIds] = useState<string[]>([])
+  const [menuId, setMenuId] = useState('')
+  const analytics = useAnalyticsDisclosure('wiseflow:analytics:datasets-management')
 
   const thirtyDaysMs = 30 * 24 * 60 * 60 * 1000
 
@@ -1352,10 +1470,42 @@ function DatasetManagementList({
     { key: 'recent', tone: 'orange', icon: <CalendarDays size={18} />, value: recentlyUpdated, label: 'Recent updates', hint: 'In the last 30 days' },
   ]
 
-  const totalPages = Math.max(1, Math.ceil(datasets.length / pageSize))
+  const filteredByStatus = useMemo(
+    () => statusFilter === 'all' ? datasets : datasets.filter(dataset => dataset.status === statusFilter),
+    [datasets, statusFilter],
+  )
+
+  const totalPages = Math.max(1, Math.ceil(filteredByStatus.length / pageSize))
   const safePage = Math.min(page, totalPages)
   const pageStart = (safePage - 1) * pageSize
-  const visibleDatasets = datasets.slice(pageStart, pageStart + pageSize)
+  const visibleDatasets = filteredByStatus.slice(pageStart, pageStart + pageSize)
+  const filteredIds = useMemo(() => new Set(filteredByStatus.map(dataset => dataset.id)), [filteredByStatus])
+  const activeSelectedIds = useMemo(() => selectedIds.filter(id => filteredIds.has(id)), [filteredIds, selectedIds])
+  const allVisibleSelected = visibleDatasets.length > 0 && visibleDatasets.every(dataset => activeSelectedIds.includes(dataset.id))
+
+  function toggleSelectAll() {
+    const visibleIds = visibleDatasets.map(dataset => dataset.id)
+    setSelectedIds(current => allVisibleSelected
+      ? current.filter(id => !visibleIds.includes(id))
+      : Array.from(new Set([...current, ...visibleIds])))
+  }
+
+  function toggleSelect(id: string) {
+    setSelectedIds(current => current.includes(id) ? current.filter(value => value !== id) : [...current, id])
+  }
+
+  function bulkDelete() {
+    if (!activeSelectedIds.length) return
+    if (!window.confirm(`Delete ${activeSelectedIds.length} selected dataset${activeSelectedIds.length === 1 ? '' : 's'}?\n\nThis also removes their relationships, automations, and quality rules. This cannot be undone.`)) return
+    onDeleteDatasets(activeSelectedIds)
+    setSelectedIds([])
+  }
+
+  const menuBackdropStyle: CSSProperties = { position: 'fixed', inset: 0, zIndex: 40, background: 'transparent', border: 0, cursor: 'default', padding: 0 }
+  const menuPanelStyle: CSSProperties = { position: 'absolute', top: 'calc(100% + 4px)', right: 0, zIndex: 41, minWidth: 168, background: '#ffffff', border: '1px solid #e5e7eb', borderRadius: 10, boxShadow: '0 12px 32px rgba(15,23,42,.16)', padding: 6, display: 'grid', gap: 2 }
+  const menuItemStyle: CSSProperties = { display: 'flex', alignItems: 'center', gap: 8, width: '100%', padding: '8px 10px', background: 'none', border: 0, borderRadius: 6, font: 'inherit', fontSize: 13, color: '#0f172a', textAlign: 'left', cursor: 'pointer' }
+  const openButtonStyle: CSSProperties = { background: 'none', border: 0, padding: 0, font: 'inherit', fontWeight: 600, color: 'inherit', textAlign: 'left', cursor: 'pointer' }
+  const statusOptions: Array<['all' | 'ACTIVE' | 'PAUSED', string]> = [['all', 'All statuses'], ['ACTIVE', 'Active'], ['PAUSED', 'Paused']]
 
   return (
     <section className="rw-management-page rw-datasets-management-page rw-mgmt">
@@ -1366,12 +1516,34 @@ function DatasetManagementList({
         </div>
         <div className="rw-mgmt-actions">
           <label className="rw-mgmt-search">
-            <input value={query} onChange={event => setQuery(event.target.value)} placeholder="Quick find" />
+            <input value={query} onChange={event => setQuery(event.target.value)} placeholder="Quick find" aria-label="Search datasets" />
             <Search size={15} />
           </label>
-          <button type="button" className="rw-mgmt-filter">
-            <Filter size={14} /> Filter
-          </button>
+          <div style={{ position: 'relative' }}>
+            <button type="button" className="rw-mgmt-filter" aria-haspopup="menu" aria-expanded={filterOpen} onClick={() => setFilterOpen(open => !open)}>
+              <Filter size={14} /> Filter{statusFilter !== 'all' ? `: ${statusFilter === 'ACTIVE' ? 'Active' : 'Paused'}` : ''}
+            </button>
+            {filterOpen && (
+              <>
+                <button type="button" aria-hidden="true" tabIndex={-1} style={menuBackdropStyle} onClick={() => setFilterOpen(false)} />
+                <div role="menu" aria-label="Filter datasets by status" style={{ ...menuPanelStyle, right: 'auto', left: 0 }}>
+                  {statusOptions.map(([value, label]) => (
+                    <button
+                      type="button"
+                      role="menuitemradio"
+                      aria-checked={statusFilter === value}
+                      key={value}
+                      style={menuItemStyle}
+                      onClick={() => { setStatusFilter(value); setPage(1); setFilterOpen(false) }}
+                    >
+                      {label}{statusFilter === value && <CheckSquare size={14} />}
+                    </button>
+                  ))}
+                </div>
+              </>
+            )}
+          </div>
+          <AnalyticsToggleButton open={analytics.open} onToggle={analytics.toggle} panelId={analytics.panelId} className="rw-mgmt-template" />
           <button type="button" className="rw-mgmt-template" onClick={onChooseTemplate}>
             <FileSpreadsheet size={15} /> Choose template
           </button>
@@ -1381,21 +1553,23 @@ function DatasetManagementList({
         </div>
       </header>
 
-      <div className="rw-mgmt-stats">
-        {stats.map(stat => (
-          <article key={stat.key} className={`rw-mgmt-stat tone-${stat.tone}`}>
-            <span className="rw-mgmt-stat-icon">{stat.icon}</span>
-            <div className="rw-mgmt-stat-body">
-              <div className="rw-mgmt-stat-value">{stat.value}</div>
-              <div className="rw-mgmt-stat-label">{stat.label}</div>
-            </div>
-            <div className="rw-mgmt-stat-foot">
-              <span>{stat.hint}</span>
-              <Sparkline tone={stat.tone} seed={stat.value + stat.key.length} />
-            </div>
-          </article>
-        ))}
-      </div>
+      <CollapsibleAnalytics open={analytics.open} id={analytics.panelId}>
+        <div className="rw-mgmt-stats">
+          {stats.map(stat => (
+            <article key={stat.key} className={`rw-mgmt-stat tone-${stat.tone}`}>
+              <span className="rw-mgmt-stat-icon">{stat.icon}</span>
+              <div className="rw-mgmt-stat-body">
+                <div className="rw-mgmt-stat-value">{stat.value}</div>
+                <div className="rw-mgmt-stat-label">{stat.label}</div>
+              </div>
+              <div className="rw-mgmt-stat-foot">
+                <span>{stat.hint}</span>
+                <Sparkline tone={stat.tone} seed={stat.value + stat.key.length} />
+              </div>
+            </article>
+          ))}
+        </div>
+      </CollapsibleAnalytics>
 
       {datasets.length > 0 && (
         <section className="rw-mgmt-pinned">
@@ -1404,7 +1578,6 @@ function DatasetManagementList({
               <h2>Pinned datasets</h2>
               <p>Your most recently updated workspaces.</p>
             </div>
-            <button type="button" className="rw-mgmt-link-btn">View all</button>
           </header>
           <div className="rw-mgmt-pinned-strip">
             {[...datasets]
@@ -1436,10 +1609,25 @@ function DatasetManagementList({
         </section>
       )}
 
+      {activeSelectedIds.length > 0 && (
+        <div className="rw-mgmt-bulkbar" style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px', margin: '0 0 12px', background: '#f1f5f9', border: '1px solid #e2e8f0', borderRadius: 10 }}>
+          <strong style={{ fontSize: 13 }}>{activeSelectedIds.length} selected</strong>
+          <button type="button" style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '6px 10px', borderRadius: 8, border: '1px solid #cbd5e1', background: '#fff', fontSize: 13, cursor: 'pointer' }} onClick={() => activeSelectedIds.forEach(onExportDataset)}>
+            <FileSpreadsheet size={14} /> Export
+          </button>
+          <button type="button" style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '6px 10px', borderRadius: 8, border: '1px solid #fecaca', background: '#fff', color: '#dc2626', fontSize: 13, cursor: 'pointer' }} onClick={bulkDelete}>
+            <Trash2 size={14} /> Delete
+          </button>
+          <button type="button" style={{ marginLeft: 'auto', padding: '6px 10px', borderRadius: 8, border: 0, background: 'none', fontSize: 13, color: '#000000', cursor: 'pointer' }} onClick={() => setSelectedIds([])}>
+            Clear
+          </button>
+        </div>
+      )}
+
       <div className="rw-mgmt-main">
       <div className="rw-mgmt-table-card">
         <div className="rw-mgmt-table-row head">
-          <span className="cell-check"><input type="checkbox" aria-label="Select all" readOnly /></span>
+          <span className="cell-check"><input type="checkbox" aria-label="Select all datasets on this page" checked={allVisibleSelected} onChange={toggleSelectAll} /></span>
           <span>Dataset</span>
           <span>Status</span>
           <span>Owners</span>
@@ -1457,22 +1645,23 @@ function DatasetManagementList({
             : ''
           const ownerLabel = dataset.owner || 'Unassigned'
           const ownerInitial = (initials(ownerLabel) || '?').slice(0, 1)
-          const datasetIdShort = dataset.id ? dataset.id.slice(0, 8).toUpperCase() : ''
           return (
-            <button type="button" className="rw-mgmt-table-row" key={dataset.id} onClick={() => onOpenDataset(dataset.id)}>
-              <span className="cell-check"><input type="checkbox" onClick={event => event.stopPropagation()} readOnly /></span>
+            <div className={`rw-mgmt-table-row${selectedIds.includes(dataset.id) ? ' selected' : ''}`} key={dataset.id} onClick={() => onOpenDataset(dataset.id)}>
+              <span className="cell-check" onClick={event => event.stopPropagation()}>
+                <input type="checkbox" aria-label={`Select ${dataset.name}`} checked={selectedIds.includes(dataset.id)} onChange={() => toggleSelect(dataset.id)} />
+              </span>
               <span className="cell-dataset">
                 <b className={index % 2 ? 'red' : 'gold'}><Grid2X2 size={16} /></b>
                 <span className="cell-dataset-text">
-                  <strong>{dataset.name}</strong>
-                  <small>
-                    {dataset.description || 'No description'}
-                    {datasetIdShort && <em className="rw-id-chip">ID: {datasetIdShort}</em>}
-                  </small>
+                  <button type="button" style={openButtonStyle} onClick={event => { event.stopPropagation(); onOpenDataset(dataset.id) }}>{dataset.name}</button>
+                  <small>{dataset.description || 'No description'}</small>
                 </span>
               </span>
               <span className="cell-status">
-                <span className={`rw-status-pill ${dataset.status === 'ACTIVE' ? 'active' : 'paused'}`}>
+                <span
+                  className={`rw-status-pill ${dataset.status === 'ACTIVE' ? 'active' : 'paused'}`}
+                  title={dataset.status === 'ACTIVE' ? 'Active — in use and counted in your active datasets.' : 'Paused — kept with all its data but marked inactive and excluded from the active count.'}
+                >
                   <i /> {dataset.status === 'ACTIVE' ? 'Active' : 'Paused'}
                 </span>
               </span>
@@ -1487,21 +1676,34 @@ function DatasetManagementList({
                 <strong>{dateText}</strong>
                 {timeText && <small>{timeText}</small>}
               </span>
-              <span className="cell-actions" onClick={event => event.stopPropagation()}>
-                <MoreHorizontal size={18} />
+              <span className="cell-actions" onClick={event => event.stopPropagation()} style={{ position: 'relative' }}>
+                <button type="button" aria-haspopup="menu" aria-expanded={menuId === dataset.id} aria-label={`Actions for ${dataset.name}`} onClick={() => setMenuId(current => current === dataset.id ? '' : dataset.id)}>
+                  <MoreHorizontal size={18} />
+                </button>
+                {menuId === dataset.id && (
+                  <>
+                    <button type="button" aria-hidden="true" tabIndex={-1} style={menuBackdropStyle} onClick={() => setMenuId('')} />
+                    <div role="menu" aria-label={`Actions for ${dataset.name}`} style={menuPanelStyle}>
+                      <button type="button" role="menuitem" style={menuItemStyle} onClick={() => { setMenuId(''); onOpenDataset(dataset.id) }}><Table2 size={14} /> Open</button>
+                      <button type="button" role="menuitem" style={menuItemStyle} onClick={() => { setMenuId(''); onToggleStatus(dataset.id) }}>{dataset.status === 'ACTIVE' ? <><Clock3 size={14} /> Pause</> : <><CheckSquare size={14} /> Activate</>}</button>
+                      <button type="button" role="menuitem" style={menuItemStyle} onClick={() => { setMenuId(''); onExportDataset(dataset.id) }}><FileSpreadsheet size={14} /> Export</button>
+                      <button type="button" role="menuitem" style={{ ...menuItemStyle, color: '#dc2626' }} onClick={() => { setMenuId(''); onDeleteDataset(dataset.id) }}><Trash2 size={14} /> Delete</button>
+                    </div>
+                  </>
+                )}
               </span>
-            </button>
+            </div>
           )
         })}
         {!visibleDatasets.length && (
           <div className="rw-mgmt-empty">
-            <EmptyState icon={<Database size={34} />} title="No datasets yet" detail="Create a dataset first, then click it to add fields." action="Create dataset" onAction={onCreateDataset} />
+            <EmptyState icon={<Database size={34} />} title={datasets.length ? 'No datasets match your filters' : 'No datasets yet'} detail={datasets.length ? 'Try clearing the search or status filter.' : 'Create a dataset first, then click it to add fields.'} action={datasets.length ? undefined : 'Create dataset'} onAction={datasets.length ? undefined : onCreateDataset} />
           </div>
         )}
 
         <footer className="rw-mgmt-table-foot">
           <span className="rw-mgmt-count">
-            Showing {datasets.length === 0 ? 0 : pageStart + 1} to {Math.min(pageStart + pageSize, datasets.length)} of {datasets.length} dataset{datasets.length === 1 ? '' : 's'}
+            Showing {filteredByStatus.length === 0 ? 0 : pageStart + 1} to {Math.min(pageStart + pageSize, filteredByStatus.length)} of {filteredByStatus.length} dataset{filteredByStatus.length === 1 ? '' : 's'}
           </span>
           <div className="rw-mgmt-pagination">
             <button
@@ -1541,9 +1743,26 @@ function DatasetManagementList({
             <h2>Recent activity</h2>
             <p>Latest changes across your datasets.</p>
           </div>
-          <button type="button" className="rw-mgmt-link-btn">View all</button>
+          <Link href="/datasets/history" className="rw-mgmt-link-btn">View all</Link>
         </header>
-        {datasets.length === 0 ? (
+        {history.length > 0 ? (
+          <ul className="rw-mgmt-activity-list">
+            {history.slice(0, 6).map(event => {
+              const created = /Created|Added|Activated|Restored|Synced/.test(event.action)
+              return (
+                <li key={event.id} className="rw-mgmt-activity-item rw-mgmt-activity-item-static">
+                  <span className={`rw-mgmt-activity-dot tone-${created ? 'green' : 'blue'}`}>
+                    {created ? <Plus size={12} /> : <Pencil size={12} />}
+                  </span>
+                  <div>
+                    <p><strong>{event.action}</strong>{event.detail ? <> — <em>{event.detail}</em></> : null}</p>
+                    <small>{relativeTime(new Date(event.createdAt))}</small>
+                  </div>
+                </li>
+              )
+            })}
+          </ul>
+        ) : datasets.length === 0 ? (
           <div className="rw-mgmt-activity-empty">
             <Activity size={24} />
             <strong>No activity yet</strong>
@@ -1810,13 +2029,12 @@ function OverviewSection(props: {
               <h1>{selectedDataset.name}</h1>
             </div>
             <div className="rw-dataset-detail-actions">
-              <button type="button">{props.records.length} record{props.records.length === 1 ? '' : 's'}</button>
+              <span className="rw-record-count">{props.records.length} record{props.records.length === 1 ? '' : 's'}</span>
               <label>
-                <input value={props.recordQuery} onChange={event => props.setRecordQuery(event.target.value)} placeholder="Enter to search records" />
+                <input value={props.recordQuery} onChange={event => props.setRecordQuery(event.target.value)} placeholder="Search records" aria-label="Search records in this dataset" />
                 <Search size={15} />
               </label>
-              <button type="button" className="primary" onClick={props.onCreateRecord}><Plus size={15} /> Create <ChevronDown size={13} /></button>
-              <button type="button" aria-label="More dataset actions"><MoreHorizontal size={18} /></button>
+              <button type="button" className="primary" onClick={props.onCreateRecord}><Plus size={15} /> Create record</button>
             </div>
           </header>
           <div className="rw-viewbar">
@@ -1846,12 +2064,11 @@ function OverviewSection(props: {
               </button>
             ))}
             <button type="button" onClick={props.onCreateView}><Plus size={14} />Create</button>
-            <button type="button">Settings</button>
           </div>
           <div className="rw-grid-actions">
             <button type="button" onClick={props.onCreateField}><AlignLeft size={14} /> Manage fields</button>
             <div className="rw-row-height-control">
-              <button type="button" className="active" onClick={() => setRowHeightOpen(!rowHeightOpen)}><Activity size={14} /> Row height <X size={12} /></button>
+              <button type="button" className="active" aria-haspopup="menu" aria-expanded={rowHeightOpen} onClick={() => setRowHeightOpen(!rowHeightOpen)}><Activity size={14} /> Row height <ChevronDown size={12} /></button>
               {rowHeightOpen && (
                 <div className="rw-row-height-menu">
                   {(['Short', 'Medium', 'Tall', 'Extra Tall'] as RowHeightOption[]).map(option => (
@@ -1878,7 +2095,6 @@ function OverviewSection(props: {
                 setDirection={setSortDirection}
               />
             )}
-            <button type="button"><Users size={14} /> Group by: None</button>
           </div>
           <RecordsTable dataset={selectedDataset} datasets={props.allDatasets} records={sortedRecords} rowHeight={rowHeight} onCreateField={props.onCreateField} onCreateRecord={props.onCreateInlineRecord} onDeleteField={props.onDeleteField} onReorderFields={props.onReorderFields} onDeleteRecords={props.onDeleteRecords} onUpdateRecordValue={props.onUpdateRecordValue} />
         </>
@@ -2266,6 +2482,15 @@ function RecordsTable({
     setSelectedRecordIds(current => current.filter(recordId => !targetIds.includes(recordId)))
   }
 
+  function confirmDeleteField(field: DatasetField) {
+    if (isSystemField(field)) {
+      window.alert(`The "${field.label}" field is managed by the system and cannot be deleted.`)
+      return
+    }
+    if (!window.confirm(`Delete the "${field.label}" field?\n\nThis permanently removes its values from every record in this dataset. This cannot be undone.`)) return
+    onDeleteField(field.id)
+  }
+
   function columnWidth(field: DatasetField) {
     return columnWidths[field.id] || (field.id === 'name' ? 300 : 200)
   }
@@ -2340,15 +2565,17 @@ function RecordsTable({
                   <span className="record-column-resizer" role="separator" aria-label={`Resize ${field.label} column`} onMouseDown={event => startColumnResize(event, field)} />
                   <button
                     type="button"
+                    className="record-field-delete"
                     draggable={false}
-                    aria-label={`Field actions for ${field.label}`}
+                    aria-label={`Delete the ${field.label} field`}
+                    title={`Delete the ${field.label} field`}
                     onPointerDown={event => event.stopPropagation()}
                     onClick={event => {
                       event.stopPropagation()
-                      onDeleteField(field.id)
+                      confirmDeleteField(field)
                     }}
                   >
-                    <ChevronDown size={13} />
+                    <Trash2 size={13} />
                   </button>
                 </th>
               )
@@ -2778,7 +3005,7 @@ function DatasetInfoSettings({ draft, setDraft, folderOptions, onSave }: { draft
         <label className="rw-check-row"><input type="checkbox" checked={Boolean(draft.allowAdvancedTable)} onChange={event => setDraft({ ...draft, allowAdvancedTable: event.target.checked })} /> Allow for using in Advance table field in other apps</label>
         <footer><small>Click on <b>Save</b> button to save your changes.</small><button type="button" className="primary" onClick={onSave}>Save</button></footer>
       </section>
-      <section className="rw-settings-panel compact"><h3>Enable dataset performance boosting <em>BETA</em></h3><Toggle label="Enable pagination for large datasets to improve performance" detail="" checked={Boolean(draft.performanceBoosting)} onChange={value => setDraft({ ...draft, performanceBoosting: value })} /></section>
+      <section className="rw-settings-panel compact"><h3>Enable dataset performance boosting</h3><Toggle label="Enable pagination for large datasets to improve performance" detail="" checked={Boolean(draft.performanceBoosting)} onChange={value => setDraft({ ...draft, performanceBoosting: value })} /></section>
     </>
   )
 }
@@ -2963,7 +3190,7 @@ function DatasetImportSettings({ dataset, importPayload, setImportPayload, onFil
 
 function FieldForm({ form, setForm, onSubmit, dataset, datasets }: FormProps & { dataset: Dataset; datasets: Dataset[] }) {
   const type = (form.type || 'Simple text') as FieldType
-  const isRollup = type === 'Rollup (beta)'
+  const isRollup = type === 'Rollup'
   const needsOptions = type.includes('Dropdown') || type === 'Select'
   const needsFormula = type === 'Custom formula'
   const needsLinkedDataset = type.includes('Link') || type.includes('Lookup') || isRollup
@@ -2987,7 +3214,7 @@ function FieldForm({ form, setForm, onSubmit, dataset, datasets }: FormProps & {
   const filteredAggregateOptions = aggregateOptions.filter(option => option.toLowerCase().includes(aggregateFilter.toLowerCase()))
 
   function updateType(nextType: FieldType) {
-    setForm({ ...form, type: nextType, label: form.label || (nextType === 'Link to another record (beta)' ? 'Link to another record' : nextType) })
+    setForm({ ...form, type: nextType, label: form.label || (nextType === 'Link to another record' ? 'Link to another record' : nextType) })
     setTypeOpen(false)
     setTypeFilter('')
   }
@@ -3599,7 +3826,7 @@ function makeDataset(input: { name: string; description: string; folder: string;
 }
 
 function makeField(key: string, label: string, type: FieldType, required = false, options: string[] = [], linkedDatasetId?: string, extras: Partial<DatasetField> = {}): DatasetField {
-  return { id: slugify(key || label), key: slugify(key || label), label, type, required, options, linkedDatasetId, ...extras }
+  return { id: slugify(key || label), key: slugify(key || label), label, type: normalizeFieldType(type), required, options, linkedDatasetId, ...extras }
 }
 
 function makeClientImportTemplateDataset(accountName: string): Dataset {
@@ -3633,6 +3860,7 @@ function makeClientImportTemplateDataset(accountName: string): Dataset {
     records: [{
       id: 'client-template-mcdonald',
       values: {
+        name: 'MCDonald',
         client_type: 'Commercial',
         client_name: 'MCDonald',
         company_email: 'info@mcdo.com',
@@ -3707,11 +3935,12 @@ function defaultDatasetFields() {
 }
 
 function ensureDefaultDatasetFields(fields: DatasetField[]) {
-  const existingIds = new Set(fields.map(field => field.id))
+  const normalizedFields = fields.map(field => ({ ...field, type: normalizeFieldType(field.type) }))
+  const existingIds = new Set(normalizedFields.map(field => field.id))
   const defaults = defaultDatasetFields()
   const missingDefaults = defaults.filter(field => !existingIds.has(field.id))
-  const customFields = fields.filter(field => !defaults.some(defaultField => defaultField.id === field.id))
-  return [...defaults.filter(field => existingIds.has(field.id)).map(field => fields.find(item => item.id === field.id) || field), ...missingDefaults, ...customFields]
+  const customFields = normalizedFields.filter(field => !defaults.some(defaultField => defaultField.id === field.id))
+  return [...defaults.filter(field => existingIds.has(field.id)).map(field => normalizedFields.find(item => item.id === field.id) || field), ...missingDefaults, ...customFields]
 }
 
 function loadWorkspace(companyId: string, accountName: string): WorkspaceState {
@@ -4040,8 +4269,8 @@ function exportCellValue(record: DatasetRecord, field: DatasetField, dataset: Da
   if (field.id === 'last_update') return formatGridDate(record.updatedAt)
   if (field.id === 'created_at') return formatGridDate(record.createdAt)
   if (field.id === 'created_by') return record.createdBy
-  if (field.type === 'Rollup (beta)') return text(computeRollupValue(record, field, dataset, datasets))
-  if (field.type === 'Lookup (beta)') return text(computeLookupValue(record, field, dataset, datasets))
+  if (field.type === 'Rollup') return text(computeRollupValue(record, field, dataset, datasets))
+  if (field.type === 'Lookup') return text(computeLookupValue(record, field, dataset, datasets))
   if (field.type === 'Custom formula') return text(computeFormulaValue(record, field))
   if (isLinkedRecordField(field)) return linkedRecordExportValue(record.values[field.id], field, datasets)
   if (field.type === 'File upload' || field.type === 'Multiple files') return exportFileCell(record.values[field.id])
@@ -4212,14 +4441,19 @@ function ensureDefaultView(views: DatasetView[]) {
 
 function normalizeFieldType(type: string): FieldType {
   if (fieldTypes.includes(type as FieldType)) return type as FieldType
-  if (type.toLowerCase().includes('email')) return 'Email'
-  if (type.toLowerCase().includes('phone')) return 'Phone'
-  if (type.toLowerCase().includes('date')) return 'Date'
-  if (type.toLowerCase().includes('number')) return 'Number'
-  if (type.toLowerCase().includes('currency')) return 'Currency'
-  if (type.toLowerCase().includes('checkbox')) return 'Checkbox'
-  if (type.toLowerCase().includes('dropdown') || type.toLowerCase().includes('select')) return 'Select'
-  if (type.toLowerCase().includes('link')) return 'Linked record'
+  const normalized = type.toLowerCase().replace(/\([^)]*\)/g, '').trim()
+  if (normalized.includes('rollup')) return 'Rollup'
+  if (normalized.includes('lookup')) return 'Lookup'
+  if (normalized.includes('service') && normalized.includes('link')) return 'Link service record'
+  if (normalized.includes('another record')) return 'Link to another record'
+  if (normalized.includes('email')) return 'Email'
+  if (normalized.includes('phone')) return 'Phone'
+  if (normalized.includes('date')) return 'Date'
+  if (normalized.includes('number')) return 'Number'
+  if (normalized.includes('currency')) return 'Currency'
+  if (normalized.includes('checkbox')) return 'Checkbox'
+  if (normalized.includes('dropdown') || normalized.includes('select')) return 'Select'
+  if (normalized.includes('link')) return 'Linked record'
   return 'Text'
 }
 
@@ -4292,8 +4526,8 @@ function recordCellValue(record: DatasetRecord, field: DatasetField, dataset: Da
     const creator = record.createdBy || dataset.owner || readAccount().name
     return <span className="record-user-cell"><i>{initials(creator).slice(0, 1)}</i>{creator}</span>
   }
-  if (field.type === 'Rollup (beta)') return computeRollupValue(record, field, dataset, datasets)
-  if (field.type === 'Lookup (beta)') return computeLookupValue(record, field, dataset, datasets)
+  if (field.type === 'Rollup') return computeRollupValue(record, field, dataset, datasets)
+  if (field.type === 'Lookup') return computeLookupValue(record, field, dataset, datasets)
   if (field.type === 'Custom formula') return computeFormulaValue(record, field)
   if (field.type === 'Single user' || field.type === 'Multiple users') return <UserAvatarCell value={storedValue} />
   if (isLinkedRecordField(field)) return linkedRecordDisplay(storedValue, field, datasets)
@@ -4319,8 +4553,8 @@ function sortableRecordValue(record: DatasetRecord, field: DatasetField, dataset
   if (field.id === 'last_update') return new Date(record.updatedAt).getTime() || 0
   if (field.id === 'created_at') return new Date(record.createdAt).getTime() || 0
   if (field.id === 'created_by') return record.createdBy || dataset.owner || ''
-  if (field.type === 'Rollup (beta)') return text(computeRollupValue(record, field, dataset, datasets))
-  if (field.type === 'Lookup (beta)') return text(computeLookupValue(record, field, dataset, datasets))
+  if (field.type === 'Rollup') return text(computeRollupValue(record, field, dataset, datasets))
+  if (field.type === 'Lookup') return text(computeLookupValue(record, field, dataset, datasets))
   if (field.type === 'Custom formula') return text(computeFormulaValue(record, field))
   if (isLinkedRecordField(field)) return linkedRecordExportValue(record.values[field.id], field, datasets)
   const value = record.values[field.id] || ''
@@ -4410,11 +4644,11 @@ function UserAvatarCell({ value }: { value?: string }) {
 }
 
 function isLinkedRecordField(field: DatasetField) {
-  return field.type === 'Link to another record (beta)' || field.type === 'Link dataset record' || field.type === 'Linked record' || field.type === 'Link service record (Beta)'
+  return field.type === 'Link to another record' || field.type === 'Link dataset record' || field.type === 'Linked record' || field.type === 'Link service record'
 }
 
 function isComputedField(field: DatasetField) {
-  return field.type === 'Rollup (beta)' || field.type === 'Lookup (beta)' || field.type === 'Custom formula'
+  return field.type === 'Rollup' || field.type === 'Lookup' || field.type === 'Custom formula'
 }
 
 function isSystemField(field: DatasetField) {
@@ -4549,10 +4783,14 @@ const styles = `
 .rw-product-mark{width:34px;height:34px;border-radius:999px;background:#d8f9e4;color:#1bc966;border:1px solid #a9efc6;display:grid;place-items:center}
 .rw-top-left strong,.rw-top-left small{display:block;line-height:1.15}
 .rw-top-left strong{font-size:15px;color:#0f172a}
-.rw-top-left small{color:#64748b;font-size:12px;margin-top:2px}
+.rw-top-left small{color:#000000;font-size:12px;margin-top:2px}
 .rw-global-search{height:36px;background:#fff;border:1px solid #dfe4ec;border-radius:7px;display:flex;align-items:center;gap:8px;padding:0 12px;color:#0f172a;box-shadow:0 1px 2px rgba(15,23,42,.03)}
+.rw-topbar.rw-topbar--no-search{grid-template-columns:240px minmax(0,1fr)}
+.rw-topbar.rw-topbar--no-search .rw-global-search{display:none}
+.rw-record-count{display:inline-flex;align-items:center;height:34px;padding:0 12px;border:1px solid var(--rw-line,#e6e8ec);border-radius:8px;background:#f8fafc;color:#000000;font-size:13px;font-weight:600;white-space:nowrap}
+.rw-mgmt-activity-item-static{cursor:default}
 .rw-global-search input{width:100%;border:0;outline:0;background:transparent;color:#111827;font:inherit;font-size:13px}
-.rw-global-search input::placeholder{color:#94a3b8}
+.rw-global-search input::placeholder{color:#000000}
 .rw-top-actions{justify-self:end;color:#0f172a;font-size:13px}
 .rw-top-actions > span{width:36px;height:36px;border:3px solid #d9f7e4;border-radius:999px;background:#20c75a;color:#0a2112;display:inline-grid;place-items:center;font-size:12px;font-weight:900}
 .rw-notification{position:relative!important;width:36px!important;height:36px!important;min-height:36px!important;border-radius:999px!important;background:#fff!important;color:#0f172a!important;padding:0!important}
@@ -4571,10 +4809,10 @@ const styles = `
 .rw-back-link{min-height:38px;border:1px solid rgba(148,163,184,.22);border-radius:8px;display:flex;align-items:center;gap:9px;padding:0 10px;color:#e2e8f0!important;text-decoration:none;font-size:13px;font-weight:850;background:rgba(255,255,255,.03);margin:0 0 14px}
 .rw-back-link svg{color:#e2e8f0!important;stroke:#e2e8f0!important;flex:0 0 auto}
 .rw-back-link:hover{background:rgba(255,255,255,.07);text-decoration:none}
-.rw-panel-label{color:#94a3b8!important;background:#000!important;font-size:10px;font-weight:900;letter-spacing:.8px;margin:0 0 6px;padding:0 10px;text-transform:uppercase}
+.rw-panel-label{color:#000000!important;background:#000!important;font-size:10px;font-weight:900;letter-spacing:.8px;margin:0 0 6px;padding:0 10px;text-transform:uppercase}
 .rw-panel-nav{display:grid;gap:4px;background:#000!important}
-.rw-panel-nav a,.rw-panel-nav button{width:100%;min-height:38px!important;border:0!important;display:flex!important;align-items:center!important;justify-content:flex-start!important;gap:10px!important;background:transparent!important;color:#a1a1aa!important;text-decoration:none;font-size:13px!important;font-weight:800!important;padding:0 10px!important;border-radius:8px!important}
-.rw-panel-nav a svg,.rw-panel-nav button svg{width:16px;color:#94a3b8!important;stroke:#94a3b8!important;flex:0 0 auto}
+.rw-panel-nav a,.rw-panel-nav button{width:100%;min-height:38px!important;border:0!important;display:flex!important;align-items:center!important;justify-content:flex-start!important;gap:10px!important;background:transparent!important;color:#000000!important;text-decoration:none;font-size:13px!important;font-weight:800!important;padding:0 10px!important;border-radius:8px!important}
+.rw-panel-nav a svg,.rw-panel-nav button svg{width:16px;color:#000000!important;stroke:#000000!important;flex:0 0 auto}
 .rw-panel-nav a:hover,.rw-panel-nav button:hover{background:rgba(255,255,255,.06)!important;color:#f8fafc!important}
 .rw-panel-nav a:hover svg,.rw-panel-nav button:hover svg{color:#f8fafc!important;stroke:#f8fafc!important}
 .rw-panel-nav a.active,.rw-panel-nav button.active{background:#242424!important;color:#fff!important}
@@ -4587,7 +4825,7 @@ const styles = `
   border-radius:0;
   border-top:1px solid rgba(148,163,184,.18);
   background:#000!important;
-  color:#94a3b8!important;
+  color:#000000!important;
   display:flex;
   align-items:center;
   justify-content:space-between;
@@ -4598,14 +4836,14 @@ const styles = `
   letter-spacing:0;
 }
 .rw-simple-nav .rw-folder-group:first-of-type{margin-top:22px;border-top:0}
-.rw-simple-nav .rw-folder-group svg{color:#94a3b8!important;stroke:#94a3b8!important}
+.rw-simple-nav .rw-folder-group svg{color:#000000!important;stroke:#000000!important}
 .rw-simple-nav .rw-sales-link{
   min-height:30px;
   width:100%;
   border:0;
   border-radius:0;
   padding-left:10px;
-  color:#cbd5e1!important;
+  color:#000000!important;
   background:#000!important;
   display:flex!important;
   align-items:center;
@@ -4638,10 +4876,10 @@ const styles = `
 .rw-main{min-width:0;overflow:hidden;background:#fff;display:grid;grid-template-rows:62px minmax(0,1fr)}
 .rw-titlebar{height:86px;border-bottom:1px solid #e2e8f0;display:grid;grid-template-columns:42px minmax(0,1fr) auto;align-items:center;gap:14px;padding:0 24px}
 .rw-dataset-icon{width:32px;height:32px;border-radius:7px;background:#c34d57;color:#fff;display:grid;place-items:center;font-weight:900}
-.rw-titlebar p{margin:0 0 5px;color:#64748b;font-size:12px;font-weight:800}
+.rw-titlebar p{margin:0 0 5px;color:#000000;font-size:12px;font-weight:800}
 .rw-titlebar h1{margin:0;font-size:24px;line-height:1.1}
 .rw-title-actions{display:flex;align-items:center;gap:10px}
-.rw-title-actions label{height:36px;border:1px solid #d7dde6;background:#fff;border-radius:6px;display:flex;align-items:center;gap:7px;padding:0 10px;color:#64748b}
+.rw-title-actions label{height:36px;border:1px solid #d7dde6;background:#fff;border-radius:6px;display:flex;align-items:center;gap:7px;padding:0 10px;color:#000000}
 .rw-title-actions input{border:0;outline:0;background:transparent;font:inherit;width:160px}
 .rw-app button,.rw-app select,.rw-app input,.rw-app textarea{font:inherit}
 .rw-app button{min-height:34px;border:1px solid #d7dde6;background:#fff;border-radius:6px;color:#111827;display:inline-flex;align-items:center;justify-content:center;gap:7px;padding:0 12px;font-size:13px;cursor:pointer}
@@ -4882,11 +5120,11 @@ const styles = `
 .rw-source-sync-row em{justify-self:start;border-radius:999px;padding:4px 9px;font-style:normal;font-size:12px;font-weight:800}
 .rw-source-sync-row em.sync-ready{background:#e0f2fe;color:#075985}
 .rw-source-sync-row em.sync-synced{background:#dcfce7;color:#166534}
-.rw-source-sync-row em.sync-no_records{background:#f1f5f9;color:#64748b}
+.rw-source-sync-row em.sync-no_records{background:#f1f5f9;color:#000000}
 .rw-source-sync-row button{height:34px!important;min-height:34px!important;border:1px solid #dbe3ef!important;border-radius:6px!important;background:#fff!important;color:#111!important;padding:0 11px!important;font-size:12px!important;font-weight:800!important;gap:7px!important}
 .rw-source-sync-row button:not(:disabled):hover{background:#f8fafc!important;border-color:#94a3b8!important}
 .rw-source-sync-row button:disabled{opacity:.55;cursor:not-allowed}
-.rw-source-sync-empty{margin:18px;border:1px dashed #cbd5e1;border-radius:10px;background:#f8fafc;display:grid;justify-items:center;text-align:center;gap:6px;padding:26px;color:#64748b}
+.rw-source-sync-empty{margin:18px;border:1px dashed #cbd5e1;border-radius:10px;background:#f8fafc;display:grid;justify-items:center;text-align:center;gap:6px;padding:26px;color:#000000}
 .rw-source-sync-empty strong{color:#0f172a;font-size:14px}
 .rw-source-sync-empty span{max-width:540px;font-size:13px;line-height:1.5}
 .rw-security-note{border:1px solid #bfdbfe;background:#eff6ff;color:#1e3a8a;border-radius:8px;padding:12px;display:flex;gap:10px;align-items:flex-start;font-size:13px;font-weight:800;margin:12px 18px}
@@ -4918,12 +5156,12 @@ const styles = `
 .rw-modal-dataset>header button{color:#8b949e}
 .rw-modal-template{width:min(620px,calc(100vw - 80px));border-radius:6px}
 .rw-template-chooser{display:grid;gap:14px;padding:20px}
-.rw-template-intro{margin:0;color:#475569;font-size:13px;line-height:1.5}
+.rw-template-intro{margin:0;color:#000000;font-size:13px;line-height:1.5}
 .rw-template-card{width:100%;min-height:108px!important;border:1px solid #dbe3ef!important;border-radius:10px!important;background:#fff!important;color:#0f172a!important;display:grid!important;grid-template-columns:46px minmax(0,1fr)!important;align-items:center!important;gap:14px!important;padding:16px!important;text-align:left!important}
 .rw-template-card:hover{border-color:#0f838a!important;background:#f8fffe!important}
 .rw-template-card>span:nth-child(2){min-width:0}
 .rw-template-card strong{display:block;font-size:15px;font-weight:850;color:#0f172a;margin-bottom:5px}
-.rw-template-card small{display:block;color:#64748b;font-size:12px;line-height:1.45;font-weight:500;overflow-wrap:anywhere}
+.rw-template-card small{display:block;color:#000000;font-size:12px;line-height:1.45;font-weight:500;overflow-wrap:anywhere}
 .rw-template-card em{grid-column:2;font-style:normal;color:#0f838a;font-size:12px;font-weight:900;white-space:normal;justify-self:start}
 @media (min-width:700px){.rw-template-card{grid-template-columns:46px minmax(0,1fr) auto!important}.rw-template-card em{grid-column:auto;white-space:nowrap;justify-self:end}}
 .rw-template-icon{width:46px;height:46px;border-radius:10px;background:#ecfdf5;color:#0f838a;display:grid;place-items:center}
@@ -4950,7 +5188,7 @@ const styles = `
 .rw-settings-panel{display:grid;gap:14px}
 .rw-settings-panel.compact{margin-top:22px}
 .rw-settings-panel h3{font-size:18px!important}
-.rw-settings-panel p{margin:0;color:#6b7280;font-size:13px}
+.rw-settings-panel p{margin:0;color:#000000;font-size:13px}
 .rw-settings-panel label{display:grid;gap:7px;color:#111;font-size:13px;font-weight:700}
 .rw-settings-panel input,.rw-settings-panel select,.rw-settings-panel textarea,.rw-people-editor input{width:100%;border:1px solid #cfcfcf;background:#fff;color:#111;min-height:34px;padding:0 10px;outline:0}
 .rw-settings-panel textarea{min-height:100px;padding:10px;resize:vertical}
@@ -5070,7 +5308,7 @@ const styles = `
 .rw-modal-record{width:min(1040px,calc(100vw - 64px));max-height:calc(100vh - 56px);border-radius:16px;overflow:hidden;box-shadow:0 28px 80px rgba(15,23,42,.28)}
 .rw-modal-record>header{height:64px;border-bottom:1px solid #e5eaf0;padding:0 24px;background:#fff}
 .rw-modal-record h2{font-size:18px;font-weight:850;color:#0f172a;text-transform:none;letter-spacing:0}
-.rw-modal-record>header button{border-radius:999px;color:#64748b}
+.rw-modal-record>header button{border-radius:999px;color:#000000}
 .rw-record-form{display:grid;grid-template-columns:minmax(0,1fr) 300px;min-height:560px;max-height:calc(100vh - 120px);background:#f8fafc}
 .rw-record-main{display:grid;align-content:start;gap:18px;padding:24px 28px 30px;background:#fff;border-right:1px solid #e5eaf0;overflow:auto}
 .rw-record-main::-webkit-scrollbar{width:10px}
@@ -5078,8 +5316,8 @@ const styles = `
 .rw-record-heading{display:grid;grid-template-columns:42px minmax(0,1fr) auto;align-items:center;gap:12px;padding-bottom:2px}
 .rw-record-heading>span{width:42px;height:42px;border-radius:11px;background:#ecfdf5;color:#0f838a;display:grid;place-items:center}
 .rw-record-heading strong{display:block;color:#0f172a;font-size:17px;font-weight:850}
-.rw-record-heading small{display:block;margin-top:3px;color:#64748b;font-size:12.5px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.rw-record-heading em{font-style:normal;border:1px solid #dbe3ef;border-radius:999px;background:#f8fafc;color:#475569;padding:6px 10px;font-size:12px;font-weight:800;white-space:nowrap}
+.rw-record-heading small{display:block;margin-top:3px;color:#000000;font-size:12.5px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.rw-record-heading em{font-style:normal;border:1px solid #dbe3ef;border-radius:999px;background:#f8fafc;color:#000000;padding:6px 10px;font-size:12px;font-weight:800;white-space:nowrap}
 .rw-record-primary-card{border:1px solid #dbe6ef;border-radius:12px;background:linear-gradient(180deg,#ffffff 0%,#fbfdff 100%);padding:16px;box-shadow:0 1px 2px rgba(15,23,42,.04)}
 .rw-record-fields-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:15px 16px}
 .rw-record-fields-grid:empty{display:none}
@@ -5089,26 +5327,26 @@ const styles = `
 .rw-record-dataset-card{display:grid;grid-template-columns:36px minmax(0,1fr);gap:10px;align-items:center;padding:14px}
 .rw-record-dataset-card>span{width:36px;height:36px;border-radius:9px;background:#eff6ff;color:#2563eb;display:grid;place-items:center}
 .rw-record-dataset-card strong{display:block;color:#0f172a;font-size:13px;font-weight:850;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.rw-record-dataset-card small{display:block;margin-top:3px;color:#64748b;font-size:12px;font-weight:600}
+.rw-record-dataset-card small{display:block;margin-top:3px;color:#000000;font-size:12px;font-weight:600}
 .rw-record-settings-card{display:grid;gap:15px;padding:16px}
 .rw-record-settings h3{margin:0;font-size:12px;font-weight:850;color:#0f172a;letter-spacing:.06em;text-transform:uppercase}
 .rw-record-form .rw-form-line{display:grid;gap:8px;font-size:12.5px;color:#334155;font-weight:750;min-width:0}
 .rw-record-form .rw-form-line input,.rw-record-form .rw-form-line select,.rw-record-form .rw-form-line textarea{width:100%;box-sizing:border-box;border:1px solid #ccd7e4;border-radius:10px!important;background:#fff;color:#0f172a;font-size:14px;transition:border-color .15s ease,box-shadow .15s ease,background .15s ease}
 .rw-record-form .rw-form-line input,.rw-record-form .rw-form-line select{height:44px;padding:0 13px}
 .rw-record-form .rw-form-line textarea{min-height:104px;padding:12px 13px;line-height:1.5;resize:vertical}
-.rw-record-form .rw-form-line input::placeholder,.rw-record-form .rw-form-line textarea::placeholder{color:#94a3b8}
+.rw-record-form .rw-form-line input::placeholder,.rw-record-form .rw-form-line textarea::placeholder{color:#000000}
 .rw-record-form .rw-form-line input:focus,.rw-record-form .rw-form-line select:focus,.rw-record-form .rw-form-line textarea:focus{border-color:#0f838a;box-shadow:0 0 0 3px rgba(15,131,138,.14);outline:0;background:#fff}
 .rw-record-primary-card .rw-form-line input{height:54px;font-size:20px;font-weight:700}
 .rw-record-primary-card .rw-form-line select{height:54px;font-size:16px;font-weight:700}
-.rw-custom-field-divider{height:22px;display:flex;align-items:center;gap:10px;color:#64748b;font-size:12px;font-weight:850;letter-spacing:.03em}
-.rw-custom-field-divider small{border:1px solid #e2e8f0;border-radius:999px;background:#f8fafc;color:#64748b;padding:2px 8px;font-size:11px;letter-spacing:0}
+.rw-custom-field-divider{height:22px;display:flex;align-items:center;gap:10px;color:#000000;font-size:12px;font-weight:850;letter-spacing:.03em}
+.rw-custom-field-divider small{border:1px solid #e2e8f0;border-radius:999px;background:#f8fafc;color:#000000;padding:2px 8px;font-size:11px;letter-spacing:0}
 .rw-custom-field-divider:after{content:"";height:1px;background:#e5eaf0;flex:1}
 .rw-link-error{display:block;border:1px solid #f0b1b1;background:#fff0f0;color:#111;padding:15px 18px;line-height:1.35;font-size:14px}
 .rw-file-picker{position:relative;min-height:78px;border:1px dashed #b7c5d6;border-radius:12px;background:#f8fafc;color:#334155;display:grid;grid-template-columns:36px minmax(0,1fr);grid-template-rows:auto auto;align-content:center;gap:3px 10px;padding:12px 14px;cursor:pointer}
 .rw-file-picker:hover{border-color:#0f838a;background:#f3fbfa}
 .rw-file-picker svg{grid-row:1/3;width:36px;height:36px;border-radius:9px;background:#fff;color:#0f838a;padding:8px;box-shadow:0 1px 2px rgba(15,23,42,.06)}
 .rw-file-picker strong{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:13.5px;color:#0f172a}
-.rw-file-picker small{font-size:12px;color:#64748b}
+.rw-file-picker small{font-size:12px;color:#000000}
 .rw-file-picker input{position:absolute;inset:0;opacity:0;cursor:pointer;height:auto!important;padding:0!important}
 .rw-file-picker.has-file{border-style:solid;background:#f0fdf4;border-color:#b7e7ca}
 .rw-multi-options{border:1px solid #e2e8f0;border-radius:12px;background:#fff;margin:0;padding:14px;display:grid;gap:9px}
@@ -5132,10 +5370,10 @@ const styles = `
 .rw-people-box>span{font-weight:800;color:#334155;font-size:12px}
 .rw-people-box>div{min-height:46px;border:1px solid #dbe3ec;border-radius:10px;background:#fff;display:flex;align-items:center;gap:9px;padding:0 12px;font-size:13px;color:#0f172a}
 .rw-people-box b{width:24px;height:24px;border-radius:999px;background:#0f838a;color:#fff;display:grid;place-items:center;font-size:10px;font-weight:850}
-.rw-people-box svg:last-child{margin-left:auto;color:#94a3b8}
+.rw-people-box svg:last-child{margin-left:auto;color:#000000}
 .rw-record-form>footer{grid-column:1/-1;min-height:72px;border-top:1px solid #e5eaf0;background:#fff;display:flex;justify-content:flex-end;align-items:center;gap:10px;padding:14px 24px;position:sticky;bottom:0}
 .rw-record-form>footer button{height:42px!important;min-height:42px!important;border:1px solid transparent!important;border-radius:10px!important;font-weight:800!important;font-size:13.5px!important;padding:0 20px!important;cursor:pointer}
-.rw-record-form>footer button:first-child{background:#fff!important;border-color:#dbe3ec!important;color:#475569!important}
+.rw-record-form>footer button:first-child{background:#fff!important;border-color:#dbe3ec!important;color:#000000!important}
 .rw-record-form>footer button:first-child:hover{background:#f4f6f8!important}
 .rw-record-form>footer .primary{background:#0f172a!important;border-color:#0f172a!important;color:#fff!important;min-width:148px;justify-content:center}
 .rw-record-form>footer .primary:hover{background:#111827!important}
@@ -5159,7 +5397,7 @@ const styles = `
 .rw-dataset-description input::placeholder{color:#7b8490}
 .rw-dataset-form footer{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:2px}
 .rw-dataset-form footer button{height:37px;min-height:37px;border:0;border-radius:3px;font-size:14px;font-weight:800}
-.rw-dataset-form footer button:first-child{background:#f4f4f4;color:#6b7280}
+.rw-dataset-form footer button:first-child{background:#f4f4f4;color:#000000}
 .rw-dataset-form footer button.primary{background:#20b80d!important;border-color:#20b80d!important;color:#fff!important}
 .rw-add-fields{background:#fff}
 .add-tabs{height:42px;display:grid;grid-template-columns:1fr 1fr;border-bottom:1px solid #ddd}
@@ -5195,8 +5433,17 @@ const styles = `
 .rw-form-line textarea{min-height:150px;padding:10px;resize:vertical}
 .rw-form .check{display:flex;align-items:center;gap:8px;font-weight:800}
 .rw-form footer{display:flex;justify-content:flex-end;border-top:1px solid #eee;padding-top:14px}
+/* Mobile navigation drawer affordances (hidden on desktop) */
+.rw-app .rw-mobile-nav-toggle,.rw-app .rw-mobile-nav-backdrop,.rw-app .rw-mobile-nav-close{display:none}
 @media(max-width:900px){
   .rw-topbar{grid-template-columns:1fr}.rw-global-search,.rw-top-actions{display:none}.rw-body{grid-template-columns:1fr}.rw-workspace-panel{display:none}.rw-titlebar{grid-template-columns:32px 1fr}.rw-title-actions{grid-column:1/-1;overflow:auto}.rw-grid-cards{grid-template-columns:1fr}.rw-bottom-status{grid-template-columns:repeat(2,1fr)}.field-card-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.existing-fields button{grid-template-columns:24px minmax(0,1fr)}.existing-fields button small,.existing-fields em{display:none}.rw-form{grid-template-columns:1fr}.rw-form p,.rw-form .wide,.rw-form footer{grid-column:auto}
+  .rw-app .rw-mobile-nav-toggle{display:inline-flex;align-items:center;justify-content:center;width:38px;height:38px;flex:0 0 auto;border:1px solid var(--rw-line);border-radius:8px;background:#fff;color:#0f172a;cursor:pointer;margin-right:10px}
+  .rw-app.rw-mobile-nav-open .rw-workspace-panel{display:block;position:fixed;top:0;left:0;bottom:0;width:284px;max-width:84vw;height:100vh;height:100dvh;overflow:auto;z-index:60;box-shadow:0 24px 70px rgba(0,0,0,.4)}
+  .rw-app.rw-mobile-nav-open .rw-mobile-nav-backdrop{display:block;position:fixed;inset:0;z-index:55;background:rgba(2,6,23,.5);border:0;padding:0;cursor:pointer}
+  .rw-app .rw-mobile-nav-close{display:inline-flex;align-items:center;justify-content:center;width:34px;height:34px;margin-left:auto;border:1px solid var(--rw-line);border-radius:8px;background:#fff;color:#0f172a;cursor:pointer}
+  .rw-panel-brand{display:flex;align-items:center;gap:10px}
+  .rw-mgmt-actions{flex-wrap:wrap}
+  .rw-mgmt-template,.rw-mgmt-create{white-space:nowrap;width:auto;flex:0 0 auto}
 }
 
 /* ===== UI polish pass ===== */
@@ -5221,28 +5468,28 @@ const styles = `
 .rw-workspace-panel{background:#ffffff!important;color:#0f172a!important;border-color:#e5e7eb!important}
 .rw-panel-brand{background:#ffffff!important}
 .rw-panel-brand strong{color:#0f172a!important}
-.rw-panel-brand small{color:#64748b!important}
+.rw-panel-brand small{color:#000000!important}
 .rw-back-dashboard{border-color:#e5e7eb!important;background:#f8fafc!important;color:#0f172a!important}
 .rw-back-dashboard svg{color:#334155!important;stroke:#334155!important}
 .rw-back-dashboard:hover{background:#f1f5f9!important}
 .rw-back-link{border-color:#e5e7eb!important;background:#f8fafc!important;color:#0f172a!important}
 .rw-back-link svg{color:#334155!important;stroke:#334155!important}
 .rw-back-link:hover{background:#f1f5f9!important}
-.rw-panel-label{color:#64748b!important;background:#ffffff!important}
+.rw-panel-label{color:#000000!important;background:#ffffff!important}
 .rw-panel-nav{background:#ffffff!important}
 .rw-panel-nav a,.rw-panel-nav button{color:#334155!important}
-.rw-panel-nav a svg,.rw-panel-nav button svg{color:#64748b!important;stroke:#64748b!important}
+.rw-panel-nav a svg,.rw-panel-nav button svg{color:#000000!important;stroke:#000000!important}
 .rw-panel-nav a:hover,.rw-panel-nav button:hover{background:#f1f5f9!important;color:#0f172a!important}
 .rw-panel-nav a:hover svg,.rw-panel-nav button:hover svg{color:#334155!important;stroke:#334155!important}
 .rw-panel-nav a.active,.rw-panel-nav button.active{background:#eef2f7!important;color:#0f172a!important}
 .rw-panel-nav a.active svg,.rw-panel-nav button.active svg{color:#0f172a!important;stroke:#0f172a!important}
-.rw-simple-nav .rw-folder-group{background:#ffffff!important;color:#64748b!important;border-top-color:#e5e7eb!important}
-.rw-simple-nav .rw-folder-group svg{color:#64748b!important;stroke:#64748b!important}
+.rw-simple-nav .rw-folder-group{background:#ffffff!important;color:#000000!important;border-top-color:#e5e7eb!important}
+.rw-simple-nav .rw-folder-group svg{color:#000000!important;stroke:#000000!important}
 .rw-simple-nav .rw-sales-link{color:#334155!important;background:#ffffff!important}
 .rw-simple-nav .rw-sales-link.active{color:#0f172a!important;background:#eef2f7!important}
 .rw-sidebar-folders,.rw-sidebar-folders section{background:#ffffff!important}
-.rw-sidebar-folder-head{background:#ffffff!important;color:#475569!important;border-bottom-color:#e5e7eb!important}
-.rw-sidebar-folder-head svg{color:#64748b!important;stroke:#64748b!important}
+.rw-sidebar-folder-head{background:#ffffff!important;color:#000000!important;border-bottom-color:#e5e7eb!important}
+.rw-sidebar-folder-head svg{color:#000000!important;stroke:#000000!important}
 .rw-sidebar-folders section>button:not(.rw-sidebar-folder-head){background:#ffffff!important;color:#334155!important}
 .rw-sidebar-folders section>button:not(.rw-sidebar-folder-head):hover{background:#f1f5f9!important;color:#0f172a!important}
 .rw-sidebar-folders section>button.active:not(.rw-sidebar-folder-head){background:#eef2f7!important;color:#0f172a!important}
@@ -5253,12 +5500,12 @@ const styles = `
 .rw-mgmt{background:#f8fafc;padding:0 28px 40px;border-top:0}
 .rw-mgmt-header{display:flex;align-items:flex-start;justify-content:space-between;gap:24px;padding:28px 0 18px;border-bottom:0;height:auto}
 .rw-mgmt-title h1{margin:0;color:#0b1220;font-size:28px;line-height:1.15;font-weight:800;letter-spacing:-0.01em}
-.rw-mgmt-title p{margin:6px 0 0;color:#475569;font-size:14px;font-weight:500}
+.rw-mgmt-title p{margin:6px 0 0;color:#000000;font-size:14px;font-weight:500}
 .rw-mgmt-actions{display:flex;align-items:center;gap:10px;flex-shrink:0}
-.rw-mgmt-search{height:36px;min-width:220px;border:1px solid #e2e8f0;background:#ffffff;border-radius:8px;display:flex;align-items:center;gap:8px;padding:0 12px;color:#475569;box-shadow:0 1px 2px rgba(15,23,42,0.03)}
+.rw-mgmt-search{height:36px;min-width:220px;border:1px solid #e2e8f0;background:#ffffff;border-radius:8px;display:flex;align-items:center;gap:8px;padding:0 12px;color:#000000;box-shadow:0 1px 2px rgba(15,23,42,0.03)}
 .rw-mgmt-search input{flex:1;min-width:0;border:0;outline:0;background:transparent;color:#0b1220;font-size:13px}
-.rw-mgmt-search input::placeholder{color:#94a3b8}
-.rw-mgmt-search svg{color:#94a3b8;flex-shrink:0}
+.rw-mgmt-search input::placeholder{color:#000000}
+.rw-mgmt-search svg{color:#000000;flex-shrink:0}
 .rw-mgmt-filter{height:36px!important;min-height:36px!important;padding:0 14px!important;border:1px solid #e2e8f0!important;background:#ffffff!important;border-radius:8px!important;color:#0b1220!important;font-size:13px!important;font-weight:600!important;gap:7px!important;box-shadow:0 1px 2px rgba(15,23,42,0.03)}
 .rw-mgmt-filter:hover{background:#f8fafc!important;border-color:#cbd5e1!important}
 .rw-mgmt-template{height:36px!important;min-height:36px!important;padding:0 14px!important;border:1px solid #cbd5e1!important;background:#ffffff!important;border-radius:8px!important;color:#0b1220!important;font-size:13px!important;font-weight:700!important;gap:7px!important;box-shadow:0 1px 2px rgba(15,23,42,0.03)}
@@ -5277,13 +5524,13 @@ const styles = `
 .rw-mgmt-stat-value{color:#0b1220;font-size:30px;font-weight:800;line-height:1;letter-spacing:-0.02em}
 .rw-mgmt-stat-label{margin-top:6px;color:#0b1220;font-size:13px;font-weight:600}
 .rw-mgmt-stat-foot{grid-column:1 / -1;grid-row:2;display:flex;align-items:center;justify-content:space-between;gap:12px;border-top:1px solid #f1f5f9;padding-top:12px}
-.rw-mgmt-stat-foot span{color:#64748b;font-size:12px;font-weight:500}
+.rw-mgmt-stat-foot span{color:#000000;font-size:12px;font-weight:500}
 .rw-mgmt-stat-spark{flex-shrink:0}
 
 .rw-mgmt-table-card{background:#ffffff;border:1px solid #eef2f7;border-radius:14px;overflow:hidden;box-shadow:0 1px 3px rgba(15,23,42,0.04)}
 .rw-mgmt-table-row{width:100%;min-height:72px;border:0;border-bottom:1px solid #f1f5f9;background:#ffffff;color:#0b1220;display:grid!important;grid-template-columns:40px minmax(0,1fr) 112px 160px 130px 42px;align-items:center;gap:12px;padding:0 16px;text-align:left;cursor:pointer;transition:background 120ms ease}
 .rw-mgmt-table-row:hover:not(.head){background:#f8fafc}
-.rw-mgmt-table-row.head{min-height:46px;background:#f8fafc;color:#64748b;font-size:11px;font-weight:700;letter-spacing:0.06em;text-transform:uppercase;cursor:default;pointer-events:none}
+.rw-mgmt-table-row.head{min-height:46px;background:#f8fafc;color:#000000;font-size:11px;font-weight:700;letter-spacing:0.06em;text-transform:uppercase;cursor:default;pointer-events:none}
 .rw-mgmt-table-row.head .cell-actions{text-align:right}
 .rw-mgmt-table-row .cell-check{display:flex;align-items:center;justify-content:center}
 .rw-mgmt-table-row .cell-check input{width:16px;height:16px;border:1.5px solid #cbd5e1;border-radius:4px;accent-color:#0b3a2e;cursor:pointer}
@@ -5293,8 +5540,8 @@ const styles = `
 .rw-mgmt-table-row .cell-dataset b.red{background:#dc2626}
 .rw-mgmt-table-row .cell-dataset-text{min-width:0;display:grid;gap:3px}
 .rw-mgmt-table-row .cell-dataset strong{color:#0b1220;font-size:14px;font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.rw-mgmt-table-row .cell-dataset small{display:flex;align-items:center;flex-wrap:wrap;gap:5px 8px;color:#64748b;font-size:12px;font-weight:500;line-height:1.3;overflow:visible;text-overflow:clip;white-space:normal}
-.rw-mgmt-table-row .rw-id-chip{display:inline-flex;align-items:center;padding:2px 8px;border-radius:6px;background:#f1f5f9;color:#64748b;font-size:10px;font-weight:700;font-style:normal;letter-spacing:0.04em;flex-shrink:0}
+.rw-mgmt-table-row .cell-dataset small{display:flex;align-items:center;flex-wrap:wrap;gap:5px 8px;color:#000000;font-size:12px;font-weight:500;line-height:1.3;overflow:visible;text-overflow:clip;white-space:normal}
+.rw-mgmt-table-row .rw-id-chip{display:inline-flex;align-items:center;padding:2px 8px;border-radius:6px;background:#f1f5f9;color:#000000;font-size:10px;font-weight:700;font-style:normal;letter-spacing:0.04em;flex-shrink:0}
 .rw-mgmt-table-row .cell-status{display:flex}
 .rw-status-pill{display:inline-flex;align-items:center;gap:6px;padding:4px 10px;border-radius:999px;font-size:12px;font-weight:600}
 .rw-status-pill i{width:6px;height:6px;border-radius:50%;display:inline-block}
@@ -5305,30 +5552,30 @@ const styles = `
 .rw-mgmt-table-row .cell-owner{display:grid;grid-template-columns:32px minmax(0,1fr);align-items:center;gap:10px;min-width:0}
 .rw-mgmt-table-row .cell-owner i{width:32px;height:32px;border-radius:50%;background:#7c3aed;color:#ffffff;display:grid;place-items:center;font-style:normal;font-size:12px;font-weight:700;flex-shrink:0}
 .rw-mgmt-table-row .cell-owner strong{display:block;color:#0b1220;font-size:13px;font-weight:600;line-height:1.2;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.rw-mgmt-table-row .cell-owner small{display:block;margin-top:2px;color:#64748b;font-size:11px;font-weight:500}
+.rw-mgmt-table-row .cell-owner small{display:block;margin-top:2px;color:#000000;font-size:11px;font-weight:500}
 .rw-mgmt-table-row .cell-date strong{display:block;color:#0b1220;font-size:13px;font-weight:600;line-height:1.2}
-.rw-mgmt-table-row .cell-date small{display:block;margin-top:2px;color:#64748b;font-size:11px;font-weight:500}
-.rw-mgmt-table-row .cell-actions{display:flex;align-items:center;justify-content:flex-end;color:#94a3b8;cursor:pointer;border-radius:6px;height:32px;width:32px;justify-self:end}
+.rw-mgmt-table-row .cell-date small{display:block;margin-top:2px;color:#000000;font-size:11px;font-weight:500}
+.rw-mgmt-table-row .cell-actions{display:flex;align-items:center;justify-content:flex-end;color:#000000;cursor:pointer;border-radius:6px;height:32px;width:32px;justify-self:end}
 .rw-mgmt-table-row .cell-actions:hover{background:#f1f5f9;color:#0b1220}
 
 .rw-mgmt-empty{padding:48px 24px}
 
 .rw-mgmt-table-foot{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:16px 22px;border-top:1px solid #f1f5f9;background:#fbfcfd}
-.rw-mgmt-count{color:#64748b;font-size:13px;font-weight:500}
+.rw-mgmt-count{color:#000000;font-size:13px;font-weight:500}
 .rw-mgmt-pagination{display:flex;align-items:center;gap:6px;margin-left:auto}
-.rw-mgmt-page-nav{width:32px!important;height:32px!important;min-height:32px!important;padding:0!important;border:1px solid #e2e8f0!important;background:#ffffff!important;border-radius:6px!important;color:#64748b!important}
+.rw-mgmt-page-nav{width:32px!important;height:32px!important;min-height:32px!important;padding:0!important;border:1px solid #e2e8f0!important;background:#ffffff!important;border-radius:6px!important;color:#000000!important}
 .rw-mgmt-page-nav:hover:not(:disabled){background:#f8fafc!important;color:#0b1220!important}
 .rw-mgmt-page-nav:disabled{opacity:0.4;cursor:not-allowed}
 .rw-mgmt-page-current{width:32px!important;height:32px!important;min-height:32px!important;padding:0!important;border:1px solid #0b3a2e!important;background:#ffffff!important;border-radius:6px!important;color:#0b3a2e!important;font-size:13px!important;font-weight:700!important;cursor:default!important}
 .rw-mgmt-page-size{position:relative;display:inline-flex;align-items:center}
 .rw-mgmt-page-size select{height:32px;padding:0 28px 0 12px;border:1px solid #e2e8f0;background:#ffffff;border-radius:6px;color:#0b1220;font-size:13px;font-weight:500;cursor:pointer;appearance:none;-webkit-appearance:none}
-.rw-mgmt-page-size svg{position:absolute;right:10px;color:#94a3b8;pointer-events:none}
+.rw-mgmt-page-size svg{position:absolute;right:10px;color:#000000;pointer-events:none}
 
 /* Pinned datasets strip */
 .rw-mgmt-pinned{margin:0 0 22px}
 .rw-mgmt-pinned > header{display:flex;align-items:center;justify-content:space-between;gap:12px;margin:0 0 12px}
 .rw-mgmt-pinned > header h2{margin:0;color:#0b1220;font-size:15px;font-weight:700;letter-spacing:-0.005em}
-.rw-mgmt-pinned > header p{margin:3px 0 0;color:#64748b;font-size:12px;font-weight:500}
+.rw-mgmt-pinned > header p{margin:3px 0 0;color:#000000;font-size:12px;font-weight:500}
 .rw-mgmt-link-btn{height:32px!important;min-height:32px!important;padding:0 12px!important;border:0!important;background:transparent!important;color:#0b3a2e!important;font-size:12px!important;font-weight:700!important;border-radius:6px!important}
 .rw-mgmt-link-btn:hover{background:#ecfdf5!important}
 .rw-mgmt-pinned-strip{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px}
@@ -5339,9 +5586,9 @@ const styles = `
 .rw-mgmt-pin-card.tone-red .rw-mgmt-pin-icon{background:#dc2626}
 .rw-mgmt-pin-card.tone-teal .rw-mgmt-pin-icon{background:#0f766e}
 .rw-mgmt-pin-card.tone-violet .rw-mgmt-pin-icon{background:#7c3aed}
-.rw-mgmt-pin-folder{color:#64748b;font-size:11px;font-weight:700;letter-spacing:0.06em;text-transform:uppercase}
+.rw-mgmt-pin-folder{color:#000000;font-size:11px;font-weight:700;letter-spacing:0.06em;text-transform:uppercase}
 .rw-mgmt-pin-card strong{display:block;color:#0b1220;font-size:15px;font-weight:700;line-height:1.2;align-self:start;width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.rw-mgmt-pin-meta{display:flex;align-items:center;gap:8px;align-self:end;color:#64748b;font-size:11px;font-weight:500}
+.rw-mgmt-pin-meta{display:flex;align-items:center;gap:8px;align-self:end;color:#000000;font-size:11px;font-weight:500}
 .rw-mgmt-pin-meta em{font-style:normal}
 .rw-mgmt-pin-meta i{width:3px;height:3px;border-radius:50%;background:#cbd5e1}
 
@@ -5352,7 +5599,7 @@ const styles = `
 .rw-mgmt-activity{background:#ffffff;border:1px solid #eef2f7;border-radius:14px;box-shadow:0 1px 3px rgba(15,23,42,0.04);padding:18px 18px 8px;position:sticky;top:20px}
 .rw-mgmt-activity > header{display:flex;align-items:center;justify-content:space-between;gap:12px;margin:0 0 12px}
 .rw-mgmt-activity > header h2{margin:0;color:#0b1220;font-size:14px;font-weight:700}
-.rw-mgmt-activity > header p{margin:2px 0 0;color:#64748b;font-size:11px;font-weight:500}
+.rw-mgmt-activity > header p{margin:2px 0 0;color:#000000;font-size:11px;font-weight:500}
 .rw-mgmt-activity-list{list-style:none;padding:0;margin:0;display:grid;gap:2px}
 .rw-mgmt-activity-item{display:grid;grid-template-columns:28px minmax(0,1fr);gap:10px;align-items:start;padding:10px 8px;border-radius:8px;cursor:pointer;transition:background 120ms ease}
 .rw-mgmt-activity-item:hover{background:#f8fafc}
@@ -5363,11 +5610,11 @@ const styles = `
 .rw-mgmt-activity-item p{margin:0;color:#0b1220;font-size:12px;font-weight:500;line-height:1.4}
 .rw-mgmt-activity-item p strong{font-weight:700}
 .rw-mgmt-activity-item p em{font-style:normal;font-weight:600;color:#0b3a2e}
-.rw-mgmt-activity-item small{display:block;margin-top:2px;color:#94a3b8;font-size:11px;font-weight:500}
-.rw-mgmt-activity-empty{padding:32px 12px;display:grid;justify-items:center;text-align:center;gap:6px;color:#64748b}
-.rw-mgmt-activity-empty svg{color:#cbd5e1}
+.rw-mgmt-activity-item small{display:block;margin-top:2px;color:#000000;font-size:11px;font-weight:500}
+.rw-mgmt-activity-empty{padding:32px 12px;display:grid;justify-items:center;text-align:center;gap:6px;color:#000000}
+.rw-mgmt-activity-empty svg{color:#000000}
 .rw-mgmt-activity-empty strong{color:#0b1220;font-size:13px;font-weight:700}
-.rw-mgmt-activity-empty span{font-size:12px;color:#64748b}
+.rw-mgmt-activity-empty span{font-size:12px;color:#000000}
 
 @media (max-width: 1280px){
   .rw-mgmt-main{grid-template-columns:1fr}

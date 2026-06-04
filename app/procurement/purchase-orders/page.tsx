@@ -21,6 +21,7 @@ import {
   WalletCards,
   X,
 } from 'lucide-react'
+import { AnalyticsToggleButton, CollapsibleAnalytics, useAnalyticsDisclosure } from '@/components/AnalyticsDisclosure'
 import { companyChangeEvent, companyScopedKey, getActiveCompany } from '@/lib/tenant/company'
 
 const font = 'var(--font-body)'
@@ -187,6 +188,7 @@ export default function PurchaseOrdersPage() {
   const [message, setMessage] = useState('')
   const [showSupplierDialog, setShowSupplierDialog] = useState(false)
   const [newSupplierName, setNewSupplierName] = useState('')
+  const analytics = useAnalyticsDisclosure('wiseflow:analytics:procurement-purchase-orders')
   const importOrdersRef = useRef<HTMLInputElement | null>(null)
   const importItemsRef = useRef<HTMLInputElement | null>(null)
   const attachmentRef = useRef<HTMLInputElement | null>(null)
@@ -531,6 +533,7 @@ export default function PurchaseOrdersPage() {
           </div>
         </div>
         <div className="po-actions">
+          <AnalyticsToggleButton open={analytics.open} onToggle={analytics.toggle} panelId={analytics.panelId} className="po-secondary-button" />
           <button type="button" className="po-secondary-button" onClick={() => setViewMode(viewMode === 'table' ? 'cards' : 'table')}>
             <Grid3X3 size={16} /> Views <ChevronDown size={14} />
           </button>
@@ -553,13 +556,15 @@ export default function PurchaseOrdersPage() {
         </div>
       </section>
 
-      <section className="po-stats" aria-label="Purchase order summary">
-        <KpiCard title="Total POs" value={String(stats.total)} helper={stats.total ? 'Across saved records' : 'No orders yet'} icon={FileText} tone="green" />
-        <KpiCard title="Total Value" value={formatCurrency(stats.totalValue)} helper="Across all POs" icon={WalletCards} tone="purple" />
-        <KpiCard title="Open POs" value={String(stats.open)} helper={stats.total ? `${percent(stats.open, stats.total)} of total` : 'No open orders'} icon={CalendarDays} tone="blue" />
-        <KpiCard title="Received" value={String(stats.received)} helper={stats.total ? `${percent(stats.received, stats.total)} of total` : 'No received orders'} icon={Truck} tone="orange" />
-        <KpiCard title="Overdue" value={String(stats.overdue)} helper={stats.total ? `${percent(stats.overdue, stats.total)} of total` : 'No overdue orders'} icon={Clock3} tone="red" />
-      </section>
+      <CollapsibleAnalytics open={analytics.open} id={analytics.panelId}>
+        <section className="po-stats" aria-label="Purchase order summary">
+          <KpiCard title="Total POs" value={String(stats.total)} helper={stats.total ? 'Across saved records' : 'No orders yet'} icon={FileText} tone="green" />
+          <KpiCard title="Total Value" value={formatCurrency(stats.totalValue)} helper="Across all POs" icon={WalletCards} tone="purple" />
+          <KpiCard title="Open POs" value={String(stats.open)} helper={stats.total ? `${percent(stats.open, stats.total)} of total` : 'No open orders'} icon={CalendarDays} tone="blue" />
+          <KpiCard title="Received" value={String(stats.received)} helper={stats.total ? `${percent(stats.received, stats.total)} of total` : 'No received orders'} icon={Truck} tone="orange" />
+          <KpiCard title="Overdue" value={String(stats.overdue)} helper={stats.total ? `${percent(stats.overdue, stats.total)} of total` : 'No overdue orders'} icon={Clock3} tone="red" />
+        </section>
+      </CollapsibleAnalytics>
 
       <section className="po-tabs" aria-label="Purchase order status tabs">
         {tabs.map(tab => (
@@ -1495,7 +1500,7 @@ const purchaseOrderCss = `
   display: flex;
   align-items: center;
   gap: 8px;
-  color: #64748b;
+  color: #000000;
   font-size: 12px;
   margin-bottom: 10px;
 }
@@ -1524,11 +1529,11 @@ const purchaseOrderCss = `
   letter-spacing: -0.03em;
 }
 .po-title-row h1 svg {
-  color: #94a3b8;
+  color: #000000;
 }
 .po-title-row p {
   margin: 8px 0 0;
-  color: #64748b;
+  color: #000000;
   font-size: 14px;
 }
 .po-actions {
@@ -1631,7 +1636,7 @@ const purchaseOrderCss = `
 .po-kpi-icon.red { background: #fee2e2; color: #ef4444; }
 .po-kpi span:not(.po-kpi-icon) {
   display: block;
-  color: #64748b;
+  color: #000000;
   font-size: 12px;
   font-weight: 800;
 }
@@ -1644,7 +1649,7 @@ const purchaseOrderCss = `
 .po-kpi small {
   display: block;
   margin-top: 8px;
-  color: #64748b;
+  color: #000000;
   font-size: 12px;
 }
 .po-tabs {
@@ -1671,7 +1676,7 @@ const purchaseOrderCss = `
   border-color: #16a34a;
 }
 .po-tabs span {
-  color: #64748b;
+  color: #000000;
   margin-left: 6px;
   font-size: 12px;
 }
@@ -1694,7 +1699,7 @@ const purchaseOrderCss = `
   align-items: center;
   gap: 10px;
   padding: 0 13px;
-  color: #64748b;
+  color: #000000;
   background: #fff;
 }
 .po-search.inner {
@@ -1788,7 +1793,7 @@ const purchaseOrderCss = `
 }
 .po-table th {
   background: #f8fafc;
-  color: #475569;
+  color: #000000;
   text-transform: uppercase;
   font-size: 10px;
   letter-spacing: .02em;
@@ -1820,7 +1825,7 @@ const purchaseOrderCss = `
 .po-badge.blue { background: #dbeafe; color: #2563eb; }
 .po-badge.orange { background: #ffedd5; color: #f97316; }
 .po-badge.red { background: #fee2e2; color: #ef4444; }
-.po-badge.gray { background: #f1f5f9; color: #475569; }
+.po-badge.gray { background: #f1f5f9; color: #000000; }
 .po-progress-text {
   display: inline-block;
   min-width: 36px;
@@ -1901,7 +1906,7 @@ const purchaseOrderCss = `
 }
 .po-order-card p,
 .po-card-meta {
-  color: #64748b;
+  color: #000000;
   font-size: 12px;
 }
 .po-card-meta {
@@ -1955,7 +1960,7 @@ const purchaseOrderCss = `
   place-items: center;
   margin-bottom: 18px;
   background: #eff6ff;
-  color: #64748b;
+  color: #000000;
 }
 .po-empty h2 {
   margin: 0;
@@ -1963,7 +1968,7 @@ const purchaseOrderCss = `
 }
 .po-empty p {
   max-width: 360px;
-  color: #64748b;
+  color: #000000;
   font-size: 13px;
   line-height: 1.55;
 }
@@ -1972,7 +1977,7 @@ const purchaseOrderCss = `
   gap: 7px;
 }
 .po-inline-empty span {
-  color: #64748b;
+  color: #000000;
   font-size: 13px;
 }
 .po-inline-empty button {
@@ -2019,7 +2024,7 @@ const purchaseOrderCss = `
 }
 .po-supplier-block small {
   display: block;
-  color: #64748b;
+  color: #000000;
   font-size: 11px;
   margin-top: 3px;
 }
@@ -2056,7 +2061,7 @@ const purchaseOrderCss = `
 }
 .po-detail-body p {
   margin: 12px 0;
-  color: #64748b;
+  color: #000000;
   font-size: 13px;
   line-height: 1.45;
 }
@@ -2068,7 +2073,7 @@ const purchaseOrderCss = `
   font-size: 12px;
 }
 .po-detail-row span {
-  color: #64748b;
+  color: #000000;
 }
 .po-detail-row strong {
   color: #0f172a;
@@ -2081,7 +2086,7 @@ const purchaseOrderCss = `
   font-size: 12px;
 }
 .po-detail-item span {
-  color: #64748b;
+  color: #000000;
 }
 .po-detail-actions {
   gap: 10px;
@@ -2123,7 +2128,7 @@ const purchaseOrderCss = `
 }
 .po-drawer-head p {
   margin: 8px 0 0;
-  color: #64748b;
+  color: #000000;
   font-size: 13px;
 }
 .po-form-layout {
@@ -2195,7 +2200,7 @@ const purchaseOrderCss = `
   margin-left: 2px;
 }
 .po-field-help {
-  color: #64748b;
+  color: #000000;
   font-size: 11px;
   font-weight: 700;
   margin-top: -3px;
@@ -2283,7 +2288,7 @@ const purchaseOrderCss = `
 }
 .po-items-table th {
   background: #f8fafc;
-  color: #64748b;
+  color: #000000;
   font-size: 10px;
   text-transform: uppercase;
 }
@@ -2302,7 +2307,7 @@ const purchaseOrderCss = `
   background: #fff;
 }
 .po-items-footer span {
-  color: #64748b;
+  color: #000000;
   font-size: 12px;
   font-weight: 800;
 }
@@ -2313,7 +2318,7 @@ const purchaseOrderCss = `
   display: grid;
   place-items: center;
   text-align: center;
-  color: #94a3b8;
+  color: #000000;
   padding: 28px 12px;
 }
 .po-empty-items strong {
@@ -2321,7 +2326,7 @@ const purchaseOrderCss = `
   margin-top: 8px;
 }
 .po-empty-items span {
-  color: #64748b;
+  color: #000000;
   font-size: 13px;
   margin-bottom: 10px;
 }
@@ -2333,7 +2338,7 @@ const purchaseOrderCss = `
   align-items: center;
   gap: 12px;
   min-height: 36px;
-  color: #64748b;
+  color: #000000;
   font-size: 13px;
 }
 .po-summary-row strong {
@@ -2362,7 +2367,7 @@ const purchaseOrderCss = `
   place-items: center;
   text-align: center;
   padding: 18px;
-  color: #64748b;
+  color: #000000;
   cursor: pointer;
 }
 .po-dropzone strong {
@@ -2375,7 +2380,7 @@ const purchaseOrderCss = `
   font-weight: 850;
 }
 .po-dropzone small {
-  color: #94a3b8;
+  color: #000000;
   font-size: 11px;
 }
 .po-attachment-list {
@@ -2552,7 +2557,7 @@ const purchaseOrderCss = `
     content: attr(data-label);
     display: inline-block;
     min-width: 105px;
-    color: #64748b;
+    color: #000000;
     font-size: 11px;
     font-weight: 900;
   }
@@ -2652,7 +2657,7 @@ const purchaseOrderCss = `
   .po-items-table td::before {
     content: attr(data-label);
     display: block;
-    color: #64748b;
+    color: #000000;
     font-size: 11px;
     font-weight: 900;
     margin-bottom: 6px;

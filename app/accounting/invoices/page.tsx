@@ -20,6 +20,7 @@ import {
   X,
 } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
+import { AnalyticsToggleButton, CollapsibleAnalytics, useAnalyticsDisclosure } from '@/components/AnalyticsDisclosure'
 import { secureId } from '@/lib/security/random'
 import { loadClients, type ClientRecord } from '@/app/people/clients/clientData'
 import {
@@ -81,7 +82,7 @@ function statusTone(value: string) {
   if (status === 'paid') return { bg: '#dcfce7', color: '#15803d' }
   if (status === 'overdue') return { bg: '#fee2e2', color: '#dc2626' }
   if (status === 'sent') return { bg: '#dbeafe', color: '#2563eb' }
-  return { bg: '#f1f5f9', color: '#475569' }
+  return { bg: '#f1f5f9', color: '#000000' }
 }
 
 function nextInvoiceNumber(invoices: AccountingInvoice[]) {
@@ -157,6 +158,29 @@ function createInvoiceForm(nextNumber: string, currency = 'PHP'): InvoiceForm {
   }
 }
 
+function invoiceFormFromSearchParams(searchParams: { get(name: string): string | null }, currency = 'PHP') {
+  const form = createInvoiceForm('', currency)
+  const clientId = searchParams.get('clientId') || searchParams.get('client') || ''
+  const customer = searchParams.get('clientName') || searchParams.get('customer') || searchParams.get('company') || ''
+  const email = searchParams.get('email') || ''
+  const phone = searchParams.get('phone') || ''
+  const address = searchParams.get('address') || ''
+  const billTo = searchParams.get('billTo') || [
+    customer,
+    email ? `Email: ${email}` : '',
+    phone ? `Phone: ${phone}` : '',
+    address ? `Address: ${address}` : '',
+  ].filter(Boolean).join('\n')
+
+  return {
+    ...form,
+    clientId,
+    customer,
+    email,
+    billTo,
+  }
+}
+
 function numericInput(value: string) {
   const parsed = Number(value)
   return Number.isFinite(parsed) ? Math.max(parsed, 0) : 0
@@ -189,10 +213,11 @@ export default function AccountingInvoicesPage() {
   const [data, setData] = useState(emptyAccountingData)
   const [activeTab, setActiveTab] = useState('All')
   const [search, setSearch] = useState('')
-  const [showCreate, setShowCreate] = useState(false)
+  const [showCreate, setShowCreate] = useState(createRequested)
   const [selected, setSelected] = useState<string[]>([])
-  const [form, setForm] = useState<InvoiceForm>(() => createInvoiceForm(''))
+  const [form, setForm] = useState<InvoiceForm>(() => createRequested ? invoiceFormFromSearchParams(searchParams) : createInvoiceForm(''))
   const [clients, setClients] = useState<ClientRecord[]>([])
+  const analytics = useAnalyticsDisclosure('wiseflow:analytics:accounting-invoices')
 
   useEffect(() => {
     const load = () => setData(loadAccountingData())
@@ -440,29 +465,32 @@ export default function AccountingInvoicesPage() {
         </div>
         <div className="invoices-header-actions">
           <label className="invoices-search">
-            <Search size={16} color="#64748b" />
+            <Search size={16} color="#000000" />
             <input value={search} onChange={event => setSearch(event.target.value)} placeholder="Search invoices, clients..." />
           </label>
+          <AnalyticsToggleButton open={analytics.open} onToggle={analytics.toggle} panelId={analytics.panelId} className="invoices-toolbar-button" />
           <button type="button" className="invoices-toolbar-button" onClick={exportInvoices}><Download size={15} /> Export CSV</button>
           <button type="button" className="invoices-primary-button" onClick={openCreate}><Plus size={15} /> New Invoice <ChevronDown size={13} /></button>
         </div>
       </div>
 
-      <section className="invoices-metrics">
-        {metrics.map(metric => {
-          const Icon = metric.icon
-          return (
-            <div key={metric.title} className="invoices-card invoices-metric-card">
-              <span className="invoices-metric-icon" style={{ background: `${metric.tone}12`, color: metric.tone }}><Icon size={23} /></span>
-              <span>
-                <span className="invoices-card-label">{metric.title}</span>
-                <strong className="invoices-card-value">{metric.value}</strong>
-                <small className="invoices-card-detail" style={{ color: metric.up ? '#16a34a' : '#334155' }}>{metric.detail}</small>
-              </span>
-            </div>
-          )
-        })}
-      </section>
+      <CollapsibleAnalytics open={analytics.open} id={analytics.panelId}>
+        <section className="invoices-metrics">
+          {metrics.map(metric => {
+            const Icon = metric.icon
+            return (
+              <div key={metric.title} className="invoices-card invoices-metric-card">
+                <span className="invoices-metric-icon" style={{ background: `${metric.tone}12`, color: metric.tone }}><Icon size={23} /></span>
+                <span>
+                  <span className="invoices-card-label">{metric.title}</span>
+                  <strong className="invoices-card-value">{metric.value}</strong>
+                  <small className="invoices-card-detail" style={{ color: metric.up ? '#16a34a' : '#334155' }}>{metric.detail}</small>
+                </span>
+              </div>
+            )
+          })}
+        </section>
+      </CollapsibleAnalytics>
 
       <nav className="invoices-tabs" aria-label="Invoice sections">
         {tabs.map(tab => (
@@ -527,6 +555,7 @@ export default function AccountingInvoicesPage() {
                   required
                 >
                   <option value="">{clientOptions.length ? 'Select client' : 'No clients available'}</option>
+                  {form.clientId && !clientOptions.some(client => client.id === form.clientId) ? <option value={form.clientId}>{form.customer || form.clientId}</option> : null}
                   {clientOptions.map(client => <option key={client.id} value={client.id}>{clientDisplayName(client)}</option>)}
                   <option value={manualCustomerOption}>Manual customer</option>
                 </select>
@@ -700,7 +729,7 @@ export default function AccountingInvoicesPage() {
           <div className="invoices-card">
             <div className="invoices-panel-header">
               <h2>Status Summary</h2>
-              <MoreHorizontal size={16} color="#64748b" />
+              <MoreHorizontal size={16} color="#000000" />
             </div>
             <div className="invoices-status-list">
               {statusSummary.map(item => (
@@ -742,36 +771,36 @@ const invoicesCss = `
 .invoices-card { background: #fff; border: 1px solid #e8edf4; border-radius: 8px; padding: 18px; box-shadow: 0 1px 2px rgba(15, 23, 42, .03); }
 .invoices-metric-card { min-height: 100px; display: flex; align-items: center; }
 .invoices-metric-icon { width: 54px; height: 54px; border-radius: 9px; display: grid; place-items: center; margin-right: 16px; flex: 0 0 auto; }
-.invoices-card-label { display: block; color: #475569; font-size: 12px; font-weight: 850; }
+.invoices-card-label { display: block; color: #000000; font-size: 12px; font-weight: 850; }
 .invoices-card-value { display: block; color: #0f172a; font-size: 23px; margin-top: 8px; white-space: nowrap; }
 .invoices-card-detail { display: block; color: #334155; font-size: 11.5px; font-weight: 900; margin-top: 8px; }
 .invoices-tabs { display: flex; align-items: center; gap: 32px; border-bottom: 1px solid #e8edf4; padding-left: 14px; overflow-x: auto; }
 .invoices-tabs button { border: 0; border-bottom: 2px solid transparent; background: transparent; color: #0f172a; min-height: 48px; padding: 0; font-size: 12.5px; font-weight: 900; cursor: pointer; white-space: nowrap; display: inline-flex; align-items: center; gap: 8px; }
 .invoices-tabs button.is-active { color: #16a34a; border-bottom-color: #16a34a; }
-.invoices-tabs span { min-width: 22px; min-height: 22px; border-radius: 999px; background: #f1f5f9; color: #475569; display: grid; place-items: center; font-size: 11px; }
+.invoices-tabs span { min-width: 22px; min-height: 22px; border-radius: 999px; background: #f1f5f9; color: #000000; display: grid; place-items: center; font-size: 11px; }
 .invoices-tabs button.is-active span { background: #dcfce7; color: #15803d; }
 .invoices-grid { display: grid; grid-template-columns: minmax(0, 1fr) 360px; gap: 16px; margin-top: 18px; }
 .invoices-side-stack { display: grid; align-content: start; gap: 16px; }
 .invoices-panel-header { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 16px; }
 .invoices-panel-header h2, .invoices-card-heading { margin: 0; color: #0f172a; font-size: 16px; font-weight: 950; }
-.invoices-panel-subtitle { margin: 6px 0 0; color: #64748b; font-size: 12.5px; font-weight: 650; }
+.invoices-panel-subtitle { margin: 6px 0 0; color: #000000; font-size: 12.5px; font-weight: 650; }
 .invoices-panel-actions { display: flex; align-items: center; flex-wrap: wrap; justify-content: flex-end; gap: 10px; }
-.invoices-panel-actions strong { color: #475569; font-size: 12px; }
+.invoices-panel-actions strong { color: #000000; font-size: 12px; }
 .invoices-panel-actions button, .invoices-link-button { min-height: 32px; border: 1px solid #e8edf4; border-radius: 7px; background: #fff; color: #0f172a; padding: 0 10px; font-size: 12px; font-weight: 900; cursor: pointer; }
 .invoices-table-wrap { overflow-x: auto; }
 .invoices-table { width: 100%; min-width: 980px; border-collapse: collapse; }
-.invoices-table th { text-align: left; padding: 12px 14px; color: #64748b; font-size: 11px; font-weight: 900; }
+.invoices-table th { text-align: left; padding: 12px 14px; color: #000000; font-size: 11px; font-weight: 900; }
 .invoices-table td { padding: 13px 14px; border-top: 1px solid #eef2f7; color: #0f172a; font-size: 13px; vertical-align: middle; }
 .invoices-table td strong { display: block; color: #0f172a; }
-.invoices-table td small { display: block; color: #64748b; margin-top: 3px; }
+.invoices-table td small { display: block; color: #000000; margin-top: 3px; }
 .invoice-status-pill { display: inline-flex; min-height: 24px; align-items: center; border-radius: 7px; padding: 0 9px; font-size: 11.5px; font-weight: 900; }
 .invoices-row-actions { display: flex; align-items: center; gap: 6px; }
 .invoices-row-actions button { width: 32px; height: 32px; border: 1px solid #e8edf4; border-radius: 7px; background: #fff; color: #0f172a; display: grid; place-items: center; cursor: pointer; }
-.invoices-empty { text-align: center; color: #64748b !important; padding: 34px !important; font-weight: 800; }
+.invoices-empty { text-align: center; color: #000000 !important; padding: 34px !important; font-weight: 800; }
 .invoices-create-panel { margin-top: 18px; }
 .invoices-maker-form { display: grid; gap: 18px; }
 .invoices-maker-form label { display: grid; gap: 7px; min-width: 0; }
-.invoices-maker-form span, .invoices-line-amount span, .invoices-total-box span { color: #475569; font-size: 12px; font-weight: 900; }
+.invoices-maker-form span, .invoices-line-amount span, .invoices-total-box span { color: #000000; font-size: 12px; font-weight: 900; }
 .invoices-maker-form input,
 .invoices-maker-form select,
 .invoices-maker-form textarea { width: 100%; min-height: 40px; border: 1px solid #d7dde7; border-radius: 8px; padding: 0 12px; color: #0f172a; background: #fff; outline: 0; font-size: 13px; font-family: inherit; }
@@ -785,10 +814,10 @@ const invoicesCss = `
 .invoices-logo-upload > span { position: static; }
 .invoices-logo-upload input { position: absolute; inset: 0; opacity: 0; cursor: pointer; }
 .invoices-logo-upload strong { display: flex; align-items: center; gap: 8px; color: #0f172a; font-size: 12.5px; font-weight: 950; }
-.invoices-logo-upload small { color: #64748b; font-size: 11px; font-weight: 750; }
+.invoices-logo-upload small { color: #000000; font-size: 11px; font-weight: 750; }
 .invoices-line-items { background: #f2f7ef; border: 1px solid #e2ecd9; border-radius: 10px; padding: 16px; display: grid; gap: 12px; }
 .invoices-line-heading, .invoices-line-row { display: grid; grid-template-columns: minmax(220px, 1fr) 130px 130px 110px 150px 36px; gap: 10px; align-items: end; }
-.invoices-line-heading { align-items: center; color: #475569; font-size: 11px; font-weight: 950; padding: 0 0 2px; }
+.invoices-line-heading { align-items: center; color: #000000; font-size: 11px; font-weight: 950; padding: 0 0 2px; }
 .invoices-line-row label span { display: none; }
 .invoices-line-amount { display: grid; gap: 7px; }
 .invoices-line-amount span { display: none; }
@@ -806,10 +835,10 @@ const invoicesCss = `
 .invoices-total-row strong { font-size: 18px; font-weight: 950; }
 .invoices-form { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; }
 .invoices-form label { display: grid; gap: 7px; }
-.invoices-form span { color: #475569; font-size: 12px; font-weight: 900; }
+.invoices-form span { color: #000000; font-size: 12px; font-weight: 900; }
 .invoices-form input, .invoices-form select { min-height: 40px; border: 1px solid #e8edf4; border-radius: 8px; padding: 0 12px; color: #0f172a; background: #fff; outline: 0; font-size: 13px; }
 .invoices-form-actions { grid-column: 1 / -1; display: flex; justify-content: space-between; align-items: center; gap: 12px; border-top: 1px solid #eef2f7; padding-top: 14px; }
-.invoices-form-actions strong { color: #475569; font-size: 12px; }
+.invoices-form-actions strong { color: #000000; font-size: 12px; }
 .invoices-status-list { display: grid; gap: 14px; }
 .invoices-status-list div { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 .invoices-status-list strong { color: #0f172a; font-size: 18px; }
@@ -852,7 +881,7 @@ const invoicesCss = `
   .invoices-table thead { display: none; }
   .invoices-table tr { border: 1px solid #eef2f7; border-radius: 8px; margin-bottom: 12px; background: #fff; overflow: hidden; }
   .invoices-table td { border-top: 0; display: grid; grid-template-columns: 112px minmax(0, 1fr); gap: 10px; padding: 10px 12px; font-size: 12.5px; align-items: center; }
-  .invoices-table td::before { content: attr(data-label); color: #64748b; font-size: 11px; font-weight: 900; text-transform: uppercase; }
+  .invoices-table td::before { content: attr(data-label); color: #000000; font-size: 11px; font-weight: 900; text-transform: uppercase; }
   .invoices-row-actions { justify-content: flex-start; }
 }
 `

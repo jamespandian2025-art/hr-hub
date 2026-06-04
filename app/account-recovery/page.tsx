@@ -624,7 +624,7 @@ const recoveryCss = `
   display: block;
   max-width: 520px;
   margin-top: 18px;
-  color: #cbd5e1;
+  color: #000000;
   font-size: 15px;
   line-height: 1.7;
 }
@@ -683,7 +683,7 @@ const recoveryCss = `
   border: 0;
   border-radius: 9px;
   background: transparent;
-  color: #475569;
+  color: #000000;
   font-weight: 800;
   cursor: pointer;
 }
@@ -720,7 +720,7 @@ const recoveryCss = `
 
 .recovery-heading p {
   margin: 7px 0 0;
-  color: #64748b;
+  color: #000000;
   font-size: 13px;
   line-height: 1.6;
 }
@@ -768,7 +768,7 @@ const recoveryCss = `
   gap: 9px;
   padding: 0 12px;
   background: #fff;
-  color: #64748b;
+  color: #000000;
 }
 
 .recovery-input input {
@@ -785,7 +785,7 @@ const recoveryCss = `
 .recovery-eye {
   border: 0;
   background: transparent;
-  color: #64748b;
+  color: #000000;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -863,7 +863,7 @@ const recoveryCss = `
   margin-top: 20px;
   display: flex;
   gap: 8px;
-  color: #64748b;
+  color: #000000;
   font-size: 12px;
   line-height: 1.5;
 }

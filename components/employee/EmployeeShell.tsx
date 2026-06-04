@@ -132,7 +132,7 @@ function EmployeeWorkspace({ children, pathname }: { children: ReactNode; pathna
             {notificationsOpen && (
               <div className="employee-notification-panel" style={notificationPanelStyle}>
                 <strong style={{ display: 'block', color: '#0f172a', marginBottom: 10 }}>Notifications</strong>
-                <p style={{ margin: 0, color: '#64748b', fontSize: 13 }}>No employee notifications waiting.</p>
+                <p style={{ margin: 0, color: '#000000', fontSize: 13 }}>No employee notifications waiting.</p>
               </div>
             )}
             <button type="button" className="employee-user-chip" aria-label="Open employee menu" onClick={() => setProfileOpen(open => !open)}>
@@ -150,7 +150,7 @@ function EmployeeWorkspace({ children, pathname }: { children: ReactNode; pathna
                   ) : <span style={profileMenuAvatarStyle}>{employeeInitials}</span>}
                   <div style={{ minWidth: 0 }}>
                     <strong style={{ display: 'block', color: '#0f172a', fontSize: 13, lineHeight: 1.25 }}>{employeeName}</strong>
-                    <span style={{ display: 'block', color: '#64748b', fontSize: 12, marginTop: 3 }}>{employee.jobTitle || 'Employee'}</span>
+                    <span style={{ display: 'block', color: '#000000', fontSize: 12, marginTop: 3 }}>{employee.jobTitle || 'Employee'}</span>
                   </div>
                 </div>
                 <Link href="/employee/profile" style={profileMenuItemStyle} onClick={() => setProfileOpen(false)}>View profile</Link>

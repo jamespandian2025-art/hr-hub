@@ -148,7 +148,7 @@ function typeTone(type: string) {
   if (normalized.includes('pdf')) return { bg: '#fee2e2', text: '#dc2626' }
   if (normalized.includes('xls') || normalized.includes('excel')) return { bg: '#dcfce7', text: '#15803d' }
   if (normalized.includes('doc') || normalized.includes('word')) return { bg: '#dbeafe', text: '#1d4ed8' }
-  return { bg: '#f1f5f9', text: '#475569' }
+  return { bg: '#f1f5f9', text: '#000000' }
 }
 
 function documentAssetUrl(doc?: Pick<HRDocument, 'fileUrl' | 'dataUrl'> | null) {
@@ -371,7 +371,7 @@ export default function HRDocumentDetailsPage() {
         </div>
         <div style={toolbarStyle}>
           <label style={searchBoxStyle}>
-            <Search size={15} color="#94a3b8" />
+            <Search size={15} color="#000000" />
             <input value={query} onChange={event => setQuery(event.target.value)} placeholder="Search documents..." style={plainInputStyle} />
           </label>
           <button style={secondaryButtonStyle} onClick={downloadDocument} disabled={!document}><Download size={15} /> Download</button>
@@ -385,7 +385,7 @@ export default function HRDocumentDetailsPage() {
 
       {!document ? (
         <div style={emptyStateStyle}>
-          <FileText size={40} color="#94a3b8" />
+          <FileText size={40} color="#000000" />
           <strong>No document selected.</strong>
           <span>Upload a document first, then open it from the documents list.</span>
           <Link href="/hr/documents" style={primaryLinkStyle}><ArrowLeft size={15} /> Back to Documents</Link>
@@ -686,7 +686,7 @@ function Fact({ label, value }: { label: string; value: string }) {
 function InfoCard({ title, icon: Icon, children }: { title: string; icon: typeof FileText; children: React.ReactNode }) {
   return (
     <section style={infoCardStyle}>
-      <div style={infoHeaderStyle}><Icon size={17} color="#64748b" /><h3>{title}</h3></div>
+      <div style={infoHeaderStyle}><Icon size={17} color="#000000" /><h3>{title}</h3></div>
       <div style={infoRowsStyle}>{children}</div>
     </section>
   )
@@ -704,7 +704,7 @@ function InfoRow({ label, value }: { label: string; value: string }) {
 function EmptyPanel({ icon: Icon, title, text }: { icon: typeof FileText; title: string; text: string }) {
   return (
     <div style={innerEmptyStyle}>
-      <Icon size={34} color="#94a3b8" />
+      <Icon size={34} color="#000000" />
       <strong>{title}</strong>
       <span>{text}</span>
     </div>
@@ -741,21 +741,21 @@ function Td({ children }: { children: React.ReactNode }) {
 
 const topBarStyle = { display: 'flex', justifyContent: 'space-between', gap: 16, alignItems: 'flex-start', flexWrap: 'wrap' as const, marginBottom: 18 }
 const pageTitleStyle = { margin: 0, color: '#0f172a', fontSize: 28, fontWeight: 900 }
-const breadcrumbStyle = { display: 'flex', gap: 8, alignItems: 'center', marginTop: 8, color: '#64748b', fontSize: 13 }
-const breadcrumbLinkStyle = { color: '#475569', textDecoration: 'none' }
+const breadcrumbStyle = { display: 'flex', gap: 8, alignItems: 'center', marginTop: 8, color: '#000000', fontSize: 13 }
+const breadcrumbLinkStyle = { color: '#000000', textDecoration: 'none' }
 const toolbarStyle = { display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' as const }
 const searchBoxStyle = { minHeight: 40, minWidth: 330, border: '1px solid #e5e7eb', borderRadius: 8, background: '#fff', padding: '0 12px', display: 'flex', alignItems: 'center', gap: 8, color: '#0f172a', fontSize: 13, fontFamily: font }
 const plainInputStyle = { border: 'none', outline: 'none', background: 'transparent', width: '100%', font: 'inherit' }
 const secondaryButtonStyle = { minHeight: 40, border: '1px solid #e5e7eb', borderRadius: 8, background: '#fff', color: '#0f172a', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 8, padding: '0 14px', fontSize: 13, fontWeight: 800, cursor: 'pointer', fontFamily: font }
 const primaryLinkStyle = { minHeight: 40, borderRadius: 8, background: '#16a34a', color: '#fff', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 8, padding: '0 16px', fontSize: 13, fontWeight: 900, textDecoration: 'none', fontFamily: font }
-const emptyStateStyle = { minHeight: 420, background: '#fff', border: '1px solid #e5e7eb', borderRadius: 12, display: 'grid', placeItems: 'center', alignContent: 'center', gap: 10, color: '#64748b', fontSize: 13, textAlign: 'center' as const, boxShadow: '0 8px 24px rgba(15,23,42,0.04)' }
+const emptyStateStyle = { minHeight: 420, background: '#fff', border: '1px solid #e5e7eb', borderRadius: 12, display: 'grid', placeItems: 'center', alignContent: 'center', gap: 10, color: '#000000', fontSize: 13, textAlign: 'center' as const, boxShadow: '0 8px 24px rgba(15,23,42,0.04)' }
 const heroCardStyle = { background: '#fff', border: '1px solid #e5e7eb', borderRadius: 12, boxShadow: '0 8px 24px rgba(15,23,42,0.04)', padding: 22, display: 'grid', gridTemplateColumns: 'minmax(280px, 1.3fr) minmax(420px, 1fr)', gap: 26, marginBottom: 18 }
 const heroMainStyle = { display: 'flex', gap: 16, alignItems: 'flex-start' }
 const heroTitleStyle = { margin: 0, color: '#0f172a', fontSize: 20, fontWeight: 900 }
-const heroSubtitleStyle = { margin: '14px 0 0', color: '#475569', fontSize: 13, lineHeight: 1.5 }
+const heroSubtitleStyle = { margin: '14px 0 0', color: '#000000', fontSize: 13, lineHeight: 1.5 }
 const badgeRowStyle = { display: 'flex', gap: 8, flexWrap: 'wrap' as const, marginTop: 8 }
 const factsGridStyle = { display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 18, borderLeft: '1px solid #e5e7eb', paddingLeft: 24 }
-const factLabelStyle = { display: 'block', color: '#64748b', fontSize: 12, marginBottom: 6 }
+const factLabelStyle = { display: 'block', color: '#000000', fontSize: 12, marginBottom: 6 }
 const factValueStyle = { display: 'block', color: '#0f172a', fontSize: 13, overflowWrap: 'anywhere' as const }
 const tabsStyle = { display: 'flex', gap: 28, borderBottom: '1px solid #e5e7eb', overflowX: 'auto' as const, marginBottom: 16 }
 const tabStyle = (active: boolean) => ({ border: 'none', background: 'transparent', padding: '14px 0', borderBottom: active ? '2px solid #22c55e' : '2px solid transparent', color: active ? '#16a34a' : '#334155', fontSize: 13, fontWeight: 800, cursor: 'pointer', fontFamily: font, whiteSpace: 'nowrap' as const })
@@ -763,12 +763,12 @@ const contentGridStyle = { display: 'grid', gridTemplateColumns: 'minmax(0, 1.5f
 const stackStyle = { display: 'grid', gap: 14, alignContent: 'start' }
 const singleCardStyle = { background: '#fff', border: '1px solid #e5e7eb', borderRadius: 12, boxShadow: '0 8px 24px rgba(15,23,42,0.04)', padding: 18, minHeight: 360 }
 const sectionTitleStyle = { margin: 0, color: '#0f172a', fontSize: 16, fontWeight: 900 }
-const sectionSubtitleStyle = { margin: '6px 0 0', color: '#64748b', fontSize: 13 }
+const sectionSubtitleStyle = { margin: '6px 0 0', color: '#000000', fontSize: 13 }
 const versionGridStyle = { display: 'grid', gridTemplateColumns: 'minmax(0, 1.45fr) minmax(320px, 0.75fr)', gap: 18 }
 const versionMainCardStyle = { background: '#fff', border: '1px solid #e5e7eb', borderRadius: 12, boxShadow: '0 8px 24px rgba(15,23,42,0.04)', overflow: 'hidden', minHeight: 420 }
 const versionHeaderStyle = { padding: 18, display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, borderBottom: '1px solid #f1f5f9', flexWrap: 'wrap' as const }
 const versionTableStyle = { width: '100%', minWidth: 880, borderCollapse: 'collapse' as const }
-const thStyle = { textAlign: 'left' as const, padding: '13px 18px', color: '#475569', fontSize: 11, fontWeight: 900, background: '#fbfdff', whiteSpace: 'nowrap' as const }
+const thStyle = { textAlign: 'left' as const, padding: '13px 18px', color: '#000000', fontSize: 11, fontWeight: 900, background: '#fbfdff', whiteSpace: 'nowrap' as const }
 const tdStyle = { padding: '13px 18px', borderTop: '1px solid #f1f5f9', color: '#0f172a', fontSize: 12, verticalAlign: 'middle' as const }
 const previewPageStyle = { display: 'grid', gridTemplateColumns: 'minmax(0, 1.45fr) minmax(320px, 0.75fr)', gap: 18 }
 const previewWorkspaceStyle = { background: '#0f172a', border: '1px solid #111827', borderRadius: 12, overflow: 'hidden', boxShadow: '0 8px 24px rgba(15,23,42,0.08)' }
@@ -779,15 +779,15 @@ const previewCanvasStyle = { minHeight: 640, padding: 18, background: '#111827',
 const infoCardStyle = { background: '#fff', border: '1px solid #e5e7eb', borderRadius: 12, boxShadow: '0 8px 24px rgba(15,23,42,0.04)', overflow: 'hidden' }
 const infoHeaderStyle = { display: 'flex', gap: 9, alignItems: 'center', padding: '16px 18px', borderBottom: '1px solid #f1f5f9', color: '#0f172a' }
 const infoRowsStyle = { display: 'grid', padding: '8px 18px 16px' }
-const infoRowStyle = { display: 'grid', gridTemplateColumns: '180px minmax(0, 1fr)', gap: 16, padding: '9px 0', color: '#475569', fontSize: 13, borderBottom: '1px solid #f8fafc' }
+const infoRowStyle = { display: 'grid', gridTemplateColumns: '180px minmax(0, 1fr)', gap: 16, padding: '9px 0', color: '#000000', fontSize: 13, borderBottom: '1px solid #f8fafc' }
 const actionButtonStyle = { minHeight: 38, border: '1px solid #e5e7eb', borderRadius: 8, background: '#fff', color: '#0f172a', display: 'flex', alignItems: 'center', gap: 9, padding: '0 12px', fontSize: 13, fontWeight: 800, cursor: 'pointer', fontFamily: font }
 const dangerActionStyle = { ...actionButtonStyle, color: '#dc2626', borderColor: '#fecaca' }
 const badgeStyle = { borderRadius: 6, padding: '3px 8px', fontSize: 11, fontWeight: 800, display: 'inline-flex' }
 const previewImageStyle = { maxWidth: '100%', maxHeight: 720, borderRadius: 10, border: '1px solid #e5e7eb', objectFit: 'contain' as const, display: 'block', margin: '0 auto' }
 const previewFrameStyle = { width: '100%', minHeight: 720, border: '1px solid #e5e7eb', borderRadius: 10, background: '#fff' }
-const innerEmptyStyle = { minHeight: 300, display: 'grid', placeItems: 'center', alignContent: 'center', gap: 8, color: '#64748b', fontSize: 13, textAlign: 'center' as const }
+const innerEmptyStyle = { minHeight: 300, display: 'grid', placeItems: 'center', alignContent: 'center', gap: 8, color: '#000000', fontSize: 13, textAlign: 'center' as const }
 const timelineItemStyle = { display: 'flex', gap: 12, alignItems: 'flex-start', color: '#0f172a', fontSize: 13 }
 const timelineDotStyle = { width: 10, height: 10, borderRadius: 999, background: '#16a34a', marginTop: 4 }
-const mutedTextStyle = { margin: '4px 0 0', color: '#64748b', fontSize: 12 }
+const mutedTextStyle = { margin: '4px 0 0', color: '#000000', fontSize: 12 }
 const relatedGridStyle = { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: 12 }
 const relatedCardStyle = { border: '1px solid #e5e7eb', borderRadius: 10, padding: 14, display: 'flex', gap: 12, alignItems: 'center', color: '#0f172a', textDecoration: 'none', fontSize: 13 }

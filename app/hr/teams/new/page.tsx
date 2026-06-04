@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { BriefcaseBusiness, Building2, ChevronRight, Lightbulb, MapPin, Search, Users } from 'lucide-react'
 import { Employee, ensureTeams, fullName, HRTeam, initials, loadStored, saveStored } from '../teamData'
+import { createHrRecord } from '@/lib/hrms/client'
 
 const font = "var(--font-body)"
 const card = { background: '#fff', border: '1px solid #e5e7eb', borderRadius: 12, boxShadow: '0 1px 4px rgba(15,23,42,0.05)' }
@@ -171,6 +172,9 @@ export default function AddTeamPage() {
     }
     const nextTeams = [...currentTeams.filter(team => team.id !== newTeam.id), newTeam]
     saveStored('flowsys-hr-teams', nextTeams)
+    void createHrRecord<HRTeam>('teams', newTeam as unknown as Record<string, unknown>)
+      .then(() => window.dispatchEvent(new Event('wiseflow:hr-data-changed')))
+      .catch(() => undefined)
     const currentDepartments = loadStored<HRDepartment[]>('flowsys-hr-departments', [])
     if (!currentDepartments.some(department => normalize(department.name) === normalize(newTeam.department))) {
       const now = new Date().toISOString()
@@ -195,9 +199,9 @@ export default function AddTeamPage() {
   return (
     <main style={{ fontFamily: font, padding: '0 20px 32px', minHeight: '100vh' }}>
       <div style={{ padding: '20px 0 18px' }}>
-        <div style={{ fontSize: 12, color: '#6b7280', marginBottom: 14 }}>HR Hub &nbsp;&gt;&nbsp; Teams &nbsp;&gt;&nbsp; Add Team</div>
+        <div style={{ fontSize: 12, color: '#000000', marginBottom: 14 }}>HR Hub &nbsp;&gt;&nbsp; Teams &nbsp;&gt;&nbsp; Add Team</div>
         <h1 style={{ margin: 0, color: '#111827', fontSize: 24, fontWeight: 800 }}>Add Team</h1>
-        <p style={{ margin: '6px 0 0', color: '#6b7280', fontSize: 13 }}>Create a new team and assign manager, members, and basic details.</p>
+        <p style={{ margin: '6px 0 0', color: '#000000', fontSize: 13 }}>Create a new team and assign manager, members, and basic details.</p>
       </div>
 
       <section style={{ ...card, padding: '18px 22px', marginBottom: 18 }}>
@@ -207,8 +211,8 @@ export default function AddTeamPage() {
             return (
               <button key={label} onClick={() => setStep(current)} style={{ border: 'none', background: 'transparent', textAlign: 'left', cursor: 'pointer', fontFamily: font }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                  <span style={{ width: 28, height: 28, borderRadius: '50%', display: 'grid', placeItems: 'center', background: step === current ? '#16a34a' : '#fff', color: step === current ? '#fff' : '#6b7280', border: '1px solid #e5e7eb', fontWeight: 800, fontSize: 12 }}>{current}</span>
-                  <strong style={{ color: step === current ? '#111827' : '#6b7280', fontSize: 12 }}>{label}</strong>
+                  <span style={{ width: 28, height: 28, borderRadius: '50%', display: 'grid', placeItems: 'center', background: step === current ? '#16a34a' : '#fff', color: step === current ? '#fff' : '#000000', border: '1px solid #e5e7eb', fontWeight: 800, fontSize: 12 }}>{current}</span>
+                  <strong style={{ color: step === current ? '#111827' : '#000000', fontSize: 12 }}>{label}</strong>
                 </div>
                 <div style={{ height: 2, background: step === current ? '#16a34a' : '#e5e7eb', marginTop: 14 }} />
               </button>
@@ -255,7 +259,7 @@ export default function AddTeamPage() {
           {step === 2 && (
             <div style={{ padding: '22px 22px' }}>
               <h2 style={{ margin: '0 0 8px', fontSize: 16, color: '#111827' }}>Assign Manager</h2>
-              <p style={{ margin: '0 0 18px', fontSize: 13, color: '#6b7280' }}>Choose the accountable manager and lead role for this team.</p>
+              <p style={{ margin: '0 0 18px', fontSize: 13, color: '#000000' }}>Choose the accountable manager and lead role for this team.</p>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
                 <Field label="Team Manager *" value={form.managerName} placeholder="Manager name" onChange={value => setField('managerName', value)} />
                 <Field label="Team Lead" value={form.leadName} placeholder="Team lead name" onChange={value => setField('leadName', value)} />
@@ -270,7 +274,7 @@ export default function AddTeamPage() {
                       return (
                         <button key={employee.id} onClick={() => setField('managerName', name)} style={{ border: '1px solid #e5e7eb', background: '#fff', borderRadius: 10, padding: 10, display: 'flex', alignItems: 'center', gap: 10, textAlign: 'left', cursor: 'pointer' }}>
                           <EmployeeAvatar employee={employee} name={name} size={30} />
-                          <span><strong style={{ color: '#111827', fontSize: 12 }}>{name}</strong><span style={{ display: 'block', color: '#6b7280', fontSize: 11 }}>{employee.jobTitle || 'Employee'}</span></span>
+                          <span><strong style={{ color: '#111827', fontSize: 12 }}>{name}</strong><span style={{ display: 'block', color: '#000000', fontSize: 11 }}>{employee.jobTitle || 'Employee'}</span></span>
                         </button>
                       )
                     })}
@@ -283,13 +287,13 @@ export default function AddTeamPage() {
           {step === 3 && (
             <div style={{ padding: '22px 22px' }}>
               <h2 style={{ margin: '0 0 8px', fontSize: 16, color: '#111827' }}>Add Members</h2>
-              <p style={{ margin: '0 0 18px', fontSize: 13, color: '#6b7280' }}>Select employees to include in this team. You can also add more later from the team details page.</p>
+              <p style={{ margin: '0 0 18px', fontSize: 13, color: '#000000' }}>Select employees to include in this team. You can also add more later from the team details page.</p>
               {employees.length === 0 ? (
-                <div style={{ border: '1px dashed #e5e7eb', borderRadius: 12, padding: 24, textAlign: 'center', color: '#6b7280', fontSize: 13 }}>No employees found yet. You can create the team now and add members later.</div>
+                <div style={{ border: '1px dashed #e5e7eb', borderRadius: 12, padding: 24, textAlign: 'center', color: '#000000', fontSize: 13 }}>No employees found yet. You can create the team now and add members later.</div>
               ) : (
                 <div>
                   <div style={{ position: 'relative', maxWidth: 420, marginBottom: 14 }}>
-                    <Search size={15} color="#9ca3af" style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)' }} />
+                    <Search size={15} color="#000000" style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)' }} />
                     <input
                       value={memberSearch}
                       onChange={event => setMemberSearch(event.target.value)}
@@ -299,7 +303,7 @@ export default function AddTeamPage() {
                   </div>
 
                   {filteredMemberEmployees.length === 0 ? (
-                    <div style={{ border: '1px dashed #e5e7eb', borderRadius: 12, padding: 24, textAlign: 'center', color: '#6b7280', fontSize: 13 }}>
+                    <div style={{ border: '1px dashed #e5e7eb', borderRadius: 12, padding: 24, textAlign: 'center', color: '#000000', fontSize: 13 }}>
                       No employees match {memberSearch}. Try another name or email.
                     </div>
                   ) : (
@@ -310,7 +314,7 @@ export default function AddTeamPage() {
                     return (
                       <button key={employee.id} onClick={() => toggleMember(employee.id)} style={{ border: `1px solid ${selected ? '#16a34a' : '#e5e7eb'}`, background: selected ? '#f0fdf4' : '#fff', borderRadius: 10, padding: 12, display: 'flex', alignItems: 'center', gap: 10, textAlign: 'left', cursor: 'pointer' }}>
                         <EmployeeAvatar employee={employee} name={name} size={34} selected={selected} />
-                        <span style={{ flex: 1, minWidth: 0 }}><strong style={{ color: '#111827', fontSize: 12, display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{name}</strong><span style={{ display: 'block', color: '#6b7280', fontSize: 11, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{employee.jobTitle || employee.email || 'Employee'}</span></span>
+                        <span style={{ flex: 1, minWidth: 0 }}><strong style={{ color: '#111827', fontSize: 12, display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{name}</strong><span style={{ display: 'block', color: '#000000', fontSize: 11, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{employee.jobTitle || employee.email || 'Employee'}</span></span>
                         <span style={{ color: selected ? '#16a34a' : '#d1d5db', fontWeight: 900 }}>{selected ? 'âœ“' : '+'}</span>
                       </button>
                     )
@@ -325,7 +329,7 @@ export default function AddTeamPage() {
           {step === 4 && (
             <div style={{ padding: '22px 22px' }}>
               <h2 style={{ margin: '0 0 8px', fontSize: 16, color: '#111827' }}>Review & Confirm</h2>
-              <p style={{ margin: '0 0 18px', fontSize: 13, color: '#6b7280' }}>Review the team information before creating it.</p>
+              <p style={{ margin: '0 0 18px', fontSize: 13, color: '#000000' }}>Review the team information before creating it.</p>
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 12 }}>
                 {[
                   ['Team Name', preview.name],
@@ -338,7 +342,7 @@ export default function AddTeamPage() {
                   ['Budget', preview.budget],
                 ].map(([label, value]) => (
                   <div key={label} style={{ border: '1px solid #f3f4f6', borderRadius: 10, padding: 12 }}>
-                    <div style={{ color: '#6b7280', fontSize: 11, fontWeight: 800, marginBottom: 4 }}>{label}</div>
+                    <div style={{ color: '#000000', fontSize: 11, fontWeight: 800, marginBottom: 4 }}>{label}</div>
                     <div style={{ color: '#111827', fontSize: 13, fontWeight: 800 }}>{value}</div>
                   </div>
                 ))}
@@ -374,7 +378,7 @@ export default function AddTeamPage() {
               ].map(({ label, value, Icon }) => {
                 const RowIcon = Icon
                 return (
-                  <div key={label} style={{ display: 'flex', justifyContent: 'space-between', gap: 8, color: '#6b7280', fontSize: 12 }}>
+                  <div key={label} style={{ display: 'flex', justifyContent: 'space-between', gap: 8, color: '#000000', fontSize: 12 }}>
                     <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}><RowIcon size={14} /> {label}</span>
                     <strong style={{ color: '#374151' }}>{value}</strong>
                   </div>
@@ -425,7 +429,7 @@ function SelectField({ label, value, placeholder, options, onChange }: { label: 
   return (
     <label style={{ display: 'grid', gap: 7, fontSize: 12, fontWeight: 700, color: '#374151' }}>
       {label}
-      <select value={value} onChange={event => onChange(event.target.value)} style={{ border: '1px solid #e5e7eb', borderRadius: 8, padding: '12px', outline: 'none', fontSize: 13, background: '#fff', color: value ? '#111827' : '#9ca3af' }}>
+      <select value={value} onChange={event => onChange(event.target.value)} style={{ border: '1px solid #e5e7eb', borderRadius: 8, padding: '12px', outline: 'none', fontSize: 13, background: '#fff', color: value ? '#111827' : '#000000' }}>
         <option value="">{placeholder}</option>
         {options.map(option => <option key={option} value={option}>{option}</option>)}
       </select>
